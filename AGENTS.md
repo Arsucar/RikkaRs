@@ -33,6 +33,26 @@
 - 单元测试：`FooTest.kt`
 - 仪器测试：`FooInstrumentedTest.kt` 或 `*Test.kt`
 
+## Git Commit and Upstream PR Rules
+
+- Keep `master` clean and aligned with `origin/master` for upstream contributions.
+- Do not open an upstream PR from local setup branches such as `local/agent-trellis-setup`.
+- Local agent/Trellis files are for this workspace only unless the user explicitly asks to contribute them upstream:
+  `.agents/`, `.codex/`, `.omc/`, `.trellis/`, `README_FOR_AGENT.md`, and Trellis-only changes in `AGENTS.md`.
+- When preparing an upstream PR, start from a clean upstream base:
+  ```bash
+  git switch master
+  git pull --ff-only
+  git switch -c feat/<change-name>
+  ```
+- Before pushing or opening a PR, verify the PR diff does not include local tooling files:
+  ```bash
+  git diff --name-only origin/master...HEAD
+  git diff --stat origin/master...HEAD
+  ```
+- If local agent setup needs to be saved, commit it only on a dedicated local branch and do not push that branch unless
+  the user explicitly confirms it is intended for the remote.
+
 ## Module Structure
 
 - **app**: Main application module with UI, ViewModels, and core logic
