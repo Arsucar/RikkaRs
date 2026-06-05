@@ -12,6 +12,9 @@ enum class FavoriteType(val value: String) {
     @SerialName("node")
     NODE("node"),
 
+    @SerialName("image")
+    IMAGE("image"),
+
     // Keep old value for compatibility with existing data.
     @SerialName("message")
     MESSAGE("message");
@@ -39,6 +42,32 @@ data class NodeFavoriteTarget(
     val conversationTitle: String,
     val nodeId: Uuid,
     val node: MessageNode,
+)
+
+@Serializable
+data class ImageFavoriteRef(
+    val imageId: Int,
+)
+
+@Serializable
+data class ImageFavoriteSnapshot(
+    val imageId: Int,
+    val prompt: String,
+    val filePath: String,
+    val timestamp: Long,
+    val model: String,
+    val type: String,
+    val sourcePaths: String? = null,
+)
+
+data class ImageFavoriteTarget(
+    val imageId: Int,
+    val prompt: String,
+    val filePath: String,
+    val timestamp: Long,
+    val model: String,
+    val type: String,
+    val sourcePaths: String? = null,
 )
 
 fun UIMessage.buildFavoritePreview(maxLength: Int = 160): String {

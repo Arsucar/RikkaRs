@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.compose.rememberAsyncImagePainter
@@ -24,6 +28,7 @@ import com.jvziyaoyao.scale.image.pager.ImagePager
 import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -32,11 +37,15 @@ import org.koin.compose.koinInject
 @Composable
 fun ImagePreviewDialog(
     images: List<String>,
+    initialPage: Int = 0,
+    labels: List<String> = emptyList(),
+    onUseAsReference: ((String) -> Unit)? = null,
     onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
-    val state = rememberZoomablePagerState { images.size }
+    val safeInitialPage = initialPage.coerceIn(0, (images.size - 1).coerceAtLeast(0))
+    val state = rememberZoomablePagerState(initialPage = safeInitialPage) { images.size }
     val toaster = LocalToaster.current
     val lifecycleOwner = LocalLifecycleOwner.current
     Dialog(
@@ -56,6 +65,24 @@ fun ImagePreviewDialog(
                 },
             )
 
+            labels.getOrNull(state.currentPage)?.takeIf { it.isNotBlank() }?.let { label ->
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(1f)
+                        .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.56f),
+                ) {
+                    Text(
+                        text = label,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -63,6 +90,16 @@ fun ImagePreviewDialog(
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                onUseAsReference?.let { useAsReference ->
+                    IconButton(
+                        onClick = {
+                            images.getOrNull(state.currentPage)?.let { useAsReference(it) }
+                        }
+                    ) {
+                        Icon(HugeIcons.Add01, null, tint = Color.White)
+                    }
+                }
+
                 IconButton(
                     onClick = {
                         lifecycleOwner.lifecycleScope.launch {

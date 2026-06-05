@@ -96,8 +96,8 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
-import com.dokar.sonner.rememberToasterState
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.context.rememberAppToasterState
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.getActivity
@@ -458,7 +458,7 @@ private fun ExportedChatImage(
     val navBackStack = remember { mutableStateListOf<NavKey>() }
     val navigator = Navigator(navBackStack)
     val highlighter = koinInject<Highlighter>()
-    val toasterState = rememberToasterState()
+    val toasterState = rememberAppToasterState()
     RikkahubTheme {
         CompositionLocalProvider(
             LocalNavController provides navigator,

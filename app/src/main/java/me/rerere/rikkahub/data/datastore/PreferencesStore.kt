@@ -21,6 +21,11 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.ui.ImageBackgroundOption
+import me.rerere.ai.ui.ImageOutputFormatOption
+import me.rerere.ai.ui.ImageModerationOption
+import me.rerere.ai.ui.ImageQualityOption
+import me.rerere.ai.ui.ImageSizeOption
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
@@ -53,6 +58,8 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+const val IMAGE_GALLERY_MIN_COLUMNS = 1
+const val IMAGE_GALLERY_MAX_COLUMNS = 6
 
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
@@ -140,6 +147,9 @@ class SettingsStore(
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val IMAGE_QUICK_MESSAGES = stringPreferencesKey("image_quick_messages")
+        val IMAGE_GENERATION_SETTINGS = stringPreferencesKey("image_generation_settings")
+        val IMAGE_GALLERY_SETTINGS = stringPreferencesKey("image_gallery_settings")
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -232,6 +242,15 @@ class SettingsStore(
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                imageQuickMessages = preferences[IMAGE_QUICK_MESSAGES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                imageGenerationSettings = preferences[IMAGE_GENERATION_SETTINGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: ImageGenerationSettings(),
+                imageGallerySettings = preferences[IMAGE_GALLERY_SETTINGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: ImageGallerySettings(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -333,6 +352,14 @@ class SettingsStore(
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
+                imageQuickMessages = settings.imageQuickMessages.distinctBy { it.id },
+                imageGenerationSettings = settings.imageGenerationSettings.normalized(),
+                imageGallerySettings = settings.imageGallerySettings.copy(
+                    columns = settings.imageGallerySettings.columns.coerceIn(
+                        IMAGE_GALLERY_MIN_COLUMNS,
+                        IMAGE_GALLERY_MAX_COLUMNS
+                    )
+                ),
             )
         }
         .onEach {
@@ -402,6 +429,9 @@ class SettingsStore(
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+            preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
+            preferences[IMAGE_GENERATION_SETTINGS] = JsonInstant.encodeToString(settings.imageGenerationSettings)
+            preferences[IMAGE_GALLERY_SETTINGS] = JsonInstant.encodeToString(settings.imageGallerySettings)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -532,6 +562,9 @@ data class Settings(
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val imageQuickMessages: List<QuickMessage> = emptyList(),
+    val imageGenerationSettings: ImageGenerationSettings = ImageGenerationSettings(),
+    val imageGallerySettings: ImageGallerySettings = ImageGallerySettings(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
@@ -545,6 +578,45 @@ data class Settings(
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
     }
+}
+
+@Serializable
+data class ImageGenerationSettings(
+    val size: ImageSizeOption = ImageSizeOption.AUTO,
+    val customSize: String = "2048x1152",
+    val quality: ImageQualityOption = ImageQualityOption.AUTO,
+    val outputFormat: ImageOutputFormatOption = ImageOutputFormatOption.PNG,
+    val outputCompression: Int = 100,
+    val background: ImageBackgroundOption = ImageBackgroundOption.AUTO,
+    val moderation: ImageModerationOption = ImageModerationOption.AUTO,
+)
+
+@Suppress("DEPRECATION")
+private fun ImageGenerationSettings.normalized(): ImageGenerationSettings {
+    val normalizedOutputFormat = when (outputFormat) {
+        ImageOutputFormatOption.URL,
+        ImageOutputFormatOption.B64_JSON -> ImageOutputFormatOption.PNG
+        else -> outputFormat
+    }
+    return copy(
+        outputFormat = normalizedOutputFormat,
+        outputCompression = outputCompression.coerceIn(0, 100),
+    )
+}
+
+@Serializable
+data class ImageGallerySettings(
+    val displayMode: ImageGalleryDisplayMode = ImageGalleryDisplayMode.GRID,
+    val columns: Int = 2,
+)
+
+@Serializable
+enum class ImageGalleryDisplayMode {
+    @SerialName("grid")
+    GRID,
+
+    @SerialName("grouped")
+    GROUPED,
 }
 
 @Serializable

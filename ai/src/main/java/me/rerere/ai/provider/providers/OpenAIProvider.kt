@@ -214,12 +214,28 @@ class OpenAIProvider(
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
                 put(
-                    "size", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1024x1024"
-                        ImageAspectRatio.LANDSCAPE -> "1536x1024"
-                        ImageAspectRatio.PORTRAIT -> "1024x1536"
+                    "size",
+                    if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
+                        params.size ?: "auto"
+                    } else {
+                        when (params.aspectRatio) {
+                            ImageAspectRatio.SQUARE -> "1024x1024"
+                            ImageAspectRatio.LANDSCAPE -> "1536x1024"
+                            ImageAspectRatio.PORTRAIT -> "1024x1536"
+                        }
                     }
                 )
+                if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
+                    params.quality?.let { put("quality", it.apiValue) }
+                    params.outputFormat?.let { format ->
+                        put("output_format", format.apiValue)
+                    }
+                    params.outputCompression
+                        ?.takeIf { params.outputFormat?.supportsCompression == true }
+                        ?.let { put("output_compression", it.coerceIn(0, 100)) }
+                    params.background?.let { put("background", it.apiValue) }
+                    params.moderation?.let { put("moderation", it.apiValue) }
+                }
             }.mergeCustomBody(params.customBody)
         )
 
@@ -240,7 +256,10 @@ class OpenAIProvider(
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
-        val items = parseImageGenerationItems(data)
+        val items = parseImageGenerationItems(
+            data = data,
+            defaultMimeType = params.outputFormat?.mimeType ?: "image/png"
+        )
 
         ImageGenerationResult(items = items)
     }
@@ -263,12 +282,29 @@ class OpenAIProvider(
             .addFormDataPart("prompt", params.prompt)
             .addFormDataPart("n", params.numOfImages.toString())
             .addFormDataPart(
-                "size", when (params.aspectRatio) {
-                    ImageAspectRatio.SQUARE -> "1024x1024"
-                    ImageAspectRatio.LANDSCAPE -> "1536x1024"
-                    ImageAspectRatio.PORTRAIT -> "1024x1536"
+                "size",
+                if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
+                    params.size ?: "auto"
+                } else {
+                    when (params.aspectRatio) {
+                        ImageAspectRatio.SQUARE -> "1024x1024"
+                        ImageAspectRatio.LANDSCAPE -> "1536x1024"
+                        ImageAspectRatio.PORTRAIT -> "1024x1536"
+                    }
                 }
             )
+
+        if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
+            params.quality?.let { bodyBuilder.addFormDataPart("quality", it.apiValue) }
+            params.outputFormat?.let { format ->
+                bodyBuilder.addFormDataPart("output_format", format.apiValue)
+            }
+            params.outputCompression
+                ?.takeIf { params.outputFormat?.supportsCompression == true }
+                ?.let { bodyBuilder.addFormDataPart("output_compression", it.coerceIn(0, 100).toString()) }
+            params.background?.let { bodyBuilder.addFormDataPart("background", it.apiValue) }
+            params.moderation?.let { bodyBuilder.addFormDataPart("moderation", it.apiValue) }
+        }
 
         val imageFieldName = if (params.images.size == 1) "image" else "image[]"
         params.images.forEach { path ->
@@ -310,12 +346,18 @@ class OpenAIProvider(
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
-        val items = parseImageGenerationItems(data)
+        val items = parseImageGenerationItems(
+            data = data,
+            defaultMimeType = params.outputFormat?.mimeType ?: "image/png"
+        )
 
         ImageGenerationResult(items = items)
     }
 
-    private suspend fun parseImageGenerationItems(data: JsonArray): List<ImageGenerationItem> {
+    private suspend fun parseImageGenerationItems(
+        data: JsonArray,
+        defaultMimeType: String,
+    ): List<ImageGenerationItem> {
         return data.map { imageJson ->
             val imageObj = imageJson.jsonObject
             val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
@@ -323,7 +365,7 @@ class OpenAIProvider(
             if (b64Json != null) {
                 ImageGenerationItem(
                     data = b64Json,
-                    mimeType = "image/png"
+                    mimeType = defaultMimeType
                 )
             } else {
                 val url = imageObj["url"]?.jsonPrimitive?.contentOrNull
@@ -362,6 +404,7 @@ class OpenAIProvider(
     }
 
     companion object {
+        private const val GPT_IMAGE_2 = "gpt-image-2"
         private val SUPPORTED_EDIT_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
     }
 }

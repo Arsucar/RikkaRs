@@ -6,7 +6,11 @@ import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.ImageAspectRatio
+import me.rerere.ai.ui.ImageBackgroundOption
+import me.rerere.ai.ui.ImageOutputFormatOption
 import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageModerationOption
+import me.rerere.ai.ui.ImageQualityOption
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 
@@ -69,6 +73,12 @@ data class ImageGenerationParams(
     val prompt: String,
     val numOfImages: Int = 1,
     val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+    val size: String? = null,
+    val quality: ImageQualityOption? = null,
+    val outputFormat: ImageOutputFormatOption? = null,
+    val outputCompression: Int? = null,
+    val background: ImageBackgroundOption? = null,
+    val moderation: ImageModerationOption? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )
@@ -80,6 +90,12 @@ data class ImageEditParams(
     val images: List<String>,
     val numOfImages: Int = 1,
     val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+    val size: String? = null,
+    val quality: ImageQualityOption? = null,
+    val outputFormat: ImageOutputFormatOption? = null,
+    val outputCompression: Int? = null,
+    val background: ImageBackgroundOption? = null,
+    val moderation: ImageModerationOption? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )

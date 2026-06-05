@@ -3,8 +3,10 @@ package me.rerere.rikkahub.data.repository
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
+import me.rerere.rikkahub.data.favorite.ImageFavoriteAdapter
 import me.rerere.rikkahub.data.favorite.NodeFavoriteAdapter
 import me.rerere.rikkahub.data.model.FavoriteType
+import me.rerere.rikkahub.data.model.ImageFavoriteTarget
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import kotlin.uuid.Uuid
 
@@ -42,5 +44,28 @@ class FavoriteRepository(
 
     suspend fun isNodeFavorited(conversationId: Uuid, nodeId: Uuid): Boolean {
         return dao.existsByRefKey(NodeFavoriteAdapter.buildRefKey(conversationId.toString(), nodeId.toString()))
+    }
+
+    suspend fun addImageFavorite(target: ImageFavoriteTarget): FavoriteEntity {
+        val refKey = ImageFavoriteAdapter.buildRefKey(target)
+        val existing = dao.getByRefKey(refKey)
+        val favorite = ImageFavoriteAdapter.buildFavoriteEntity(
+            target = target,
+            existing = existing,
+        )
+        dao.upsert(favorite)
+        return favorite
+    }
+
+    suspend fun getImageFavorite(imageId: Int): FavoriteEntity? {
+        return dao.getByRefKey(ImageFavoriteAdapter.buildRefKey(imageId))
+    }
+
+    suspend fun removeImageFavorite(imageId: Int): Int {
+        return dao.deleteByRefKey(ImageFavoriteAdapter.buildRefKey(imageId))
+    }
+
+    suspend fun isImageFavorited(imageId: Int): Boolean {
+        return dao.existsByRefKey(ImageFavoriteAdapter.buildRefKey(imageId))
     }
 }
