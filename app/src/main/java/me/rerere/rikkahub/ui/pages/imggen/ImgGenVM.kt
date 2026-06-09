@@ -8,9 +8,14 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.map
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -94,8 +99,14 @@ private data class PromptTemplate(
     val score: Int,
 )
 
+private data class PromptCluster(
+    val groups: List<ExactPromptGroup>,
+    val template: PromptTemplate?,
+)
+
 private const val MAX_VARIANT_GROUPING_LENGTH = 360
 private const val MAX_VARIANT_LABEL_LENGTH = 80
+private const val MAX_VARIANT_SEARCH_WINDOW = 30
 
 internal fun buildGeneratedImageGroups(images: List<GeneratedImage>): List<GeneratedImageGroup> {
     val exactGroups = images
@@ -113,19 +124,13 @@ internal fun buildGeneratedImageGroups(images: List<GeneratedImage>): List<Gener
         }
         .sortedByDescending { it.timestamp }
 
-    return buildPromptComponents(exactGroups)
-        .flatMap { componentIndices ->
-            val componentGroups = componentIndices.map { exactGroups[it] }.sortedByDescending { it.timestamp }
-            val template = if (componentGroups.size >= 2) {
-                findPromptTemplate(componentGroups.map { it.normalizedPrompt })
-            } else {
-                null
-            }
-
+    return buildPromptClusters(exactGroups)
+        .flatMap { cluster ->
+            val template = cluster.template
             if (template == null) {
-                componentGroups.map { it.toGeneratedImageGroup() }
+                cluster.groups.map { it.toGeneratedImageGroup() }
             } else {
-                listOf(componentGroups.toGeneratedImageGroup(template))
+                listOf(cluster.groups.toGeneratedImageGroup(template))
             }
         }
         .sortedByDescending { it.timestamp }
@@ -160,6 +165,51 @@ private fun List<ExactPromptGroup>.toGeneratedImageGroup(template: PromptTemplat
     )
 }
 
+private fun List<GeneratedImageGroup>.filterByImageSearchKeyword(keyword: String): List<GeneratedImageGroup> {
+    return mapNotNull { group ->
+        group.filterByImageSearchKeyword(keyword)
+    }
+}
+
+private fun GeneratedImageGroup.filterByImageSearchKeyword(keyword: String): GeneratedImageGroup? {
+    val matchingImages = images.filter { it.matchesImageSearchKeyword(keyword) }
+    if (matchingImages.isEmpty() && !matchesImageSearchKeyword(keyword)) {
+        return null
+    }
+    if (variants.isEmpty()) {
+        return copy(images = matchingImages.ifEmpty { images })
+    }
+    val matchingVariants = variants.mapNotNull { variant ->
+        val variantImages = variant.images.filter { it.matchesImageSearchKeyword(keyword) }
+        when {
+            variantImages.isNotEmpty() -> variant.copy(images = variantImages)
+            variant.matchesImageSearchKeyword(keyword) -> variant
+            else -> null
+        }
+    }
+    if (matchingVariants.isEmpty()) {
+        return null
+    }
+    return copy(
+        images = matchingVariants.flatMap { it.images },
+        variants = matchingVariants,
+    )
+}
+
+private fun GeneratedImageGroup.matchesImageSearchKeyword(keyword: String): Boolean =
+    prompt.contains(keyword, ignoreCase = true) ||
+        model.contains(keyword, ignoreCase = true)
+
+private fun GeneratedImageVariantGroup.matchesImageSearchKeyword(keyword: String): Boolean =
+    label.contains(keyword, ignoreCase = true) ||
+        prompt.contains(keyword, ignoreCase = true) ||
+        model.contains(keyword, ignoreCase = true)
+
+private fun GeneratedImage.matchesImageSearchKeyword(keyword: String): Boolean =
+    prompt.contains(keyword, ignoreCase = true) ||
+        model.contains(keyword, ignoreCase = true) ||
+        type.contains(keyword, ignoreCase = true)
+
 private fun normalizePromptForGrouping(prompt: String): String {
     return prompt
         .trim()
@@ -171,89 +221,71 @@ private fun normalizePromptForGrouping(prompt: String): String {
         .replace('、', ',')
 }
 
-private fun findPromptTemplate(left: String, right: String): PromptTemplate? {
-    return findPromptTemplate(listOf(left, right))
-}
-
 private fun findPromptTemplate(prompts: List<String>): PromptTemplate? {
     if (prompts.size < 2 || prompts.any { it.isBlank() } || prompts.distinct().size < 2) return null
 
     val minLength = prompts.minOf { it.length }
-    val commonPrefixLength = commonPrefixLength(prompts)
-    val commonSuffixLength = commonSuffixLength(prompts, commonPrefixLength)
-    val commonLength = commonPrefixLength + commonSuffixLength
+    val commonPrefix = findCommonPrefix(prompts)
+    val commonSuffix = findCommonSuffix(prompts, commonPrefix.length)
+    val commonLength = commonPrefix.length + commonSuffix.length
     val minCommonLength = maxOf(12, (minLength * 0.30f).toInt())
 
     if (commonLength < minCommonLength) return null
 
-    val prefix = prompts.first().take(commonPrefixLength)
-    val suffix = prompts.first().takeLast(commonSuffixLength)
-    val variants = prompts.map { it.extractVariant(prefix, suffix) ?: return null }
+    val variants = prompts.map { it.extractVariant(commonPrefix, commonSuffix) ?: return null }
     if (!areUsefulVariants(variants)) return null
 
     return PromptTemplate(
-        prefix = prefix,
-        suffix = suffix,
+        prefix = commonPrefix,
+        suffix = commonSuffix,
         score = commonLength,
     )
 }
 
-private fun buildPromptComponents(groups: List<ExactPromptGroup>): List<List<Int>> {
-    val parent = IntArray(groups.size) { it }
+private fun buildPromptClusters(groups: List<ExactPromptGroup>): List<PromptCluster> {
+    val assigned = BooleanArray(groups.size)
+    val clusters = mutableListOf<PromptCluster>()
 
-    fun find(index: Int): Int {
-        var current = index
-        while (parent[current] != current) {
-            parent[current] = parent[parent[current]]
-            current = parent[current]
-        }
-        return current
-    }
+    groups.indices.forEach { headIndex ->
+        if (assigned[headIndex]) return@forEach
 
-    fun union(left: Int, right: Int) {
-        val leftRoot = find(left)
-        val rightRoot = find(right)
-        if (leftRoot != rightRoot) {
-            parent[rightRoot] = leftRoot
-        }
-    }
+        assigned[headIndex] = true
+        val clusterIndices = mutableListOf(headIndex)
+        var clusterTemplate: PromptTemplate? = null
+        val searchEnd = minOf(groups.size, headIndex + 1 + MAX_VARIANT_SEARCH_WINDOW)
 
-    groups.indices.forEach { left ->
-        for (right in left + 1 until groups.size) {
-            if (findPromptTemplate(groups[left].normalizedPrompt, groups[right].normalizedPrompt) != null) {
-                union(left, right)
+        for (candidateIndex in headIndex + 1 until searchEnd) {
+            if (assigned[candidateIndex]) continue
+
+            val proposedIndices = clusterIndices + candidateIndex
+            val template = findPromptTemplate(proposedIndices.map { groups[it].normalizedPrompt })
+            if (template != null) {
+                assigned[candidateIndex] = true
+                clusterIndices.add(candidateIndex)
+                clusterTemplate = template
             }
         }
+
+        clusters += PromptCluster(
+            groups = clusterIndices.map { groups[it] }.sortedByDescending { it.timestamp },
+            template = clusterTemplate,
+        )
     }
 
-    return groups.indices
-        .groupBy { find(it) }
-        .values
-        .map { it.sortedByDescending { index -> groups[index].timestamp } }
-        .sortedByDescending { indices -> indices.maxOfOrNull { groups[it].timestamp } ?: 0L }
+    return clusters.sortedByDescending { cluster ->
+        cluster.groups.maxOfOrNull { it.timestamp } ?: 0L
+    }
 }
 
-private fun commonPrefixLength(values: List<String>): Int {
-    val first = values.firstOrNull() ?: return 0
-    val max = values.minOfOrNull { it.length } ?: 0
-    var index = 0
-    while (index < max && values.all { it[index] == first[index] }) {
-        index++
-    }
-    return index
+private fun findCommonPrefix(values: List<String>): String {
+    return values.reduceOrNull { prefix, value -> prefix.commonPrefixWith(value) }.orEmpty()
 }
 
-private fun commonSuffixLength(values: List<String>, prefixLength: Int): Int {
-    val first = values.firstOrNull() ?: return 0
-    val max = (values.minOfOrNull { it.length } ?: 0) - prefixLength
-    var index = 0
-    while (
-        index < max &&
-        values.all { it[it.lastIndex - index] == first[first.lastIndex - index] }
-    ) {
-        index++
-    }
-    return index
+private fun findCommonSuffix(values: List<String>, prefixLength: Int): String {
+    return values
+        .map { it.drop(prefixLength) }
+        .reduceOrNull { suffix, value -> suffix.commonSuffixWith(value) }
+        .orEmpty()
 }
 
 private fun String.extractVariant(template: PromptTemplate): String? {
@@ -300,6 +332,7 @@ private fun PromptTemplate.toDisplayPrompt(): String {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ImgGenVM(
     val settingsStore: SettingsStore,
     private val session: ImgGenSession,
@@ -314,24 +347,40 @@ class ImgGenVM(
     val error: StateFlow<String?> = session.error
     val currentGeneratedImages: StateFlow<List<GeneratedImage>> = session.currentGeneratedImages
     val referenceImages: StateFlow<List<String>> = session.referenceImages
+    private val _imageSearchQuery = MutableStateFlow("")
+    val imageSearchQuery: StateFlow<String> = _imageSearchQuery
 
-    val pager = Pager(
-        config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-        pagingSourceFactory = { genMediaRepository.getAllMedia() }
-    )
-    val generatedImages: Flow<PagingData<GeneratedImage>> = pager.flow
+    val generatedImages: Flow<PagingData<GeneratedImage>> = imageSearchQuery
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { keyword ->
+            Pager(
+                config = PagingConfig(pageSize = 20, enablePlaceholders = false),
+                pagingSourceFactory = {
+                    if (keyword.isBlank()) {
+                        genMediaRepository.getAllMedia()
+                    } else {
+                        genMediaRepository.searchAllMedia(keyword)
+                    }
+                }
+            ).flow
+        }
         .map { pagingData ->
             pagingData.map { entity -> entity.toGeneratedImage(filesManager) }
         }
         .cachedIn(viewModelScope)
 
-    val groupedImages: StateFlow<List<GeneratedImageGroup>> = genMediaRepository.observeAllMedia()
-        .map { entities ->
-            buildGeneratedImageGroups(
-                entities.map { entity -> entity.toGeneratedImage(filesManager) }
-            )
+    val groupedImages: StateFlow<List<GeneratedImageGroup>> = combine(
+        genMediaRepository.observeAllMedia(),
+        imageSearchQuery.map { it.trim() }.distinctUntilChanged(),
+    ) { entities, keyword ->
+        val images = entities.map { entity -> entity.toGeneratedImage(filesManager) }
+        if (keyword.isBlank()) {
+            buildGeneratedImageGroups(images)
+        } else {
+            buildGeneratedImageGroups(images).filterByImageSearchKeyword(keyword)
         }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val trashImages: StateFlow<List<GeneratedImage>> = genMediaRepository.observeTrashMedia()
         .map { entities ->
@@ -371,6 +420,10 @@ class ImgGenVM(
         .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
 
     fun updatePrompt(prompt: String) = session.updatePrompt(prompt)
+
+    fun updateImageSearchQuery(query: String) {
+        _imageSearchQuery.value = query
+    }
 
     fun updateNumberOfImages(count: Int) = session.updateNumberOfImages(count)
 

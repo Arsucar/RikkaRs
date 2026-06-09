@@ -91,6 +91,57 @@ class ImgGenGroupingTest {
         assertTrue(groups.single().variants.any { it.label.contains("4") })
     }
 
+    @Test
+    fun keepsLocalGroupWhenTransitiveMatchesDoNotShareTemplate() {
+        val promptA = "Bright sunny garden with a calm cat beside red flowers"
+        val promptB = "Bright sunny garden with a playful dog beside blue river"
+        val promptC = "Moody night alley with a playful dog beside blue river"
+
+        val groups = buildGeneratedImageGroups(
+            listOf(
+                image(id = 1, prompt = promptA, timestamp = 1L),
+                image(id = 2, prompt = promptB, timestamp = 3L),
+                image(id = 3, prompt = promptC, timestamp = 2L),
+            )
+        )
+
+        val variantGroup = groups.single { it.variants.isNotEmpty() }
+        assertEquals(listOf(promptB, promptC), variantGroup.variants.map { it.prompt })
+        assertTrue(groups.any { it.variants.isEmpty() && it.prompt == promptA })
+    }
+
+    @Test
+    fun fuzzyGroupingOnlyScansThirtyRecentPromptGroups() {
+        val newerPrompt = "shared opening scene with a red kite over the ocean"
+        val olderPrompt = "shared opening scene with a blue kite over the ocean"
+        val fillerSymbols = "abcdefghijklmnopqrstuvwxyz0123"
+        val fillerImages = (0 until 30).map { index ->
+            image(
+                id = 100 + index,
+                prompt = "${fillerSymbols[index]} filler prompt $index ${fillerSymbols[29 - index]}",
+                timestamp = 99L - index,
+            )
+        }
+
+        val groups = buildGeneratedImageGroups(
+            listOf(image(id = 1, prompt = newerPrompt, timestamp = 100L)) +
+                fillerImages +
+                image(id = 2, prompt = olderPrompt, timestamp = 69L)
+        )
+
+        assertEquals(32, groups.size)
+        assertTrue(
+            groups.none { group ->
+                val prompts = if (group.variants.isEmpty()) {
+                    listOf(group.prompt)
+                } else {
+                    group.variants.map { it.prompt }
+                }
+                newerPrompt in prompts && olderPrompt in prompts
+            }
+        )
+    }
+
     private fun image(id: Int, prompt: String, timestamp: Long): GeneratedImage {
         return GeneratedImage(
             id = id,

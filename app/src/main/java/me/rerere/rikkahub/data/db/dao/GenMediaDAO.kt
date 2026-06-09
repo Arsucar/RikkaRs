@@ -12,6 +12,20 @@ interface GenMediaDAO {
     @Query("SELECT * FROM genmediaentity WHERE type != :trashType ORDER BY create_at DESC")
     fun getAll(trashType: String): PagingSource<Int, GenMediaEntity>
 
+    @Query(
+        """
+        SELECT * FROM genmediaentity
+        WHERE type != :trashType
+        AND (
+            prompt LIKE '%' || :keyword || '%'
+            OR model_id LIKE '%' || :keyword || '%'
+            OR type LIKE '%' || :keyword || '%'
+        )
+        ORDER BY create_at DESC
+        """
+    )
+    fun searchAll(trashType: String, keyword: String): PagingSource<Int, GenMediaEntity>
+
     @Query("SELECT * FROM genmediaentity WHERE type != :trashType ORDER BY create_at DESC")
     suspend fun getAllMedia(trashType: String): List<GenMediaEntity>
 

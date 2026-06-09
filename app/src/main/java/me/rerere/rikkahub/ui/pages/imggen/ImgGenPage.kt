@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -36,6 +37,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -44,6 +47,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,14 +78,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,10 +104,15 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
+import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Minus
+import com.composables.icons.lucide.Plus
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.ai.provider.ModelType
@@ -120,6 +138,7 @@ import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Image03
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
@@ -149,6 +168,70 @@ import kotlin.uuid.Uuid
 private const val IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS = 4
 
 @Composable
+private fun ImageSearchTitleField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    onSearch: () -> Unit,
+    onFocusLost: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var hadFocus by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        if (hadFocus && !focusState.isFocused) {
+                            onFocusLost()
+                        }
+                        hadFocus = focusState.isFocused
+                    },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (value.isBlank()) {
+                            Text(
+                                text = "搜索图片关键字",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
 fun ImageGenPage(
     modifier: Modifier = Modifier,
     vm: ImgGenVM = koinViewModel()
@@ -159,7 +242,21 @@ fun ImageGenPage(
     val toaster = LocalToaster.current
     var showTopMenu by remember { mutableStateOf(false) }
     var showRecycleBin by remember { mutableStateOf(false) }
+    var isImageSearchActive by remember { mutableStateOf(false) }
+    val imageSearchQuery by vm.imageSearchQuery.collectAsStateWithLifecycle()
+    val imageSearchFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val trashImages by vm.trashImages.collectAsStateWithLifecycle()
+    val settings by vm.settingsStore.settingsFlow.collectAsStateWithLifecycle()
+
+    LaunchedEffect(isImageSearchActive) {
+        if (isImageSearchActive) {
+            imageSearchFocusRequester.requestFocus()
+            delay(80)
+            keyboardController?.show()
+        }
+    }
 
     fun addImageAsReference(imagePath: String, navigateToGeneration: Boolean) {
         scope.launch {
@@ -180,17 +277,66 @@ fun ImageGenPage(
     }
     val useImageAsReference: (String) -> Unit = { imagePath -> addImageAsReference(imagePath, true) }
     val applyImageAsReference: (String) -> Unit = { imagePath -> addImageAsReference(imagePath, false) }
+    fun collapseImageSearch() {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        isImageSearchActive = false
+    }
+    // 自动收纳：清焦、收键盘，仅在输入框为空时才收起搜索框（有关键词则保持展开）
+    fun dismissImageSearchKeyboard() {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        if (imageSearchQuery.isBlank()) {
+            isImageSearchActive = false
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(stringResource(R.string.imggen_page_title))
+                    if (isImageSearchActive) {
+                        ImageSearchTitleField(
+                            value = imageSearchQuery,
+                            onValueChange = vm::updateImageSearchQuery,
+                            focusRequester = imageSearchFocusRequester,
+                            onSearch = {
+                                dismissImageSearchKeyboard()
+                            },
+                            onFocusLost = {
+                                // 仅在无关键词时收纳，有关键词保持展开
+                                if (imageSearchQuery.isBlank()) {
+                                    isImageSearchActive = false
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                        )
+                    } else {
+                        Text(stringResource(R.string.imggen_page_title))
+                    }
                 },
                 navigationIcon = {
                     BackButton()
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            if (isImageSearchActive) {
+                                collapseImageSearch()
+                            } else {
+                                isImageSearchActive = true
+                                scope.launch {
+                                    pagerState.animateScrollToPage(1)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Search01,
+                            contentDescription = "Search images",
+                        )
+                    }
                     IconButton(onClick = vm::startNewSession) {
                         Icon(
                             imageVector = HugeIcons.Add01,
@@ -208,6 +354,83 @@ fun ImageGenPage(
                             expanded = showTopMenu,
                             onDismissRequest = { showTopMenu = false },
                         ) {
+                            // 图库页：显示模式 + 列数；空间页：独立列数；点击设置项不关闭菜单，可连续调整
+                            when (pagerState.currentPage) {
+                                1 -> {
+                                    MenuSectionLabel("显示模式")
+                                    ImageGalleryDisplayMode.entries.forEach { mode ->
+                                        val selected = settings.imageGallerySettings.displayMode == mode
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    when (mode) {
+                                                        ImageGalleryDisplayMode.GRID -> "网格"
+                                                        ImageGalleryDisplayMode.GROUPED -> "分组"
+                                                    }
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                if (selected) {
+                                                    Icon(
+                                                        imageVector = Lucide.Check,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                } else {
+                                                    Spacer(Modifier.size(24.dp))
+                                                }
+                                            },
+                                            onClick = {
+                                                scope.launch {
+                                                    vm.settingsStore.update { current ->
+                                                        current.copy(
+                                                            imageGallerySettings = current.imageGallerySettings.copy(
+                                                                displayMode = mode
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
+                                    HorizontalDivider()
+                                    ImageColumnsMenuRow(
+                                        columns = settings.imageGallerySettings.columns.coerceIn(
+                                            IMAGE_GALLERY_MIN_COLUMNS,
+                                            IMAGE_GALLERY_MAX_COLUMNS
+                                        ),
+                                        onColumnsChange = { value ->
+                                            scope.launch {
+                                                vm.settingsStore.update { current ->
+                                                    current.copy(
+                                                        imageGallerySettings = current.imageGallerySettings.copy(columns = value)
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                    HorizontalDivider()
+                                }
+
+                                2 -> {
+                                    ImageColumnsMenuRow(
+                                        columns = settings.imageGallerySettings.spaceColumns.coerceIn(
+                                            IMAGE_GALLERY_MIN_COLUMNS,
+                                            IMAGE_GALLERY_MAX_COLUMNS
+                                        ),
+                                        onColumnsChange = { value ->
+                                            scope.launch {
+                                                vm.settingsStore.update { current ->
+                                                    current.copy(
+                                                        imageGallerySettings = current.imageGallerySettings.copy(spaceColumns = value)
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                    HorizontalDivider()
+                                }
+                            }
                             DropdownMenuItem(
                                 text = { Text("回收站") },
                                 leadingIcon = { Icon(HugeIcons.Delete01, null) },
@@ -230,6 +453,13 @@ fun ImageGenPage(
             modifier = modifier
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
+                .pointerInput(isImageSearchActive, imageSearchQuery.isBlank()) {
+                    if (!isImageSearchActive) return@pointerInput
+                    awaitEachGesture {
+                        awaitFirstDown(pass = PointerEventPass.Initial)
+                        dismissImageSearchKeyboard()
+                    }
+                }
         ) { page ->
             when (page) {
                 0 -> ImageGenScreen(
@@ -903,14 +1133,8 @@ private fun ImageGalleryScreen(
     val settings by vm.settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val generatedImages = vm.generatedImages.collectAsLazyPagingItems()
     val groupedImages by vm.groupedImages.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        GalleryControls(
-            settings = settings,
-            vm = vm,
-            scope = scope,
-        )
         Box(modifier = Modifier.weight(1f)) {
             when (settings.imageGallerySettings.displayMode) {
                 ImageGalleryDisplayMode.GRID -> ImageGalleryGrid(
@@ -935,60 +1159,6 @@ private fun ImageGalleryScreen(
                     onApplyReference = onApplyReference,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun GalleryControls(
-    settings: Settings,
-    vm: ImgGenVM,
-    scope: CoroutineScope,
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        items(ImageGalleryDisplayMode.entries) { mode ->
-            CompactOptionPill(
-                selected = settings.imageGallerySettings.displayMode == mode,
-                text = when (mode) {
-                    ImageGalleryDisplayMode.GRID -> "网格"
-                    ImageGalleryDisplayMode.GROUPED -> "分组"
-                },
-                onClick = {
-                    scope.launch {
-                        vm.settingsStore.update { settings ->
-                            settings.copy(
-                                imageGallerySettings = settings.imageGallerySettings.copy(displayMode = mode)
-                            )
-                        }
-                    }
-                },
-            )
-        }
-
-        item {
-            CompactStepper(
-                label = "列",
-                value = settings.imageGallerySettings.columns.coerceIn(
-                    IMAGE_GALLERY_MIN_COLUMNS,
-                    IMAGE_GALLERY_MAX_COLUMNS
-                ),
-                min = IMAGE_GALLERY_MIN_COLUMNS,
-                max = IMAGE_GALLERY_MAX_COLUMNS,
-                onValueChange = { columns ->
-                    scope.launch {
-                        vm.settingsStore.update { settings ->
-                            settings.copy(
-                                imageGallerySettings = settings.imageGallerySettings.copy(columns = columns)
-                            )
-                        }
-                    }
-                },
-            )
         }
     }
 }
@@ -1178,7 +1348,7 @@ private fun ImageSpaceScreen(
     val onToggleFavorite = rememberImageFavoriteToggler(vm)
     var previewStartIndex by remember { mutableStateOf<Int?>(null) }
     val favoriteImages = favorites.map { it.image }
-    val columns = settings.imageGallerySettings.columns.coerceIn(
+    val columns = settings.imageGallerySettings.spaceColumns.coerceIn(
         IMAGE_GALLERY_MIN_COLUMNS,
         IMAGE_GALLERY_MAX_COLUMNS
     )
@@ -2018,13 +2188,7 @@ private fun SettingsBottomSheet(
             FormItem(
                 label = { Text(stringResource(R.string.imggen_page_generation_count)) },
                 description = {
-                    Text(
-                        if (isGptImage2) {
-                            "${stringResource(R.string.imggen_page_generation_count_desc)}，gpt-image-2 支持 1-8"
-                        } else {
-                            stringResource(R.string.imggen_page_generation_count_desc)
-                        }
-                    )
+                    Text(stringResource(R.string.imggen_page_generation_count_desc))
                 }
             ) {
                 CompactStepper(
@@ -2032,7 +2196,7 @@ private fun SettingsBottomSheet(
                     value = numberOfImages,
                     onValueChange = vm::updateNumberOfImages,
                     min = 1,
-                    max = if (isGptImage2) 8 else 4,
+                    max = MAX_GENERATION_IMAGES,
                 )
             }
 
@@ -2153,6 +2317,57 @@ private fun SettingsBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun MenuSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun ImageColumnsMenuRow(
+    columns: Int,
+    onColumnsChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "列数",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = {
+                onColumnsChange((columns - 1).coerceIn(IMAGE_GALLERY_MIN_COLUMNS, IMAGE_GALLERY_MAX_COLUMNS))
+            },
+            enabled = columns > IMAGE_GALLERY_MIN_COLUMNS,
+        ) {
+            Icon(Lucide.Minus, contentDescription = "减少列数")
+        }
+        Text(
+            text = columns.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(24.dp),
+        )
+        IconButton(
+            onClick = {
+                onColumnsChange((columns + 1).coerceIn(IMAGE_GALLERY_MIN_COLUMNS, IMAGE_GALLERY_MAX_COLUMNS))
+            },
+            enabled = columns < IMAGE_GALLERY_MAX_COLUMNS,
+        ) {
+            Icon(Lucide.Plus, contentDescription = "增加列数")
         }
     }
 }

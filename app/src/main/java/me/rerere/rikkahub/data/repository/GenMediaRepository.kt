@@ -8,6 +8,9 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 class GenMediaRepository(private val dao: GenMediaDAO) {
     fun getAllMedia(): PagingSource<Int, GenMediaEntity> = dao.getAll(GenMediaEntity.TYPE_IMAGE_TRASH)
 
+    fun searchAllMedia(keyword: String): PagingSource<Int, GenMediaEntity> =
+        dao.searchAll(GenMediaEntity.TYPE_IMAGE_TRASH, keyword)
+
     fun observeAllMedia(): Flow<List<GenMediaEntity>> = dao.observeAllMedia(GenMediaEntity.TYPE_IMAGE_TRASH)
 
     fun observeTrashMedia(): Flow<List<GenMediaEntity>> = dao.observeByType(GenMediaEntity.TYPE_IMAGE_TRASH)

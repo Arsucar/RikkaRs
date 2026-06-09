@@ -608,6 +608,7 @@ private fun ImageGenerationSettings.normalized(): ImageGenerationSettings {
 data class ImageGallerySettings(
     val displayMode: ImageGalleryDisplayMode = ImageGalleryDisplayMode.GRID,
     val columns: Int = 2,
+    val spaceColumns: Int = 2,
 )
 
 @Serializable

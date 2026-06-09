@@ -24,6 +24,9 @@ import me.rerere.rikkahub.data.repository.GenMediaRepository
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
+/** 单次生成/编辑的最大出图数量 */
+const val MAX_GENERATION_IMAGES = 4
+
 class ImgGenSession(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
@@ -118,7 +121,7 @@ class ImgGenSession(
                 val params = ImageGenerationParams(
                     model = model,
                     prompt = _prompt.value,
-                    numOfImages = _numberOfImages.value.coerceIn(1, if (isGptImage2) 8 else 4),
+                    numOfImages = _numberOfImages.value.coerceIn(1, MAX_GENERATION_IMAGES),
                     aspectRatio = _aspectRatio.value,
                     size = gptImage2Size,
                     quality = imageSettings.quality.takeIf { isGptImage2 },
@@ -178,7 +181,7 @@ class ImgGenSession(
                     model = model,
                     prompt = _prompt.value,
                     images = sourceImages,
-                    numOfImages = _numberOfImages.value.coerceIn(1, if (isGptImage2) 8 else 4),
+                    numOfImages = _numberOfImages.value.coerceIn(1, MAX_GENERATION_IMAGES),
                     aspectRatio = _aspectRatio.value,
                     size = gptImage2Size,
                     quality = imageSettings.quality.takeIf { isGptImage2 },
@@ -338,11 +341,7 @@ class ImgGenSession(
         }
     }
 
-    private fun maxImagesForCurrentModel(): Int {
-        val settings = settingsStore.settingsFlow.value
-        val model = settings.findModelById(settings.imageGenerationModelId)
-        return if (model?.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) 8 else 4
-    }
+    private fun maxImagesForCurrentModel(): Int = MAX_GENERATION_IMAGES
 
     private fun ImageGenerationSettings.resolveGptImage2SizeOrThrow(): String {
         val result = size.resolveGptImage2Size(customSize)
