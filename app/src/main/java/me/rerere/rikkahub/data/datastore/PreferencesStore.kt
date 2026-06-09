@@ -589,6 +589,7 @@ data class ImageGenerationSettings(
     val outputCompression: Int = 100,
     val background: ImageBackgroundOption = ImageBackgroundOption.AUTO,
     val moderation: ImageModerationOption = ImageModerationOption.AUTO,
+    val imageStreaming: Boolean = false,
 )
 
 @Suppress("DEPRECATION")

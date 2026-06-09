@@ -132,6 +132,7 @@ class ImgGenSession(
                     },
                     background = imageSettings.background.takeIf { isGptImage2 },
                     moderation = imageSettings.moderation.takeIf { isGptImage2 },
+                    stream = imageSettings.imageStreaming,
                     customHeaders = model.customHeaders,
                     customBody = model.customBodies
                 )
@@ -189,6 +190,7 @@ class ImgGenSession(
                     },
                     background = imageSettings.background.takeIf { isGptImage2 },
                     moderation = imageSettings.moderation.takeIf { isGptImage2 },
+                    stream = imageSettings.imageStreaming,
                     customHeaders = model.customHeaders,
                     customBody = model.customBodies
                 )

@@ -60,6 +60,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -242,6 +243,7 @@ fun ImageGenPage(
     val toaster = LocalToaster.current
     var showTopMenu by remember { mutableStateOf(false) }
     var showRecycleBin by remember { mutableStateOf(false) }
+    var showImageQuickMessagesDialog by remember { mutableStateOf(false) }
     var isImageSearchActive by remember { mutableStateOf(false) }
     val imageSearchQuery by vm.imageSearchQuery.collectAsStateWithLifecycle()
     val imageSearchFocusRequester = remember { FocusRequester() }
@@ -356,6 +358,18 @@ fun ImageGenPage(
                         ) {
                             // 图库页：显示模式 + 列数；空间页：独立列数；点击设置项不关闭菜单，可连续调整
                             when (pagerState.currentPage) {
+                                0 -> {
+                                    DropdownMenuItem(
+                                        text = { Text("管理图像快捷消息") },
+                                        leadingIcon = { Icon(HugeIcons.Edit01, null) },
+                                        onClick = {
+                                            showTopMenu = false
+                                            showImageQuickMessagesDialog = true
+                                        },
+                                    )
+                                    HorizontalDivider()
+                                }
+
                                 1 -> {
                                     MenuSectionLabel("显示模式")
                                     ImageGalleryDisplayMode.entries.forEach { mode ->
@@ -490,6 +504,16 @@ fun ImageGenPage(
             onRestore = vm::restoreImage,
             onPermanentDelete = vm::permanentlyDeleteImage,
             onClear = vm::permanentlyDeleteImages,
+        )
+    }
+
+    if (showImageQuickMessagesDialog) {
+        ImageQuickMessagesDialog(
+            quickMessages = settings.imageQuickMessages,
+            onDismiss = { showImageQuickMessagesDialog = false },
+            onAdd = vm::addImageQuickMessage,
+            onUpdate = vm::updateImageQuickMessage,
+            onDelete = { vm.deleteImageQuickMessage(it.id) },
         )
     }
 }
@@ -721,7 +745,6 @@ private fun InputBar(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showQuickMessagesDialog by remember { mutableStateOf(false) }
     val imagePickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
             if (selectedUris.isNotEmpty()) {
@@ -766,6 +789,14 @@ private fun InputBar(
             maxLines = 5,
             shape = MaterialTheme.shapes.large,
             textStyle = MaterialTheme.typography.bodySmall,
+            leadingIcon = if (settings.imageQuickMessages.isNotEmpty()) {
+                {
+                    ImageQuickMessageButton(
+                        quickMessages = settings.imageQuickMessages,
+                        onAppend = vm::appendQuickMessage,
+                    )
+                }
+            } else null,
         )
 
         Row(
@@ -779,12 +810,6 @@ private fun InputBar(
                 type = ModelType.IMAGE,
                 onlyIcon = true,
                 onSelect = { model -> vm.selectImageGenerationModel(model.id) }
-            )
-
-            ImageQuickMessageButton(
-                quickMessages = settings.imageQuickMessages,
-                onAppend = vm::appendQuickMessage,
-                onManage = { showQuickMessagesDialog = true },
             )
 
             IconButton(
@@ -844,34 +869,17 @@ private fun InputBar(
             }
         }
     }
-
-    if (showQuickMessagesDialog) {
-        ImageQuickMessagesDialog(
-            quickMessages = settings.imageQuickMessages,
-            onDismiss = { showQuickMessagesDialog = false },
-            onAdd = vm::addImageQuickMessage,
-            onUpdate = vm::updateImageQuickMessage,
-            onDelete = { vm.deleteImageQuickMessage(it.id) },
-        )
-    }
 }
 
 @Composable
 private fun ImageQuickMessageButton(
     quickMessages: List<QuickMessage>,
     onAppend: (String) -> Unit,
-    onManage: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
-            onClick = {
-                if (quickMessages.isEmpty()) {
-                    onManage()
-                } else {
-                    expanded = true
-                }
-            }
+            onClick = { expanded = true }
         ) {
             Icon(HugeIcons.Zap, null)
         }
@@ -903,14 +911,6 @@ private fun ImageQuickMessageButton(
                     },
                 )
             }
-            DropdownMenuItem(
-                text = { Text("管理图像快捷消息") },
-                leadingIcon = { Icon(HugeIcons.Edit01, null) },
-                onClick = {
-                    expanded = false
-                    onManage()
-                },
-            )
         }
     }
 }
@@ -2197,6 +2197,18 @@ private fun SettingsBottomSheet(
                     onValueChange = vm::updateNumberOfImages,
                     min = 1,
                     max = MAX_GENERATION_IMAGES,
+                )
+            }
+
+            FormItem(
+                label = { Text("流式预览") },
+                description = { Text("开启后边生成边显示部分图；若你的接口/中转不支持流式(SSE)，请关闭") }
+            ) {
+                Switch(
+                    checked = imageSettings.imageStreaming,
+                    onCheckedChange = { enabled ->
+                        updateImageSettings { it.copy(imageStreaming = enabled) }
+                    },
                 )
             }
 

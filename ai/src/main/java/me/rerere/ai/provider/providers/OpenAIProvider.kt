@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -50,6 +51,8 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.io.File
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "OpenAIProvider"
 
@@ -222,8 +225,10 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
-                put("stream", true)
-                put("partial_images", params.partialImages.coerceIn(0, 3))
+                if (params.stream) {
+                    put("stream", true)
+                    put("partial_images", params.partialImages.coerceIn(0, 3))
+                }
                 put(
                     "size",
                     if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
@@ -249,7 +254,7 @@ class OpenAIProvider(
                 }
             }
                 .mergeCustomBody(params.customBody)
-                .forceImageStream()
+                .let { if (params.stream) it.forceImageStream() else it }
         )
 
         Log.i(TAG, "generateImage: ${json.encodeToString(requestBody)}")
@@ -263,11 +268,18 @@ class OpenAIProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        return streamImageRequest(
-            request = request,
-            partialEventType = "image_generation.partial_image",
-            completedEventType = "image_generation.completed",
-        )
+        return if (params.stream) {
+            streamImageRequest(
+                request = request,
+                partialEventType = "image_generation.partial_image",
+                completedEventType = "image_generation.completed",
+            )
+        } else {
+            nonStreamImageRequest(
+                request = request,
+                defaultMimeType = params.outputFormat?.mimeType ?: "image/png",
+            )
+        }
     }
 
     override suspend fun editImage(
@@ -287,7 +299,6 @@ class OpenAIProvider(
             .addFormDataPart("model", params.model.modelId)
             .addFormDataPart("prompt", params.prompt)
             .addFormDataPart("n", params.numOfImages.toString())
-            .addFormDataPart("partial_images", params.partialImages.coerceIn(0, 3).toString())
             .addFormDataPart(
                 "size",
                 if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
@@ -336,7 +347,10 @@ class OpenAIProvider(
             }
             bodyBuilder.addFormDataPart(customBody.key, value)
         }
-        bodyBuilder.addFormDataPart("stream", "true")
+        if (params.stream) {
+            bodyBuilder.addFormDataPart("stream", "true")
+            bodyBuilder.addFormDataPart("partial_images", params.partialImages.coerceIn(0, 3).toString())
+        }
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/edits")
@@ -346,10 +360,64 @@ class OpenAIProvider(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        return streamImageRequest(
-            request = request,
-            partialEventType = "image_edit.partial_image",
-            completedEventType = "image_edit.completed",
+        return if (params.stream) {
+            streamImageRequest(
+                request = request,
+                partialEventType = "image_edit.partial_image",
+                completedEventType = "image_edit.completed",
+            )
+        } else {
+            nonStreamImageRequest(
+                request = request,
+                defaultMimeType = params.outputFormat?.mimeType ?: "image/png",
+            )
+        }
+    }
+
+    // 非流式回退：一次性请求，解析 data[] 后逐个 emit（兼容不支持 SSE 流式的中转）
+    private fun nonStreamImageRequest(
+        request: Request,
+        defaultMimeType: String,
+    ): Flow<ImageGenerationItem> = flow {
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to generate image: ${response.code} ${response.body?.stringSafe()}")
+        }
+        val bodyStr = response.body?.stringSafe() ?: ""
+        val data = json.parseToJsonElement(bodyStr).jsonObject["data"]?.jsonArray
+            ?: error("No data in response")
+        for (imageJson in data) {
+            val imageObj = imageJson.jsonObject
+            val b64Json = imageObj["b64_json"]?.jsonPrimitive?.contentOrNull
+            if (b64Json != null) {
+                emit(ImageGenerationItem(data = b64Json, mimeType = defaultMimeType))
+            } else {
+                val url = imageObj["url"]?.jsonPrimitive?.contentOrNull
+                    ?: error("No b64_json or url in response")
+                emit(downloadImageAsBase64(url))
+            }
+        }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun downloadImageAsBase64(url: String): ImageGenerationItem {
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            error("Failed to download generated image: ${response.code} ${response.body?.stringSafe()}")
+        }
+
+        val body = response.body
+        val mimeType = body.contentType()?.toString() ?: "image/png"
+        val base64 = Base64.encode(body.bytes())
+
+        return ImageGenerationItem(
+            data = base64,
+            mimeType = mimeType
         )
     }
 

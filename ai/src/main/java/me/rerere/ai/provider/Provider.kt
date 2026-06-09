@@ -80,6 +80,7 @@ data class ImageGenerationParams(
     val background: ImageBackgroundOption? = null,
     val moderation: ImageModerationOption? = null,
     val partialImages: Int = 2,
+    val stream: Boolean = true,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )
@@ -98,6 +99,7 @@ data class ImageEditParams(
     val background: ImageBackgroundOption? = null,
     val moderation: ImageModerationOption? = null,
     val partialImages: Int = 2,
+    val stream: Boolean = true,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )
