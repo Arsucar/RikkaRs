@@ -7,9 +7,9 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageBackgroundOption
-import me.rerere.ai.ui.ImageOutputFormatOption
-import me.rerere.ai.ui.ImageGenerationResult
+import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageModerationOption
+import me.rerere.ai.ui.ImageOutputFormatOption
 import me.rerere.ai.ui.ImageQualityOption
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -45,12 +45,12 @@ interface Provider<T : ProviderSetting> {
     suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): ImageGenerationResult
+    ): Flow<ImageGenerationItem>
 
     suspend fun editImage(
         providerSetting: ProviderSetting,
         params: ImageEditParams,
-    ): ImageGenerationResult {
+    ): Flow<ImageGenerationItem> {
         error("Image edit is not supported")
     }
 }
@@ -79,6 +79,7 @@ data class ImageGenerationParams(
     val outputCompression: Int? = null,
     val background: ImageBackgroundOption? = null,
     val moderation: ImageModerationOption? = null,
+    val partialImages: Int = 2,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )
@@ -96,6 +97,7 @@ data class ImageEditParams(
     val outputCompression: Int? = null,
     val background: ImageBackgroundOption? = null,
     val moderation: ImageModerationOption? = null,
+    val partialImages: Int = 2,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )

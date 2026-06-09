@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.imggen
 
 import android.util.Log
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -135,17 +136,14 @@ class ImgGenSession(
                     customBody = model.customBodies
                 )
 
-                val result = providerManager.getProviderByType(provider)
+                val images = providerManager.getProviderByType(provider)
                     .generateImage(providerSetting, params)
 
-                _currentGeneratedImages.value = result.items.mapIndexed { index, item ->
-                    saveImageToStorage(
-                        item = item,
-                        prompt = _prompt.value,
-                        modelName = model.displayName,
-                        index = index
-                    )
-                }
+                collectImageGeneration(
+                    images = images,
+                    prompt = _prompt.value,
+                    modelName = model.displayName,
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) return@launch
                 Log.e(TAG, "Failed to generate image", e)
@@ -195,20 +193,16 @@ class ImgGenSession(
                     customBody = model.customBodies
                 )
 
-                val result = providerManager.getProviderByType(provider)
+                val images = providerManager.getProviderByType(provider)
                     .editImage(providerSetting, params)
 
-                val sourcePaths = sourceImages.joinToString(separator = "\n")
-                _currentGeneratedImages.value = result.items.mapIndexed { index, item ->
-                    saveImageToStorage(
-                        item = item,
-                        prompt = _prompt.value,
-                        modelName = model.displayName,
-                        index = index,
-                        type = GenMediaEntity.TYPE_IMAGE_EDIT,
-                        sourcePaths = sourcePaths,
-                    )
-                }
+                collectImageGeneration(
+                    images = images,
+                    prompt = _prompt.value,
+                    modelName = model.displayName,
+                    type = GenMediaEntity.TYPE_IMAGE_EDIT,
+                    sourcePaths = sourceImages.joinToString(separator = "\n"),
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) return@launch
                 Log.e(TAG, "Failed to edit image", e)
@@ -291,6 +285,66 @@ class ImgGenSession(
         if (file.exists()) {
             file.delete()
         }
+    }
+
+    private suspend fun collectImageGeneration(
+        images: Flow<ImageGenerationItem>,
+        prompt: String,
+        modelName: String,
+        type: String = GenMediaEntity.TYPE_IMAGE_GENERATION,
+        sourcePaths: String? = null,
+    ) {
+        val finalImages = mutableListOf<GeneratedImage>()
+        var previewFile: File? = null
+        var finalIndex = 0
+
+        images.collect { item ->
+            if (item.partial) {
+                // 流式部分图：写到临时预览文件并即时展示，不入库
+                previewFile?.delete()
+                val imageFile = saveImagePreview(
+                    item = item,
+                    modelName = modelName,
+                    index = item.partialImageIndex ?: finalIndex,
+                )
+                previewFile = imageFile
+                _currentGeneratedImages.value = finalImages + GeneratedImage(
+                    id = 0,
+                    prompt = prompt,
+                    filePath = imageFile.absolutePath,
+                    timestamp = System.currentTimeMillis(),
+                    model = modelName,
+                    type = type,
+                    sourcePaths = sourcePaths,
+                )
+            } else {
+                // 最终图：删除预览、落盘入库（saveImageToStorage 返回带数据库 id 的记录）
+                previewFile?.delete()
+                previewFile = null
+                val saved = saveImageToStorage(
+                    item = item,
+                    prompt = prompt,
+                    modelName = modelName,
+                    index = finalIndex,
+                    type = type,
+                    sourcePaths = sourcePaths,
+                )
+                finalImages.add(saved)
+                finalIndex++
+                _currentGeneratedImages.value = finalImages.toList()
+            }
+        }
+    }
+
+    private fun saveImagePreview(
+        item: ImageGenerationItem,
+        modelName: String,
+        index: Int,
+    ): File {
+        val imagesDir = filesManager.getImagesDir()
+        val timestamp = System.currentTimeMillis()
+        val previewFile = File(imagesDir, "preview_${timestamp}_${modelName}_$index.png")
+        return filesManager.createImageFileFromBase64(item.data, previewFile.absolutePath)
     }
 
     private suspend fun saveImageToStorage(
