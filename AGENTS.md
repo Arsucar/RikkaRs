@@ -124,7 +124,14 @@ This project is managed by Trellis. The working knowledge you need lives under `
 - `.trellis/workspace/` — per-developer journals and session traces
 - `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
 
-If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+AI assistants should actively follow the Trellis workflow in this repository.
+
+If a Trellis command is available on your platform, use it instead of manual steps. Examples include `/trellis:continue` and `/trellis:finish-work`.
+
+If Trellis commands are not available, manually follow `.trellis/workflow.md` instead of skipping Trellis.
+
+`.trellis/` may be read and used during local development, but should not be included in upstream PRs unless explicitly requested by the user.
+
 
 If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
 - `.agents/skills/` — reusable Trellis skills
