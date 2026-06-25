@@ -13,8 +13,8 @@
 ./gradlew lint                   # 运行 Android Lint
 ```
 
-构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
-`web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
+下游 **Rikka-arsucar** fork 已移除 Firebase，**不需要** `google-services.json`。
+`web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`（首次在 `web-ui/` 执行 `pnpm install`）。
 
 ## Coding Style & Naming Conventions
 
@@ -52,6 +52,68 @@
   ```
 - If local agent setup needs to be saved, commit it only on a dedicated local branch and do not push that branch unless
   the user explicitly confirms it is intended for the remote.
+
+## Rikka-arsucar 下游：提交与发版（Agent 必读）
+
+完整说明见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。本 fork **不向** `rikkahub/rikkahub` 上游提 PR。
+
+| 项 | 约定 |
+|----|------|
+| 发行分支 | `release/rikka-arsucar` |
+| applicationId | release `me.arsucar.rikka`，debug `me.arsucar.rikka.debug` |
+| 本地构建 | **仅** `./gradlew assembleDebug`（Windows：`gradlew.bat assembleDebug`） |
+| 正式 APK | **仅 CI**（`.github/workflows/release-apk.yml`），本地不要 `assembleRelease` 发版 |
+
+### 提交代码
+
+1. 在 `release/rikka-arsucar` 上改代码并验证 Debug 构建。
+2. **不要提交**：`*.jks`、`local.properties`、`.omc/`（已在 `.gitignore`）。
+3. 提交并推送：
+   ```bash
+   git add <改动的业务/workflow/文档文件>
+   git commit -m "feat|fix|chore: ..."
+   git push origin release/rikka-arsucar
+   ```
+
+### 触发 CI 发版
+
+Workflow：**Release APK (arm64)**（`release-apk.yml`）。
+
+| 触发方式 | 行为 |
+|----------|------|
+| 推送标签 `v*`（如 `v2.3.2`） | 用当前 `app/build.gradle.kts` 版本构建 signed arm64 APK；创建 **GitHub Release** 并附 `rikka-arsucar-<tag>-arm64.apk`；保留 Actions Artifact |
+| Actions 页 **Run workflow**（`workflow_dispatch`） | 构建前 **自动 bump** `versionCode` / `versionName`（patch +1），成功后 **commit + push** 版本号；**不**创建 GitHub Release（仅 Artifact） |
+
+**重打同一标签以重新构建并发布 Release**（标签需指向含最新 workflow 的提交）：
+
+```bash
+git checkout release/rikka-arsucar
+git pull --ff-only origin release/rikka-arsucar
+git tag -d v2.3.2
+git push origin :refs/tags/v2.3.2
+git tag -a v2.3.2 -m "Rikka-arsucar 2.3.2"
+git push origin v2.3.2
+```
+
+可选（需已安装并登录 `gh`）：
+
+```bash
+gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar
+```
+
+### 仓库与密钥（人工一次）
+
+- Fork：`origin` → `Arsucar/rikkahub`；上游 `upstream` → `rikkahub/rikkahub`。
+- Actions Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
+- Settings → Actions → General → Workflow permissions：**Read and write**。
+- CI checkout 需 **子模块** `material3/material-color-utilities`（workflow 已 `submodules: recursive`）。
+
+### 下载产物
+
+- **Releases** 页：仅 **tag 触发** 且构建成功后有 APK。
+- **Actions** → 某次运行 → **Artifacts**：任意成功构建均可下载（含 `workflow_dispatch`）。
+
+已成功构建的 Artifact APK 为 **已签名 release**，可直接安装分发；同 keystore 的后续 release 可覆盖升级。
 
 ## Module Structure
 
