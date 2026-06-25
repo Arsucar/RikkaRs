@@ -73,10 +73,10 @@ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
-import me.rerere.rikkahub.ui.context.AppToasterState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
+import com.dokar.sonner.ToasterState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
@@ -372,7 +372,7 @@ private fun ImportProviderButton(
 private fun handleQRResult(
     result: QRResult,
     onAdd: (ProviderSetting) -> Unit,
-    toaster: AppToasterState,
+    toaster: ToasterState,
     context: android.content.Context
 ) {
     runCatching {
@@ -415,7 +415,7 @@ private fun handleQRResult(
 private fun handleImageQRCode(
     uri: Uri,
     onAdd: (ProviderSetting) -> Unit,
-    toaster: AppToasterState,
+    toaster: ToasterState,
     context: android.content.Context
 ) {
     runCatching {

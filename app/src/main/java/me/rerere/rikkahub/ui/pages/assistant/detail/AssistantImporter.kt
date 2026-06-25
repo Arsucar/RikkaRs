@@ -38,12 +38,12 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
-import me.rerere.rikkahub.ui.context.AppToasterState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.R
 import org.koin.compose.koinInject
+import com.dokar.sonner.ToasterState
 
 @Composable
 fun AssistantImporter(
@@ -252,7 +252,7 @@ private suspend fun importAssistantFromUri(
     context: Context,
     uri: Uri,
     onImport: (Assistant) -> Unit,
-    toaster: AppToasterState,
+    toaster: ToasterState,
     filesManager: FilesManager,
 ) {
     try {
