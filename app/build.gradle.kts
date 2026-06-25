@@ -9,8 +9,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.baselineprofile)
 }
 
@@ -19,17 +17,13 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.rerere.rikkahub"
+        applicationId = "me.arsucar.rikka"
         minSdk = 26
         targetSdk = 37
         versionCode = 165
         versionName = "2.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
     }
 
     splits {
@@ -39,8 +33,8 @@ android {
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
             isEnable = !isBuildingBundle
             reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = true
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
@@ -53,14 +47,18 @@ android {
                 localProperties.load(FileInputStream(localPropertiesFile))
 
                 val storeFilePath = localProperties.getProperty("storeFile")
+                    ?: localProperties.getProperty("keystore.path")
                 val storePasswordValue = localProperties.getProperty("storePassword")
+                    ?: localProperties.getProperty("keystore.password")
                 val keyAliasValue = localProperties.getProperty("keyAlias")
+                    ?: localProperties.getProperty("key.alias")
                 val keyPasswordValue = localProperties.getProperty("keyPassword")
+                    ?: localProperties.getProperty("key.password")
 
                 if (storeFilePath != null && storePasswordValue != null &&
                     keyAliasValue != null && keyPasswordValue != null
                 ) {
-                    storeFile = file(storeFilePath)
+                    storeFile = rootProject.file(storeFilePath)
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
@@ -168,12 +166,6 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.material3.adaptive.navigation3)
-
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
-    implementation(libs.firebase.config)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)

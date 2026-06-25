@@ -12,3 +12,5 @@ local.properties
 .history
 .kotlin
 .omc
+*.jks
+rikka-arsucar-release.jks

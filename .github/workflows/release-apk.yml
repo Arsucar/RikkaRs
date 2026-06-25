@@ -1,0 +1,91 @@
+name: Release APK (arm64)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump versionCode and versionName
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python3 << 'PY'
+          import re, pathlib
+          p = pathlib.Path("app/build.gradle.kts")
+          t = p.read_text(encoding="utf-8")
+          vc = int(re.search(r"versionCode\s*=\s*(\d+)", t).group(1))
+          vn = re.search(r'versionName\s*=\s*"([^"]+)"', t).group(1)
+          parts = vn.split(".")
+          parts[-1] = str(int(parts[-1]) + 1)
+          vn_new = ".".join(parts)
+          vc_new = vc + 1
+          t = re.sub(r"versionCode\s*=\s*\d+", f"versionCode = {vc_new}", t, count=1)
+          t = re.sub(r'versionName\s*=\s*"[^"]+"', f'versionName = "{vn_new}"', t, count=1)
+          p.write_text(t, encoding="utf-8")
+          print(f"Bumped to {vn_new} ({vc_new})")
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > rikka-arsucar-release.jks
+          cat >> local.properties << EOF
+          storeFile=rikka-arsucar-release.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+      - name: Assemble release
+        run: chmod +x gradlew && ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikka-arsucar-arm64-${{ github.ref_name }}
+          path: app/build/outputs/apk/release/*arm64-v8a*release*.apk
+
+      - name: Commit version bump
+        if: success() && github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle.kts
+          git commit -m "chore(release): bump version after CI build" || exit 0
+          git push
