@@ -16,12 +16,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import me.rerere.ai.ui.ImageAspectRatio
+import me.rerere.rikkahub.data.datastore.ImageFavoriteCollection
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
@@ -66,6 +68,7 @@ data class ImageFavoriteListItem(
     val favoriteId: String,
     val refKey: String,
     val image: GeneratedImage,
+    val collectionId: String?,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -344,8 +347,8 @@ class ImgGenVM(
     val numberOfImages: StateFlow<Int> = session.numberOfImages
     val aspectRatio: StateFlow<ImageAspectRatio> = session.aspectRatio
     val isGenerating: StateFlow<Boolean> = session.isGenerating
+    val activeJobs: StateFlow<Map<Long, ImgGenActiveJob>> = session.activeJobs
     val error: StateFlow<String?> = session.error
-    val currentGeneratedImages: StateFlow<List<GeneratedImage>> = session.currentGeneratedImages
     val referenceImages: StateFlow<List<String>> = session.referenceImages
     private val _imageSearchQuery = MutableStateFlow("")
     val imageSearchQuery: StateFlow<String> = _imageSearchQuery
@@ -393,6 +396,7 @@ class ImgGenVM(
         .map { entities ->
             entities.mapNotNull { entity ->
                 val snapshot = ImageFavoriteAdapter.decodeSnapshot(entity) ?: return@mapNotNull null
+                val meta = ImageFavoriteAdapter.decodeMeta(entity)
                 ImageFavoriteListItem(
                     favoriteId = entity.id,
                     refKey = entity.refKey,
@@ -405,6 +409,7 @@ class ImgGenVM(
                         type = snapshot.type,
                         sourcePaths = snapshot.sourcePaths,
                     ),
+                    collectionId = meta?.collectionId,
                     createdAt = entity.createdAt,
                     updatedAt = entity.updatedAt,
                 )
@@ -451,6 +456,14 @@ class ImgGenVM(
     fun editImage() = session.editImage()
 
     fun cancelGeneration() = session.cancelGeneration()
+
+    fun cancelJob(jobId: Long) = session.cancelJob(jobId)
+
+    fun dismissJob(jobId: Long) = session.dismissJob(jobId)
+
+    fun regenerateJob(jobId: Long) = session.regenerateFromJob(jobId)
+
+    fun regenerateFromImage(image: GeneratedImage) = session.regenerateFromImage(image)
 
     fun deleteImage(image: GeneratedImage) = session.deleteImage(image)
 
@@ -511,6 +524,58 @@ class ImgGenVM(
     fun deleteImageQuickMessage(id: Uuid) {
         updateImageQuickMessages { messages ->
             messages.filterNot { message -> message.id == id }
+        }
+    }
+
+    fun addImageFavoriteCollection(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                val id = Uuid.random().toString()
+                settings.copy(
+                    imageFavoriteCollections = settings.imageFavoriteCollections + ImageFavoriteCollection(
+                        id = id,
+                        name = trimmed,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun renameImageFavoriteCollection(collectionId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(
+                    imageFavoriteCollections = settings.imageFavoriteCollections.map { collection ->
+                        if (collection.id == collectionId) collection.copy(name = trimmed) else collection
+                    },
+                )
+            }
+        }
+    }
+
+    fun deleteImageFavoriteCollection(collectionId: String) {
+        viewModelScope.launch {
+            favoriteRepository.listByType(FavoriteType.IMAGE).first().forEach { entity ->
+                val meta = ImageFavoriteAdapter.decodeMeta(entity) ?: return@forEach
+                if (meta.collectionId != collectionId) return@forEach
+                val imageId = ImageFavoriteAdapter.decodeRef(entity)?.imageId ?: return@forEach
+                favoriteRepository.setImageFavoriteCollection(imageId, null)
+            }
+            settingsStore.update { settings ->
+                settings.copy(
+                    imageFavoriteCollections = settings.imageFavoriteCollections.filterNot { it.id == collectionId },
+                )
+            }
+        }
+    }
+
+    fun setImageFavoriteCollection(imageId: Int, collectionId: String?) {
+        viewModelScope.launch {
+            favoriteRepository.setImageFavoriteCollection(imageId, collectionId)
         }
     }
 

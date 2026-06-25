@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -72,6 +73,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -128,6 +130,8 @@ import me.rerere.ai.ui.validateGptImage2Size
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Colors
@@ -139,6 +143,7 @@ import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Image03
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Zap
@@ -147,6 +152,7 @@ import me.rerere.rikkahub.data.datastore.IMAGE_GALLERY_MAX_COLUMNS
 import me.rerere.rikkahub.data.datastore.IMAGE_GALLERY_MIN_COLUMNS
 import me.rerere.rikkahub.data.datastore.ImageGalleryDisplayMode
 import me.rerere.rikkahub.data.datastore.ImageGenerationSettings
+import me.rerere.rikkahub.data.datastore.ImageFavoriteCollection
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.files.FileUtils
@@ -337,12 +343,6 @@ fun ImageGenPage(
                         Icon(
                             imageVector = HugeIcons.Search01,
                             contentDescription = "Search images",
-                        )
-                    }
-                    IconButton(onClick = vm::startNewSession) {
-                        Icon(
-                            imageVector = HugeIcons.Add01,
-                            contentDescription = "New session"
                         )
                     }
                     Box {
@@ -580,8 +580,10 @@ private fun ImageGenScreen(
     val prompt by vm.prompt.collectAsStateWithLifecycle()
     val numberOfImages by vm.numberOfImages.collectAsStateWithLifecycle()
     val aspectRatio by vm.aspectRatio.collectAsStateWithLifecycle()
-    val isGenerating by vm.isGenerating.collectAsStateWithLifecycle()
-    val currentGeneratedImages by vm.currentGeneratedImages.collectAsStateWithLifecycle()
+    val activeJobs by vm.activeJobs.collectAsStateWithLifecycle()
+    val jobList = remember(activeJobs) {
+        activeJobs.values.sortedByDescending { it.id }
+    }
     val imageFavoriteIds by vm.imageFavoriteIds.collectAsStateWithLifecycle()
     val referenceImages by vm.referenceImages.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
@@ -591,6 +593,11 @@ private fun ImageGenScreen(
     val onToggleFavorite = rememberImageFavoriteToggler(vm)
     var showSettingsSheet by remember { mutableStateOf(false) }
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    val columns = settings.imageGallerySettings.columns.coerceIn(
+        IMAGE_GALLERY_MIN_COLUMNS,
+        IMAGE_GALLERY_MAX_COLUMNS,
+    )
+    val showThumbnailActions = columns <= IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS
 
     LaunchedEffect(error) {
         error?.let { errorMessage ->
@@ -604,119 +611,51 @@ private fun ImageGenScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .imePadding()
+            .imePadding(),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            when {
-                isGenerating && currentGeneratedImages.isEmpty() -> {
-                    ContainedLoadingIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+            if (jobList.isEmpty()) {
+                Box(modifier = Modifier.align(Alignment.Center)) {
+                    GalleryEmptyState()
                 }
-
-                currentGeneratedImages.size == 1 -> {
-                    val image = currentGeneratedImages.first()
-                    var showPreview by remember(image.id) { mutableStateOf(false) }
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AsyncImage(
-                            model = File(image.filePath),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { showPreview = true },
-                            contentScale = ContentScale.Fit
-                        )
-                        ImageThumbnailActions(
-                            image = image,
-                            isFavorited = image.id in imageFavoriteIds,
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(jobList, key = { it.id }) { job ->
+                        ActiveGenerationJobSection(
+                            job = job,
+                            columns = columns,
+                            showThumbnailActions = showThumbnailActions,
+                            imageFavoriteIds = imageFavoriteIds,
                             onToggleFavorite = onToggleFavorite,
+                            onUseReference = onUseReference,
                             onApplyReference = onApplyReference,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp),
+                            onCancel = { vm.cancelJob(job.id) },
+                            onDismiss = { vm.dismissJob(job.id) },
+                            onRegenerateJob = { vm.regenerateJob(job.id) },
+                            onRegenerateImage = { vm.regenerateFromImage(it) },
                         )
-                    }
-
-                    if (showPreview) {
-                        ImagePreviewDialog(
-                            images = listOf(image.filePath),
-                            labels = listOf(formatImageDateTime(image.timestamp)),
-                            onUseAsReference = onUseReference,
-                            onDismissRequest = { showPreview = false },
-                        )
-                    }
-                }
-
-                else -> {
-                    val columns = settings.imageGallerySettings.columns.coerceIn(
-                        IMAGE_GALLERY_MIN_COLUMNS,
-                        IMAGE_GALLERY_MAX_COLUMNS
-                    )
-                    val showThumbnailActions = columns <= IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(0.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(currentGeneratedImages.size) { index ->
-                            val image = currentGeneratedImages[index]
-                            var showPreview by remember(image.id) { mutableStateOf(false) }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1f)
-                            ) {
-                                AsyncImage(
-                                    model = File(image.filePath),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { showPreview = true },
-                                    contentScale = ContentScale.Crop
-                                )
-                                if (showThumbnailActions) {
-                                    ImageThumbnailActions(
-                                        image = image,
-                                        isFavorited = image.id in imageFavoriteIds,
-                                        onToggleFavorite = onToggleFavorite,
-                                        onApplyReference = onApplyReference,
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(6.dp),
-                                    )
-                                }
-                            }
-
-                            if (showPreview) {
-                                ImagePreviewDialog(
-                                    images = currentGeneratedImages.map { it.filePath },
-                                    initialPage = index,
-                                    labels = currentGeneratedImages.map { formatImageDateTime(it.timestamp) },
-                                    onUseAsReference = onUseReference,
-                                    onDismissRequest = { showPreview = false },
-                                )
-                            }
-                        }
                     }
                 }
             }
         }
+        val runningJobCount = remember(jobList) { jobList.count { it.isRunning } }
+        val maxConcurrentJobs = settings.imageGenerationSettings.maxConcurrentJobs.coerceIn(1, MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP)
         InputBar(
             prompt = prompt,
             vm = vm,
-            isGenerating = isGenerating,
+            runningJobCount = runningJobCount,
+            maxConcurrentJobs = maxConcurrentJobs,
             referenceImages = referenceImages,
             settings = settings,
             onShowSettings = { showSettingsSheet = true },
-            modifier = Modifier
+            modifier = Modifier,
         )
     }
 
@@ -728,7 +667,126 @@ private fun ImageGenScreen(
             aspectRatio = aspectRatio,
             scope = scope,
             sheetState = sheetState,
-            onDismiss = { showSettingsSheet = false }
+            onDismiss = { showSettingsSheet = false },
+        )
+    }
+}
+
+@Composable
+private fun ActiveGenerationJobSection(
+    job: ImgGenActiveJob,
+    columns: Int,
+    showThumbnailActions: Boolean,
+    imageFavoriteIds: Set<Int>,
+    onToggleFavorite: (GeneratedImage) -> Unit,
+    onUseReference: (String) -> Unit,
+    onApplyReference: (String) -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    onRegenerateJob: () -> Unit,
+    onRegenerateImage: (GeneratedImage) -> Unit,
+) {
+    var previewStartIndex by remember(job.id) { mutableStateOf<Int?>(null) }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    PromptPreviewText(
+                        prompt = job.prompt,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                    )
+                    Text(
+                        text = if (job.isEdit) "编辑" else "生成",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (job.isRunning) {
+                    IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
+                        Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    IconButton(onClick = onRegenerateJob, modifier = Modifier.size(32.dp)) {
+                        Icon(HugeIcons.Refresh01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            if (job.isRunning && job.images.isEmpty()) {
+                Text(
+                    text = if (job.isAwaitingPermit) "排队中…" else "生成中…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                ContainedLoadingIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
+            job.errorMessage?.let { message ->
+                JobGenerationErrorText(message = message)
+            }
+            if (job.images.isNotEmpty()) {
+                job.images.chunked(columns).forEach { rowImages ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        rowImages.forEach { image ->
+                            val imageIndex = job.images.indexOf(image)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f),
+                            ) {
+                                AsyncImage(
+                                    model = File(image.filePath),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            previewStartIndex = imageIndex
+                                        },
+                                    contentScale = ContentScale.Crop,
+                                )
+                                if (showThumbnailActions) {
+                                    ImageThumbnailActions(
+                                        image = image,
+                                        isFavorited = image.id in imageFavoriteIds,
+                                        onToggleFavorite = onToggleFavorite,
+                                        onApplyReference = onApplyReference,
+                                        onRegenerate = { onRegenerateImage(image) },
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(6.dp),
+                                    )
+                                }
+                            }
+                        }
+                        repeat(columns - rowImages.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    previewStartIndex?.let { startIndex ->
+        ImagePreviewDialog(
+            images = job.images.map { it.filePath },
+            initialPage = startIndex,
+            labels = job.images.map { formatImageDateTime(it.timestamp) },
+            onUseAsReference = onUseReference,
+            onDismissRequest = { previewStartIndex = null },
         )
     }
 }
@@ -737,7 +795,8 @@ private fun ImageGenScreen(
 private fun InputBar(
     prompt: String,
     vm: ImgGenVM,
-    isGenerating: Boolean,
+    runningJobCount: Int,
+    maxConcurrentJobs: Int,
     referenceImages: List<String>,
     settings: Settings,
     onShowSettings: () -> Unit,
@@ -830,24 +889,21 @@ private fun InputBar(
             Spacer(modifier = Modifier.weight(1f))
 
             val canSend = prompt.isNotBlank()
+            val atConcurrentLimit = runningJobCount >= maxConcurrentJobs
             Surface(
                 onClick = {
-                    if (!isGenerating) {
-                        if (referenceImages.isEmpty()) {
-                            vm.generateImage()
-                        } else {
-                            vm.editImage()
-                        }
+                    if (!canSend || atConcurrentLimit) return@Surface
+                    if (referenceImages.isEmpty()) {
+                        vm.generateImage()
                     } else {
-                        vm.cancelGeneration()
+                        vm.editImage()
                     }
                 },
-                enabled = isGenerating || canSend,
+                enabled = canSend && !atConcurrentLimit,
                 modifier = Modifier.size(40.dp),
                 shape = CircleShape,
                 color = when {
-                    isGenerating -> MaterialTheme.colorScheme.errorContainer
-                    !canSend -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    !canSend || atConcurrentLimit -> MaterialTheme.colorScheme.surfaceContainerHigh
                     else -> MaterialTheme.colorScheme.primary
                 },
             ) {
@@ -856,14 +912,13 @@ private fun InputBar(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (isGenerating) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
+                        imageVector = HugeIcons.ArrowUp02,
                         contentDescription = stringResource(R.string.imggen_page_generate_image),
                         tint = when {
-                            isGenerating -> MaterialTheme.colorScheme.onErrorContainer
-                            !canSend -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            !canSend || atConcurrentLimit -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             else -> MaterialTheme.colorScheme.onPrimary
                         },
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -1345,145 +1400,409 @@ private fun ImageSpaceScreen(
     val favorites by vm.imageFavorites.collectAsStateWithLifecycle()
     val imageFavoriteIds by vm.imageFavoriteIds.collectAsStateWithLifecycle()
     val settings by vm.settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val collections = settings.imageFavoriteCollections
     val onToggleFavorite = rememberImageFavoriteToggler(vm)
-    var previewStartIndex by remember { mutableStateOf<Int?>(null) }
-    val favoriteImages = favorites.map { it.image }
+    var previewFlatIndex by remember { mutableStateOf<Int?>(null) }
+    var showNewCollectionDialog by remember { mutableStateOf(false) }
+    var newCollectionName by remember { mutableStateOf("") }
+    var renameCollectionTarget by remember { mutableStateOf<ImageFavoriteCollection?>(null) }
+    var renameCollectionName by remember { mutableStateOf("") }
+    var deleteCollectionTarget by remember { mutableStateOf<ImageFavoriteCollection?>(null) }
     val columns = settings.imageGallerySettings.spaceColumns.coerceIn(
         IMAGE_GALLERY_MIN_COLUMNS,
-        IMAGE_GALLERY_MAX_COLUMNS
+        IMAGE_GALLERY_MAX_COLUMNS,
     )
     val showThumbnailActions = columns <= IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS
+
+    val sectionKeys = remember(favorites, collections) {
+        val ungroupedKey = "__ungrouped__"
+        val knownIds = collections.map { it.id }.toSet()
+        val keys = mutableListOf<Pair<String, String>>()
+        keys += ungroupedKey to "未分组"
+        collections.forEach { c -> keys += c.id to c.name }
+        favorites.mapNotNull { it.collectionId }
+            .distinct()
+            .filter { it !in knownIds }
+            .forEach { orphanId -> keys += orphanId to "已删除分组" }
+        keys.filter { (key, _) ->
+            favorites.any { item ->
+                if (key == ungroupedKey) item.collectionId == null else item.collectionId == key
+            }
+        }
+    }
+    val flatFavorites = remember(favorites, sectionKeys) {
+        val ungroupedKey = "__ungrouped__"
+        sectionKeys.flatMap { (sectionKey, _) ->
+            favorites.filter { item ->
+                if (sectionKey == ungroupedKey) item.collectionId == null
+                else item.collectionId == sectionKey
+            }
+        }
+    }
+    var allSectionsExpanded by remember { mutableStateOf(true) }
+    val sectionExpanded = remember { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(sectionKeys) {
+        sectionKeys.forEach { (key, _) ->
+            if (sectionExpanded[key] == null) sectionExpanded[key] = true
+        }
+        sectionExpanded.keys.retainAll(sectionKeys.map { it.first }.toSet())
+    }
+
+    fun flatIndexFor(item: ImageFavoriteListItem): Int =
+        flatFavorites.indexOfFirst { it.favoriteId == item.favoriteId }
 
     if (favorites.isEmpty()) {
         SpaceEmptyState()
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item(
-                span = { GridItemSpan(maxLineSpan) },
-            ) {
+            item(key = "space-toolbar") {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = "收藏",
+                        text = "收藏 ${favorites.size} 张",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        text = "${favorites.size} 张",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    TextButton(
+                        onClick = {
+                            allSectionsExpanded = !allSectionsExpanded
+                            sectionKeys.forEach { (key, _) ->
+                                sectionExpanded[key] = allSectionsExpanded
+                            }
+                        },
+                    ) {
+                        Text(if (allSectionsExpanded) "全部折叠" else "全部展开")
+                    }
+                    TextButton(onClick = { showNewCollectionDialog = true }) {
+                        Text("新建分组")
+                    }
                 }
             }
-
-            items(
-                count = favorites.size,
-                key = { index -> favorites[index].favoriteId },
-                contentType = { "ImageFavorite" },
-            ) { index ->
-                val item = favorites[index]
-                SpaceFavoriteCard(
-                    item = item,
-                    isFavorited = item.image.id in imageFavoriteIds,
-                    showThumbnailActions = showThumbnailActions,
-                    onToggleFavorite = onToggleFavorite,
-                    onApplyReference = onApplyReference,
-                    onPreview = { previewStartIndex = index },
-                )
+            sectionKeys.forEach { (sectionKey, sectionTitle) ->
+                val sectionItems = favorites.filter { item ->
+                    if (sectionKey == "__ungrouped__") item.collectionId == null
+                    else item.collectionId == sectionKey
+                }
+                if (sectionItems.isEmpty()) return@forEach
+                val expanded = sectionExpanded[sectionKey] != false
+                item(key = "space-header-$sectionKey") {
+                    val managedCollection = collections.firstOrNull { it.id == sectionKey }
+                    CollapsibleSectionHeader(
+                        title = sectionTitle,
+                        subtitle = "${sectionItems.size} 张",
+                        expanded = expanded,
+                        onExpandedChange = { sectionExpanded[sectionKey] = it },
+                        onRename = managedCollection?.let { c ->
+                            {
+                                renameCollectionTarget = c
+                                renameCollectionName = c.name
+                            }
+                        },
+                        onDelete = managedCollection?.let { c ->
+                            { deleteCollectionTarget = c }
+                        },
+                    )
+                }
+                if (expanded) {
+                    item(key = "space-grid-$sectionKey") {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 4000.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            userScrollEnabled = false,
+                        ) {
+                            items(sectionItems, key = { it.favoriteId }) { item ->
+                                SpaceFavoriteGridCell(
+                                    item = item,
+                                    isFavorited = item.image.id in imageFavoriteIds,
+                                    showThumbnailActions = showThumbnailActions,
+                                    collections = collections,
+                                    onToggleFavorite = onToggleFavorite,
+                                    onApplyReference = onApplyReference,
+                                    onAssignCollection = { collectionId ->
+                                        if (item.image.id > 0) {
+                                            vm.setImageFavoriteCollection(item.image.id, collectionId)
+                                        }
+                                    },
+                                    canAssignCollection = item.image.id > 0 && item.image.id in imageFavoriteIds,
+                                    onPreview = {
+                                        previewFlatIndex = flatIndexFor(item).takeIf { it >= 0 }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    previewStartIndex?.let { startIndex ->
-        if (favoriteImages.isNotEmpty()) {
+    previewFlatIndex?.let { startIndex ->
+        if (flatFavorites.isNotEmpty()) {
             ImagePreviewDialog(
-                images = favoriteImages.map { it.filePath },
+                images = flatFavorites.map { it.image.filePath },
                 initialPage = startIndex,
-                labels = favoriteImages.map { formatImageDateTime(it.timestamp) },
+                labels = flatFavorites.map { formatImageDateTime(it.image.timestamp) },
                 onUseAsReference = onUseReference,
-                onDismissRequest = { previewStartIndex = null },
+                onDismissRequest = { previewFlatIndex = null },
+            )
+        }
+    }
+
+    if (showNewCollectionDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewCollectionDialog = false },
+            title = { Text("新建分组") },
+            text = {
+                OutlinedTextField(
+                    value = newCollectionName,
+                    onValueChange = { newCollectionName = it },
+                    label = { Text("分组名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newCollectionName.trim()
+                        if (name.isNotBlank()) {
+                            vm.addImageFavoriteCollection(name)
+                            newCollectionName = ""
+                            showNewCollectionDialog = false
+                        }
+                    },
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCollectionDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    renameCollectionTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { renameCollectionTarget = null },
+            title = { Text("重命名分组") },
+            text = {
+                OutlinedTextField(
+                    value = renameCollectionName,
+                    onValueChange = { renameCollectionName = it },
+                    label = { Text("分组名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = renameCollectionName.trim()
+                        if (name.isNotBlank()) {
+                            vm.renameImageFavoriteCollection(target.id, name)
+                            renameCollectionTarget = null
+                        }
+                    },
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameCollectionTarget = null }) { Text("取消") }
+            },
+        )
+    }
+
+    deleteCollectionTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteCollectionTarget = null },
+            title = { Text("删除分组") },
+            text = {
+                Text("将删除分组「${target.name}」，其中收藏会移入未分组，不会取消收藏。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.deleteImageFavoriteCollection(target.id)
+                        deleteCollectionTarget = null
+                    },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteCollectionTarget = null }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CollapsibleSectionHeader(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    onRename: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onExpandedChange(!expanded) },
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (onRename != null || onDelete != null) {
+            Box {
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(HugeIcons.MoreVertical, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    onRename?.let { rename ->
+                        DropdownMenuItem(
+                            text = { Text("重命名") },
+                            onClick = {
+                                showMenu = false
+                                rename()
+                            },
+                        )
+                    }
+                    onDelete?.let { delete ->
+                        DropdownMenuItem(
+                            text = { Text("删除分组", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                showMenu = false
+                                delete()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        IconButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
 }
 
 @Composable
-private fun SpaceFavoriteCard(
+private fun SpaceFavoriteGridCell(
     item: ImageFavoriteListItem,
     isFavorited: Boolean,
     showThumbnailActions: Boolean,
+    collections: List<ImageFavoriteCollection>,
     onToggleFavorite: (GeneratedImage) -> Unit,
     onApplyReference: (String) -> Unit,
+    onAssignCollection: (String?) -> Unit,
     onPreview: () -> Unit,
+    canAssignCollection: Boolean = true,
 ) {
     val image = item.image
+    var showCollectionMenu by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            Box(
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+        ) {
+            AsyncImage(
+                model = File(image.filePath),
+                contentDescription = null,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-            ) {
-                AsyncImage(
-                    model = File(image.filePath),
-                    contentDescription = null,
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onPreview() },
+                contentScale = ContentScale.Crop,
+            )
+            if (showThumbnailActions) {
+                ImageThumbnailActions(
+                    image = image,
+                    isFavorited = isFavorited,
+                    onToggleFavorite = onToggleFavorite,
+                    onApplyReference = onApplyReference,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clickable { onPreview() },
-                    contentScale = ContentScale.Crop,
-                )
-                if (showThumbnailActions) {
-                    ImageThumbnailActions(
-                        image = image,
-                        isFavorited = isFavorited,
-                        onToggleFavorite = onToggleFavorite,
-                        onApplyReference = onApplyReference,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp),
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = image.model,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = formatImageDateTime(image.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-                PromptPreviewText(
-                    prompt = image.prompt,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp),
                 )
             }
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = collections.firstOrNull { it.id == item.collectionId }?.name ?: "未分组",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (canAssignCollection) {
+                Box {
+                    TextButton(onClick = { showCollectionMenu = true }) {
+                        Text("分组", style = MaterialTheme.typography.labelSmall)
+                    }
+                    DropdownMenu(
+                        expanded = showCollectionMenu,
+                        onDismissRequest = { showCollectionMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("未分组") },
+                            onClick = {
+                                onAssignCollection(null)
+                                showCollectionMenu = false
+                            },
+                        )
+                        collections.forEach { collection ->
+                            DropdownMenuItem(
+                                text = { Text(collection.name) },
+                                onClick = {
+                                    onAssignCollection(collection.id)
+                                    showCollectionMenu = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            text = formatImageDateTime(image.timestamp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }
 
@@ -1551,16 +1870,49 @@ private fun GroupedImageGallery(
     }
     val imageFavoriteIds by vm.imageFavoriteIds.collectAsStateWithLifecycle()
     val onToggleFavorite = rememberImageFavoriteToggler(vm)
+    val groupKeys = remember(groups) { groups.map { "${it.prompt}:${it.timestamp}" } }
+    var allGroupsExpanded by remember { mutableStateOf(true) }
+    val groupExpanded = remember { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(groupKeys) {
+        groupKeys.forEach { key ->
+            if (groupExpanded[key] == null) {
+                groupExpanded[key] = true
+            }
+        }
+        groupExpanded.keys.retainAll(groupKeys.toSet())
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item(key = "gallery-group-toolbar") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(
+                    onClick = {
+                        allGroupsExpanded = !allGroupsExpanded
+                        groupKeys.forEach { groupExpanded[it] = allGroupsExpanded }
+                    },
+                ) {
+                    Text(if (allGroupsExpanded) "全部折叠" else "全部展开")
+                }
+            }
+        }
         items(groups, key = { "${it.prompt}:${it.timestamp}" }) { group ->
+            val groupKey = "${group.prompt}:${group.timestamp}"
+            val expanded = groupExpanded[groupKey] != false
             GroupedImageCard(
                 group = group,
                 columns = columns,
+                expanded = expanded,
+                onExpandedChange = { next ->
+                    groupExpanded[groupKey] = next
+                    allGroupsExpanded = groupKeys.all { groupExpanded[it] != false }
+                },
                 onDelete = vm::deleteImage,
                 imageFavoriteIds = imageFavoriteIds,
                 onToggleFavorite = onToggleFavorite,
@@ -1575,6 +1927,8 @@ private fun GroupedImageGallery(
 private fun GroupedImageCard(
     group: GeneratedImageGroup,
     columns: Int,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onDelete: (GeneratedImage) -> Unit,
     imageFavoriteIds: Set<Int>,
     onToggleFavorite: (GeneratedImage) -> Unit,
@@ -1603,9 +1957,9 @@ private fun GroupedImageCard(
         group.prompt
     }
     val groupMeta = if (isTemplateGroup) {
-        "${formatImageDate(group.timestamp)} · ${group.model} · ${group.images.size} 张 · ${group.variants.size} 组"
+        "${formatImageDate(group.timestamp)} · ${group.images.size} 张 · ${group.variants.size} 变体"
     } else {
-        "${formatImageDate(group.timestamp)} · ${group.model} · ${group.images.size} 张"
+        "${formatImageDate(group.timestamp)} · ${group.images.size} 张"
     }
     var previewImages by remember { mutableStateOf<List<GeneratedImage>>(emptyList()) }
     var previewStartIndex by remember { mutableStateOf<Int?>(null) }
@@ -1634,6 +1988,16 @@ private fun GroupedImageCard(
                     )
                 }
                 IconButton(
+                    onClick = { onExpandedChange(!expanded) },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                IconButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(groupCopyText))
                         toaster.show(message = "Prompt copied to clipboard", type = ToastType.Success)
@@ -1642,6 +2006,10 @@ private fun GroupedImageCard(
                 ) {
                     Icon(HugeIcons.Copy01, null, modifier = Modifier.size(16.dp))
                 }
+            }
+
+            if (!expanded) {
+                return@Column
             }
 
             sections.forEach { section ->
@@ -1781,6 +2149,7 @@ private fun ImageThumbnailActions(
     isFavorited: Boolean,
     onToggleFavorite: (GeneratedImage) -> Unit,
     onApplyReference: (String) -> Unit,
+    onRegenerate: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -1788,6 +2157,9 @@ private fun ImageThumbnailActions(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        onRegenerate?.let { regenerate ->
+            RegenerateImageButton(onClick = regenerate)
+        }
         ImageFavoriteButton(
             selected = isFavorited,
             onClick = { onToggleFavorite(image) },
@@ -1795,6 +2167,47 @@ private fun ImageThumbnailActions(
         ReferenceApplyButton(
             onClick = { onApplyReference(image.filePath) },
         )
+    }
+}
+
+@Composable
+private fun JobGenerationErrorText(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember(message) { mutableStateOf(false) }
+    Text(
+        text = message,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        maxLines = if (expanded) Int.MAX_VALUE else 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun RegenerateImageButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(30.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.96f),
+        shadowElevation = 2.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = HugeIcons.Refresh01,
+                contentDescription = "Regenerate",
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -2197,6 +2610,23 @@ private fun SettingsBottomSheet(
                     onValueChange = vm::updateNumberOfImages,
                     min = 1,
                     max = MAX_GENERATION_IMAGES,
+                )
+            }
+
+            FormItem(
+                label = { Text("并发请求数") },
+                description = { Text("同时进行中的 API 请求上限；成功或失败的任务卡片不占名额，可继续发送") },
+            ) {
+                CompactStepper(
+                    label = "个",
+                    value = imageSettings.maxConcurrentJobs.coerceIn(1, MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP),
+                    onValueChange = { count ->
+                        updateImageSettings {
+                            it.copy(maxConcurrentJobs = count.coerceIn(1, MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP))
+                        }
+                    },
+                    min = 1,
+                    max = MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP,
                 )
             }
 

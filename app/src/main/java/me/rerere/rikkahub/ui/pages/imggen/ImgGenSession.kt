@@ -1,12 +1,18 @@
 package me.rerere.rikkahub.ui.pages.imggen
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.ProviderManager
@@ -23,10 +29,29 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import java.io.File
-import kotlin.coroutines.cancellation.CancellationException
+import java.util.concurrent.atomic.AtomicLong
 
 /** 单次生成/编辑的最大出图数量 */
 const val MAX_GENERATION_IMAGES = 4
+
+/** 用户可配置并发上限的最大值（Semaphore 容量） */
+const val MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP = 8
+
+/** @deprecated 使用设置中的 maxConcurrentJobs；仅作 UI/默认值回退 */
+const val MAX_CONCURRENT_IMAGE_GENERATION_JOBS = 4
+
+data class ImgGenActiveJob(
+    val id: Long,
+    val prompt: String,
+    val images: List<GeneratedImage>,
+    val isEdit: Boolean,
+    val isRunning: Boolean = true,
+    val isAwaitingPermit: Boolean = true,
+    val errorMessage: String? = null,
+    val referenceSourcePaths: List<String> = emptyList(),
+    val numberOfImages: Int = 1,
+    val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+)
 
 class ImgGenSession(
     private val appScope: AppScope,
@@ -44,19 +69,41 @@ class ImgGenSession(
     private val _aspectRatio = MutableStateFlow(ImageAspectRatio.SQUARE)
     val aspectRatio: StateFlow<ImageAspectRatio> = _aspectRatio
 
+    private val _activeJobs = MutableStateFlow<Map<Long, ImgGenActiveJob>>(emptyMap())
+    val activeJobs: StateFlow<Map<Long, ImgGenActiveJob>> = _activeJobs.asStateFlow()
+
     private val _isGenerating = MutableStateFlow(false)
-    val isGenerating: StateFlow<Boolean> = _isGenerating
+    val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
+
+    init {
+        appScope.launch {
+            settingsStore.settingsFlow.collect { settings ->
+                maxConcurrentJobsLimit = settings.imageGenerationSettings.maxConcurrentJobs.coerceIn(
+                    1,
+                    MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP,
+                )
+            }
+        }
+        appScope.launch {
+            _activeJobs.collect { jobs ->
+                _isGenerating.value = jobs.values.any { it.isRunning }
+            }
+        }
+    }
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    private val _currentGeneratedImages = MutableStateFlow<List<GeneratedImage>>(emptyList())
-    val currentGeneratedImages: StateFlow<List<GeneratedImage>> = _currentGeneratedImages
-
     private val _referenceImages = MutableStateFlow<List<String>>(emptyList())
     val referenceImages: StateFlow<List<String>> = _referenceImages
 
-    private var cancelJob: Job? = null
+    private val jobIdSeq = AtomicLong(0)
+    private val jobSlotMutex = Mutex()
+    private var reservedJobSlots = 0
+    private val apiConcurrencyMutex = Mutex()
+    private var apiInFlight = 0
+    private val runningJobs = mutableMapOf<Long, Job>()
+    private var maxConcurrentJobsLimit = MAX_CONCURRENT_IMAGE_GENERATION_JOBS
 
     fun updatePrompt(prompt: String) {
         _prompt.value = prompt
@@ -89,142 +136,111 @@ class ImgGenSession(
     }
 
     fun startNewSession() {
-        cancelJob?.cancel()
+        cancelGeneration()
         clearReferenceImages()
         _prompt.value = ""
-        _currentGeneratedImages.value = emptyList()
         _error.value = null
-        _isGenerating.value = false
         _numberOfImages.value = 1
         _aspectRatio.value = ImageAspectRatio.SQUARE
     }
 
     fun generateImage() {
         if (prompt.value.isBlank()) return
-        cancelJob?.cancel()
-        cancelJob = appScope.launch {
-            try {
-                _isGenerating.value = true
-                _error.value = null
-                _currentGeneratedImages.value = emptyList()
-
-                val settings = settingsStore.settingsFlow.first()
-                val model = settings.findModelById(settings.imageGenerationModelId)
-                    ?: throw IllegalStateException("No model selected")
-                val provider = model.findProvider(settings.providers)
-                    ?: throw IllegalStateException("Provider not found")
-                val providerSetting = settings.providers.find { it.id == provider.id }
-                    ?: throw IllegalStateException("Provider setting not found")
-                val imageSettings = settings.imageGenerationSettings
-                val isGptImage2 = model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)
-                val gptImage2Size = if (isGptImage2) imageSettings.resolveGptImage2SizeOrThrow() else null
-
-                val params = ImageGenerationParams(
-                    model = model,
-                    prompt = _prompt.value,
-                    numOfImages = _numberOfImages.value.coerceIn(1, MAX_GENERATION_IMAGES),
-                    aspectRatio = _aspectRatio.value,
-                    size = gptImage2Size,
-                    quality = imageSettings.quality.takeIf { isGptImage2 },
-                    outputFormat = imageSettings.outputFormat.takeIf { isGptImage2 },
-                    outputCompression = imageSettings.outputCompression.takeIf {
-                        isGptImage2 && imageSettings.outputFormat.supportsCompression
-                    },
-                    background = imageSettings.background.takeIf { isGptImage2 },
-                    moderation = imageSettings.moderation.takeIf { isGptImage2 },
-                    stream = imageSettings.imageStreaming,
-                    customHeaders = model.customHeaders,
-                    customBody = model.customBodies
-                )
-
-                val images = providerManager.getProviderByType(provider)
-                    .generateImage(providerSetting, params)
-
-                collectImageGeneration(
-                    images = images,
-                    prompt = _prompt.value,
-                    modelName = model.displayName,
-                )
-            } catch (e: Exception) {
-                if (e is CancellationException) return@launch
-                Log.e(TAG, "Failed to generate image", e)
-                _error.value = e.message ?: "Unknown error occurred"
-            } finally {
-                _isGenerating.value = false
-            }
+        appScope.launch {
+            if (!tryReserveJobSlot()) return@launch
+            val snapshot = captureGenerationSnapshot(isEdit = false)
+            enqueueGenerationJob(snapshot)
         }
     }
 
     fun editImage() {
         if (prompt.value.isBlank() || referenceImages.value.isEmpty()) return
-        cancelJob?.cancel()
-        cancelJob = appScope.launch {
-            try {
-                _isGenerating.value = true
-                _error.value = null
-                _currentGeneratedImages.value = emptyList()
-
-                val settings = settingsStore.settingsFlow.first()
-                val model = settings.findModelById(settings.imageGenerationModelId)
-                    ?: throw IllegalStateException("No model selected")
-                val provider = model.findProvider(settings.providers)
-                    ?: throw IllegalStateException("Provider not found")
-                val providerSetting = settings.providers.find { it.id == provider.id }
-                    ?: throw IllegalStateException("Provider setting not found")
-                val imageSettings = settings.imageGenerationSettings
-                val isGptImage2 = model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)
-                val gptImage2Size = if (isGptImage2) imageSettings.resolveGptImage2SizeOrThrow() else null
-                val sourceImages = _referenceImages.value
-
-                val params = ImageEditParams(
-                    model = model,
-                    prompt = _prompt.value,
-                    images = sourceImages,
-                    numOfImages = _numberOfImages.value.coerceIn(1, MAX_GENERATION_IMAGES),
-                    aspectRatio = _aspectRatio.value,
-                    size = gptImage2Size,
-                    quality = imageSettings.quality.takeIf { isGptImage2 },
-                    outputFormat = imageSettings.outputFormat.takeIf { isGptImage2 },
-                    outputCompression = imageSettings.outputCompression.takeIf {
-                        isGptImage2 && imageSettings.outputFormat.supportsCompression
-                    },
-                    background = imageSettings.background.takeIf { isGptImage2 },
-                    moderation = imageSettings.moderation.takeIf { isGptImage2 },
-                    stream = imageSettings.imageStreaming,
-                    customHeaders = model.customHeaders,
-                    customBody = model.customBodies
-                )
-
-                val images = providerManager.getProviderByType(provider)
-                    .editImage(providerSetting, params)
-
-                collectImageGeneration(
-                    images = images,
-                    prompt = _prompt.value,
-                    modelName = model.displayName,
-                    type = GenMediaEntity.TYPE_IMAGE_EDIT,
-                    sourcePaths = sourceImages.joinToString(separator = "\n"),
-                )
-            } catch (e: Exception) {
-                if (e is CancellationException) return@launch
-                Log.e(TAG, "Failed to edit image", e)
-                _error.value = e.message ?: "Unknown error occurred"
-            } finally {
-                _isGenerating.value = false
-            }
+        appScope.launch {
+            if (!tryReserveJobSlot()) return@launch
+            val snapshot = captureGenerationSnapshot(isEdit = true)
+            enqueueGenerationJob(snapshot)
         }
     }
 
     fun cancelGeneration() {
-        cancelJob?.cancel()
+        val runningIds = runningJobs.keys.toList()
+        runningIds.forEach { cancelJob(it) }
+    }
+
+    fun cancelJob(jobId: Long) {
+        runningJobs.remove(jobId)?.cancel()
+        _activeJobs.update { it - jobId }
+    }
+
+    fun dismissJob(jobId: Long) {
+        runningJobs.remove(jobId)?.cancel()
+        _activeJobs.update { it - jobId }
+    }
+
+    fun regenerateFromImage(image: GeneratedImage) {
+        appScope.launch {
+            if (!tryReserveJobSlot()) return@launch
+            val parentJob = _activeJobs.value.values.firstOrNull { job ->
+                job.images.any { it.id == image.id || it.filePath == image.filePath }
+            }
+            val refs = image.sourcePaths
+                ?.lineSequence()
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toList()
+                .orEmpty()
+            val isEdit = refs.isNotEmpty()
+            enqueueSnapshotJob(
+                prompt = image.prompt,
+                numberOfImages = parentJob?.numberOfImages ?: 1,
+                aspectRatio = parentJob?.aspectRatio ?: _aspectRatio.value,
+                referenceImages = refs,
+                isEdit = isEdit,
+            )
+        }
+    }
+
+    fun regenerateFromJob(jobId: Long) {
+        val job = _activeJobs.value[jobId] ?: return
+        appScope.launch {
+            if (!tryReserveJobSlot()) return@launch
+            dismissJob(jobId)
+            val newJobId = jobIdSeq.incrementAndGet()
+            _activeJobs.update {
+                it + (
+                    newJobId to ImgGenActiveJob(
+                        id = newJobId,
+                        prompt = job.prompt,
+                        images = emptyList(),
+                        isEdit = job.isEdit,
+                        referenceSourcePaths = job.referenceSourcePaths,
+                        numberOfImages = job.numberOfImages,
+                        aspectRatio = job.aspectRatio,
+                    )
+                    )
+            }
+            val snapshot = GenerationSnapshot(
+                jobId = newJobId,
+                prompt = job.prompt,
+                numberOfImages = job.numberOfImages,
+                aspectRatio = job.aspectRatio,
+                referenceImages = job.referenceSourcePaths,
+                isEdit = job.isEdit,
+            )
+            enqueueGenerationJob(snapshot)
+        }
     }
 
     fun deleteImage(image: GeneratedImage) {
         appScope.launch {
             try {
                 genMediaRepository.moveToTrash(image.id)
-                _currentGeneratedImages.value = _currentGeneratedImages.value.filterNot {
-                    it.id == image.id || it.filePath == image.filePath
+                _activeJobs.update { jobs ->
+                    jobs.mapValues { (_, job) ->
+                        job.copy(images = job.images.filterNot {
+                            it.id == image.id || it.filePath == image.filePath
+                        })
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete image", e)
@@ -237,8 +253,12 @@ class ImgGenSession(
         appScope.launch {
             try {
                 permanentlyDeleteImageFileAndRecord(image)
-                _currentGeneratedImages.value = _currentGeneratedImages.value.filterNot {
-                    it.id == image.id || it.filePath == image.filePath
+                _activeJobs.update { jobs ->
+                    jobs.mapValues { (_, job) ->
+                        job.copy(images = job.images.filterNot {
+                            it.id == image.id || it.filePath == image.filePath
+                        })
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to permanently delete image", e)
@@ -255,8 +275,12 @@ class ImgGenSession(
                 }
                 val ids = images.map { it.id }.toSet()
                 val paths = images.map { it.filePath }.toSet()
-                _currentGeneratedImages.value = _currentGeneratedImages.value.filterNot {
-                    it.id in ids || it.filePath in paths
+                _activeJobs.update { jobs ->
+                    jobs.mapValues { (_, job) ->
+                        job.copy(images = job.images.filterNot {
+                            it.id in ids || it.filePath in paths
+                        })
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to clear trash images", e)
@@ -281,6 +305,203 @@ class ImgGenSession(
         }
     }
 
+    private data class GenerationSnapshot(
+        val jobId: Long,
+        val prompt: String,
+        val numberOfImages: Int,
+        val aspectRatio: ImageAspectRatio,
+        val referenceImages: List<String>,
+        val isEdit: Boolean,
+    )
+
+    private fun enqueueSnapshotJob(
+        prompt: String,
+        numberOfImages: Int,
+        aspectRatio: ImageAspectRatio,
+        referenceImages: List<String>,
+        isEdit: Boolean,
+    ) {
+        val jobId = jobIdSeq.incrementAndGet()
+        _activeJobs.update {
+            it + (
+                jobId to ImgGenActiveJob(
+                    id = jobId,
+                    prompt = prompt,
+                    images = emptyList(),
+                    isEdit = isEdit,
+                    referenceSourcePaths = if (isEdit) referenceImages else emptyList(),
+                    numberOfImages = numberOfImages,
+                    aspectRatio = aspectRatio,
+                )
+            )
+        }
+        enqueueGenerationJob(
+            GenerationSnapshot(
+                jobId = jobId,
+                prompt = prompt,
+                numberOfImages = numberOfImages,
+                aspectRatio = aspectRatio,
+                referenceImages = referenceImages,
+                isEdit = isEdit,
+            ),
+        )
+    }
+
+    private fun captureGenerationSnapshot(isEdit: Boolean): GenerationSnapshot {
+        val jobId = jobIdSeq.incrementAndGet()
+        _activeJobs.update {
+            it + (
+                jobId to ImgGenActiveJob(
+                    id = jobId,
+                    prompt = _prompt.value,
+                    images = emptyList(),
+                    isEdit = isEdit,
+                    referenceSourcePaths = if (isEdit) _referenceImages.value.toList() else emptyList(),
+                    numberOfImages = _numberOfImages.value,
+                    aspectRatio = _aspectRatio.value,
+                )
+                )
+        }
+        return GenerationSnapshot(
+            jobId = jobId,
+            prompt = _prompt.value,
+            numberOfImages = _numberOfImages.value,
+            aspectRatio = _aspectRatio.value,
+            referenceImages = _referenceImages.value.toList(),
+            isEdit = isEdit,
+        )
+    }
+
+    private fun enqueueGenerationJob(snapshot: GenerationSnapshot) {
+        val job = appScope.launch {
+            withApiConcurrencyLimit {
+                markJobStarted(snapshot.jobId)
+                runGeneration(snapshot)
+            }
+        }
+        runningJobs[snapshot.jobId] = job
+        job.invokeOnCompletion { cause ->
+            runningJobs.remove(snapshot.jobId)
+            appScope.launch { releaseJobSlot() }
+            when {
+                cause is CancellationException -> {
+                    _activeJobs.update { it - snapshot.jobId }
+                }
+
+                cause == null -> {
+                    _activeJobs.update { jobs ->
+                        val existing = jobs[snapshot.jobId] ?: return@update jobs
+                        jobs + (
+                            snapshot.jobId to existing.copy(
+                                isRunning = false,
+                                isAwaitingPermit = false,
+                                errorMessage = null,
+                            )
+                            )
+                    }
+                }
+
+                else -> {
+                    _activeJobs.update { jobs ->
+                        val existing = jobs[snapshot.jobId] ?: return@update jobs
+                        if (existing.errorMessage != null) {
+                            jobs
+                        } else {
+                            jobs + (
+                                snapshot.jobId to existing.copy(
+                                    isRunning = false,
+                                    isAwaitingPermit = false,
+                                    errorMessage = cause.message ?: "Unknown error occurred",
+                                )
+                                )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun runGeneration(snapshot: GenerationSnapshot) {
+        try {
+            val settings = settingsStore.settingsFlow.first()
+            val model = settings.findModelById(settings.imageGenerationModelId)
+                ?: throw IllegalStateException("No model selected")
+            val provider = model.findProvider(settings.providers)
+                ?: throw IllegalStateException("Provider not found")
+            val providerSetting = settings.providers.find { it.id == provider.id }
+                ?: throw IllegalStateException("Provider setting not found")
+            val imageSettings = settings.imageGenerationSettings
+            val isGptImage2 = model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)
+            val gptImage2Size = if (isGptImage2) imageSettings.resolveGptImage2SizeOrThrow() else null
+
+            val imagesFlow = if (snapshot.isEdit) {
+                val params = ImageEditParams(
+                    model = model,
+                    prompt = snapshot.prompt,
+                    images = snapshot.referenceImages,
+                    numOfImages = snapshot.numberOfImages.coerceIn(1, MAX_GENERATION_IMAGES),
+                    aspectRatio = snapshot.aspectRatio,
+                    size = gptImage2Size,
+                    quality = imageSettings.quality.takeIf { isGptImage2 },
+                    outputFormat = imageSettings.outputFormat.takeIf { isGptImage2 },
+                    outputCompression = imageSettings.outputCompression.takeIf {
+                        isGptImage2 && imageSettings.outputFormat.supportsCompression
+                    },
+                    background = imageSettings.background.takeIf { isGptImage2 },
+                    moderation = imageSettings.moderation.takeIf { isGptImage2 },
+                    stream = imageSettings.imageStreaming,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies,
+                )
+                providerManager.getProviderByType(provider).editImage(providerSetting, params)
+            } else {
+                val params = ImageGenerationParams(
+                    model = model,
+                    prompt = snapshot.prompt,
+                    numOfImages = snapshot.numberOfImages.coerceIn(1, MAX_GENERATION_IMAGES),
+                    aspectRatio = snapshot.aspectRatio,
+                    size = gptImage2Size,
+                    quality = imageSettings.quality.takeIf { isGptImage2 },
+                    outputFormat = imageSettings.outputFormat.takeIf { isGptImage2 },
+                    outputCompression = imageSettings.outputCompression.takeIf {
+                        isGptImage2 && imageSettings.outputFormat.supportsCompression
+                    },
+                    background = imageSettings.background.takeIf { isGptImage2 },
+                    moderation = imageSettings.moderation.takeIf { isGptImage2 },
+                    stream = imageSettings.imageStreaming,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies,
+                )
+                providerManager.getProviderByType(provider).generateImage(providerSetting, params)
+            }
+
+            collectImageGeneration(
+                jobId = snapshot.jobId,
+                images = imagesFlow,
+                prompt = snapshot.prompt,
+                modelName = model.displayName,
+                type = if (snapshot.isEdit) GenMediaEntity.TYPE_IMAGE_EDIT else GenMediaEntity.TYPE_IMAGE_GENERATION,
+                sourcePaths = snapshot.referenceImages.takeIf { snapshot.isEdit }?.joinToString(separator = "\n"),
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e(TAG, "Failed to generate image", e)
+            val message = e.message ?: "Unknown error occurred"
+            _error.value = message
+            _activeJobs.update { jobs ->
+                val existing = jobs[snapshot.jobId] ?: return@update jobs
+                jobs + (
+                    snapshot.jobId to existing.copy(
+                        isRunning = false,
+                        isAwaitingPermit = false,
+                        errorMessage = message,
+                    )
+                    )
+            }
+            throw e
+        }
+    }
+
     private suspend fun permanentlyDeleteImageFileAndRecord(image: GeneratedImage) {
         genMediaRepository.deleteMedia(image.id)
         val file = File(image.filePath)
@@ -290,6 +511,7 @@ class ImgGenSession(
     }
 
     private suspend fun collectImageGeneration(
+        jobId: Long,
         images: Flow<ImageGenerationItem>,
         prompt: String,
         modelName: String,
@@ -302,7 +524,6 @@ class ImgGenSession(
 
         images.collect { item ->
             if (item.partial) {
-                // 流式部分图：写到临时预览文件并即时展示，不入库
                 previewFile?.delete()
                 val imageFile = saveImagePreview(
                     item = item,
@@ -310,17 +531,19 @@ class ImgGenSession(
                     index = item.partialImageIndex ?: finalIndex,
                 )
                 previewFile = imageFile
-                _currentGeneratedImages.value = finalImages + GeneratedImage(
-                    id = 0,
-                    prompt = prompt,
-                    filePath = imageFile.absolutePath,
-                    timestamp = System.currentTimeMillis(),
-                    model = modelName,
-                    type = type,
-                    sourcePaths = sourcePaths,
+                updateJobImages(
+                    jobId,
+                    finalImages + GeneratedImage(
+                        id = 0,
+                        prompt = prompt,
+                        filePath = imageFile.absolutePath,
+                        timestamp = System.currentTimeMillis(),
+                        model = modelName,
+                        type = type,
+                        sourcePaths = sourcePaths,
+                    ),
                 )
             } else {
-                // 最终图：删除预览、落盘入库（saveImageToStorage 返回带数据库 id 的记录）
                 previewFile?.delete()
                 previewFile = null
                 val saved = saveImageToStorage(
@@ -333,8 +556,15 @@ class ImgGenSession(
                 )
                 finalImages.add(saved)
                 finalIndex++
-                _currentGeneratedImages.value = finalImages.toList()
+                updateJobImages(jobId, finalImages.toList())
             }
+        }
+    }
+
+    private fun updateJobImages(jobId: Long, images: List<GeneratedImage>) {
+        _activeJobs.update { jobs ->
+            val existing = jobs[jobId] ?: return@update jobs
+            jobs + (jobId to existing.copy(images = images))
         }
     }
 
@@ -394,6 +624,61 @@ class ImgGenSession(
                     file.delete()
                 }
             }
+        }
+    }
+
+    private suspend fun tryReserveJobSlot(): Boolean {
+        val limit = maxConcurrentJobsLimit
+        val reserved = jobSlotMutex.withLock {
+            if (reservedJobSlots >= limit) {
+                false
+            } else {
+                reservedJobSlots++
+                true
+            }
+        }
+        if (!reserved) {
+            _error.value = "最多同时进行 $limit 个生图请求（已完成任务不占名额）"
+        }
+        return reserved
+    }
+
+    private suspend fun releaseJobSlot() {
+        jobSlotMutex.withLock {
+            if (reservedJobSlots > 0) {
+                reservedJobSlots--
+            }
+        }
+    }
+
+    private suspend fun <T> withApiConcurrencyLimit(block: suspend () -> T): T {
+        while (true) {
+            val acquired = apiConcurrencyMutex.withLock {
+                if (apiInFlight < maxConcurrentJobsLimit) {
+                    apiInFlight++
+                    true
+                } else {
+                    false
+                }
+            }
+            if (acquired) break
+            delay(50)
+        }
+        return try {
+            block()
+        } finally {
+            apiConcurrencyMutex.withLock {
+                if (apiInFlight > 0) {
+                    apiInFlight--
+                }
+            }
+        }
+    }
+
+    private fun markJobStarted(jobId: Long) {
+        _activeJobs.update { jobs ->
+            val existing = jobs[jobId] ?: return@update jobs
+            jobs + (jobId to existing.copy(isAwaitingPermit = false))
         }
     }
 
