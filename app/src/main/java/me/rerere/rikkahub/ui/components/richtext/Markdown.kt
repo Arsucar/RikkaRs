@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ClipEntry
@@ -539,7 +540,8 @@ private fun MarkdownNode(
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathInline(
-                    formula, modifier = modifier.padding(horizontal = 1.dp)
+                    formula, modifier = modifier.padding(horizontal = 1.dp),
+                    fontSize = LocalTextStyle.current.fontSize
                 )
             } else {
                 Text(
@@ -557,7 +559,8 @@ private fun MarkdownNode(
                 MathBlock(
                     formula, modifier = modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 8.dp),
+                    fontSize = LocalTextStyle.current.fontSize
                 )
             } else {
                 Text(
@@ -960,6 +963,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
             columnMinWidths = List(columnCount) { 80.dp },
             columnMaxWidths = List(columnCount) { 200.dp },
             outerBorder = null,
+            shape = RectangleShape,
         )
     }
 }
@@ -1143,8 +1147,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             withStyle(
                 SpanStyle(
                     fontFamily = JetbrainsMono,
-                    fontSize = 0.95.em,
-                    background = colorScheme.surfaceVariant,
+                    fontSize = 0.9.em,
                     color = colorScheme.primary,
                 )
             ) {

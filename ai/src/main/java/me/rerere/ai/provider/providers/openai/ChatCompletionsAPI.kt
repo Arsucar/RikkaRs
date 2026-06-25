@@ -354,6 +354,10 @@ class ChatCompletionsAPI(
                         }
                     }
 
+                    "aiping.cn" -> {
+                        put("enable_thinking", level.isEnabled)
+                    }
+
                     "open.bigmodel.cn" -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
@@ -389,6 +393,12 @@ class ChatCompletionsAPI(
                             if (level != ReasoningLevel.AUTO) {
                                 put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
                             }
+                        }
+                    }
+
+                    "opencode.ai" -> {
+                        if (level != ReasoningLevel.AUTO) {
+                            put("reasoning_effort", level.effort)
                         }
                     }
 
