@@ -135,6 +135,10 @@ class ImgGenSession(
         _error.value = null
     }
 
+    fun reportUserError(message: String) {
+        _error.value = message
+    }
+
     fun startNewSession() {
         cancelGeneration()
         clearReferenceImages()

@@ -29,6 +29,7 @@ data class FavoriteMeta(
     val title: String? = null,
     val subtitle: String? = null,
     val previewText: String? = null,
+    val collectionId: String? = null,
 )
 
 @Serializable
@@ -68,6 +69,7 @@ data class ImageFavoriteTarget(
     val model: String,
     val type: String,
     val sourcePaths: String? = null,
+    val collectionId: String? = null,
 )
 
 fun UIMessage.buildFavoritePreview(maxLength: Int = 160): String {

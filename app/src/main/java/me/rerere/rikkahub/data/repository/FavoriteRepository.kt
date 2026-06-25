@@ -69,8 +69,9 @@ class FavoriteRepository(
         return dao.existsByRefKey(ImageFavoriteAdapter.buildRefKey(imageId))
     }
 
-    suspend fun setImageFavoriteCollection(imageId: Int, collectionId: String?) {
-        val entity = dao.getByRefKey(ImageFavoriteAdapter.buildRefKey(imageId)) ?: return
+    suspend fun setImageFavoriteCollection(imageId: Int, collectionId: String?): Boolean {
+        val entity = dao.getByRefKey(ImageFavoriteAdapter.buildRefKey(imageId)) ?: return false
         dao.upsert(ImageFavoriteAdapter.updateCollectionId(entity, collectionId))
+        return true
     }
 }

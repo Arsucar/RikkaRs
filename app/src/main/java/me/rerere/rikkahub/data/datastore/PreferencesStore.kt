@@ -151,6 +151,7 @@ class SettingsStore(
         val IMAGE_QUICK_MESSAGES = stringPreferencesKey("image_quick_messages")
         val IMAGE_GENERATION_SETTINGS = stringPreferencesKey("image_generation_settings")
         val IMAGE_GALLERY_SETTINGS = stringPreferencesKey("image_gallery_settings")
+        val IMAGE_FAVORITE_COLLECTIONS = stringPreferencesKey("image_favorite_collections")
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -252,6 +253,9 @@ class SettingsStore(
                 imageGallerySettings = preferences[IMAGE_GALLERY_SETTINGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: ImageGallerySettings(),
+                imageFavoriteCollections = preferences[IMAGE_FAVORITE_COLLECTIONS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -433,6 +437,7 @@ class SettingsStore(
             preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
             preferences[IMAGE_GENERATION_SETTINGS] = JsonInstant.encodeToString(settings.imageGenerationSettings)
             preferences[IMAGE_GALLERY_SETTINGS] = JsonInstant.encodeToString(settings.imageGallerySettings)
+            preferences[IMAGE_FAVORITE_COLLECTIONS] = JsonInstant.encodeToString(settings.imageFavoriteCollections)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -566,6 +571,7 @@ data class Settings(
     val imageQuickMessages: List<QuickMessage> = emptyList(),
     val imageGenerationSettings: ImageGenerationSettings = ImageGenerationSettings(),
     val imageGallerySettings: ImageGallerySettings = ImageGallerySettings(),
+    val imageFavoriteCollections: List<ImageFavoriteCollection> = emptyList(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
@@ -591,6 +597,8 @@ data class ImageGenerationSettings(
     val background: ImageBackgroundOption = ImageBackgroundOption.AUTO,
     val moderation: ImageModerationOption = ImageModerationOption.AUTO,
     val imageStreaming: Boolean = false,
+    /** 同时进行中的 API 请求数上限（已完成/失败的任务卡片不占名额） */
+    val maxConcurrentJobs: Int = 4,
 )
 
 @Suppress("DEPRECATION")
@@ -603,6 +611,7 @@ private fun ImageGenerationSettings.normalized(): ImageGenerationSettings {
     return copy(
         outputFormat = normalizedOutputFormat,
         outputCompression = outputCompression.coerceIn(0, 100),
+        maxConcurrentJobs = maxConcurrentJobs.coerceIn(1, 8),
     )
 }
 
@@ -611,6 +620,12 @@ data class ImageGallerySettings(
     val displayMode: ImageGalleryDisplayMode = ImageGalleryDisplayMode.GRID,
     val columns: Int = 2,
     val spaceColumns: Int = 2,
+)
+
+@Serializable
+data class ImageFavoriteCollection(
+    val id: String,
+    val name: String,
 )
 
 @Serializable

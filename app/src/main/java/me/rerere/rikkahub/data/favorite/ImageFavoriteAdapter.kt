@@ -36,6 +36,7 @@ object ImageFavoriteAdapter : FavoriteAdapter<ImageFavoriteTarget> {
             title = target.prompt.take(80).ifBlank { "图片收藏" },
             subtitle = target.model,
             previewText = target.prompt.take(160),
+            collectionId = target.collectionId ?: existing?.let { decodeMeta(it)?.collectionId },
         )
 
         return FavoriteEntity(
@@ -62,5 +63,21 @@ object ImageFavoriteAdapter : FavoriteAdapter<ImageFavoriteTarget> {
         return runCatching {
             JsonInstant.decodeFromString<ImageFavoriteSnapshot>(entity.snapshotJson)
         }.getOrNull()
+    }
+
+    fun decodeMeta(entity: FavoriteEntity): FavoriteMeta? {
+        if (entity.type != type.value) return null
+        val raw = entity.metaJson ?: return null
+        return runCatching {
+            JsonInstant.decodeFromString<FavoriteMeta>(raw)
+        }.getOrNull()
+    }
+
+    fun updateCollectionId(entity: FavoriteEntity, collectionId: String?): FavoriteEntity {
+        val meta = decodeMeta(entity) ?: FavoriteMeta()
+        return entity.copy(
+            metaJson = JsonInstant.encodeToString(meta.copy(collectionId = collectionId)),
+            updatedAt = System.currentTimeMillis(),
+        )
     }
 }

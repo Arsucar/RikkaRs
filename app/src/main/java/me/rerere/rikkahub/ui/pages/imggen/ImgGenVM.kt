@@ -575,7 +575,10 @@ class ImgGenVM(
 
     fun setImageFavoriteCollection(imageId: Int, collectionId: String?) {
         viewModelScope.launch {
-            favoriteRepository.setImageFavoriteCollection(imageId, collectionId)
+            val ok = favoriteRepository.setImageFavoriteCollection(imageId, collectionId)
+            if (!ok) {
+                session.reportUserError("请先收藏后再分组")
+            }
         }
     }
 
