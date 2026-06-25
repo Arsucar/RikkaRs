@@ -71,6 +71,7 @@ import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.hooks.ImeToastDismisser
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
@@ -232,6 +233,10 @@ class RouteActivity : ComponentActivity() {
         val tts = rememberCustomTtsState()
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
+
+        // Auto-dismiss toasts when keyboard opens to prevent focus stealing
+        ImeToastDismisser(toastState)
+
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
                 when (event) {
