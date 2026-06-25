@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python .trellis/scripts/task.py archive --help)",
+      "Bash(python .trellis/scripts/task.py archive 06-05-optimize-imggen-grouping --no-commit)"
+    ]
+  }
+}
