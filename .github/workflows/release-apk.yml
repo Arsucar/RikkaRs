@@ -82,6 +82,21 @@ jobs:
           name: rikka-arsucar-arm64-${{ github.ref_name }}
           path: app/build/outputs/apk/release/*arm64-v8a*release*.apk
 
+      - name: Prepare release asset filename
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*arm64-v8a*release*.apk | head -1)
+          cp "$APK" "rikka-arsucar-${{ github.ref_name }}-arm64.apk"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rikka-arsucar-${{ github.ref_name }}-arm64.apk
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
       - name: Commit version bump
         if: success() && github.event_name == 'workflow_dispatch'
         run: |
