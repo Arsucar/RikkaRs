@@ -69,7 +69,7 @@ git tag -a v2.3.2 -m "…" && git push origin v2.3.2
 
 重打标签：先 `git push origin :refs/tags/v2.3.2` 删远程标签，再重新 `tag` + `push`。
 
-或：`gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar`（仅 Actions 产物，并自动 bump 版本号）。
+或：`gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar`（仅 Actions 产物，并自动 bump 版本号）。本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等。
 
 更多见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。
 
