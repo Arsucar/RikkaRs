@@ -157,6 +157,12 @@ val dataSourceModule = module {
         )
     }
 
+    single {
+        me.rerere.rikkahub.data.ai.subagent.SubagentHost(
+            generationHandler = get(),
+        )
+    }
+
     single<OkHttpClient> {
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
             .build()

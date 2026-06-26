@@ -55,6 +55,19 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import kotlinx.serialization.json.Json
+import me.rerere.rikkahub.data.ai.subagent.SubagentHost
+import me.rerere.rikkahub.data.ai.subagent.SubagentResult
+import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
+import me.rerere.rikkahub.data.ai.subagent.buildSubagentTools
+import me.rerere.rikkahub.data.ai.subagent.createManageSubagentTool
+import me.rerere.rikkahub.data.ai.subagent.createSubagentTools
+import me.rerere.rikkahub.data.ai.subagent.createSubagentWorkspaceTools
+import me.rerere.rikkahub.data.ai.subagent.mergeSubagentProfiles
+import me.rerere.rikkahub.data.ai.subagent.removeSubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
+import me.rerere.rikkahub.data.datastore.Settings
 
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -151,6 +164,8 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
+    private val subagentHost: SubagentHost,
+    private val json: Json,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
@@ -607,6 +622,18 @@ class ChatService(
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
                             )
+                        )
+                    }
+                    if (assistant.enableSubagents) {
+                        addAll(
+                            buildSubagentToolsForChat(
+                                assistant = assistant,
+                                settings = settings,
+                                parentModel = model,
+                                parentTools = this@buildList,
+                                workspaceCwd = conversation.workspaceCwd,
+                                depth = 0,
+                            ),
                         )
                     }
                 },
@@ -1356,6 +1383,226 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
+
+    private suspend fun buildSubagentToolsForChat(
+        assistant: Assistant,
+        settings: Settings,
+        parentModel: Model,
+        parentTools: List<Tool>,
+        workspaceCwd: String?,
+        depth: Int,
+    ): List<Tool> {
+        val maxDepth = assistant.subagentMaxDepth.coerceAtLeast(1)
+        val profiles = mergeSubagentProfiles(assistant.subagentProfiles, assistant.disabledBuiltinSubagents)
+        val workspaceId = assistant.workspaceId?.toString().orEmpty()
+        val result = mutableListOf<Tool>()
+        if (profiles.isNotEmpty()) {
+            result += createSubagentTools(
+                profiles = profiles,
+                json = json,
+                spawn = { profileName, task, _ ->
+                    val profile = SubagentRegistry.resolveProfile(profileName, assistant)
+                    if (profile == null) {
+                        SubagentResult(
+                            profileName = profileName,
+                            summary = "",
+                            succeeded = false,
+                            error = "profile not found",
+                            depth = depth + 1,
+                        )
+                    } else {
+                        subagentHost.spawn(
+                            profileName = profileName,
+                            task = task,
+                            settings = settings,
+                            parentAssistant = assistant,
+                            parentModel = parentModel,
+                            buildChildTools = { _, childDepth ->
+                                toolsForSubagentProfile(
+                                    profile = profile,
+                                    assistant = assistant,
+                                    settings = settings,
+                                    parentModel = parentModel,
+                                    parentTools = parentTools,
+                                    workspaceCwd = workspaceCwd,
+                                    workspaceId = workspaceId,
+                                    depth = childDepth,
+                                    maxDepth = maxDepth,
+                                )
+                            },
+                            depth = depth + 1,
+                            maxDepth = maxDepth,
+                            workspaceCwd = workspaceCwd,
+                        )
+                    }
+                },
+                askBtw = { question ->
+                    subagentHost.askBtw(
+                        question = question,
+                        settings = settings,
+                        parentAssistant = assistant,
+                        parentModel = parentModel,
+                        workspaceCwd = workspaceCwd,
+                    )
+                },
+            )
+        }
+        createManageSubagentTool(
+            profiles = profiles,
+            json = json,
+            depth = depth,
+            manage = { action, name, profile ->
+                manageSubagentProfile(assistant.id, action, name, profile)
+            },
+        )?.let { result += it }
+        return result
+    }
+
+    private suspend fun toolsForSubagentProfile(
+        profile: SubagentProfile,
+        assistant: Assistant,
+        settings: Settings,
+        parentModel: Model,
+        parentTools: List<Tool>,
+        workspaceCwd: String?,
+        workspaceId: String,
+        depth: Int,
+        maxDepth: Int,
+    ): List<Tool> {
+        val workspaceToolsFactory: (me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess) -> List<Tool> = { access ->
+            kotlinx.coroutines.runBlocking {
+                createSubagentWorkspaceTools(
+                    access = access,
+                    profile = profile,
+                    workspaceRepository = workspaceRepository,
+                    workspaceId = workspaceId,
+                    workspaceCwd = workspaceCwd,
+                )
+            }
+        }
+        val spawnToolBuilder: (() -> Tool)? =
+            if (profile.canSpawn && depth + 1 < maxDepth) {
+                {
+                    createSubagentTools(
+                        profiles = mergeSubagentProfiles(
+                            assistant.subagentProfiles,
+                            assistant.disabledBuiltinSubagents,
+                        ),
+                        json = json,
+                        spawn = { nestedProfile, nestedTask, _ ->
+                            val nested = SubagentRegistry.resolveProfile(nestedProfile, assistant)
+                            if (nested == null) {
+                                SubagentResult(
+                                    profileName = nestedProfile,
+                                    summary = "",
+                                    succeeded = false,
+                                    error = "profile not found",
+                                    depth = depth + 1,
+                                )
+                            } else {
+                                subagentHost.spawn(
+                                    profileName = nestedProfile,
+                                    task = nestedTask,
+                                    settings = settings,
+                                    parentAssistant = assistant,
+                                    parentModel = parentModel,
+                                    buildChildTools = { _, d ->
+                                        toolsForSubagentProfile(
+                                            profile = nested,
+                                            assistant = assistant,
+                                            settings = settings,
+                                            parentModel = parentModel,
+                                            parentTools = parentTools,
+                                            workspaceCwd = workspaceCwd,
+                                            workspaceId = workspaceId,
+                                            depth = d,
+                                            maxDepth = maxDepth,
+                                        )
+                                    },
+                                    depth = depth + 1,
+                                    maxDepth = maxDepth,
+                                    workspaceCwd = workspaceCwd,
+                                )
+                            }
+                        },
+                        askBtw = { q ->
+                            subagentHost.askBtw(q, settings, assistant, parentModel, workspaceCwd)
+                        },
+                    ).first { it.name == "spawn_subagent" }
+                }
+            } else {
+                null
+            }
+        return SubagentHost.sandboxToolsForSubagent(
+            buildSubagentTools(
+                profile = profile,
+                depth = depth,
+                maxDepth = maxDepth,
+                parentTools = parentTools,
+                workspaceToolsFactory = workspaceToolsFactory,
+                spawnToolBuilder = spawnToolBuilder,
+            ),
+        )
+    }
+
+    private suspend fun manageSubagentProfile(
+        assistantId: Uuid,
+        action: String,
+        name: String,
+        profile: SubagentProfile?,
+    ): String {
+        val current = settingsStore.settingsFlow.first()
+        val target = current.assistants.firstOrNull { it.id == assistantId }
+            ?: return "Error: assistant not found"
+        val merged = mergeSubagentProfiles(target.subagentProfiles, target.disabledBuiltinSubagents)
+        return when (action) {
+            "list" -> {
+                if (merged.isEmpty()) "No subagent profiles available."
+                else merged.joinToString("\n") { p -> "- ${p.name}: ${p.description}" }
+            }
+            "create", "update" -> {
+                val p = profile ?: return "Error: profile data missing"
+                settingsStore.update { settings ->
+                    settings.copy(
+                        assistants = settings.assistants.map { a ->
+                            if (a.id == assistantId) {
+                                a.copy(subagentProfiles = upsertSubagentProfile(a.subagentProfiles, p))
+                            } else {
+                                a
+                            }
+                        },
+                    )
+                }
+                "$action: subagent profile '${p.name}' saved."
+            }
+            "delete" -> {
+                if (name.isBlank()) return "Error: name required for delete"
+                val isBuiltin = SubagentRegistry.BUILTIN_PROFILES.any { it.name == name }
+                settingsStore.update { settings ->
+                    settings.copy(
+                        assistants = settings.assistants.map { a ->
+                            if (a.id == assistantId) {
+                                a.copy(
+                                    subagentProfiles = removeSubagentProfile(a.subagentProfiles, name),
+                                    disabledBuiltinSubagents = if (isBuiltin) {
+                                        a.disabledBuiltinSubagents + name
+                                    } else {
+                                        a.disabledBuiltinSubagents
+                                    },
+                                )
+                            } else {
+                                a
+                            }
+                        },
+                    )
+                }
+                "delete: profile '$name' removed or disabled."
+            }
+            else -> "Error: unknown action $action"
+        }
+    }
+
+
     suspend fun stopGeneration(conversationId: Uuid) {
         val job = sessions[conversationId]?.getJob() ?: return
         job.cancel()
