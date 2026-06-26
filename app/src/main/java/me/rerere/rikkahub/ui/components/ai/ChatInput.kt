@@ -85,6 +85,7 @@ import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
+import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Zap
@@ -656,6 +657,9 @@ private fun ChatInputState.applyCompletion(
     val textLength = textContent.text.length
     val start = replacementRange.min.coerceIn(0, textLength)
     val end = replacementRange.max.coerceIn(start, textLength)
+    if (!item.skillName.isNullOrBlank()) {
+        addPendingSlashSkill(item.skillName)
+    }
     textContent.edit {
         replace(start, end, item.insertText)
         selection = TextRange(start + item.insertText.length)

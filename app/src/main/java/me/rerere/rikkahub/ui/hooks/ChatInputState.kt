@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.slashSkillNames
 import kotlin.uuid.Uuid
 
 class ChatInputState {
@@ -23,6 +24,19 @@ class ChatInputState {
         editingParts = null
         editingAttachmentUrls = emptySet()
     }
+
+    fun addPendingSlashSkill(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        if (messageContent.any { it is UIMessagePart.SlashSkill && it.name == trimmed }) return
+        messageContent = messageContent + UIMessagePart.SlashSkill(name = trimmed)
+    }
+
+    fun removePendingSlashSkill(name: String) {
+        messageContent = messageContent.filterNot { it is UIMessagePart.SlashSkill && it.name == name }
+    }
+
+    fun pendingSlashSkillNames(): List<String> = messageContent.slashSkillNames()
 
     fun isEditing() = editingMessage != null
 

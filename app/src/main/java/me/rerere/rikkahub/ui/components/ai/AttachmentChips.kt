@@ -35,6 +35,7 @@ import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.MusicNote03
@@ -134,6 +135,14 @@ internal fun MediaFileInputRow(
                         ),
                         leading = { AttachmentLeadingIcon(icon = HugeIcons.Files02) },
                         onRemove = { removePart(part, part.url) }
+                    )
+                }
+
+                is UIMessagePart.SlashSkill -> {
+                    AttachmentChip(
+                        title = "/${part.name}",
+                        leading = { AttachmentLeadingIcon(icon = HugeIcons.Book02) },
+                        onRemove = { state.removePendingSlashSkill(part.name) },
                     )
                 }
 

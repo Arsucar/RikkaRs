@@ -13,6 +13,28 @@ class SkillManager(
 ) {
     companion object {
         private const val TAG = "SkillManager"
+        private const val LIST_CACHE_TTL_MS = 5_000L
+    }
+
+    @Volatile
+    private var listCache: List<SkillMetadata>? = null
+    @Volatile
+    private var listCacheTimestamp: Long = 0L
+
+    fun listSkills(): List<SkillMetadata> {
+        val now = System.currentTimeMillis()
+        val cached = listCache
+        if (cached != null && now - listCacheTimestamp < LIST_CACHE_TTL_MS) {
+            return cached
+        }
+        val result = listSkillsUncached()
+        listCache = result
+        listCacheTimestamp = now
+        return result
+    }
+
+    fun invalidateListCache() {
+        listCache = null
     }
 
     fun getSkillsDir(): File {
@@ -21,7 +43,7 @@ class SkillManager(
         return dir
     }
 
-    fun listSkills(): List<SkillMetadata> {
+    private fun listSkillsUncached(): List<SkillMetadata> {
         val skillsDir = getSkillsDir()
         return skillsDir.listFiles()
             ?.filter { it.isDirectory }
@@ -46,9 +68,7 @@ class SkillManager(
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
-        // 通过原子写入(staging + rename)落盘，避免直接 mkdirs 失败时
-        // writeText 抛出 FileNotFoundException 导致崩溃
-        if (!saveSkillFileBytesAtomically(name, mapOf("SKILL.md" to content.toByteArray()))) {
+        if (!saveSkillFilesAtomically(name, mapOf("SKILL.md" to content))) {
             return null
         }
         val skillDir = resolveSkillDir(name) ?: return null
@@ -59,6 +79,7 @@ class SkillManager(
         val skillDir = resolveSkillDir(name) ?: return@withContext false
         val deleted = skillDir.deleteRecursively()
         if (deleted) {
+            invalidateListCache()
             settingsStore.update { settings ->
                 settings.copy(
                     assistants = settings.assistants.map { assistant ->
@@ -81,6 +102,7 @@ class SkillManager(
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
         target.parentFile?.mkdirs()
         target.writeText(content)
+        invalidateListCache()
         return true
     }
 
@@ -119,6 +141,7 @@ class SkillManager(
             }
 
             backupDir?.deleteRecursively()
+            invalidateListCache()
             return true
         } catch (e: Exception) {
             Log.w(TAG, "saveSkillFilesAtomically: Failed to save $skillName", e)
@@ -139,7 +162,9 @@ class SkillManager(
     fun deleteSkillFile(skillName: String, relativePath: String): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
-        return target.delete()
+        val deleted = target.delete()
+        if (deleted) invalidateListCache()
+        return deleted
     }
 
     fun resolveSkillFile(skillName: String, relativePath: String): File? {

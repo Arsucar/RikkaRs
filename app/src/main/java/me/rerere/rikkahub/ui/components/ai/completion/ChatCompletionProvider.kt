@@ -23,6 +23,7 @@ data class ChatCompletionItem(
     val detail: String? = null,
     val icon: ImageVector? = null,
     val sortScore: Int = 0,
+    val skillName: String? = null,
 )
 
 interface ChatCompletionProvider {

@@ -246,6 +246,7 @@ fun List<UIMessagePart>.isEmptyInputMessage(): Boolean {
             is UIMessagePart.Document -> message.url.isBlank()
             is UIMessagePart.Video -> message.url.isBlank()
             is UIMessagePart.Audio -> message.url.isBlank()
+            is UIMessagePart.SlashSkill -> false
             else -> true
         }
     }
@@ -264,10 +265,17 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Reasoning -> message.reasoning.isBlank()
             is UIMessagePart.Video -> message.url.isBlank()
             is UIMessagePart.Audio -> message.url.isBlank()
+            is UIMessagePart.SlashSkill -> message.name.isBlank()
             else -> true
         }
     }
 }
+
+fun List<UIMessagePart>.slashSkillNames(): List<String> =
+    filterIsInstance<UIMessagePart.SlashSkill>()
+        .map { it.name.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 
 fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
     if (size <= 0 || this.size <= size) return this
@@ -390,6 +398,13 @@ sealed class UIMessagePart {
     ) : UIMessagePart()
 
     @Serializable
+    @SerialName("slash_skill")
+    data class SlashSkill(
+        val name: String,
+        override var metadata: JsonObject? = null,
+    ) : UIMessagePart()
+
+    @Serializable
     @SerialName("reasoning")
     data class Reasoning(
         val reasoning: String,
@@ -507,6 +522,7 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
             is UIMessagePart.Video -> 1
             is UIMessagePart.Audio -> 1
             is UIMessagePart.Document -> 1
+            is UIMessagePart.SlashSkill -> 1
         }
     }
 }
