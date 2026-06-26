@@ -266,6 +266,7 @@
   <string name="chat_page_compress_context_desc">대화를 요약하여 토큰을 절약하세요</string>
   <string name="chat_page_compress_context_title">대화 기록 압축</string>
   <string name="chat_page_compress_keep_recent">최근 메시지 유지</string>
+  <string name="chat_page_compress_custom">사용자 지정</string>
   <string name="chat_page_compress_not_enough_messages">압축할 메시지가 부족합니다. 유지할 메시지 수를 줄이거나 더 많은 메시지를 추가하세요.</string>
   <string name="chat_page_compress_target_tokens">대상 토큰 크기</string>
   <string name="chat_page_compress_warning">⚠️ 문맥 압축 시 현재 대화의 모든 메시지가 초기화됩니다</string>

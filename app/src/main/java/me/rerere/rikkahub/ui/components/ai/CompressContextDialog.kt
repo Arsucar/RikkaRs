@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import me.rerere.rikkahub.R
@@ -38,8 +40,10 @@ fun CompressContextDialog(
     var additionalPrompt by remember { mutableStateOf("") }
     var selectedTokens by remember { mutableIntStateOf(2000) }
     var keepRecentMessages by remember { mutableIntStateOf(32) }
+    var customKeepRecentText by remember { mutableStateOf("") }
+    val CUSTOM_SENTINEL = -1
     val tokenOptions = listOf(500, 1000, 2000, 4000)
-    val keepRecentOptions = listOf(0, 16, 32, 64)
+    val keepRecentOptions = listOf(0, 16, 32, 64, CUSTOM_SENTINEL)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
 
@@ -120,9 +124,24 @@ fun CompressContextDialog(
                                     count = keepRecentOptions.size
                                 )
                             ) {
-                                Text("$count")
+                                Text(
+                                    if (count == CUSTOM_SENTINEL) stringResource(R.string.chat_page_compress_custom)
+                                    else "$count"
+                                )
                             }
                         }
+                    }
+                    if (keepRecentMessages == CUSTOM_SENTINEL) {
+                        OutlinedTextField(
+                            value = customKeepRecentText,
+                            onValueChange = { customKeepRecentText = it.filter { c -> c.isDigit() } },
+                            label = {
+                                Text(stringResource(R.string.chat_page_compress_custom))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
                     }
 
                     // Additional context input
@@ -158,7 +177,12 @@ fun CompressContextDialog(
                 }
             } else {
                 TextButton(onClick = {
-                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages)
+                    val resolvedKeepRecent = if (keepRecentMessages == CUSTOM_SENTINEL) {
+                        customKeepRecentText.toIntOrNull() ?: 32
+                    } else {
+                        keepRecentMessages
+                    }
+                    currentJob = onConfirm(additionalPrompt, selectedTokens, resolvedKeepRecent)
                 }) {
                     Text(stringResource(R.string.confirm))
                 }
