@@ -50,7 +50,7 @@ import me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceApproval
 import me.rerere.rikkahub.data.ai.subagent.toggleSkill
 import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.model.Assistant
@@ -676,6 +676,7 @@ private fun LocalToolsSkillMcpSection(
         LocalToolOption.Clipboard,
         LocalToolOption.Tts,
         LocalToolOption.AskUser,
+        LocalToolOption.ScreenTime,
     )
 
     Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
@@ -772,4 +773,5 @@ private fun localToolLabel(option: LocalToolOption): String = when (option) {
     LocalToolOption.Clipboard -> stringResource(R.string.assistant_page_local_tools_clipboard_title)
     LocalToolOption.Tts -> stringResource(R.string.assistant_page_local_tools_tts_title)
     LocalToolOption.AskUser -> stringResource(R.string.assistant_page_local_tools_ask_user_title)
+    LocalToolOption.ScreenTime -> stringResource(R.string.assistant_page_local_tools_screen_time_title)
 }

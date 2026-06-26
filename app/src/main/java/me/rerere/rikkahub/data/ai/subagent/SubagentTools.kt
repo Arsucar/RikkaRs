@@ -18,7 +18,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import kotlin.uuid.Uuid
 
 val SUBAGENT_TOOL_NAMES: Set<String> = setOf(
@@ -288,5 +288,6 @@ private fun String.toLocalToolOption(): LocalToolOption? = when (this) {
     "clipboard" -> LocalToolOption.Clipboard
     "tts" -> LocalToolOption.Tts
     "ask_user" -> LocalToolOption.AskUser
+    "screen_time" -> LocalToolOption.ScreenTime
     else -> null
 }
