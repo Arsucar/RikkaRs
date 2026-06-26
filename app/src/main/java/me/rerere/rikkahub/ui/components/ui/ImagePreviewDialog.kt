@@ -16,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -36,6 +38,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -47,6 +50,8 @@ fun ImagePreviewDialog(
     images: List<String>,
     initialPage: Int = 0,
     labels: List<String> = emptyList(),
+    models: List<String> = emptyList(),
+    prompts: List<String> = emptyList(),
     onUseAsReference: ((String) -> Unit)? = null,
     onDismissRequest: () -> Unit,
 ) {
@@ -55,6 +60,7 @@ fun ImagePreviewDialog(
     val safeInitialPage = initialPage.coerceIn(0, (images.size - 1).coerceAtLeast(0))
     val state = rememberZoomablePagerState(initialPage = safeInitialPage) { images.size }
     val toaster = LocalToaster.current
+    val clipboardManager = LocalClipboardManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val hazeState = rememberHazeState()
     val hazeStyle = HazeMaterials.thin(containerColor = Color.Black.copy(alpha = 0.45f))
@@ -96,7 +102,14 @@ fun ImagePreviewDialog(
                 },
             )
 
-            labels.getOrNull(state.currentPage)?.takeIf { it.isNotBlank() }?.let { label ->
+            val label = labels.getOrNull(state.currentPage)?.takeIf { it.isNotBlank() }
+            val model = models.getOrNull(state.currentPage)?.takeIf { it.isNotBlank() }
+            val labelText = buildString {
+                label?.let { append(it) }
+                if (label != null && model != null) append(" · ")
+                model?.let { append(it) }
+            }.takeIf { it.isNotBlank() }
+            if (labelText != null) {
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -106,7 +119,7 @@ fun ImagePreviewDialog(
                     color = Color.Black.copy(alpha = 0.56f),
                 ) {
                     Text(
-                        text = label,
+                        text = labelText,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White,
@@ -128,6 +141,17 @@ fun ImagePreviewDialog(
                         },
                     ) {
                         Icon(HugeIcons.Add01, null, tint = Color.White)
+                    }
+                }
+
+                prompts.getOrNull(state.currentPage)?.takeIf { it.isNotBlank() }?.let { prompt ->
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(prompt))
+                            toaster.show(message = "已复制提示词", type = ToastType.Success)
+                        },
+                    ) {
+                        Icon(HugeIcons.Copy01, null, tint = Color.White)
                     }
                 }
 

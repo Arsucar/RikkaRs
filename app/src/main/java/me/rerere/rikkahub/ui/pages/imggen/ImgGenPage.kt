@@ -785,6 +785,8 @@ private fun ActiveGenerationJobSection(
             images = job.images.map { it.filePath },
             initialPage = startIndex,
             labels = job.images.map { formatImageDateTime(it.timestamp) },
+            models = job.images.map { it.model },
+            prompts = job.images.map { it.prompt },
             onUseAsReference = onUseReference,
             onDismissRequest = { previewStartIndex = null },
         )
@@ -1380,6 +1382,8 @@ private fun ImageGalleryGrid(
                             ImagePreviewDialog(
                                 images = listOf(it.filePath),
                                 labels = listOf(formatImageDateTime(it.timestamp)),
+                                models = listOf(it.model),
+                                prompts = listOf(it.prompt),
                                 onUseAsReference = onUseReference,
                                 onDismissRequest = { showPreview = false }
                             )
@@ -1554,6 +1558,8 @@ private fun ImageSpaceScreen(
                 images = flatFavorites.map { it.image.filePath },
                 initialPage = startIndex,
                 labels = flatFavorites.map { formatImageDateTime(it.image.timestamp) },
+                models = flatFavorites.map { it.image.model },
+                prompts = flatFavorites.map { it.image.prompt },
                 onUseAsReference = onUseReference,
                 onDismissRequest = { previewFlatIndex = null },
             )
@@ -2113,6 +2119,8 @@ private fun GroupedImageCard(
             images = previewImages.map { it.filePath },
             initialPage = startIndex,
             labels = previewImages.map { formatImageDateTime(it.timestamp) },
+            models = previewImages.map { it.model },
+            prompts = previewImages.map { it.prompt },
             onUseAsReference = onUseReference,
             onDismissRequest = { previewStartIndex = null },
         )
@@ -2496,6 +2504,8 @@ private fun RecycleBinItem(
         ImagePreviewDialog(
             images = listOf(image.filePath),
             labels = listOf(formatImageDateTime(image.timestamp)),
+            models = listOf(image.model),
+            prompts = listOf(image.prompt),
             onDismissRequest = { showPreview = false },
         )
     }
