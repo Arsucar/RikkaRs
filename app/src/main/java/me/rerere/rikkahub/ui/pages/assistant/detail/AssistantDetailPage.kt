@@ -9,6 +9,7 @@ import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Wrench01
+import me.rerere.hugeicons.stroke.Connect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -142,7 +143,22 @@ fun AssistantDetailPage(id: String) {
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantSubagent(id)) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_subagent_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_subagent)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
                 }
+            }
+
+            item {
+                AssistantSubagentHubControls(
+                    assistant = assistant,
+                    onUpdate = { vm.update(it) },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
             }
         }
     }
