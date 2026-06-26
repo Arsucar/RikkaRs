@@ -110,3 +110,37 @@ Archived the completed bootstrap guidelines task (00-bootstrap-guidelines). The 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Slash skill completion
+
+**Date**: 2026-06-27
+**Task**: Slash skill completion
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented / slash skill autocomplete, SlashSkill message parts, input transformer and use_skill flow; review fixes (dead code, async chip I/O, SkillManager list cache); installed debug APK; committed feat e852c9ac and archived 06-26-slash-skill-completion.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e852c9ac` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
