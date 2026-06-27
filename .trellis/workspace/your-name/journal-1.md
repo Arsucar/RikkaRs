@@ -182,3 +182,37 @@ Archived all 6 subagent tasks (model, MVP, permissions, runtime, UI-chat, UI-set
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Log redaction, LogsTool, LogPage export
+
+**Date**: 2026-06-27
+**Task**: Log redaction, LogsTool, LogPage export
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented log redaction (LogRedaction.kt + tests), get_logs AI tool with per-entry truncation and O(n) payload budgeting at 16KB cap, LogPage export (SAF, redacted), LocalToolOption.Logs UI toggle, GetLogsToolUI (icon+title only), SubagentProfilePage AskUser removal, Logging MAX_RECENT_LOGS 100→32
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2884ed55` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
