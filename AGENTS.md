@@ -85,11 +85,30 @@ git add <文件> && git commit -m "…" && git push origin release/rikka-arsucar
 git tag -a v2.3.2 -m "…" && git push origin v2.3.2
 ```
 
+**发版前必须先更新 `CHANGELOG.md`**（见下文「更新日志维护」），再执行打标签。
+
 重打标签：先 `git push origin :refs/tags/v2.3.2` 删远程标签，再重新 `tag` + `push`。
 
 或：`gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar`（仅 Actions 产物，并自动 bump 版本号）。本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等。
 
 更多见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。
+
+### 更新日志维护
+
+`CHANGELOG.md` 是本 Fork 的**中英双语**更新日志，每次发版必须按以下流程操作：
+
+1. **新增版本段落** — 在文件顶部（`---` 分隔线之后）按已有格式添加 `## v<版本号>` 章节，每条变更写两遍：先中文、下一行写对应英文，保持对照。
+2. **提交变更** — `git add CHANGELOG.md && git commit -m "docs: update CHANGELOG for v<版本号>"`。
+3. **截取 Release 说明** — 从目标版本段落中提取中英文内容，按上游 release 旧格式组织：先「更新内容: + 中文列表」，空行后「Updates: + 英文列表」。
+4. **打标签** — `git tag -a v<版本号> -m "<Release 说明>"`，tag message 即为 Release body。
+5. **推送** — `git push origin release/rikka-arsucar && git push origin v<版本号>`；如需创建 GitHub Release 可用 `gh release create v<版本号> --title "<版本号>" --notes "<Release 说明>"`。
+
+格式模板（每条变更）：
+
+```
+- **中文标题** — 中文说明。
+  **English Title** — English description.
+```
 
 ## Module Structure
 
