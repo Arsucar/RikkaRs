@@ -113,7 +113,6 @@ $profileListText
                 ?: error("task is required")
             val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
             val result = spawn(profileName, task, description)
-            val payload = json.encodeToString(SubagentResult.serializer(), result)
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
@@ -122,7 +121,14 @@ $profileListText
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
                 put("subagent_streaming", JsonPrimitive(false))
             }
-            listOf(UIMessagePart.Text(text = payload, metadata = finalMetadata))
+            val slimPayload = buildJsonObject {
+                put("profile_name", JsonPrimitive(result.profileName))
+                put("summary", JsonPrimitive(result.summary))
+                put("succeeded", JsonPrimitive(result.succeeded))
+                if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
+                put("steps", JsonPrimitive(result.steps.coerceAtLeast(result.transcript.size)))
+            }.toString()
+            listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },
     )
 

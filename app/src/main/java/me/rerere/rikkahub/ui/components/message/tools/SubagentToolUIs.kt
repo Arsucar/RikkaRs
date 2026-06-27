@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -26,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +46,7 @@ import me.rerere.hugeicons.stroke.Tools
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
@@ -116,87 +123,58 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
         val metaTranscript = remember(context.tool) { transcriptStepsFromMetadata(context) }
         val result = remember(context.tool) { parseSubagentResult(context) }
-        val failed = result?.succeeded == false ||
-            (result == null && meta?.get("subagent_succeeded")?.jsonPrimitive?.contentOrNull == "false" && !streaming)
-        val containerColor = if (failed) {
-            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
+        val failed = !streaming && (
+            result?.succeeded == false ||
+                (result == null && meta?.get("subagent_succeeded")?.jsonPrimitive?.contentOrNull == "false")
+        )
+
+        val lastTextStepIndex = remember(metaTranscript) {
+            metaTranscript.indexOfLast { it is SubagentTranscriptStep.Text }
         }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = containerColor),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if ((context.loading || streaming) && result?.summary.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Text(
-                            text = stringResource(R.string.subagent_tool_ui_running),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (metaTranscript.isNotEmpty()) {
-                    ChainOfThought(
-                        modifier = Modifier.fillMaxWidth(),
-                        steps = metaTranscript,
-                        collapsedVisibleCount = if (streaming) metaTranscript.size else 2,
-                        collapsedAdaptiveWidth = false,
-                        cardColors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ),
-                    ) { step ->
-                        SubagentStreamingStepView(step = step)
-                    }
-                }
-                result?.summary?.takeIf { it.isNotBlank() }?.let { summary ->
-                    MarkdownBlock(
-                        content = summary,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (failed) {
-                    val errorText = result?.error?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.subagent_tool_ui_failed)
-                    Text(
-                        text = errorText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                result?.usage?.let { usage ->
-                    SubagentUsageLine(usage = usage)
-                }
-                val transcript = if (metaTranscript.isEmpty()) result?.transcript.orEmpty() else emptyList()
-                if (transcript.isNotEmpty()) {
-                    SubagentTranscriptSection(steps = transcript)
-                } else if (result == null && metaTranscript.isEmpty() && !context.loading) {
-                    val raw = context.tool.output.filterIsInstance<UIMessagePart.Text>()
-                        .joinToString("\n") { it.text }
-                    if (raw.isNotBlank()) {
-                        Text(
-                            text = raw,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 8,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
+
+        if (metaTranscript.isNotEmpty()) {
+            ChainOfThought(
+                modifier = Modifier.fillMaxWidth(),
+                steps = metaTranscript,
+                collapsedVisibleCount = 2,
+                collapsedAdaptiveWidth = false,
+                cardColors = CardDefaults.cardColors(
+                    containerColor = if (failed) {
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                ),
+            ) { step ->
+                val stepIndex = metaTranscript.indexOf(step)
+                val isFinalSummary = stepIndex == lastTextStepIndex && step is SubagentTranscriptStep.Text
+                SubagentStreamingStepView(step = step, isFinalSummary = isFinalSummary)
             }
+        } else if ((context.loading || streaming) && result?.summary.isNullOrBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = stringResource(R.string.subagent_tool_ui_running),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (failed) {
+            val errorText = result?.error?.takeIf { it.isNotBlank() }
+                ?: stringResource(R.string.subagent_tool_ui_failed)
+            Text(
+                text = errorText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 
@@ -444,7 +422,10 @@ private fun transcriptStepsFromMetadata(context: ToolUIContext): List<SubagentTr
 }
 
 @Composable
-private fun ChainOfThoughtScope.SubagentStreamingStepView(step: SubagentTranscriptStep) {
+private fun ChainOfThoughtScope.SubagentStreamingStepView(
+    step: SubagentTranscriptStep,
+    isFinalSummary: Boolean = false,
+) {
     when (step) {
         is SubagentTranscriptStep.Reasoning -> {
             ChainOfThoughtStep(
@@ -530,47 +511,160 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(step: SubagentTranscri
         }
 
         is SubagentTranscriptStep.Text -> {
-            ChainOfThoughtStep(
-                icon = {
-                    Icon(
-                        imageVector = HugeIcons.Connect,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
-                },
-                label = {
-                    Text(
-                        text = stringResource(R.string.subagent_step_text),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                content = {
-                    MarkdownBlock(
+            if (isFinalSummary) {
+                var showFullScreen by remember { mutableStateOf(false) }
+                ChainOfThoughtStep(
+                    icon = {
+                        Icon(
+                            imageVector = HugeIcons.Connect,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = "Summary",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        showFullScreen = true
+                    },
+                    content = null,
+                )
+                if (showFullScreen) {
+                    SubagentSummarySheet(
                         content = step.content,
+                        onDismiss = { showFullScreen = false },
+                    )
+                }
+            } else {
+                ChainOfThoughtStep(
+                    icon = {
+                        Icon(
+                            imageVector = HugeIcons.Connect,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = stringResource(R.string.subagent_step_text),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    content = {
+                        MarkdownBlock(
+                            content = step.content,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubagentSummarySheet(
+    content: String,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Expanded,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
+    var showRaw by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight(0.9f)
+                .fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !showRaw,
+                    onClick = { showRaw = false },
+                    label = { Text("预览") },
+                )
+                FilterChip(
+                    selected = showRaw,
+                    onClick = { showRaw = true },
+                    label = { Text("原生") },
+                )
+            }
+            if (showRaw) {
+                SelectionContainer {
+                    Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                ) {
+                    MarkdownBlock(
+                        content = content,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                },
-            )
+                }
+            }
         }
     }
 }
 
 private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
-    val raw = context.tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-    if (raw.isBlank()) return null
+    val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+    val raw = textPart?.text
+    if (raw.isNullOrBlank()) return null
+
     return runCatching {
         JsonInstant.decodeFromString(SubagentResult.serializer(), raw)
-    }.getOrElse {
-        context.content?.let { element ->
-            runCatching {
-                JsonInstant.decodeFromJsonElement(SubagentResult.serializer(), element)
-            }.getOrNull()
-        }
-    }
+    }.recoverCatching {
+        val obj = JsonInstant.parseToJsonElement(raw).jsonObject
+        val transcript = textPart.metadata?.get("subagent_transcript")?.let {
+            JsonInstant.decodeFromJsonElement(
+                ListSerializer(SubagentTranscriptStep.serializer()),
+                it,
+            )
+        }.orEmpty()
+        SubagentResult(
+            profileName = obj["profile_name"]?.jsonPrimitive?.contentOrNull ?: "",
+            summary = obj["summary"]?.jsonPrimitive?.contentOrNull ?: "",
+            succeeded = obj["succeeded"]?.jsonPrimitive?.contentOrNull == "true",
+            error = obj["error"]?.jsonPrimitive?.contentOrNull,
+            steps = obj["steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+            transcript = transcript,
+        )
+    }.getOrNull()
 }
 
 private fun resolveSubagentDisplayName(profileName: String): String =

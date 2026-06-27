@@ -64,6 +64,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
@@ -343,9 +344,16 @@ private fun MessagePartsBlock(
 
                             is ThinkingStep.ToolStep -> {
                                 key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                    val isSubagentStreaming = step.tool.output
+                                        .filterIsInstance<UIMessagePart.Text>()
+                                        .firstOrNull()
+                                        ?.metadata
+                                        ?.get("subagent_streaming")
+                                        ?.jsonPrimitive
+                                        ?.contentOrNull == "true"
                                     ChatMessageToolStep(
                                         tool = step.tool,
-                                        loading = loading && !step.tool.isExecuted,
+                                        loading = loading && (!step.tool.isExecuted || isSubagentStreaming),
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
                                     )

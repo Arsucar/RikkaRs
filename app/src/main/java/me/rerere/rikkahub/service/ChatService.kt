@@ -674,7 +674,7 @@ class ChatService(
                 when (chunk) {
                     is GenerationChunk.Messages -> {
                         updateConversationState(conversationId) { prev ->
-                            prev.updateCurrentMessages(chunk.messages).cleanStaleStreamingMetadata()
+                            prev.updateCurrentMessages(chunk.messages)
                         }
 
                         // 如果应用不在前台，发送 Live Update 通知
@@ -1102,7 +1102,7 @@ class ChatService(
 
     private fun updateConversation(conversationId: Uuid, conversation: Conversation) {
         if (conversation.id != conversationId) return
-        commitConversationState(conversationId, conversation.cleanStaleStreamingMetadata())
+        commitConversationState(conversationId, conversation)
     }
 
     private fun commitConversationState(conversationId: Uuid, newState: Conversation) {
@@ -1139,7 +1139,7 @@ class ChatService(
         subMessages: List<UIMessage>,
     ) {
         runCatching {
-            if (toolCallId.isNullOrBlank()) return@runCatching
+            // No early return for null toolCallId - allow fallback matching
 
             val transcript = SubagentHost.buildTranscript(
                 subMessages,
@@ -1176,7 +1176,7 @@ class ChatService(
                     val matchesTool: (UIMessagePart.Tool) -> Boolean = { part ->
                         part.toolName == "spawn_subagent" &&
                             (!part.isExecuted || isStreamingSubagent(part)) &&
-                            part.toolCallId == toolCallId
+                            (toolCallId == null || part.toolCallId == toolCallId)
                     }
                     if (!message.parts.any { it is UIMessagePart.Tool && matchesTool(it) }) {
                         return@mapIndexed message

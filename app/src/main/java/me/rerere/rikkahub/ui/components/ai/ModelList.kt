@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -821,34 +824,40 @@ private fun ColumnScope.ModelList(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (providerTabsExpanded) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.weight(1f),
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState()),
                 ) {
-                    tagFilteredProviders.forEach { provider ->
-                        val scrollToProviderDescription = stringResource(
-                            R.string.model_list_scroll_to_provider,
-                            provider.name,
-                        )
-                        AssistChip(
-                            onClick = {
-                                val position = providerPositions[provider.id] ?: 0
-                                coroutineScope.launch {
-                                    lazyListState.animateScrollToItem(position)
-                                }
-                                providerTabsExpanded = false
-                            },
-                            label = {
-                                Text(provider.name)
-                            },
-                            leadingIcon = {
-                                AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
-                            },
-                            modifier = Modifier.semantics {
-                                contentDescription = scrollToProviderDescription
-                            },
-                        )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        tagFilteredProviders.forEach { provider ->
+                            val scrollToProviderDescription = stringResource(
+                                R.string.model_list_scroll_to_provider,
+                                provider.name,
+                            )
+                            AssistChip(
+                                onClick = {
+                                    val position = providerPositions[provider.id] ?: 0
+                                    coroutineScope.launch {
+                                        lazyListState.animateScrollToItem(position)
+                                    }
+                                    providerTabsExpanded = false
+                                },
+                                label = {
+                                    Text(provider.name)
+                                },
+                                leadingIcon = {
+                                    AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
+                                },
+                                modifier = Modifier.semantics {
+                                    contentDescription = scrollToProviderDescription
+                                },
+                            )
+                        }
                     }
                 }
             } else {
