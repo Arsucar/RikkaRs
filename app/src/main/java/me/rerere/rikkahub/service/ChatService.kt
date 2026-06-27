@@ -657,7 +657,14 @@ class ChatService(
                     },
                     updateAt = Instant.now()
                 )
-                updateConversation(conversationId, updatedConversation)
+                updateConversationState(conversationId) { prev ->
+                    prev.copy(
+                        messageNodes = prev.messageNodes.map { node ->
+                            node.copy(messages = node.messages.map { it.finishReasoning() })
+                        },
+                        updateAt = Instant.now(),
+                    ).cleanStaleStreamingMetadata()
+                }
 
                 // Show notification if app is not in foreground
                 if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
@@ -666,9 +673,9 @@ class ChatService(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
-                        val updatedConversation = getConversationFlow(conversationId).value
-                            .updateCurrentMessages(chunk.messages)
-                        updateConversation(conversationId, updatedConversation)
+                        updateConversationState(conversationId) { prev ->
+                            prev.updateCurrentMessages(chunk.messages).cleanStaleStreamingMetadata()
+                        }
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
@@ -1095,10 +1102,20 @@ class ChatService(
 
     private fun updateConversation(conversationId: Uuid, conversation: Conversation) {
         if (conversation.id != conversationId) return
+        commitConversationState(conversationId, conversation.cleanStaleStreamingMetadata())
+    }
+
+    private fun commitConversationState(conversationId: Uuid, newState: Conversation) {
+        if (newState.id != conversationId) return
         val session = getOrCreateSession(conversationId)
-        val cleaned = conversation.cleanStaleStreamingMetadata()
-        checkFilesDelete(cleaned, session.state.value)
-        session.state.value = cleaned
+        repeat(50) {
+            val prev = session.state.value
+            if (session.state.compareAndSet(prev, newState)) {
+                checkFilesDelete(newState, prev)
+                return
+            }
+        }
+        Log.w(TAG, "CAS retry limit exceeded for conversation $conversationId (commit)")
     }
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
@@ -1122,6 +1139,8 @@ class ChatService(
         subMessages: List<UIMessage>,
     ) {
         runCatching {
+            if (toolCallId.isNullOrBlank()) return@runCatching
+
             val transcript = SubagentHost.buildTranscript(
                 subMessages,
                 truncateChars = 200,
@@ -1137,8 +1156,13 @@ class ChatService(
                 put("subagent_succeeded", JsonPrimitive(false))
                 put("subagent_streaming", JsonPrimitive(true))
             }
+            val partialOutputText = buildJsonObject {
+                put("profile_name", JsonPrimitive(profileName))
+                put("succeeded", JsonPrimitive(false))
+                put("streaming", JsonPrimitive(true))
+            }.toString()
             val partialOutput = UIMessagePart.Text(
-                text = "{\"profile_name\":\"$profileName\",\"succeeded\":false,\"streaming\":true}",
+                text = partialOutputText,
                 metadata = transcriptMetadata,
             )
 
@@ -1152,7 +1176,7 @@ class ChatService(
                     val matchesTool: (UIMessagePart.Tool) -> Boolean = { part ->
                         part.toolName == "spawn_subagent" &&
                             (!part.isExecuted || isStreamingSubagent(part)) &&
-                            (toolCallId == null || part.toolCallId == toolCallId)
+                            part.toolCallId == toolCallId
                     }
                     if (!message.parts.any { it is UIMessagePart.Tool && matchesTool(it) }) {
                         return@mapIndexed message

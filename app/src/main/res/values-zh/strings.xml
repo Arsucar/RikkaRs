@@ -27,9 +27,14 @@
   <string name="subagent_max_depth_desc">深度 %1$d 最多允许 %2$d 层嵌套委派，仅对新发起的子代理生效。</string>
   <string name="subagent_max_depth_disabled">深度为 1：主代理可派生子代理，但不支持子代理继续嵌套委派。</string>
   <string name="subagent_profiles_section">档案</string>
-  <string name="subagent_profiles_section_desc">本助手可用的内置与自定义子代理档案</string>
+  <string name="subagent_profiles_section_desc">内置、全局及助手专属子代理档案</string>
   <string name="subagent_profiles_empty">暂无档案。</string>
   <string name="subagent_builtin_badge">内置</string>
+  <string name="subagent_global_badge">全局</string>
+  <string name="extensions_page_subagent_profiles">子代理档案</string>
+  <string name="extensions_page_subagent_profiles_desc">所有助手共享的子代理档案</string>
+  <string name="extension_subagent_profile_edit_title">全局子代理档案</string>
+  <string name="subagent_global_edit_in_extensions">在扩展中编辑</string>
   <string name="subagent_profile_card_meta">工作区：%1$s · 审批：%2$s · 可派生：%3$s</string>
   <string name="subagent_can_spawn_yes">是</string>
   <string name="subagent_can_spawn_no">否</string>
@@ -1015,6 +1020,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_input_modality">输入模态</string>
   <string name="setting_provider_page_location">位置（例如 us-central1）</string>
   <string name="setting_provider_page_model_count">%d个模型</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">模型显示名称</string>
   <string name="setting_provider_page_model_display_name_placeholder">例如：GPT-3.5, 用于UI显示</string>
   <string name="setting_provider_page_model_id">模型ID</string>

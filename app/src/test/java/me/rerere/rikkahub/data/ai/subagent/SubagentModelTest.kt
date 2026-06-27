@@ -5,6 +5,9 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.migrateSubagentBuiltinsIfNeeded
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
@@ -64,6 +67,102 @@ class SubagentModelTest {
         val encoded = json.encodeToString(kotlinx.serialization.builtins.ListSerializer(SubagentTranscriptStep.serializer()), steps)
         val decoded = json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(SubagentTranscriptStep.serializer()), encoded)
         assertEquals(steps, decoded)
+    }
+
+    @Test
+    fun subagentTranscriptStep_roundTrip_preservesCreatedAtAndExecuted() {
+        val steps: List<SubagentTranscriptStep> = listOf(
+            SubagentTranscriptStep.Reasoning(text = "r", createdAt = 1_700_000_000_123L),
+            SubagentTranscriptStep.ToolCall(
+                toolName = "workspace_shell",
+                input = "{}",
+                output = "",
+                executed = false,
+            ),
+        )
+        val listSerializer = kotlinx.serialization.builtins.ListSerializer(SubagentTranscriptStep.serializer())
+        val decoded = json.decodeFromString(listSerializer, json.encodeToString(listSerializer, steps))
+        assertEquals(steps, decoded)
+        val reasoning = decoded[0] as SubagentTranscriptStep.Reasoning
+        val tool = decoded[1] as SubagentTranscriptStep.ToolCall
+        assertEquals(1_700_000_000_123L, reasoning.createdAt)
+        assertFalse(tool.executed)
+    }
+
+    @Test
+    fun subagentResult_roundTrip_preservesTranscriptMetadataFields() {
+        val result = SubagentResult(
+            profileName = "explore",
+            summary = "ok",
+            succeeded = true,
+            transcript = listOf(
+                SubagentTranscriptStep.Reasoning("think", createdAt = 42L),
+                SubagentTranscriptStep.ToolCall("t", "in", "out", executed = false),
+            ),
+        )
+        val decoded = json.decodeFromString(SubagentResult.serializer(), json.encodeToString(SubagentResult.serializer(), result))
+        assertEquals(result, decoded)
+    }
+
+    /**
+     * Mirrors [SubagentHost.runToCompletion] progress gate: emit when assistant part-count
+     * signature changes or [minIntervalMs] elapsed (default 120ms).
+     */
+    private fun shouldEmitSubagentProgress(
+        messages: List<UIMessage>,
+        lastSignature: Int,
+        lastEmitTime: Long,
+        now: Long,
+        minIntervalMs: Long = 120L,
+    ): Boolean {
+        val signature = messages.sumOf { msg ->
+            if (msg.role == MessageRole.ASSISTANT) msg.parts.size else 0
+        }
+        return signature != lastSignature || now - lastEmitTime >= minIntervalMs
+    }
+
+    @Test
+    fun subagentProgressThrottle_sameSignatureWithin120ms_doesNotEmit() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text("a"), UIMessagePart.Text("b")),
+            ),
+        )
+        assertFalse(shouldEmitSubagentProgress(messages, lastSignature = 2, lastEmitTime = 1_000L, now = 1_050L))
+    }
+
+    @Test
+    fun subagentProgressThrottle_sameSignatureAfter120ms_emits() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text("a"), UIMessagePart.Text("b")),
+            ),
+        )
+        assertTrue(shouldEmitSubagentProgress(messages, lastSignature = 2, lastEmitTime = 1_000L, now = 1_121L))
+    }
+
+    @Test
+    fun subagentProgressThrottle_signatureChange_emitsEvenWithin120ms() {
+        val twoParts = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text("a"), UIMessagePart.Text("b")),
+            ),
+        )
+        assertTrue(shouldEmitSubagentProgress(twoParts, lastSignature = 1, lastEmitTime = 1_000L, now = 1_010L))
+        val threeParts = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Text("a"),
+                    UIMessagePart.Text("b"),
+                    UIMessagePart.Reasoning("r"),
+                ),
+            ),
+        )
+        assertTrue(shouldEmitSubagentProgress(threeParts, lastSignature = 2, lastEmitTime = 1_000L, now = 1_010L))
     }
 
     @Test
@@ -130,6 +229,16 @@ class SubagentModelTest {
                 profileOverrides = mapOf("workspace_shell" to false),
             ),
         )
+    }
+
+    @Test
+    fun registry_resolveBuiltinWhenGlobalEmpty() {
+        val assistant = Assistant()
+        val explore = SubagentRegistry.resolveProfile("explore", assistant, globalProfiles = emptyList())
+        assertNotNull(explore)
+        assertEquals("explore", explore!!.name)
+        val merged = mergeSubagentProfiles(assistant.subagentProfiles, global = emptyList())
+        assertTrue(merged.any { it.name == "explore" })
     }
 
     @Test

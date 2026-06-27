@@ -906,6 +906,7 @@
   <string name="setting_provider_page_input_modality">Режим ввода</string>
   <string name="setting_provider_page_location">Расположение (например, us-central1)</string>
   <string name="setting_provider_page_model_count">%1$d моделей</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">Отображаемое имя модели</string>
   <string name="setting_provider_page_model_display_name_placeholder">например: GPT-3.5, для отображения в интерфейсе</string>
   <string name="setting_provider_page_model_id">ID модели</string>
@@ -1288,5 +1289,18 @@
   <string name="extensions_page_section_subagent_profiles">Настройки субагентов</string>
   <string name="extensions_page_no_subagent_profiles">Нет настроек субагентов</string>
   <string name="extensions_page_add_subagent">Добавить субагент</string>
+  <string name="subagent_global_badge">Глобальный</string>
+  <string name="subagent_global_edit_in_extensions">Редактировать в расширениях</string>
+  <string name="setting_provider_detail_tags">Теги</string>
+  <string name="setting_provider_detail_add_tag">Добавить тег</string>
+  <string name="filter_all">Все</string>
+  <string-array name="provider_suggested_tags">
+    <item>Часто используемые</item>
+    <item>Бюджетные</item>
+    <item>Длинный контекст</item>
+    <item>Высокое качество</item>
+    <item>Бесплатный тариф</item>
+    <item>Отечественные</item>
+  </string-array>
 </resources>
 

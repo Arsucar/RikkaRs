@@ -906,6 +906,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_input_modality">입력 모달리티</string>
   <string name="setting_provider_page_location">위치 (예: us-central1)</string>
   <string name="setting_provider_page_model_count">%d 모델</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">모델 표시 이름</string>
   <string name="setting_provider_page_model_display_name_placeholder">예: GPT-3.5, UI 표시용</string>
   <string name="setting_provider_page_model_id">모델 ID</string>
@@ -1288,5 +1289,18 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="extensions_page_section_subagent_profiles">서브에이전트 설정</string>
   <string name="extensions_page_no_subagent_profiles">서브에이전트 설정이 없습니다</string>
   <string name="extensions_page_add_subagent">서브에이전트 추가</string>
+  <string name="subagent_global_badge">글로벌</string>
+  <string name="subagent_global_edit_in_extensions">확장 기능에서 편집</string>
+  <string name="setting_provider_detail_tags">태그</string>
+  <string name="setting_provider_detail_add_tag">태그 추가</string>
+  <string name="filter_all">전체</string>
+  <string-array name="provider_suggested_tags">
+    <item>자주 사용</item>
+    <item>저렴함</item>
+    <item>긴 컨텍스트</item>
+    <item>고품질</item>
+    <item>무료 할당</item>
+    <item>국산</item>
+  </string-array>
 </resources>
 

@@ -58,6 +58,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
@@ -314,7 +316,7 @@ private fun ColumnScope.ModelList(
     val settings = settingsStore.settingsFlow
         .collectAsStateWithLifecycle()
 
-    val favoriteModels = remember(settings.value.favoriteModels, providers, modelType) {
+    val favoriteModels = remember(settings.value.favoriteModels, settings.value.providers, providers, modelType) {
         settings.value.favoriteModels.mapNotNull { modelId ->
             val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
             if (model.type != modelType) return@mapNotNull null
@@ -496,7 +498,10 @@ private fun ColumnScope.ModelList(
                     unfocusedContainerColor = Color.Transparent,
                 ),
                 leadingIcon = {
-                    Icon(HugeIcons.Search01, null)
+                    Icon(
+                        HugeIcons.Search01,
+                        contentDescription = stringResource(R.string.model_list_search),
+                    )
                 },
                 maxLines = 1,
             )
@@ -513,7 +518,9 @@ private fun ColumnScope.ModelList(
         ) {
             Icon(
                 imageVector = if (allCollapsed) HugeIcons.ArrowDown01 else HugeIcons.ArrowUp01,
-                contentDescription = null,
+                contentDescription = stringResource(
+                    if (allCollapsed) R.string.model_list_expand_all else R.string.model_list_collapse_all,
+                ),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -522,7 +529,13 @@ private fun ColumnScope.ModelList(
         ) {
             Icon(
                 imageVector = if (providerTabsExpanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
-                contentDescription = null,
+                contentDescription = stringResource(
+                    if (providerTabsExpanded) {
+                        R.string.model_list_collapse_provider_tabs
+                    } else {
+                        R.string.model_list_expand_provider_tabs
+                    },
+                ),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -532,6 +545,7 @@ private fun ColumnScope.ModelList(
         providers.flatMap { it.tags }.distinct()
     }
     if (allTags.isNotEmpty()) {
+        val filterAllDescription = stringResource(R.string.filter_all)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
@@ -540,14 +554,21 @@ private fun ColumnScope.ModelList(
                 FilterChip(
                     selected = selectedModelListTag == null,
                     onClick = { selectedModelListTag = null },
-                    label = { Text(stringResource(R.string.filter_all)) }
+                    label = { Text(filterAllDescription) },
+                    modifier = Modifier.semantics {
+                        contentDescription = filterAllDescription
+                    },
                 )
             }
             items(allTags) { tag ->
+                val tagFilterDescription = stringResource(R.string.model_list_filter_by_tag, tag)
                 FilterChip(
                     selected = selectedModelListTag == tag,
                     onClick = { selectedModelListTag = if (selectedModelListTag == tag) null else tag },
-                    label = { Text(tag) }
+                    label = { Text(tag) },
+                    modifier = Modifier.semantics {
+                        contentDescription = tagFilterDescription
+                    },
                 )
             }
         }
@@ -574,11 +595,21 @@ private fun ColumnScope.ModelList(
 
         if (favoriteModels.isNotEmpty()) {
             stickyHeader {
+                val favoriteSectionDescription = stringResource(
+                    if (favoriteCollapsed) {
+                        R.string.model_list_expand_favorites
+                    } else {
+                        R.string.model_list_collapse_favorites
+                    },
+                )
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .padding(bottom = 4.dp, top = 8.dp)
-                        .clickable { favoriteCollapsed = !favoriteCollapsed },
+                        .clickable { favoriteCollapsed = !favoriteCollapsed }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = favoriteSectionDescription
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -632,7 +663,7 @@ private fun ColumnScope.ModelList(
                             ) {
                                 Icon(
                                     HeartIcon,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(R.string.chat_message_remove_favorite),
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
@@ -641,7 +672,7 @@ private fun ColumnScope.ModelList(
                         dragHandle = {
                             Icon(
                                 imageVector = HugeIcons.DragDropHorizontal,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.model_list_reorder_favorite),
                                 modifier = Modifier.longPressDraggableHandle(
                                     onDragStarted = {
                                         haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
@@ -661,12 +692,23 @@ private fun ColumnScope.ModelList(
         tagFilteredProviders.fastForEach { providerSetting ->
             val isProviderExpanded = providerGroupExpanded[providerSetting.id] != false
             stickyHeader(key = "header:${providerSetting.id}") {
+                val providerSectionDescription = stringResource(
+                    if (isProviderExpanded) {
+                        R.string.model_list_collapse_provider
+                    } else {
+                        R.string.model_list_expand_provider
+                    },
+                    providerSetting.name,
+                )
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .padding(bottom = 4.dp, top = 8.dp)
                         .clickable {
                             providerGroupExpanded[providerSetting.id] = !isProviderExpanded
+                        }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = providerSectionDescription
                         },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -730,14 +772,14 @@ private fun ColumnScope.ModelList(
                                 if (favorite) {
                                     Icon(
                                         HeartIcon,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(R.string.chat_message_remove_favorite),
                                         modifier = Modifier.size(20.dp),
                                         tint = MaterialTheme.colorScheme.primary,
                                     )
                                 } else {
                                     Icon(
                                         imageVector = HugeIcons.Favourite,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(R.string.chat_message_add_favorite),
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -785,6 +827,10 @@ private fun ColumnScope.ModelList(
                     modifier = Modifier.weight(1f),
                 ) {
                     tagFilteredProviders.forEach { provider ->
+                        val scrollToProviderDescription = stringResource(
+                            R.string.model_list_scroll_to_provider,
+                            provider.name,
+                        )
                         AssistChip(
                             onClick = {
                                 val position = providerPositions[provider.id] ?: 0
@@ -799,6 +845,9 @@ private fun ColumnScope.ModelList(
                             leadingIcon = {
                                 AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
                             },
+                            modifier = Modifier.semantics {
+                                contentDescription = scrollToProviderDescription
+                            },
                         )
                     }
                 }
@@ -809,6 +858,10 @@ private fun ColumnScope.ModelList(
                     state = providerBadgeListState
                 ) {
                     items(tagFilteredProviders, key = { it.id }) { provider ->
+                        val scrollToProviderDescription = stringResource(
+                            R.string.model_list_scroll_to_provider,
+                            provider.name,
+                        )
                         AssistChip(
                             onClick = {
                                 val position = providerPositions[provider.id] ?: 0
@@ -821,6 +874,9 @@ private fun ColumnScope.ModelList(
                             },
                             leadingIcon = {
                                 AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.semantics {
+                                contentDescription = scrollToProviderDescription
                             },
                         )
                     }

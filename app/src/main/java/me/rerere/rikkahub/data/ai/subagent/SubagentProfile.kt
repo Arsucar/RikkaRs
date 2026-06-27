@@ -131,13 +131,18 @@ sealed interface SubagentTranscriptStep {
     ) : SubagentTranscriptStep
 }
 
+/**
+ * Merges assistant-local custom profiles over global profiles (custom wins on name collision).
+ * [global] is usually [Settings.globalSubagentProfiles]; when empty, builtins are used as fallback
+ * via [SubagentRegistry.effectiveGlobalProfiles].
+ */
 fun mergeSubagentProfiles(
     custom: List<SubagentProfile>,
     global: List<SubagentProfile> = emptyList(),
     disabledGlobal: Set<String> = emptySet(),
 ): List<SubagentProfile> {
     val byName = LinkedHashMap<String, SubagentProfile>()
-    global
+    SubagentRegistry.effectiveGlobalProfiles(global)
         .filter { it.name !in disabledGlobal }
         .forEach { byName[it.name] = it }
     custom.forEach { byName[it.name] = it }

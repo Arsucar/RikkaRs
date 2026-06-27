@@ -1,0 +1,30 @@
+{
+  "id": "sub-agent-ui-overhaul",
+  "name": "sub-agent-ui-overhaul",
+  "title": "子代理与UI优化总任务",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-06-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-27-sub-agent-streaming-ui",
+    "06-27-sub-agent-global-config",
+    "06-27-provider-list-ui-opt"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

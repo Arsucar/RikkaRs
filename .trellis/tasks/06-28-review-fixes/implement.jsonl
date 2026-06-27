@@ -1,0 +1,17 @@
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R1"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R1 — disabledBuiltinSubagents migration"}
+{"type":"source","path":"app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt","focus":"migrateSubagentBuiltinsIfNeeded"}
+{"type":"source","path":"app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt","focus":"disabledBuiltinSubagents,disabledGlobalSubagents"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R2"}
+{"type":"source","path":"app/src/main/res/values/strings.xml","focus":"setting_provider_detail_tags,setting_provider_detail_add_tag,filter_all,provider_suggested_tags"}
+{"type":"source","path":"app/src/main/res/values-zh/strings.xml"}
+{"type":"source","path":"app/src/main/res/values-zh-rTW/strings.xml"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R3"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R3 — Stale streaming cleanup on load"}
+{"type":"source","path":"app/src/main/java/me/rerere/rikkahub/service/ChatService.kt","focus":"cleanupStreamingSubagentMetadata,getOrCreateSession,isStreamingSubagent"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R4"}
+{"type":"source","path":"app/src/main/java/me/rerere/rikkahub/data/ai/subagent/SubagentProfile.kt","focus":"childTranscript in ToolCall"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R5"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R5 — Migration tests"}
+{"type":"source","path":"app/src/test/java/me/rerere/rikkahub/data/ai/subagent/SubagentModelTest.kt"}
+{"type":"source","path":"app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt","focus":"migrateSubagentBuiltinsIfNeeded"}

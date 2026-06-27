@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -207,7 +208,12 @@ class SubagentHost(
                 if (signature != lastSignature || now - lastEmitTime >= minIntervalMs) {
                     lastSignature = signature
                     lastEmitTime = now
-                    progressScope.launch { cb(messages) }
+                    if (progressScope.coroutineContext.isActive) {
+                        progressScope.launch {
+                            if (!isActive) return@launch
+                            cb(messages)
+                        }
+                    }
                 }
             }
         }

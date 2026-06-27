@@ -7,6 +7,7 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.utils.JsonInstant
+import kotlin.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -108,5 +109,71 @@ class SubagentRuntimeTest {
         assertTrue(steps[0] is SubagentTranscriptStep.Reasoning)
         assertTrue(steps[1] is SubagentTranscriptStep.ToolCall)
         assertTrue(steps[2] is SubagentTranscriptStep.Text)
+    }
+
+    @Test
+    fun buildTranscript_mapsReasoningCreatedAtEpochMillis() {
+        val createdAt = Instant.fromEpochMilliseconds(1_700_000_000_456L)
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(reasoning = "chain", createdAt = createdAt)),
+            ),
+        )
+        val steps = SubagentHost.buildTranscript(messages)
+        assertEquals(1, steps.size)
+        val reasoning = steps.single() as SubagentTranscriptStep.Reasoning
+        assertEquals(1_700_000_000_456L, reasoning.createdAt)
+    }
+
+    @Test
+    fun buildTranscript_mapsToolExecutedFromOutputPresence() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "1",
+                        toolName = "workspace_read_file",
+                        input = "{}",
+                        output = emptyList(),
+                    ),
+                    UIMessagePart.Tool(
+                        toolCallId = "2",
+                        toolName = "workspace_read_file",
+                        input = "{}",
+                        output = listOf(UIMessagePart.Text("done")),
+                    ),
+                ),
+            ),
+        )
+        val steps = SubagentHost.buildTranscript(messages)
+        assertEquals(2, steps.size)
+        val pending = steps[0] as SubagentTranscriptStep.ToolCall
+        val done = steps[1] as SubagentTranscriptStep.ToolCall
+        assertFalse(pending.executed)
+        assertTrue(done.executed)
+    }
+
+    @Test
+    fun buildTranscript_honorsTruncateToolOutputLimit() {
+        val longOutput = "x".repeat(50)
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "1",
+                        toolName = "t",
+                        input = "{}",
+                        output = listOf(UIMessagePart.Text(longOutput)),
+                    ),
+                ),
+            ),
+        )
+        val steps = SubagentHost.buildTranscript(messages, truncateChars = 200, truncateToolOutput = 10)
+        val tool = steps.single() as SubagentTranscriptStep.ToolCall
+        assertEquals(11, tool.output.length)
+        assertEquals("x".repeat(10) + "\u2026", tool.output)
     }
 }

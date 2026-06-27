@@ -1,0 +1,12 @@
+{"type":"context","content":"审查报告位置: .trellis/tasks/archive/2026-06/06-28-06-28-review-all-changes/research/"}
+{"type":"context","content":"分支: release/rikka-arsucar"}
+{"type":"context","content":"上次提交: 6dca48a1 (milestone commit)"}
+{"type":"fix","target":"SubagentHost.kt","description":"修复协程竞态 - launch { cb } 与 finally { cancel() } 竞态条件","priority":"P0"}
+{"type":"fix","target":"ChatService.kt","description":"修复 CAS 竞态 - updateConversation 与 updateConversationState 覆盖风险","priority":"P0"}
+{"type":"fix","target":"ModelList.kt","description":"remember 依赖键遗漏 settings.value.providers","priority":"P0"}
+{"type":"fix","target":"AssistantSubagentPage.kt","description":"generateCloneName 缺少 globalProfiles 参数","priority":"P1"}
+{"type":"fix","target":"ExtensionSubagentProfilePage.kt","description":"删除未使用的 SubagentRegistry import","priority":"P1"}
+{"type":"fix","target":"ChatService.kt","description":"currentToolCallId null 保护 + profileName JSON 转义","priority":"P1"}
+{"type":"fix","target":"SubagentRegistry.kt","description":"global 空列表时 mergeSubagentProfiles 行为修复","priority":"P1"}
+{"type":"fix","target":"strings.xml","description":"补全 i18n: ja/ko/ru Provider 标签, subagent_global_* 翻译","priority":"P2"}
+{"type":"fix","target":"SubagentModelTest.kt","description":"补充节流/transcript 字段单元测试","priority":"P2"}

@@ -242,7 +242,11 @@ private fun AssistantSubagentContent(
                                     }
                                 } else {
                                     IconButton(onClick = {
-                                        val cloneName = generateCloneName(profile.name, assistant)
+                                        val cloneName = generateCloneName(
+                                            profile.name,
+                                            assistant,
+                                            globalProfiles,
+                                        )
                                         val clone = profile.copy(
                                             name = cloneName,
                                             displayName = profile.displayName + " (copy)",
@@ -363,8 +367,12 @@ private fun AssistantSubagentContent(
     }
 }
 
-private fun generateCloneName(base: String, assistant: Assistant): String {
-    val taken = subagentListEntries(assistant).map { it.profile.name }.toSet()
+private fun generateCloneName(
+    base: String,
+    assistant: Assistant,
+    globalProfiles: List<SubagentProfile>,
+): String {
+    val taken = subagentListEntries(assistant, globalProfiles).map { it.profile.name }.toSet()
     var i = 1
     while (true) {
         val candidate = "${base}_copy$i"

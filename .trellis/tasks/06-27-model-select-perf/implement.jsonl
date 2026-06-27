@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides — pre-modification search rule + cross-layer check triggers; 改动 Model 注解、状态 memo、列表 key 时按此校验"}
+{"file": ".trellis/tasks/06-27-model-select-perf/design.md", "reason": "本任务技术设计：改动点行号、布局迁移、风险与回滚"}
+{"file": ".trellis/tasks/06-27-model-select-perf/prd.md", "reason": "本任务需求与验收：R-1~R-10、AC-1~AC-8"}

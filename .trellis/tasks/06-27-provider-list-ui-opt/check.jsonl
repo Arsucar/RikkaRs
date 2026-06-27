@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/06-27-provider-list-ui-opt/prd.md", "reason": "AC1–AC7 acceptance criteria. Post-implementation check must verify each AC."}
+{"file": ".trellis/tasks/06-27-provider-list-ui-opt/design.md", "reason": "Contract verification: tags field default=emptyList, copyProvider signature, sheet height change, FlowRow/LazyRow conditional, mutableStateMapOf for collapse state, tag chip filtering logic."}
+{"file": ".trellis/tasks/06-27-provider-list-ui-opt/implement.md", "reason": "Validation commands per phase: :ai:compileDebugKotlin for Phase 1, :app:compileDebugKotlin for Phase 2–5, :app:installDebug for Phase 6–7."}

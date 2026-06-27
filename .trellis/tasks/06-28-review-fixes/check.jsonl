@@ -1,0 +1,8 @@
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R1 - disabledBuiltinSubagents migration"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R1"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R2 - i18n strings"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R3 - stale streaming cleanup"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R3"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R4 - remove childTranscript"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/prd.md","requirement":"R5 - migration tests"}
+{"type":"spec","path":".trellis/tasks/06-28-review-fixes/design.md","section":"R5"}

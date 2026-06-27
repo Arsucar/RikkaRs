@@ -904,6 +904,7 @@
   <string name="setting_provider_page_input_modality">輸入模態</string>
   <string name="setting_provider_page_location">位置（例如 us-central1）</string>
   <string name="setting_provider_page_model_count">%d個模型</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">模型顯示名稱</string>
   <string name="setting_provider_page_model_display_name_placeholder">例如：GPT-3.5, 用於UI顯示</string>
   <string name="setting_provider_page_model_id">模型ID</string>
@@ -1297,5 +1298,7 @@
   <string name="extensions_page_section_subagent_profiles">子代理設定</string>
   <string name="extensions_page_no_subagent_profiles">尚無子代理設定</string>
   <string name="extensions_page_add_subagent">新增子代理</string>
+  <string name="subagent_global_badge">全域</string>
+  <string name="subagent_global_edit_in_extensions">在擴充功能中編輯</string>
 </resources>
 

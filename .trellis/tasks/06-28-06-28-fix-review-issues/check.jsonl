@@ -1,0 +1,7 @@
+{"type":"check","target":"SubagentHost.kt","expected":"launch 竞态消除，progressScope 取消后不再执行回调"}
+{"type":"check","target":"ChatService.kt","expected":"CAS 竞态消除，currentToolCallId null 有保护，profileName 已转义"}
+{"type":"check","target":"ModelList.kt","expected":"remember 依赖包含 settings.value.providers"}
+{"type":"check","target":"AssistantSubagentPage.kt","expected":"generateCloneName 使用 globalProfiles 检测重名"}
+{"type":"check","target":"ExtensionSubagentProfilePage.kt","expected":"无未使用 import"}
+{"type":"check","target":"strings.xml","expected":"Provider 标签 key 在 ja/ko/ru 中有翻译；subagent_global_* 所有 locale 一致"}
+{"type":"check","target":"gradle build","expected":"./gradlew :app:compileDebugKotlin 通过 && ./gradlew test 通过"}

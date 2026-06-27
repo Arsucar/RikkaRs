@@ -54,6 +54,14 @@ object SubagentRegistry {
         ),
     )
 
+    /**
+     * Settings normally persist builtins in [me.rerere.rikkahub.data.datastore.Settings.globalSubagentProfiles]
+     * after migration. When [global] is still empty (e.g. before [migrateSubagentBuiltinsIfNeeded] runs),
+     * fall back to [BUILTIN_PROFILES] so resolution and merges stay usable.
+     */
+    internal fun effectiveGlobalProfiles(global: List<SubagentProfile>): List<SubagentProfile> =
+        global.ifEmpty { BUILTIN_PROFILES }
+
     fun resolveProfile(
         name: String,
         assistant: Assistant,
@@ -63,7 +71,7 @@ object SubagentRegistry {
         if (name in assistant.disabledGlobalSubagents) {
             return null
         }
-        return globalProfiles.firstOrNull { it.name == name }
+        return effectiveGlobalProfiles(globalProfiles).firstOrNull { it.name == name }
     }
 
     fun allProfiles(
@@ -72,7 +80,7 @@ object SubagentRegistry {
     ): List<SubagentProfile> =
         mergeSubagentProfiles(
             custom = assistant.subagentProfiles,
-            global = globalProfiles,
+            global = effectiveGlobalProfiles(globalProfiles),
             disabledGlobal = assistant.disabledGlobalSubagents,
         )
 }

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "AI reviewer false-positive 识别清单（注解/memo 类改动易被误报为行为变更）+ pre-modification 搜索规则"}
+{"file": ".trellis/tasks/06-27-model-select-perf/prd.md", "reason": "验收标准 AC-1~AC-8 的 check 依据"}

@@ -906,6 +906,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_input_modality">入力モダリティ</string>
   <string name="setting_provider_page_location">場所（例：us-central1）</string>
   <string name="setting_provider_page_model_count">%dモデル</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">モデル表示名</string>
   <string name="setting_provider_page_model_display_name_placeholder">例：GPT-3.5、UI表示用</string>
   <string name="setting_provider_page_model_id">モデルID</string>
@@ -1288,5 +1289,18 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="extensions_page_section_subagent_profiles">サブエージェント設定</string>
   <string name="extensions_page_no_subagent_profiles">サブエージェント設定がありません</string>
   <string name="extensions_page_add_subagent">サブエージェントを追加</string>
+  <string name="subagent_global_badge">グローバル</string>
+  <string name="subagent_global_edit_in_extensions">拡張機能で編集</string>
+  <string name="setting_provider_detail_tags">タグ</string>
+  <string name="setting_provider_detail_add_tag">タグを追加</string>
+  <string name="filter_all">すべて</string>
+  <string-array name="provider_suggested_tags">
+    <item>よく使う</item>
+    <item>低コスト</item>
+    <item>長コンテキスト</item>
+    <item>高品質</item>
+    <item>無料枠</item>
+    <item>国内</item>
+  </string-array>
 </resources>
 
