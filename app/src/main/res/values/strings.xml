@@ -27,9 +27,15 @@
   <string name="subagent_max_depth_desc">Depth %1$d allows up to %2$d nested delegation level(s). Applies to new spawns only.</string>
   <string name="subagent_max_depth_disabled">Depth 1: the main agent may spawn subagents, but nested subagent delegation is not available.</string>
   <string name="subagent_profiles_section">Profiles</string>
-  <string name="subagent_profiles_section_desc">Built-in and custom profiles available to this assistant</string>
+  <string name="subagent_profiles_section_desc">Built-in, global, and assistant-specific profiles</string>
   <string name="subagent_profiles_empty">No profiles configured.</string>
   <string name="subagent_builtin_badge">Built-in</string>
+  <string name="subagent_global_badge">Global</string>
+  <string name="extensions_page_subagent_profiles">Subagent profiles</string>
+  <string name="extensions_page_subagent_profiles_desc">Shared subagent profiles for all assistants</string>
+  <string name="extensions_page_add_subagent">Add subagent</string>
+  <string name="extension_subagent_profile_edit_title">Global subagent profile</string>
+  <string name="subagent_global_edit_in_extensions">Edit in Extensions</string>
   <string name="subagent_profile_card_meta">Workspace: %1$s · Approval: %2$s · Spawn: %3$s</string>
   <string name="subagent_can_spawn_yes">Yes</string>
   <string name="subagent_can_spawn_no">No</string>
@@ -451,6 +457,8 @@
   <string name="extensions_page_prompts_desc">Manage and use custom prompts</string>
   <string name="extensions_page_quick_messages_desc">Manage shared quick message templates</string>
   <string name="extensions_page_section_extensions">Extensions</string>
+  <string name="extensions_page_section_subagent_profiles">Subagent Profiles</string>
+  <string name="extensions_page_no_subagent_profiles">No global subagent profiles yet</string>
   <string name="extensions_page_title">Extensions</string>
   <string name="favorite_page_no_favorites">No favorites yet</string>
   <string name="favorite_page_removed">Favorite removed</string>
@@ -1031,6 +1039,7 @@
   <string name="setting_provider_page_input_modality">Input Modality</string>
   <string name="setting_provider_page_location">Location (e.g. us-central1)</string>
   <string name="setting_provider_page_model_count">%d models</string>
+  <string name="setting_provider_page_model_count_chat">%1$d/%2$d</string>
   <string name="setting_provider_page_model_display_name">Model Display Name</string>
   <string name="setting_provider_page_model_display_name_placeholder">e.g.: GPT-3.5, for UI display</string>
   <string name="setting_provider_page_model_id">Model ID</string>
@@ -1281,6 +1290,12 @@
   <string name="workspace_terminal_exited">Terminal exited</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
+  <string name="extensions_page_subagents_entry">Subagents</string>
+  <string name="extensions_page_subagents_entry_desc">Manage global subagent profiles</string>
+  <string name="extensions_subagents_page_title">Subagents</string>
+  <string name="extensions_subagents_page_empty">No subagent profiles yet</string>
+  <string name="extensions_subagents_page_restore_defaults">Restore default subagents</string>
+  <string name="extensions_subagents_page_restore_defaults_done">Default subagents restored</string>
   <string name="workspace_select">Select Workspace</string>
   <string name="workspace_no_binding">No binding</string>
   <string name="workspace_manage">Manage Workspaces</string>
@@ -1339,5 +1354,41 @@
   <string name="tool_ui_screen_time_total">Total screen time</string>
   <string name="assistant_page_local_tools_logs_title">Logs</string>
   <string name="assistant_page_local_tools_logs_desc">Let the AI read app runtime logs (redacted) for debugging</string>
+  <string name="setting_provider_detail_tags">Tags</string>
+  <string name="setting_provider_detail_add_tag">Add tag</string>
+  <string name="filter_all">All</string>
+  <string name="subagent_step_thinking">Thinking</string>
+  <string name="subagent_step_text">Text</string>
+  <string-array name="provider_suggested_tags">
+    <item>Frequently Used</item>
+    <item>Budget</item>
+    <item>Long Context</item>
+    <item>High Quality</item>
+    <item>Free Tier</item>
+    <item>Domestic</item>
+  </string-array>
+  <string name="common_clear">Clear</string>
+  <string name="common_copy">Copy</string>
+  <string name="common_select_all">Select all</string>
+  <string name="common_search">Search</string>
+  <string name="common_edit">Edit</string>
+  <string name="common_download">Download</string>
+  <string name="common_refresh">Refresh</string>
+  <string name="chat_list_clear_selection">Clear selection</string>
+  <string name="chat_list_confirm">Confirm</string>
+  <string name="chat_drawer_stats">Statistics</string>
+  <string name="translator_page_paste">Paste text</string>
+  <string name="translator_page_copy_result">Copy translation</string>
+  <string name="route_dev_mode">[DEV MODE]</string>
+  <string name="webview_open_in_browser">Open in Browser</string>
+  <string name="webview_console_logs">Console Logs</string>
+  <string name="webview_more_options">More options</string>
+  <string name="webview_forward">Forward</string>
+  <string name="share_sheet_title">Share your LLM model</string>
+  <string name="chain_of_thought_title">Chain of thought</string>
+  <string name="setting_provider_page_aihubmix_discount">10%% off</string>
+  <string name="markdown_table_copy">Copy</string>
+  <string name="markdown_table_download">Download</string>
+  <string name="mcp_tools_count">%1$d/%2$d tools</string>
 </resources>
 

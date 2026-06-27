@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -68,6 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import io.github.g00fy2.quickie.QRResult
 import io.github.g00fy2.quickie.ScanQRCode
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -96,6 +99,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
+    var selectedFilterTag by remember { mutableStateOf<String?>(null) }
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         val newProviders = settings.providers.toMutableList().apply {
@@ -104,13 +108,12 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
         vm.updateSettings(settings.copy(providers = newProviders))
     }
 
-    val filteredProviders = remember(settings.providers, searchQuery) {
-        if (searchQuery.isBlank()) {
-            settings.providers
-        } else {
-            settings.providers.filter { provider ->
+    val filteredProviders = remember(settings.providers, searchQuery, selectedFilterTag) {
+        settings.providers.filter { provider ->
+            val matchesSearch = searchQuery.isBlank() ||
                 provider.name.contains(searchQuery, ignoreCase = true)
-            }
+            val matchesTag = selectedFilterTag == null || provider.tags.contains(selectedFilterTag)
+            matchesSearch && matchesTag
         }
     }
 
@@ -180,6 +183,31 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 shape = CircleShape,
             )
 
+            val allTags = remember(settings.providers) {
+                settings.providers.flatMap { it.tags }.distinct()
+            }
+            if (allTags.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedFilterTag == null,
+                            onClick = { selectedFilterTag = null },
+                            label = { Text(stringResource(R.string.filter_all)) }
+                        )
+                    }
+                    items(allTags) { tag ->
+                        FilterChip(
+                            selected = selectedFilterTag == tag,
+                            onClick = { selectedFilterTag = if (selectedFilterTag == tag) null else tag },
+                            label = { Text(tag) }
+                        )
+                    }
+                }
+            }
 
             LazyColumn(
                 modifier = Modifier
@@ -627,6 +655,24 @@ private fun ProviderItem(
                         provider.shortDescription()
                     }
                 }
+                val baseUrlSummary = remember(provider) {
+                    when (provider) {
+                        is ProviderSetting.OpenAI -> provider.baseUrl
+                        is ProviderSetting.Google -> provider.baseUrl
+                        is ProviderSetting.Claude -> provider.baseUrl
+                    }.let { url ->
+                        try {
+                            url.removePrefix("https://").removePrefix("http://").split("/").first()
+                        } catch (_: Exception) {
+                            url
+                        }
+                    }
+                }
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.5f)) {
+                        Text(baseUrlSummary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -635,16 +681,17 @@ private fun ProviderItem(
                         Text(stringResource(if (provider.enabled) R.string.setting_provider_page_enabled else R.string.setting_provider_page_disabled))
                     }
                     Tag(type = TagType.INFO) {
-                        Text(
-                            stringResource(
-                                R.string.setting_provider_page_model_count,
-                                provider.models.size
-                            )
-                        )
+                        val chatCount = provider.models.count { it.type == ModelType.CHAT }
+                        Text(stringResource(R.string.setting_provider_page_model_count_chat, chatCount, provider.models.size))
                     }
                     if (provider.name == "AiHubMix") {
                         Tag(type = TagType.INFO) {
-                            Text("10% 优惠")
+                            Text(stringResource(R.string.setting_provider_page_aihubmix_discount))
+                        }
+                    }
+                    provider.tags.forEach { tag ->
+                        Tag(type = TagType.INFO) {
+                            Text(tag)
                         }
                     }
                 }

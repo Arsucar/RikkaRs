@@ -51,6 +51,7 @@ data class Assistant(
     val subagentMaxDepth: Int = 2,
     val subagentProfiles: List<SubagentProfile> = emptyList(),
     val disabledBuiltinSubagents: Set<String> = emptySet(),
+    val disabledGlobalSubagents: Set<String> = emptySet(),
 )
 
 @Serializable

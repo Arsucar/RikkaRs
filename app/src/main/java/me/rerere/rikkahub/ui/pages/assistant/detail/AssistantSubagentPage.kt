@@ -61,6 +61,7 @@ fun AssistantSubagentPage(id: String) {
         parameters = { parametersOf(id) }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
 
@@ -79,9 +80,13 @@ fun AssistantSubagentPage(id: String) {
         AssistantSubagentContent(
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
+            globalProfiles = settings.globalSubagentProfiles,
             onUpdate = { vm.update(it) },
             onOpenProfile = { profileName, createMode ->
                 navController.navigate(Screen.AssistantSubagentProfile(id, profileName, createMode))
+            },
+            onOpenGlobalProfile = { profileName ->
+                navController.navigate(Screen.ExtensionSubagentProfile(profileName, false))
             },
         )
     }
@@ -91,10 +96,12 @@ fun AssistantSubagentPage(id: String) {
 private fun AssistantSubagentContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
+    globalProfiles: List<SubagentProfile>,
     onUpdate: (Assistant) -> Unit,
     onOpenProfile: (String, Boolean) -> Unit,
+    onOpenGlobalProfile: (String) -> Unit,
 ) {
-    val entries = subagentListEntries(assistant)
+    val entries = subagentListEntries(assistant, globalProfiles)
     var showCreateDialog by remember { mutableStateOf(false) }
     var newProfileName by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<SubagentListEntry?>(null) }
@@ -124,9 +131,13 @@ private fun AssistantSubagentContent(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (assistant.disabledBuiltinSubagents.isNotEmpty()) {
+                    if (assistant.disabledGlobalSubagents.isNotEmpty()) {
                         IconButton(onClick = {
-                            onUpdate(assistant.copy(disabledBuiltinSubagents = emptySet()))
+                            onUpdate(
+                                assistant.copy(
+                                    disabledGlobalSubagents = emptySet(),
+                                )
+                            )
                         }) {
                             Icon(HugeIcons.Refresh03, contentDescription = null)
                         }
@@ -152,7 +163,7 @@ private fun AssistantSubagentContent(
         items(entries.size) { index ->
             val entry = entries[index]
             val profile = entry.profile
-            val cardAlpha = if (entry.isDisabledBuiltin) 0.45f else 1f
+            val cardAlpha = if (entry.isDisabledGlobal) 0.45f else 1f
             CardGroup(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -160,19 +171,21 @@ private fun AssistantSubagentContent(
             ) {
                 item(
                     onClick = {
-                        if (!entry.isDisabledBuiltin) {
-                            onOpenProfile(profile.name, false)
+                        when {
+                            entry.isDisabledGlobal -> Unit
+                            entry.isGlobal -> onOpenGlobalProfile(profile.name)
+                            else -> onOpenProfile(profile.name, false)
                         }
                     },
                     leadingContent = { Icon(HugeIcons.Connect, null) },
                     overlineContent = {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(profile.name)
-                            if (entry.isBuiltin) {
+                            if (entry.isGlobal) {
                                 Text(
-                                    text = stringResource(R.string.subagent_builtin_badge),
+                                    text = stringResource(R.string.subagent_global_badge),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.secondary,
                                 )
                             }
                         }
@@ -206,52 +219,52 @@ private fun AssistantSubagentContent(
                     },
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (entry.isDisabledBuiltin) {
+                            if (entry.isDisabledGlobal) {
                                 IconButton(onClick = {
                                     onUpdate(
                                         assistant.copy(
-                                            disabledBuiltinSubagents = assistant.disabledBuiltinSubagents - profile.name
+                                            disabledGlobalSubagents = assistant.disabledGlobalSubagents - profile.name,
                                         )
                                     )
                                 }) {
                                     Icon(HugeIcons.Refresh03, contentDescription = null)
                                 }
                             } else {
-                                IconButton(onClick = {
-                                    val cloneName = generateCloneName(profile.name, assistant)
-                                    val clone = profile.copy(
-                                        name = cloneName,
-                                        displayName = profile.displayName + " (copy)",
-                                    )
-                                    onUpdate(
-                                        assistant.copy(
-                                            subagentProfiles = upsertSubagentProfile(
-                                                assistant.subagentProfiles,
-                                                clone,
-                                            )
-                                        )
-                                    )
-                                    onOpenProfile(cloneName, false)
-                                }) {
-                                    Icon(HugeIcons.Copy01, contentDescription = null)
-                                }
-                                if (entry.isBuiltin) {
+                                if (entry.isGlobal) {
                                     IconButton(onClick = {
                                         onUpdate(
                                             assistant.copy(
-                                                disabledBuiltinSubagents = assistant.disabledBuiltinSubagents + profile.name,
+                                                disabledGlobalSubagents = assistant.disabledGlobalSubagents + profile.name,
                                             )
                                         )
                                     }) {
                                         Icon(HugeIcons.Delete01, contentDescription = null)
                                     }
                                 } else {
+                                    IconButton(onClick = {
+                                        val cloneName = generateCloneName(profile.name, assistant)
+                                        val clone = profile.copy(
+                                            name = cloneName,
+                                            displayName = profile.displayName + " (copy)",
+                                        )
+                                        onUpdate(
+                                            assistant.copy(
+                                                subagentProfiles = upsertSubagentProfile(
+                                                    assistant.subagentProfiles,
+                                                    clone,
+                                                )
+                                            )
+                                        )
+                                        onOpenProfile(cloneName, false)
+                                    }) {
+                                        Icon(HugeIcons.Copy01, contentDescription = null)
+                                    }
                                     IconButton(onClick = { pendingDelete = entry }) {
                                         Icon(HugeIcons.Delete01, contentDescription = null)
                                     }
                                 }
                             }
-                            if (!entry.isDisabledBuiltin) {
+                            if (!entry.isDisabledGlobal) {
                                 Icon(HugeIcons.ArrowRight01, null)
                             }
                         }
@@ -265,7 +278,7 @@ private fun AssistantSubagentContent(
         val takenNames = entries.map { it.profile.name }.toSet()
         val isValidName = newProfileName.matches(SubagentProfile.IdentifierRegex) &&
             newProfileName !in takenNames &&
-            !isBuiltinSubagentName(newProfileName)
+            !isGlobalSubagentName(newProfileName, globalProfiles)
         AlertDialog(
             onDismissRequest = {
                 showCreateDialog = false

@@ -1179,6 +1179,12 @@
   <string name="workspace_terminal_exited">Терминал завершен</string>
   <string name="extensions_page_workspace">Рабочее пространство</string>
   <string name="extensions_page_workspace_desc">Управление локальными рабочими каталогами, доступными для Agent</string>
+  <string name="extensions_page_subagents_entry">Субагенты</string>
+  <string name="extensions_page_subagents_entry_desc">Управление глобальными профилями субагентов</string>
+  <string name="extensions_subagents_page_title">Субагенты</string>
+  <string name="extensions_subagents_page_empty">Нет профилей субагентов</string>
+  <string name="extensions_subagents_page_restore_defaults">Восстановить субагенты по умолчанию</string>
+  <string name="extensions_subagents_page_restore_defaults_done">Субагенты по умолчанию восстановлены</string>
   <string name="workspace_select">Выберите рабочее пространство</string>
   <string name="workspace_no_binding">Нет привязки</string>
   <string name="workspace_manage">Управление рабочими пространствами</string>
@@ -1256,5 +1262,31 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">Пожалуйста, предоставьте разрешение Доступ к использованию в настройках, чтобы использовать экранное время</string>
   <string name="chat_message_tool_screen_time">Чтение экранного времени</string>
   <string name="tool_ui_screen_time_total">Общее время экрана</string>
+  <string name="common_clear">Очистить</string>
+  <string name="common_copy">Копировать</string>
+  <string name="common_select_all">Выбрать все</string>
+  <string name="common_search">Поиск</string>
+  <string name="common_edit">Изменить</string>
+  <string name="common_download">Скачать</string>
+  <string name="common_refresh">Обновить</string>
+  <string name="chat_list_clear_selection">Снять выделение</string>
+  <string name="chat_list_confirm">Подтвердить</string>
+  <string name="chat_drawer_stats">Статистика</string>
+  <string name="translator_page_paste">Вставить текст</string>
+  <string name="translator_page_copy_result">Копировать перевод</string>
+  <string name="route_dev_mode">[РЕЖИМ РАЗРАБОТЧИКА]</string>
+  <string name="webview_open_in_browser">Открыть в браузере</string>
+  <string name="webview_console_logs">Логи консоли</string>
+  <string name="webview_more_options">Дополнительные параметры</string>
+  <string name="webview_forward">Вперёд</string>
+  <string name="share_sheet_title">Поделиться вашей LLM моделью</string>
+  <string name="chain_of_thought_title">Цепочка рассуждений</string>
+  <string name="setting_provider_page_aihubmix_discount">Скидка 10%%</string>
+  <string name="markdown_table_copy">Копировать</string>
+  <string name="markdown_table_download">Скачать</string>
+  <string name="mcp_tools_count">%1$d/%2$d инструментов</string>
+  <string name="extensions_page_section_subagent_profiles">Настройки субагентов</string>
+  <string name="extensions_page_no_subagent_profiles">Нет настроек субагентов</string>
+  <string name="extensions_page_add_subagent">Добавить субагент</string>
 </resources>
 

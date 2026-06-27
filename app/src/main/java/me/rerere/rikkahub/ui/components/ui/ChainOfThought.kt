@@ -431,7 +431,7 @@ private fun ChainOfThoughtPreview() {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text("Chain of thought")
+                        Text(stringResource(R.string.chain_of_thought_title))
                     }
                 )
             }

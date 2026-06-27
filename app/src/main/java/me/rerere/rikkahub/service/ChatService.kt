@@ -55,10 +55,18 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.currentToolCallId
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.ai.subagent.SubagentHost
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.buildSubagentTools
 import me.rerere.rikkahub.data.ai.subagent.createManageSubagentTool
@@ -632,6 +640,7 @@ class ChatService(
                                 parentModel = model,
                                 parentTools = this@buildList,
                                 workspaceCwd = conversation.workspaceCwd,
+                                conversationId = conversationId,
                                 depth = 0,
                             ),
                         )
@@ -676,6 +685,7 @@ class ChatService(
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
+            cleanupStreamingSubagentMetadata(conversationId)
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
@@ -686,6 +696,7 @@ class ChatService(
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
             }
+            cleanupStreamingSubagentMetadata(conversationId)
         }
     }
 
@@ -1085,13 +1096,164 @@ class ChatService(
     private fun updateConversation(conversationId: Uuid, conversation: Conversation) {
         if (conversation.id != conversationId) return
         val session = getOrCreateSession(conversationId)
-        checkFilesDelete(conversation, session.state.value)
-        session.state.value = conversation
+        val cleaned = conversation.cleanStaleStreamingMetadata()
+        checkFilesDelete(cleaned, session.state.value)
+        session.state.value = cleaned
     }
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
-        val current = getConversationFlow(conversationId).value
-        updateConversation(conversationId, update(current))
+        val session = getOrCreateSession(conversationId)
+        repeat(50) {
+            val prev = session.state.value
+            val updated = update(prev)
+            if (updated.id != conversationId) return
+            if (session.state.compareAndSet(prev, updated)) {
+                checkFilesDelete(updated, prev)
+                return
+            }
+        }
+        Log.w(TAG, "CAS retry limit exceeded for conversation $conversationId")
+    }
+
+    private fun updateSubagentProgress(
+        conversationId: Uuid,
+        toolCallId: String?,
+        profileName: String,
+        subMessages: List<UIMessage>,
+    ) {
+        runCatching {
+            val transcript = SubagentHost.buildTranscript(
+                subMessages,
+                truncateChars = 200,
+                truncateToolOutput = 2000,
+            )
+            if (transcript.isEmpty()) return@runCatching
+
+            val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
+            val transcriptMetadata = buildJsonObject {
+                put("subagent_transcript", json.encodeToJsonElement(listSerializer, transcript))
+                put("subagent_profile", JsonPrimitive(profileName))
+                put("subagent_steps", JsonPrimitive(transcript.size))
+                put("subagent_succeeded", JsonPrimitive(false))
+                put("subagent_streaming", JsonPrimitive(true))
+            }
+            val partialOutput = UIMessagePart.Text(
+                text = "{\"profile_name\":\"$profileName\",\"succeeded\":false,\"streaming\":true}",
+                metadata = transcriptMetadata,
+            )
+
+            updateConversationState(conversationId) { conversation ->
+                val messages = conversation.currentMessages
+                val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
+                if (lastAssistantIndex < 0) return@updateConversationState conversation
+
+                val updatedMessages = messages.mapIndexed { index, message ->
+                    if (index != lastAssistantIndex) return@mapIndexed message
+                    val matchesTool: (UIMessagePart.Tool) -> Boolean = { part ->
+                        part.toolName == "spawn_subagent" &&
+                            (!part.isExecuted || isStreamingSubagent(part)) &&
+                            (toolCallId == null || part.toolCallId == toolCallId)
+                    }
+                    if (!message.parts.any { it is UIMessagePart.Tool && matchesTool(it) }) {
+                        return@mapIndexed message
+                    }
+                    message.copy(parts = message.parts.map { part ->
+                        if (part is UIMessagePart.Tool && matchesTool(part)) {
+                            part.copy(output = listOf(partialOutput))
+                        } else {
+                            part
+                        }
+                    })
+                }
+                conversation.updateCurrentMessages(updatedMessages)
+            }
+        }.onFailure {
+            Log.w(TAG, "updateSubagentProgress failed: ${it.message}")
+        }
+    }
+
+    private fun isStreamingSubagent(part: UIMessagePart.Tool): Boolean {
+        val textPart = part.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+        return textPart?.metadata?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
+    }
+
+    private fun Conversation.cleanStaleStreamingMetadata(): Conversation {
+        val updatedMessages = this.currentMessages.map { message ->
+            if (message.role != MessageRole.ASSISTANT) return@map message
+            var changed = false
+            val updatedParts = message.parts.map { part ->
+                if (part is UIMessagePart.Tool && part.toolName == "spawn_subagent" && isStreamingSubagent(part)) {
+                    changed = true
+                    val cleanedOutput = part.output.map { outputPart ->
+                        if (outputPart is UIMessagePart.Text) {
+                            val sourceMeta = outputPart.metadata ?: return@map outputPart
+                            val cleanedMeta = buildJsonObject {
+                                sourceMeta.forEach { (key, value) ->
+                                    if (key == "subagent_streaming") {
+                                        put("subagent_streaming", JsonPrimitive(false))
+                                    } else {
+                                        put(key, value)
+                                    }
+                                }
+                            }
+                            outputPart.copy(metadata = cleanedMeta)
+                        } else {
+                            outputPart
+                        }
+                    }
+                    part.copy(output = cleanedOutput)
+                } else {
+                    part
+                }
+            }
+            if (changed) message.copy(parts = updatedParts) else message
+        }
+        return this.updateCurrentMessages(updatedMessages)
+    }
+
+    private fun cleanupStreamingSubagentMetadata(conversationId: Uuid) {
+        val conversation = getConversationFlow(conversationId).value
+        val lastAssistantIndex = conversation.currentMessages.indexOfLast { it.role == MessageRole.ASSISTANT }
+        if (lastAssistantIndex < 0) return
+
+        val message = conversation.currentMessages[lastAssistantIndex]
+        var needsUpdate = false
+        val updatedParts = message.parts.map { part ->
+            if (part is UIMessagePart.Tool &&
+                part.toolName == "spawn_subagent" &&
+                isStreamingSubagent(part)
+            ) {
+                needsUpdate = true
+                val cleanedOutput = part.output.map { outputPart ->
+                    if (outputPart is UIMessagePart.Text) {
+                        val sourceMeta = outputPart.metadata ?: return@map outputPart
+                        val cleanedMeta = buildJsonObject {
+                            sourceMeta.forEach { (key, value) ->
+                                if (key == "subagent_streaming") {
+                                    put("subagent_streaming", JsonPrimitive(false))
+                                } else {
+                                    put(key, value)
+                                }
+                            }
+                        }
+                        outputPart.copy(metadata = cleanedMeta)
+                    } else {
+                        outputPart
+                    }
+                }
+                part.copy(output = cleanedOutput)
+            } else {
+                part
+            }
+        }
+
+        if (needsUpdate) {
+            val updatedMessage = message.copy(parts = updatedParts)
+            val updatedMessages = conversation.currentMessages.mapIndexed { index, msg ->
+                if (index == lastAssistantIndex) updatedMessage else msg
+            }
+            updateConversationState(conversationId) { it.updateCurrentMessages(updatedMessages) }
+        }
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
@@ -1390,10 +1552,15 @@ class ChatService(
         parentModel: Model,
         parentTools: List<Tool>,
         workspaceCwd: String?,
+        conversationId: Uuid?,
         depth: Int,
     ): List<Tool> {
         val maxDepth = assistant.subagentMaxDepth.coerceAtLeast(1)
-        val profiles = mergeSubagentProfiles(assistant.subagentProfiles, assistant.disabledBuiltinSubagents)
+        val profiles = mergeSubagentProfiles(
+            custom = assistant.subagentProfiles,
+            global = settings.globalSubagentProfiles,
+            disabledGlobal = assistant.disabledGlobalSubagents,
+        )
         val workspaceId = assistant.workspaceId?.toString().orEmpty()
         val result = mutableListOf<Tool>()
         if (profiles.isNotEmpty()) {
@@ -1401,7 +1568,11 @@ class ChatService(
                 profiles = profiles,
                 json = json,
                 spawn = { profileName, task, _ ->
-                    val profile = SubagentRegistry.resolveProfile(profileName, assistant)
+                    val profile = SubagentRegistry.resolveProfile(
+                        profileName,
+                        assistant,
+                        settings.globalSubagentProfiles,
+                    )
                     if (profile == null) {
                         SubagentResult(
                             profileName = profileName,
@@ -1411,6 +1582,7 @@ class ChatService(
                             depth = depth + 1,
                         )
                     } else {
+                        val toolCallId = currentToolCallId()
                         subagentHost.spawn(
                             profileName = profileName,
                             task = task,
@@ -1426,6 +1598,7 @@ class ChatService(
                                     parentTools = parentTools,
                                     workspaceCwd = workspaceCwd,
                                     workspaceId = workspaceId,
+                                    conversationId = conversationId,
                                     depth = childDepth,
                                     maxDepth = maxDepth,
                                 )
@@ -1433,6 +1606,18 @@ class ChatService(
                             depth = depth + 1,
                             maxDepth = maxDepth,
                             workspaceCwd = workspaceCwd,
+                            onProgress = if (conversationId != null) {
+                                { subMessages ->
+                                    updateSubagentProgress(
+                                        conversationId,
+                                        toolCallId,
+                                        profile.name,
+                                        subMessages,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
                 },
@@ -1466,6 +1651,7 @@ class ChatService(
         parentTools: List<Tool>,
         workspaceCwd: String?,
         workspaceId: String,
+        conversationId: Uuid?,
         depth: Int,
         maxDepth: Int,
     ): List<Tool> {
@@ -1485,12 +1671,17 @@ class ChatService(
                 {
                     createSubagentTools(
                         profiles = mergeSubagentProfiles(
-                            assistant.subagentProfiles,
-                            assistant.disabledBuiltinSubagents,
+                            custom = assistant.subagentProfiles,
+                            global = settings.globalSubagentProfiles,
+                            disabledGlobal = assistant.disabledGlobalSubagents,
                         ),
                         json = json,
                         spawn = { nestedProfile, nestedTask, _ ->
-                            val nested = SubagentRegistry.resolveProfile(nestedProfile, assistant)
+                            val nested = SubagentRegistry.resolveProfile(
+                                nestedProfile,
+                                assistant,
+                                settings.globalSubagentProfiles,
+                            )
                             if (nested == null) {
                                 SubagentResult(
                                     profileName = nestedProfile,
@@ -1500,6 +1691,7 @@ class ChatService(
                                     depth = depth + 1,
                                 )
                             } else {
+                                val toolCallId = currentToolCallId()
                                 subagentHost.spawn(
                                     profileName = nestedProfile,
                                     task = nestedTask,
@@ -1515,6 +1707,7 @@ class ChatService(
                                             parentTools = parentTools,
                                             workspaceCwd = workspaceCwd,
                                             workspaceId = workspaceId,
+                                            conversationId = conversationId,
                                             depth = d,
                                             maxDepth = maxDepth,
                                         )
@@ -1522,6 +1715,18 @@ class ChatService(
                                     depth = depth + 1,
                                     maxDepth = maxDepth,
                                     workspaceCwd = workspaceCwd,
+                                    onProgress = if (conversationId != null) {
+                                        { subMessages ->
+                                            updateSubagentProgress(
+                                                conversationId,
+                                                toolCallId,
+                                                nested.name,
+                                                subMessages,
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         },
@@ -1554,7 +1759,11 @@ class ChatService(
         val current = settingsStore.settingsFlow.first()
         val target = current.assistants.firstOrNull { it.id == assistantId }
             ?: return "Error: assistant not found"
-        val merged = mergeSubagentProfiles(target.subagentProfiles, target.disabledBuiltinSubagents)
+        val merged = mergeSubagentProfiles(
+            custom = target.subagentProfiles,
+            global = current.globalSubagentProfiles,
+            disabledGlobal = target.disabledGlobalSubagents,
+        )
         return when (action) {
             "list" -> {
                 if (merged.isEmpty()) "No subagent profiles available."
@@ -1577,17 +1786,17 @@ class ChatService(
             }
             "delete" -> {
                 if (name.isBlank()) return "Error: name required for delete"
-                val isBuiltin = SubagentRegistry.BUILTIN_PROFILES.any { it.name == name }
+                val isGlobal = current.globalSubagentProfiles.any { it.name == name }
                 settingsStore.update { settings ->
                     settings.copy(
                         assistants = settings.assistants.map { a ->
                             if (a.id == assistantId) {
                                 a.copy(
                                     subagentProfiles = removeSubagentProfile(a.subagentProfiles, name),
-                                    disabledBuiltinSubagents = if (isBuiltin) {
-                                        a.disabledBuiltinSubagents + name
+                                    disabledGlobalSubagents = if (isGlobal) {
+                                        a.disabledGlobalSubagents + name
                                     } else {
-                                        a.disabledBuiltinSubagents
+                                        a.disabledGlobalSubagents
                                     },
                                 )
                             } else {

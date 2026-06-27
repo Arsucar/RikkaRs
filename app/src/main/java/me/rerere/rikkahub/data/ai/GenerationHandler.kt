@@ -2,11 +2,15 @@ package me.rerere.rikkahub.data.ai
 
 import android.content.Context
 import android.util.Log
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -57,6 +61,17 @@ import kotlin.uuid.Uuid
 private const val TAG = "GenerationHandler"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
+
+private class ToolCallIdElement(
+    val toolCallId: String,
+) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<ToolCallIdElement>
+}
+
+suspend fun currentToolCallId(): String? = coroutineContext[ToolCallIdElement]?.toolCallId
+
+private suspend fun <T> withToolCallId(toolCallId: String, block: suspend () -> T): T =
+    withContext(ToolCallIdElement(toolCallId)) { block() }
 
 @Serializable
 sealed interface GenerationChunk {
@@ -435,7 +450,7 @@ class GenerationHandler(
                     error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
                 }
                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
-                val result = toolDef.execute(args)
+                val result = withToolCallId(tool.toolCallId) { toolDef.execute(args) }
                 val hasShellAccess = toolsInternal.any { it.name == "workspace_shell" }
                 tool.copy(output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess))
             }.onFailure {

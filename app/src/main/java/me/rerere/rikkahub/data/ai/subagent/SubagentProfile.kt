@@ -112,6 +112,7 @@ sealed interface SubagentTranscriptStep {
     @SerialName("reasoning")
     data class Reasoning(
         val text: String,
+        val createdAt: Long? = null,
     ) : SubagentTranscriptStep
 
     @Serializable
@@ -120,6 +121,7 @@ sealed interface SubagentTranscriptStep {
         val toolName: String,
         val input: String,
         val output: String,
+        val executed: Boolean = true,
     ) : SubagentTranscriptStep
 
     @Serializable
@@ -131,11 +133,12 @@ sealed interface SubagentTranscriptStep {
 
 fun mergeSubagentProfiles(
     custom: List<SubagentProfile>,
-    disabledBuiltin: Set<String> = emptySet(),
+    global: List<SubagentProfile> = emptyList(),
+    disabledGlobal: Set<String> = emptySet(),
 ): List<SubagentProfile> {
     val byName = LinkedHashMap<String, SubagentProfile>()
-    SubagentRegistry.BUILTIN_PROFILES
-        .filter { it.name !in disabledBuiltin }
+    global
+        .filter { it.name !in disabledGlobal }
         .forEach { byName[it.name] = it }
     custom.forEach { byName[it.name] = it }
     return byName.values.toList()

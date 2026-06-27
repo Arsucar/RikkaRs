@@ -1,9 +1,11 @@
 package me.rerere.ai.provider
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 
+@Immutable
 @Serializable
 data class Model(
     val modelId: String = "",

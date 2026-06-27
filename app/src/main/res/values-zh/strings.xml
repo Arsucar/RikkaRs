@@ -1281,6 +1281,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_terminal_exited">终端已退出</string>
   <string name="extensions_page_workspace">工作区</string>
   <string name="extensions_page_workspace_desc">管理可由Agent访问的本地工作目录</string>
+  <string name="extensions_page_subagents_entry">子代理</string>
+  <string name="extensions_page_subagents_entry_desc">管理全局子代理配置</string>
+  <string name="extensions_subagents_page_title">子代理</string>
+  <string name="extensions_subagents_page_empty">暂无子代理配置</string>
+  <string name="extensions_subagents_page_restore_defaults">恢复默认子代理</string>
+  <string name="extensions_subagents_page_restore_defaults_done">默认子代理已恢复</string>
   <string name="workspace_select">选择工作区</string>
   <string name="workspace_no_binding">未绑定</string>
   <string name="workspace_manage">管理工作区</string>
@@ -1340,5 +1346,42 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="tool_ui_screen_time_total">总屏幕时间</string>
   <string name="assistant_page_local_tools_logs_title">日志</string>
   <string name="assistant_page_local_tools_logs_desc">让AI读取应用运行日志（已脱敏）来排查问题</string>
+  <string name="setting_provider_detail_tags">标签</string>
+  <string name="setting_provider_detail_add_tag">添加标签</string>
+  <string name="filter_all">全部</string>
+  <string-array name="provider_suggested_tags">
+    <item>常用</item>
+    <item>便宜</item>
+    <item>长上下文</item>
+    <item>高质量</item>
+    <item>免费额度</item>
+    <item>国产</item>
+  </string-array>
+  <string name="common_clear">清除</string>
+  <string name="common_copy">复制</string>
+  <string name="common_select_all">全选</string>
+  <string name="common_search">搜索</string>
+  <string name="common_edit">编辑</string>
+  <string name="common_download">下载</string>
+  <string name="common_refresh">刷新</string>
+  <string name="chat_list_clear_selection">清除选择</string>
+  <string name="chat_list_confirm">确认</string>
+  <string name="chat_drawer_stats">统计数据</string>
+  <string name="translator_page_paste">粘贴文本</string>
+  <string name="translator_page_copy_result">复制翻译结果</string>
+  <string name="route_dev_mode">[开发模式]</string>
+  <string name="webview_open_in_browser">在浏览器打开</string>
+  <string name="webview_console_logs">控制台日志</string>
+  <string name="webview_more_options">更多选项</string>
+  <string name="webview_forward">前进</string>
+  <string name="share_sheet_title">共享你的LLM模型</string>
+  <string name="chain_of_thought_title">思维链</string>
+  <string name="setting_provider_page_aihubmix_discount">10%% 优惠</string>
+  <string name="markdown_table_copy">复制</string>
+  <string name="markdown_table_download">下载</string>
+  <string name="mcp_tools_count">%1$d/%2$d 个工具</string>
+  <string name="extensions_page_section_subagent_profiles">子代理配置</string>
+  <string name="extensions_page_no_subagent_profiles">暂无子代理配置</string>
+  <string name="extensions_page_add_subagent">添加子代理</string>
 </resources>
 

@@ -13,8 +13,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -29,6 +32,8 @@ import me.rerere.ai.ui.ImageQualityOption
 import me.rerere.ai.ui.ImageSizeOption
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
@@ -77,6 +82,8 @@ class SettingsStore(
     context: Context,
     scope: AppScope,
 ) : KoinComponent {
+    private val appScope = scope
+
     companion object {
         // 版本号
         val VERSION = intPreferencesKey("data_version")
@@ -123,6 +130,8 @@ class SettingsStore(
 
         // MCP
         val MCP_SERVERS = stringPreferencesKey("mcp_servers")
+        val GLOBAL_SUBAGENT_PROFILES = stringPreferencesKey("global_subagent_profiles")
+        val SUBAGENT_BUILTIN_MIGRATED = booleanPreferencesKey("subagent_builtin_migrated")
 
         // WebDAV
         val WEBDAV_CONFIG = stringPreferencesKey("webdav_config")
@@ -222,6 +231,10 @@ class SettingsStore(
                 mcpServers = preferences[MCP_SERVERS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                globalSubagentProfiles = preferences[GLOBAL_SUBAGENT_PROFILES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                subagentBuiltinMigrated = preferences[SUBAGENT_BUILTIN_MIGRATED] == true,
                 webDavConfig = preferences[WEBDAV_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: WebDavConfig(),
@@ -369,9 +382,33 @@ class SettingsStore(
                 ),
             )
         }
+        .map { settings -> migrateSubagentBuiltinsIfNeeded(settings) }
+        .onEach { settings ->
+            if (!settings.init && settings.subagentBuiltinMigrated) {
+                scheduleSubagentBuiltinMigrationPersist(settings)
+            }
+        }
         .onEach {
             get<PebbleEngine>().templateCache.invalidateAll()
         }
+
+    private val subagentMigrationPersistScheduled = AtomicBoolean(false)
+
+    private fun scheduleSubagentBuiltinMigrationPersist(settings: Settings) {
+        appScope.launch {
+            if (dataStore.data.first()[SUBAGENT_BUILTIN_MIGRATED] == true) {
+                return@launch
+            }
+            if (!subagentMigrationPersistScheduled.compareAndSet(false, true)) {
+                return@launch
+            }
+            try {
+                update(settings)
+            } finally {
+                subagentMigrationPersistScheduled.set(false)
+            }
+        }
+    }
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
@@ -424,6 +461,8 @@ class SettingsStore(
             preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
 
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
+            preferences[GLOBAL_SUBAGENT_PROFILES] = JsonInstant.encodeToString(settings.globalSubagentProfiles)
+            preferences[SUBAGENT_BUILTIN_MIGRATED] = settings.subagentBuiltinMigrated
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
             preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
@@ -563,6 +602,8 @@ data class Settings(
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,
     val mcpServers: List<McpServerConfig> = emptyList(),
+    val globalSubagentProfiles: List<SubagentProfile> = emptyList(),
+    val subagentBuiltinMigrated: Boolean = false,
     val webDavConfig: WebDavConfig = WebDavConfig(),
     val s3Config: S3Config = S3Config(),
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
@@ -589,6 +630,31 @@ data class Settings(
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
     }
+}
+
+internal fun migrateSubagentBuiltinsIfNeeded(settings: Settings): Settings {
+    if (settings.init || settings.subagentBuiltinMigrated) {
+        return settings
+    }
+    val existingNames = settings.globalSubagentProfiles.map { it.name }.toSet()
+    val toAdd = SubagentRegistry.BUILTIN_PROFILES.filter { it.name !in existingNames }
+    val globalSubagentProfiles = settings.globalSubagentProfiles + toAdd
+    val globalProfileNames = globalSubagentProfiles.map { it.name }.toSet()
+    val assistants = settings.assistants.map { assistant ->
+        if (assistant.disabledBuiltinSubagents.isEmpty()) {
+            assistant
+        } else {
+            val migratedDisabled = assistant.disabledBuiltinSubagents.filter { it in globalProfileNames }.toSet()
+            assistant.copy(
+                disabledGlobalSubagents = assistant.disabledGlobalSubagents + migratedDisabled,
+            )
+        }
+    }
+    return settings.copy(
+        globalSubagentProfiles = globalSubagentProfiles,
+        subagentBuiltinMigrated = true,
+        assistants = assistants,
+    )
 }
 
 @Serializable

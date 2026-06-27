@@ -1179,6 +1179,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_terminal_exited">ターミナル終了</string>
   <string name="extensions_page_workspace">ワークスペース</string>
   <string name="extensions_page_workspace_desc">エージェントがアクセス可能なローカルの作業ディレクトリを管理します</string>
+  <string name="extensions_page_subagents_entry">サブエージェント</string>
+  <string name="extensions_page_subagents_entry_desc">グローバルサブエージェント設定を管理</string>
+  <string name="extensions_subagents_page_title">サブエージェント</string>
+  <string name="extensions_subagents_page_empty">サブエージェント設定がありません</string>
+  <string name="extensions_subagents_page_restore_defaults">デフォルトサブエージェントを復元</string>
+  <string name="extensions_subagents_page_restore_defaults_done">デフォルトサブエージェントを復元しました</string>
   <string name="workspace_select">ワークスペースを選択</string>
   <string name="workspace_no_binding">バインドなし</string>
   <string name="workspace_manage">ワークスペースを管理</string>
@@ -1256,5 +1262,31 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_screen_time_permission_required">スクリーンタイムを使用するには、設定で「使用状況へのアクセス」許可を付与してください</string>
   <string name="chat_message_tool_screen_time">スクリーンタイムを読み取る</string>
   <string name="tool_ui_screen_time_total">総画面時間</string>
+  <string name="common_clear">クリア</string>
+  <string name="common_copy">コピー</string>
+  <string name="common_select_all">すべて選択</string>
+  <string name="common_search">検索</string>
+  <string name="common_edit">編集</string>
+  <string name="common_download">ダウンロード</string>
+  <string name="common_refresh">更新</string>
+  <string name="chat_list_clear_selection">選択を解除</string>
+  <string name="chat_list_confirm">確認</string>
+  <string name="chat_drawer_stats">統計データ</string>
+  <string name="translator_page_paste">テキストを貼り付け</string>
+  <string name="translator_page_copy_result">翻訳をコピー</string>
+  <string name="route_dev_mode">[開発モード]</string>
+  <string name="webview_open_in_browser">ブラウザで開く</string>
+  <string name="webview_console_logs">コンソールログ</string>
+  <string name="webview_more_options">その他のオプション</string>
+  <string name="webview_forward">進む</string>
+  <string name="share_sheet_title">LLMモデルを共有</string>
+  <string name="chain_of_thought_title">思考の連鎖</string>
+  <string name="setting_provider_page_aihubmix_discount">10%% 割引</string>
+  <string name="markdown_table_copy">コピー</string>
+  <string name="markdown_table_download">ダウンロード</string>
+  <string name="mcp_tools_count">%1$d/%2$d 個のツール</string>
+  <string name="extensions_page_section_subagent_profiles">サブエージェント設定</string>
+  <string name="extensions_page_no_subagent_profiles">サブエージェント設定がありません</string>
+  <string name="extensions_page_add_subagent">サブエージェントを追加</string>
 </resources>
 

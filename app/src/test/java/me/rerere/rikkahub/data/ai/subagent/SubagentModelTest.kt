@@ -3,8 +3,11 @@ package me.rerere.rikkahub.data.ai.subagent
 import kotlinx.serialization.json.Json
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.migrateSubagentBuiltinsIfNeeded
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
+import kotlin.uuid.Uuid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -130,42 +133,47 @@ class SubagentModelTest {
     }
 
     @Test
-    fun registry_resolveBuiltin() {
+    fun registry_resolveGlobalProfile() {
+        val exploreBuiltin = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }
         val assistant = Assistant()
-        val explore = SubagentRegistry.resolveProfile("explore", assistant)
+        val explore = SubagentRegistry.resolveProfile("explore", assistant, listOf(exploreBuiltin))
         assertNotNull(explore)
         assertEquals("explore", explore!!.name)
         assertEquals(WorkspaceAccess.READ_ONLY, explore.workspaceAccess)
     }
 
     @Test
-    fun registry_respectsDisabledBuiltin() {
-        val assistant = Assistant(disabledBuiltinSubagents = setOf("coder"))
-        assertNull(SubagentRegistry.resolveProfile("coder", assistant))
-        val all = SubagentRegistry.allProfiles(assistant)
+    fun registry_respectsDisabledGlobal() {
+        val coderBuiltin = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "coder" }
+        val global = listOf(coderBuiltin)
+        val assistant = Assistant(disabledGlobalSubagents = setOf("coder"))
+        assertNull(SubagentRegistry.resolveProfile("coder", assistant, global))
+        val all = SubagentRegistry.allProfiles(assistant, global)
         assertFalse(all.any { it.name == "coder" })
     }
 
     @Test
     fun registry_mergesCustomOverride() {
+        val exploreBuiltin = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }
         val custom = SubagentProfile(
             name = "explore",
             displayName = "Custom Explorer",
             maxSteps = 99,
         )
         val assistant = Assistant(subagentProfiles = listOf(custom))
-        val resolved = SubagentRegistry.resolveProfile("explore", assistant)
+        val resolved = SubagentRegistry.resolveProfile("explore", assistant, listOf(exploreBuiltin))
         assertNotNull(resolved)
         assertEquals("Custom Explorer", resolved!!.displayName)
         assertEquals(99, resolved.maxSteps)
     }
 
     @Test
-    fun registry_allProfiles_includesBuiltinsAndCustom() {
+    fun registry_allProfiles_includesGlobalAndCustom() {
+        val global = SubagentRegistry.BUILTIN_PROFILES
         val assistant = Assistant(
             subagentProfiles = listOf(SubagentProfile(name = "extra", displayName = "Extra")),
         )
-        val names = SubagentRegistry.allProfiles(assistant).map { it.name }.toSet()
+        val names = SubagentRegistry.allProfiles(assistant, global).map { it.name }.toSet()
         assertTrue("explore" in names)
         assertTrue("coder" in names)
         assertTrue("reviewer" in names)
@@ -187,5 +195,76 @@ class SubagentModelTest {
         assertEquals(24, reviewer.maxSteps)
         assertFalse(reviewer.canSpawn)
         assertTrue(reviewer.excludedTools.contains("workspace_write_file"))
+    }
+
+    @Test
+    fun migration_copiesBuiltinToGlobal() {
+        val settings = Settings(init = false, subagentBuiltinMigrated = false)
+        val result = migrateSubagentBuiltinsIfNeeded(settings)
+        assertTrue(result.subagentBuiltinMigrated)
+        val globalNames = result.globalSubagentProfiles.map { it.name }.toSet()
+        val builtinNames = SubagentRegistry.BUILTIN_PROFILES.map { it.name }.toSet()
+        assertTrue(globalNames.containsAll(builtinNames))
+    }
+
+    @Test
+    fun migration_migratesDisabledBuiltinToGlobal() {
+        val assistant = Assistant(
+            id = Uuid.random(),
+            name = "test",
+            disabledBuiltinSubagents = setOf("coder"),
+        )
+        val settings = Settings(
+            init = false,
+            subagentBuiltinMigrated = false,
+            assistants = listOf(assistant),
+        )
+        val result = migrateSubagentBuiltinsIfNeeded(settings)
+        val migrated = result.assistants.first()
+        assertTrue("coder" in migrated.disabledGlobalSubagents)
+    }
+
+    @Test
+    fun migration_isIdempotent() {
+        val assistant = Assistant(
+            id = Uuid.random(),
+            name = "test",
+            disabledBuiltinSubagents = setOf("coder"),
+        )
+        val settings = Settings(
+            init = false,
+            subagentBuiltinMigrated = false,
+            assistants = listOf(assistant),
+        )
+        val first = migrateSubagentBuiltinsIfNeeded(settings)
+        val second = migrateSubagentBuiltinsIfNeeded(first)
+        assertEquals(first.globalSubagentProfiles.size, second.globalSubagentProfiles.size)
+        assertEquals(first.assistants.first().disabledGlobalSubagents, second.assistants.first().disabledGlobalSubagents)
+    }
+
+    @Test
+    fun migration_preservesExistingGlobalDisabled() {
+        val assistant = Assistant(
+            id = Uuid.random(),
+            name = "test",
+            disabledBuiltinSubagents = setOf("coder"),
+            disabledGlobalSubagents = setOf("reviewer"),
+        )
+        val settings = Settings(
+            init = false,
+            subagentBuiltinMigrated = false,
+            assistants = listOf(assistant),
+        )
+        val result = migrateSubagentBuiltinsIfNeeded(settings)
+        val migrated = result.assistants.first()
+        assertTrue("reviewer" in migrated.disabledGlobalSubagents)
+        assertTrue("coder" in migrated.disabledGlobalSubagents)
+    }
+
+    @Test
+    fun migration_skipsWhenAlreadyMigrated() {
+        val settings = Settings(init = false, subagentBuiltinMigrated = true)
+        val result = migrateSubagentBuiltinsIfNeeded(settings)
+        assertTrue(result.globalSubagentProfiles.isEmpty())
     }
 }

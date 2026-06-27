@@ -80,6 +80,7 @@ import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
 import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
@@ -94,6 +95,8 @@ import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+import me.rerere.rikkahub.ui.pages.extensions.ExtensionSubagentProfilePage
+import me.rerere.rikkahub.ui.pages.extensions.ExtensionSubagentsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
@@ -493,6 +496,14 @@ class RouteActivity : ComponentActivity() {
                                 ExtensionsPage()
                             }
 
+                            entry<Screen.ExtensionSubagents> {
+                                ExtensionSubagentsPage()
+                            }
+
+                            entry<Screen.ExtensionSubagentProfile> { key ->
+                                ExtensionSubagentProfilePage(key.profileName, key.createMode)
+                            }
+
                             entry<Screen.QuickMessages> {
                                 QuickMessagesPage()
                             }
@@ -532,7 +543,7 @@ class RouteActivity : ComponentActivity() {
                     )
                     if (BuildConfig.DEBUG) {
                         Text(
-                            text = "[开发模式]",
+                            text = stringResource(R.string.route_dev_mode),
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .padding(top = 4.dp),
@@ -707,6 +718,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Extensions : Screen
+
+    @Serializable
+    data object ExtensionSubagents : Screen
+
+    @Serializable
+    data class ExtensionSubagentProfile(
+        val profileName: String,
+        val createMode: Boolean = false,
+    ) : Screen
 
     @Serializable
     data object QuickMessages : Screen

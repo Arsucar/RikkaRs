@@ -1177,6 +1177,12 @@
   <string name="workspace_terminal_exited">終端已退出</string>
   <string name="extensions_page_workspace">工作區</string>
   <string name="extensions_page_workspace_desc">管理可由 Agent 存取的本地工作目錄</string>
+  <string name="extensions_page_subagents_entry">子代理</string>
+  <string name="extensions_page_subagents_entry_desc">管理全域子代理設定</string>
+  <string name="extensions_subagents_page_title">子代理</string>
+  <string name="extensions_subagents_page_empty">尚無子代理設定</string>
+  <string name="extensions_subagents_page_restore_defaults">恢復預設子代理</string>
+  <string name="extensions_subagents_page_restore_defaults_done">預設子代理已恢復</string>
   <string name="workspace_select">選擇工作區</string>
   <string name="workspace_no_binding">無綁定</string>
   <string name="workspace_manage">管理工作區</string>
@@ -1254,5 +1260,42 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">請在設定中授予「使用記錄存取權」權限，以使用螢幕時間</string>
   <string name="chat_message_tool_screen_time">讀取螢幕時間</string>
   <string name="tool_ui_screen_time_total">總螢幕使用時間</string>
+  <string name="setting_provider_detail_tags">標籤</string>
+  <string name="setting_provider_detail_add_tag">新增標籤</string>
+  <string name="filter_all">全部</string>
+  <string-array name="provider_suggested_tags">
+    <item>常用</item>
+    <item>便宜</item>
+    <item>長上下文</item>
+    <item>高品質</item>
+    <item>免費額度</item>
+    <item>國產</item>
+  </string-array>
+  <string name="common_clear">清除</string>
+  <string name="common_copy">複製</string>
+  <string name="common_select_all">全選</string>
+  <string name="common_search">搜尋</string>
+  <string name="common_edit">編輯</string>
+  <string name="common_download">下載</string>
+  <string name="common_refresh">重新整理</string>
+  <string name="chat_list_clear_selection">清除選取</string>
+  <string name="chat_list_confirm">確認</string>
+  <string name="chat_drawer_stats">統計資料</string>
+  <string name="translator_page_paste">貼上文字</string>
+  <string name="translator_page_copy_result">複製翻譯結果</string>
+  <string name="route_dev_mode">[開發模式]</string>
+  <string name="webview_open_in_browser">在瀏覽器開啟</string>
+  <string name="webview_console_logs">主控台記錄</string>
+  <string name="webview_more_options">更多選項</string>
+  <string name="webview_forward">前進</string>
+  <string name="share_sheet_title">分享您的 LLM 模型</string>
+  <string name="chain_of_thought_title">思維鏈</string>
+  <string name="setting_provider_page_aihubmix_discount">10%% 優惠</string>
+  <string name="markdown_table_copy">複製</string>
+  <string name="markdown_table_download">下載</string>
+  <string name="mcp_tools_count">%1$d/%2$d 個工具</string>
+  <string name="extensions_page_section_subagent_profiles">子代理設定</string>
+  <string name="extensions_page_no_subagent_profiles">尚無子代理設定</string>
+  <string name="extensions_page_add_subagent">新增子代理</string>
 </resources>
 

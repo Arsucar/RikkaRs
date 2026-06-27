@@ -4,41 +4,58 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
-import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceApproval
 import me.rerere.rikkahub.data.model.Assistant
 
-internal data class SubagentListEntry(
-    val profile: SubagentProfile,
-    val isBuiltin: Boolean,
-    val isDisabledBuiltin: Boolean,
-)
-
-internal fun subagentListEntries(assistant: Assistant): List<SubagentListEntry> {
-    val builtinNames = SubagentRegistry.BUILTIN_PROFILES.map { it.name }.toSet()
-    val builtinByName = SubagentRegistry.BUILTIN_PROFILES.associateBy { it.name }
-    val customByName = assistant.subagentProfiles.associateBy { it.name }
-
-    val builtins = SubagentRegistry.BUILTIN_PROFILES.map { builtin ->
-        val profile = customByName[builtin.name] ?: builtin
-        val disabled = builtin.name in assistant.disabledBuiltinSubagents &&
-            builtin.name !in customByName
-        SubagentListEntry(profile = profile, isBuiltin = true, isDisabledBuiltin = disabled)
-    }
-
-    val customs = assistant.subagentProfiles
-        .filter { it.name !in builtinNames }
-        .map { profile ->
-            SubagentListEntry(profile = profile, isBuiltin = false, isDisabledBuiltin = false)
-        }
-
-    return builtins + customs
+internal enum class SubagentProfileSource {
+    Global,
+    Local,
 }
 
-internal fun assistantHasSpawnableProfile(assistant: Assistant): Boolean =
-    subagentListEntries(assistant).any { entry ->
-        !entry.isDisabledBuiltin && entry.profile.canSpawn
+internal data class SubagentListEntry(
+    val profile: SubagentProfile,
+    val source: SubagentProfileSource,
+    val isDisabledGlobal: Boolean,
+) {
+    val isGlobal: Boolean get() = source == SubagentProfileSource.Global
+    val isLocal: Boolean get() = source == SubagentProfileSource.Local
+}
+
+internal fun subagentListEntries(
+    assistant: Assistant,
+    globalProfiles: List<SubagentProfile> = emptyList(),
+): List<SubagentListEntry> {
+    val customByName = assistant.subagentProfiles.associateBy { it.name }
+
+    val globals = globalProfiles
+        .filter { it.name !in customByName }
+        .map { profile ->
+            val disabled = profile.name in assistant.disabledGlobalSubagents
+            SubagentListEntry(
+                profile = profile,
+                source = SubagentProfileSource.Global,
+                isDisabledGlobal = disabled,
+            )
+        }
+
+    val customs = assistant.subagentProfiles.map { profile ->
+        SubagentListEntry(
+            profile = profile,
+            source = SubagentProfileSource.Local,
+            isDisabledGlobal = false,
+        )
+    }
+
+    return globals + customs
+}
+
+internal fun assistantHasSpawnableProfile(
+    assistant: Assistant,
+    globalProfiles: List<SubagentProfile> = emptyList(),
+): Boolean =
+    subagentListEntries(assistant, globalProfiles).any { entry ->
+        !entry.isDisabledGlobal && entry.profile.canSpawn
     }
 
 @Composable
@@ -55,5 +72,5 @@ internal fun workspaceApprovalLabel(approval: WorkspaceApproval): String = when 
     WorkspaceApproval.OVERRIDE -> stringResource(R.string.subagent_workspace_approval_override)
 }
 
-internal fun isBuiltinSubagentName(name: String): Boolean =
-    name in SubagentRegistry.BUILTIN_PROFILES.map { it.name }
+internal fun isGlobalSubagentName(name: String, globalProfiles: List<SubagentProfile>): Boolean =
+    name in globalProfiles.map { it.name }

@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -22,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -38,7 +42,9 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,7 +73,9 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.DragDropHorizontal
@@ -93,6 +101,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
+@Stable
 class ModelListState internal constructor(
     modelId: Uuid?,
     providers: List<ProviderSetting>,
@@ -208,7 +217,7 @@ fun ModelSelector(
                 ) {
                     Icon(
                         imageVector = HugeIcons.Cancel01,
-                        contentDescription = "Clear"
+                        contentDescription = stringResource(R.string.common_clear)
                     )
                 }
             }
@@ -251,7 +260,7 @@ fun ModelListSheet(
     val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
     )
 
     fun dismiss() {
@@ -266,11 +275,13 @@ fun ModelListSheet(
             state.close()
         },
         sheetState = sheetState,
+        sheetGesturesEnabled = false,
     ) {
         Column(
             modifier = Modifier
-                .padding(8.dp)
-                .fillMaxHeight(0.8f)
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(top = 8.dp)
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -303,23 +314,36 @@ private fun ColumnScope.ModelList(
     val settings = settingsStore.settingsFlow
         .collectAsStateWithLifecycle()
 
-    val favoriteModels = settings.value.favoriteModels.mapNotNull { modelId ->
-        val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
-        if (model.type != modelType) return@mapNotNull null
-        val provider = model.findProvider(providers = settings.value.providers, checkOverwrite = false) ?: return@mapNotNull null
-        model to provider
+    val favoriteModels = remember(settings.value.favoriteModels, providers, modelType) {
+        settings.value.favoriteModels.mapNotNull { modelId ->
+            val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
+            if (model.type != modelType) return@mapNotNull null
+            val provider =
+                model.findProvider(providers = settings.value.providers, checkOverwrite = false)
+                    ?: return@mapNotNull null
+            model to provider
+        }
     }
 
+    var favoriteCollapsed by remember { mutableStateOf(false) }
     var searchKeywords by remember { mutableStateOf("") }
+    var providerTabsExpanded by remember { mutableStateOf(false) }
+    var selectedModelListTag by remember { mutableStateOf<String?>(null) }
+    val providerGroupExpanded = remember { mutableStateMapOf<Uuid, Boolean>() }
 
-    val typeFilteredModelsByProvider = remember(providers, modelType) {
-        providers.associate { provider ->
+    val tagFilteredProviders = remember(providers, selectedModelListTag) {
+        if (selectedModelListTag == null) providers
+        else providers.filter { it.tags.contains(selectedModelListTag) }
+    }
+
+    val typeFilteredModelsByProvider = remember(tagFilteredProviders, modelType) {
+        tagFilteredProviders.associate { provider ->
             provider.id to provider.models.fastFilter { it.type == modelType }
         }
     }
 
-    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords) {
-        providers.associate { provider ->
+    val searchFilteredModelsByProvider = remember(tagFilteredProviders, modelType, searchKeywords) {
+        tagFilteredProviders.associate { provider ->
             provider.id to provider.models.fastFilter {
                 it.type == modelType && it.displayName.contains(searchKeywords, true)
             }
@@ -327,13 +351,13 @@ private fun ColumnScope.ModelList(
     }
 
     // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, providers, typeFilteredModelsByProvider) {
+    val selectedModelPosition = remember(currentModel, favoriteModels, tagFilteredProviders, typeFilteredModelsByProvider) {
         if (currentModel == null) return@remember 0
 
         var position = 0
 
         // 跳过无providers提示
-        if (providers.isEmpty()) {
+        if (tagFilteredProviders.isEmpty()) {
             position += 1
         }
 
@@ -354,15 +378,18 @@ private fun ColumnScope.ModelList(
         }
 
         // 在providers中查找
-        for (provider in providers) {
-            position += 1 // provider header
+        for (provider in tagFilteredProviders) {
             val models = typeFilteredModelsByProvider[provider.id].orEmpty()
             val modelIndex = models.indexOfFirst { it.id == currentModel }
+            val isExpanded = providerGroupExpanded[provider.id] != false
+            position += 1
             if (modelIndex >= 0) {
-                position += modelIndex
+                position += if (isExpanded) modelIndex else 0
                 return@remember position
             }
-            position += models.size
+            if (isExpanded) {
+                position += models.size
+            }
         }
 
         0
@@ -371,10 +398,24 @@ private fun ColumnScope.ModelList(
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = selectedModelPosition
     )
+
+    LaunchedEffect(currentModel, tagFilteredProviders, typeFilteredModelsByProvider) {
+        if (currentModel == null) return@LaunchedEffect
+        for (provider in tagFilteredProviders) {
+            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
+            if (models.any { it.id == currentModel }) {
+                if (providerGroupExpanded[provider.id] == false) {
+                    providerGroupExpanded[provider.id] = true
+                }
+                break
+            }
+        }
+    }
+
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         // 计算favorite models在列表中的位置偏移
         var favoriteStartIndex = 0
-        if (providers.isEmpty()) {
+        if (tagFilteredProviders.isEmpty()) {
             favoriteStartIndex = 1 // no providers item
         }
         if (favoriteModels.isNotEmpty()) {
@@ -400,51 +441,116 @@ private fun ColumnScope.ModelList(
     }
     val haptic = LocalHapticFeedback.current
 
-    val providerPositions = remember(providers, favoriteModels, searchFilteredModelsByProvider) {
+    val providerPositions = remember(
+        tagFilteredProviders,
+        favoriteModels,
+        favoriteCollapsed,
+        searchFilteredModelsByProvider,
+        providerGroupExpanded.toMap(),
+    ) {
         var currentIndex = 0
-        if (providers.isEmpty()) {
-            currentIndex = 1 // no providers item
+        if (tagFilteredProviders.isEmpty()) {
+            currentIndex = 1
         }
         if (favoriteModels.isNotEmpty()) {
-            currentIndex += 1 // favorite header
-            currentIndex += favoriteModels.size // favorite models
+            currentIndex += 1
+            if (!favoriteCollapsed) {
+                currentIndex += favoriteModels.size
+            }
         }
 
-        providers.map { provider ->
+        tagFilteredProviders.map { provider ->
             val position = currentIndex
-            currentIndex += 1 // provider header
-            currentIndex += searchFilteredModelsByProvider[provider.id].orEmpty().size
+            currentIndex += 1
+            if (providerGroupExpanded[provider.id] != false) {
+                currentIndex += searchFilteredModelsByProvider[provider.id].orEmpty().size
+            }
             provider.id to position
         }.toMap()
     }
 
-    Surface(
-        shape = RoundedCornerShape(50),
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedTextField(
-            value = searchKeywords,
-            onValueChange = { searchKeywords = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.model_list_search_placeholder),
-                )
-            },
+        Surface(
             shape = RoundedCornerShape(50),
-            colors = TextFieldDefaults.colors(
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-            ),
-            leadingIcon = {
-                Icon(HugeIcons.Search01, null)
+            modifier = Modifier.weight(1f),
+        ) {
+            OutlinedTextField(
+                value = searchKeywords,
+                onValueChange = { searchKeywords = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.model_list_search_placeholder),
+                    )
+                },
+                shape = RoundedCornerShape(50),
+                colors = TextFieldDefaults.colors(
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+                leadingIcon = {
+                    Icon(HugeIcons.Search01, null)
+                },
+                maxLines = 1,
+            )
+        }
+        val allCollapsed = tagFilteredProviders.all { providerGroupExpanded[it.id] == false } &&
+            favoriteCollapsed
+        IconButton(
+            onClick = {
+                tagFilteredProviders.forEach { provider ->
+                    providerGroupExpanded[provider.id] = allCollapsed
+                }
+                favoriteCollapsed = !allCollapsed
             },
-            maxLines = 1,
-        )
+        ) {
+            Icon(
+                imageVector = if (allCollapsed) HugeIcons.ArrowDown01 else HugeIcons.ArrowUp01,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        IconButton(
+            onClick = { providerTabsExpanded = !providerTabsExpanded },
+        ) {
+            Icon(
+                imageVector = if (providerTabsExpanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+
+    val allTags = remember(providers) {
+        providers.flatMap { it.tags }.distinct()
+    }
+    if (allTags.isNotEmpty()) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+        ) {
+            item {
+                FilterChip(
+                    selected = selectedModelListTag == null,
+                    onClick = { selectedModelListTag = null },
+                    label = { Text(stringResource(R.string.filter_all)) }
+                )
+            }
+            items(allTags) { tag ->
+                FilterChip(
+                    selected = selectedModelListTag == tag,
+                    onClick = { selectedModelListTag = if (selectedModelListTag == tag) null else tag },
+                    label = { Text(tag) }
+                )
+            }
+        }
     }
 
     LazyColumn(
@@ -455,7 +561,7 @@ private fun ColumnScope.ModelList(
             .weight(1f)
             .fillMaxWidth(),
     ) {
-        if (providers.isEmpty()) {
+        if (tagFilteredProviders.isEmpty()) {
             item {
                 Text(
                     text = stringResource(R.string.model_list_no_providers),
@@ -468,19 +574,35 @@ private fun ColumnScope.ModelList(
 
         if (favoriteModels.isNotEmpty()) {
             stickyHeader {
-                Text(
-                    text = stringResource(R.string.model_list_favorite),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                Row(
                     modifier = Modifier
+                        .padding(horizontal = 8.dp)
                         .padding(bottom = 4.dp, top = 8.dp)
-                )
+                        .clickable { favoriteCollapsed = !favoriteCollapsed },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (favoriteCollapsed) HugeIcons.ArrowRight01 else HugeIcons.ArrowDown01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(R.string.model_list_favorite) + " (${favoriteModels.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
 
-            items(
-                items = favoriteModels,
-                key = { "favorite:" + it.first.id.toString() }
-            ) { (model, provider) ->
+            if (!favoriteCollapsed) {
+                items(
+                    items = favoriteModels,
+                    key = { "favorite:" + it.first.id.toString() },
+                ) { (model, provider) ->
                 ReorderableItem(
                     state = reorderableState,
                     key = "favorite:" + model.id.toString()
@@ -533,16 +655,28 @@ private fun ColumnScope.ModelList(
                     )
                 }
             }
+            }
         }
 
-        providers.fastForEach { providerSetting ->
+        tagFilteredProviders.fastForEach { providerSetting ->
+            val isProviderExpanded = providerGroupExpanded[providerSetting.id] != false
             stickyHeader(key = "header:${providerSetting.id}") {
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
-                        .padding(bottom = 4.dp, top = 8.dp),
+                        .padding(bottom = 4.dp, top = 8.dp)
+                        .clickable {
+                            providerGroupExpanded[providerSetting.id] = !isProviderExpanded
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Icon(
+                        imageVector = if (isProviderExpanded) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
                     Text(
                         text = providerSetting.name,
                         style = MaterialTheme.typography.labelMedium,
@@ -559,56 +693,58 @@ private fun ColumnScope.ModelList(
                 }
             }
 
-            items(
-                items = searchFilteredModelsByProvider[providerSetting.id].orEmpty(),
-                key = { it.id }
-            ) { model ->
-                val favorite = settings.value.favoriteModels.contains(model.id)
-                ModelItem(
-                    model = model,
-                    onSelect = onSelect,
-                    modifier = Modifier.animateItem(),
-                    providerSetting = providerSetting,
-                    select = currentModel == model.id,
-                    onDismiss = {
-                        onDismiss()
-                    },
-                    tail = {
-                        IconButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    settingsStore.update { settings ->
-                                        if (favorite) {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
+            if (isProviderExpanded) {
+                items(
+                    items = searchFilteredModelsByProvider[providerSetting.id].orEmpty(),
+                    key = { it.id }
+                ) { model ->
+                    val favorite = settings.value.favoriteModels.contains(model.id)
+                    ModelItem(
+                        model = model,
+                        onSelect = onSelect,
+                        modifier = Modifier.animateItem(),
+                        providerSetting = providerSetting,
+                        select = currentModel == model.id,
+                        onDismiss = {
+                            onDismiss()
+                        },
+                        tail = {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        settingsStore.update { settings ->
+                                            if (favorite) {
+                                                settings.copy(
+                                                    favoriteModels = settings.favoriteModels.filter { it != model.id }
+                                                )
 
-                                        } else {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels + model.id
-                                            )
+                                            } else {
+                                                settings.copy(
+                                                    favoriteModels = settings.favoriteModels + model.id
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        ) {
-                            if (favorite) {
-                                Icon(
-                                    HeartIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = HugeIcons.Favourite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            ) {
+                                if (favorite) {
+                                    Icon(
+                                        HeartIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = HugeIcons.Favourite,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -616,18 +752,17 @@ private fun ColumnScope.ModelList(
     // 供应商Badge行
     val providerBadgeListState = rememberLazyListState()
     LaunchedEffect(lazyListState) {
-        // 当LazyColumn滚动时，LazyRow也跟随滚动
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
-            .debounce(100) // 防抖处理
+            .debounce(100)
             .collect { index ->
                 if (index > 0) {
                     val currentProvider = providerPositions.entries.findLast {
                         index > it.value
                     }
-                    val index = providers.indexOfFirst { it.id == currentProvider?.key }
-                    if (index >= 0) {
-                        providerBadgeListState.animateScrollToItem(index)
+                    val idx = tagFilteredProviders.indexOfFirst { it.id == currentProvider?.key }
+                    if (idx >= 0) {
+                        providerBadgeListState.animateScrollToItem(idx)
                     } else {
                         providerBadgeListState.requestScrollToItem(0)
                     }
@@ -636,28 +771,60 @@ private fun ColumnScope.ModelList(
                 }
             }
     }
-    if (providers.isNotEmpty()) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            state = providerBadgeListState
+    if (tagFilteredProviders.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(providers) { provider ->
-                AssistChip(
-                    onClick = {
-                        val position = providerPositions[provider.id] ?: 0
-                        coroutineScope.launch {
-                            lazyListState.animateScrollToItem(position)
-                        }
-                    },
-                    label = {
-                        Text(provider.name)
-                    },
-                    leadingIcon = {
-                        AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
-                    },
-                )
+            if (providerTabsExpanded) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    tagFilteredProviders.forEach { provider ->
+                        AssistChip(
+                            onClick = {
+                                val position = providerPositions[provider.id] ?: 0
+                                coroutineScope.launch {
+                                    lazyListState.animateScrollToItem(position)
+                                }
+                                providerTabsExpanded = false
+                            },
+                            label = {
+                                Text(provider.name)
+                            },
+                            leadingIcon = {
+                                AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
+                            },
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f),
+                    state = providerBadgeListState
+                ) {
+                    items(tagFilteredProviders, key = { it.id }) { provider ->
+                        AssistChip(
+                            onClick = {
+                                val position = providerPositions[provider.id] ?: 0
+                                coroutineScope.launch {
+                                    lazyListState.animateScrollToItem(position)
+                                }
+                            },
+                            label = {
+                                Text(provider.name)
+                            },
+                            leadingIcon = {
+                                AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
+                            },
+                        )
+                    }
+                }
             }
         }
     }

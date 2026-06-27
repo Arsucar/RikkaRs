@@ -35,7 +35,14 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.BubbleChatQuestion
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Tools
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.rikkahub.ui.components.ui.ChainOfThought
+import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
@@ -53,13 +60,28 @@ object SpawnSubagentToolUI : ToolUIRenderer {
 
     @Composable
     override fun title(context: ToolUIContext): String {
+        val meta = remember(context.tool) { parseSubagentMetadata(context) }
+        if (meta != null) {
+            val profileName = meta["subagent_profile"]?.jsonPrimitive?.contentOrNull ?: "subagent"
+            val displayName = resolveSubagentDisplayName(profileName)
+            val streaming = meta["subagent_streaming"]?.jsonPrimitive?.contentOrNull == "true"
+            val steps = meta["subagent_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+            if (streaming) {
+                return if (steps > 0) {
+                    "$displayName (${stringResource(R.string.subagent_tool_ui_steps, steps)})"
+                } else {
+                    displayName
+                }
+            }
+        }
         val result = remember(context.tool) { parseSubagentResult(context) }
         val profileName = result?.profileName
+            ?: meta?.get("subagent_profile")?.jsonPrimitive?.contentOrNull
             ?: context.arguments.getStringContent("profile_name")
             ?: "subagent"
         val displayName = resolveSubagentDisplayName(profileName)
         if (result == null) {
-            return if (context.loading) displayName else displayName
+            return displayName
         }
         val steps = result.steps.coerceAtLeast(result.transcript.size)
         val usage = result.usage
@@ -84,13 +106,18 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         val result = parseSubagentResult(context)
         return context.loading ||
             result != null ||
+            transcriptStepsFromMetadata(context).isNotEmpty() ||
             context.arguments.getStringContent("task") != null
     }
 
     @Composable
     override fun Summary(context: ToolUIContext) {
+        val meta = remember(context.tool) { parseSubagentMetadata(context) }
+        val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
+        val metaTranscript = remember(context.tool) { transcriptStepsFromMetadata(context) }
         val result = remember(context.tool) { parseSubagentResult(context) }
-        val failed = result?.succeeded == false
+        val failed = result?.succeeded == false ||
+            (result == null && meta?.get("subagent_succeeded")?.jsonPrimitive?.contentOrNull == "false" && !streaming)
         val containerColor = if (failed) {
             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
         } else {
@@ -106,7 +133,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (context.loading && result == null) {
+                if ((context.loading || streaming) && result?.summary.isNullOrBlank()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -122,6 +149,19 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                         )
                     }
                 }
+                if (metaTranscript.isNotEmpty()) {
+                    ChainOfThought(
+                        modifier = Modifier.fillMaxWidth(),
+                        steps = metaTranscript,
+                        collapsedVisibleCount = if (streaming) metaTranscript.size else 2,
+                        collapsedAdaptiveWidth = false,
+                        cardColors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                    ) { step ->
+                        SubagentStreamingStepView(step = step)
+                    }
+                }
                 result?.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                     MarkdownBlock(
                         content = summary,
@@ -129,7 +169,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                     )
                 }
                 if (failed) {
-                    val errorText = result.error?.takeIf { it.isNotBlank() }
+                    val errorText = result?.error?.takeIf { it.isNotBlank() }
                         ?: stringResource(R.string.subagent_tool_ui_failed)
                     Text(
                         text = errorText,
@@ -140,10 +180,10 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                 result?.usage?.let { usage ->
                     SubagentUsageLine(usage = usage)
                 }
-                val transcript = result?.transcript.orEmpty()
+                val transcript = if (metaTranscript.isEmpty()) result?.transcript.orEmpty() else emptyList()
                 if (transcript.isNotEmpty()) {
                     SubagentTranscriptSection(steps = transcript)
-                } else if (result == null && !context.loading) {
+                } else if (result == null && metaTranscript.isEmpty() && !context.loading) {
                     val raw = context.tool.output.filterIsInstance<UIMessagePart.Text>()
                         .joinToString("\n") { it.text }
                     if (raw.isNotBlank()) {
@@ -383,6 +423,137 @@ private fun SubagentTranscriptStepRow(step: SubagentTranscriptStep) {
             MarkdownBlock(
                 content = step.content,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+
+private fun parseSubagentMetadata(context: ToolUIContext): JsonObject? {
+    val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+    return textPart?.metadata
+}
+
+private fun transcriptStepsFromMetadata(context: ToolUIContext): List<SubagentTranscriptStep> {
+    val meta = parseSubagentMetadata(context) ?: return emptyList()
+    val transcriptJson = meta["subagent_transcript"] ?: return emptyList()
+    return runCatching {
+        val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
+        JsonInstant.decodeFromJsonElement(listSerializer, transcriptJson)
+    }.getOrElse { emptyList() }
+}
+
+@Composable
+private fun ChainOfThoughtScope.SubagentStreamingStepView(step: SubagentTranscriptStep) {
+    when (step) {
+        is SubagentTranscriptStep.Reasoning -> {
+            ChainOfThoughtStep(
+                icon = {
+                    Icon(
+                        imageVector = HugeIcons.Sparkles,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                },
+                label = {
+                    Text(
+                        text = stringResource(R.string.subagent_step_thinking),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                content = {
+                    Text(
+                        text = step.text,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 10,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+
+        is SubagentTranscriptStep.ToolCall -> {
+            ChainOfThoughtStep(
+                icon = {
+                    Icon(
+                        imageVector = subagentToolStepIcon(step.toolName),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                },
+                label = {
+                    Text(
+                        text = step.toolName,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                extra = {
+                    if (!step.executed) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                },
+                content = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (step.input.isNotBlank()) {
+                            Text(
+                                text = truncate(step.input),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 5,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (step.output.isNotBlank()) {
+                            Text(
+                                text = step.output.take(2000),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 10,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                },
+            )
+        }
+
+        is SubagentTranscriptStep.Text -> {
+            ChainOfThoughtStep(
+                icon = {
+                    Icon(
+                        imageVector = HugeIcons.Connect,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                },
+                label = {
+                    Text(
+                        text = stringResource(R.string.subagent_step_text),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                content = {
+                    MarkdownBlock(
+                        content = step.content,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
             )
         }
     }

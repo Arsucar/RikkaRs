@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -93,6 +94,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -926,7 +928,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
 
                 Icon(
                     imageVector = HugeIcons.Copy01,
-                    contentDescription = "Copy",
+                    contentDescription = stringResource(R.string.markdown_table_copy),
                     tint = iconTint,
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
@@ -941,7 +943,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
 
                 Icon(
                     imageVector = HugeIcons.Download04,
-                    contentDescription = "Download",
+                    contentDescription = stringResource(R.string.markdown_table_download),
                     tint = iconTint,
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))

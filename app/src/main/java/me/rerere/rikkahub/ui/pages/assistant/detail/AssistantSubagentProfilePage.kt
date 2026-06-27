@@ -70,6 +70,7 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
         parameters = { parametersOf(id) }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val mcpServerConfigs by vm.mcpServerConfigs.collectAsStateWithLifecycle()
     val skills by vm.skills.collectAsStateWithLifecycle()
@@ -80,7 +81,7 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
             LargeFlexibleTopAppBar(
                 title = {
                     Text(
-                        subagentListEntries(assistant)
+                        subagentListEntries(assistant, settings.globalSubagentProfiles)
                             .firstOrNull { it.profile.name == profileName }
                             ?.profile
                             ?.displayName
@@ -99,6 +100,7 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
         AssistantSubagentProfileContent(
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
+            globalProfiles = settings.globalSubagentProfiles,
             providers = providers,
             mcpServers = mcpServerConfigs,
             skills = skills,
@@ -110,29 +112,35 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
 }
 
 @Composable
-private fun AssistantSubagentProfileContent(
+internal fun AssistantSubagentProfileContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
+    globalProfiles: List<SubagentProfile>,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
     profileName: String,
     createMode: Boolean,
     onUpdate: (Assistant) -> Unit,
+    readOnly: Boolean = false,
 ) {
-    val resolved = SubagentRegistry.resolveProfile(profileName, assistant)
+    val resolved = SubagentRegistry.resolveProfile(profileName, assistant, globalProfiles)
         ?: assistant.subagentProfiles.firstOrNull { it.name == profileName }
-        ?: SubagentRegistry.BUILTIN_PROFILES.firstOrNull { it.name == profileName }
+        ?: globalProfiles.firstOrNull { it.name == profileName }
         ?: SubagentProfile(name = profileName)
+
+    val isGlobalOnly = profileName in globalProfiles.map { it.name } &&
+        profileName !in assistant.subagentProfiles.map { it.name }
 
     val latestAssistant = rememberUpdatedState(assistant)
     var pathDraft by remember(profileName) { mutableStateOf("") }
     var excludedDraft by remember(profileName) { mutableStateOf("") }
 
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
-        val base = SubagentRegistry.resolveProfile(profileName, latestAssistant.value)
+        if (readOnly || isGlobalOnly) return
+        val base = SubagentRegistry.resolveProfile(profileName, latestAssistant.value, globalProfiles)
             ?: latestAssistant.value.subagentProfiles.firstOrNull { it.name == profileName }
-            ?: SubagentRegistry.BUILTIN_PROFILES.firstOrNull { it.name == profileName }
+            ?: globalProfiles.firstOrNull { it.name == profileName }
             ?: SubagentProfile(name = profileName)
         val updated = transform(base)
         onUpdate(
@@ -153,13 +161,59 @@ private fun AssistantSubagentProfileContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        if (isGlobalOnly) {
+            Text(
+                text = stringResource(R.string.subagent_global_edit_in_extensions),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        SubagentProfileForm(
+            resolved = resolved,
+            profileName = profileName,
+            createMode = createMode,
+            globalProfiles = globalProfiles,
+            providers = providers,
+            mcpServers = mcpServers,
+            skills = skills,
+            readOnly = readOnly || isGlobalOnly,
+            pathDraft = pathDraft,
+            onPathDraftChange = { pathDraft = it },
+            excludedDraft = excludedDraft,
+            onExcludedDraftChange = { excludedDraft = it },
+            onPersist = ::persist,
+        )
+    }
+}
+
+@Composable
+internal fun SubagentProfileForm(
+    resolved: SubagentProfile,
+    profileName: String,
+    createMode: Boolean,
+    globalProfiles: List<SubagentProfile> = emptyList(),
+    providers: List<me.rerere.ai.provider.ProviderSetting>,
+    mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
+    skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
+    readOnly: Boolean,
+    pathDraft: String,
+    onPathDraftChange: (String) -> Unit,
+    excludedDraft: String,
+    onExcludedDraftChange: (String) -> Unit,
+    onPersist: (transform: (SubagentProfile) -> SubagentProfile) -> Unit,
+) {
+    fun persist(transform: (SubagentProfile) -> SubagentProfile) {
+        if (!readOnly) onPersist(transform)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_name)) },
                 description = { Text(stringResource(R.string.subagent_profile_name_desc)) },
             ) {
-                if (createMode && profileName !in SubagentRegistry.BUILTIN_PROFILES.map { it.name }) {
+                if (createMode && profileName !in globalProfiles.map { it.name }) {
                     OutlinedTextField(
                         value = resolved.name,
                         onValueChange = {},
@@ -433,11 +487,11 @@ private fun AssistantSubagentProfileContent(
                 PathChipEditor(
                     paths = resolved.allowedPathPrefixes,
                     draft = pathDraft,
-                    onDraftChange = { pathDraft = it },
+                    onDraftChange = onPathDraftChange,
                     onAdd = { path ->
                         if (path.isNotBlank() && path !in resolved.allowedPathPrefixes) {
                             persist { it.copy(allowedPathPrefixes = it.allowedPathPrefixes + path) }
-                            pathDraft = ""
+                            onPathDraftChange("")
                         }
                     },
                     onRemove = { path -> persist { it.copy(allowedPathPrefixes = it.allowedPathPrefixes - path) } },
@@ -480,11 +534,11 @@ private fun AssistantSubagentProfileContent(
                     PathChipEditor(
                         paths = resolved.excludedTools.toList(),
                         draft = excludedDraft,
-                        onDraftChange = { excludedDraft = it },
+                        onDraftChange = onExcludedDraftChange,
                         onAdd = { tool ->
                             if (tool.isNotBlank()) {
                                 persist { it.copy(excludedTools = it.excludedTools + tool) }
-                                excludedDraft = ""
+                                onExcludedDraftChange("")
                             }
                         },
                         onRemove = { tool -> persist { it.copy(excludedTools = it.excludedTools - tool) } },

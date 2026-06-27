@@ -43,8 +43,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +84,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -255,6 +258,12 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     }
 }
 
+private fun ProviderSetting.withTags(tags: List<String>): ProviderSetting = when (this) {
+    is ProviderSetting.OpenAI -> copy(tags = tags)
+    is ProviderSetting.Google -> copy(tags = tags)
+    is ProviderSetting.Claude -> copy(tags = tags)
+}
+
 @Composable
 private fun SettingProviderConfigPage(
     provider: ProviderSetting,
@@ -286,6 +295,84 @@ private fun SettingProviderConfigPage(
                 onEdit = { internalProvider = internalProvider.copyProvider(balanceOption = it) }
             )
             ProviderBalanceText(providerSetting = provider, style = MaterialTheme.typography.labelSmall)
+        }
+
+        Text(
+            text = stringResource(R.string.setting_provider_detail_tags),
+            style = MaterialTheme.typography.titleSmall
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            internalProvider.tags.forEach { tag ->
+                InputChip(
+                    selected = false,
+                    onClick = {},
+                    label = { Text(tag) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                internalProvider = internalProvider.withTags(
+                                    internalProvider.tags.filter { it != tag }
+                                )
+                            },
+                            modifier = Modifier.size(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Cancel01,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+        var newTagText by remember { mutableStateOf("") }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = newTagText,
+                onValueChange = { newTagText = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(R.string.setting_provider_detail_add_tag)) },
+                singleLine = true,
+                maxLines = 1,
+            )
+            IconButton(
+                onClick = {
+                    if (newTagText.isNotBlank() && newTagText !in internalProvider.tags) {
+                        internalProvider = internalProvider.withTags(
+                            internalProvider.tags + newTagText.trim()
+                        )
+                        newTagText = ""
+                    }
+                },
+                enabled = newTagText.isNotBlank(),
+            ) {
+                Icon(HugeIcons.Add01, contentDescription = null)
+            }
+        }
+        val suggestedTags = stringArrayResource(R.array.provider_suggested_tags).toList()
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            suggestedTags.forEach { suggestion ->
+                if (suggestion !in internalProvider.tags) {
+                    AssistChip(
+                        onClick = {
+                            internalProvider = internalProvider.withTags(
+                                internalProvider.tags + suggestion
+                            )
+                        },
+                        label = { Text(suggestion) }
+                    )
+                }
+            }
         }
 
         Row(
@@ -849,6 +936,7 @@ private fun ModelPicker(
         ModalBottomSheet(
             onDismissRequest = { showModal = false },
             sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
+            sheetGesturesEnabled = false,
         ) {
             var filterText by remember { mutableStateOf("") }
             val filterKeywords = filterText.split(" ").filter { it.isNotBlank() }

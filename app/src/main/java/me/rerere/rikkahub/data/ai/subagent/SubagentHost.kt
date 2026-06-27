@@ -2,7 +2,13 @@ package me.rerere.rikkahub.data.ai.subagent
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.fold
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
@@ -44,7 +50,11 @@ class SubagentHost(
         workspaceCwd: String? = null,
         onProgress: ((List<UIMessage>) -> Unit)? = null,
     ): SubagentResult {
-        val profile = SubagentRegistry.resolveProfile(profileName, parentAssistant)
+        val profile = SubagentRegistry.resolveProfile(
+            profileName,
+            parentAssistant,
+            settings.globalSubagentProfiles,
+        )
             ?: return SubagentResult(
                 profileName = profileName,
                 summary = "",
@@ -184,22 +194,44 @@ class SubagentHost(
         workspaceCwd: String?,
         onProgress: ((List<UIMessage>) -> Unit)?,
     ): RunCompletion {
-        val finalMessages = generationHandler.generateText(
-            settings = settings,
-            model = model,
-            messages = initialMessages,
-            assistant = assistant,
-            tools = tools,
-            maxSteps = profile.maxSteps.coerceIn(1, 256),
-            memories = emptyList(),
-            workspaceCwd = workspaceCwd,
-        ).fold(initialMessages) { _, chunk ->
-            when (chunk) {
-                is GenerationChunk.Messages -> {
-                    onProgress?.invoke(chunk.messages)
-                    chunk.messages
+        val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        var lastEmitTime = 0L
+        var lastSignature = -1
+        val minIntervalMs = 120L
+        val throttledOnProgress: ((List<UIMessage>) -> Unit)? = onProgress?.let { cb ->
+            { messages ->
+                val signature = messages.sumOf { msg ->
+                    if (msg.role == MessageRole.ASSISTANT) msg.parts.size else 0
+                }
+                val now = System.currentTimeMillis()
+                if (signature != lastSignature || now - lastEmitTime >= minIntervalMs) {
+                    lastSignature = signature
+                    lastEmitTime = now
+                    progressScope.launch { cb(messages) }
                 }
             }
+        }
+        val finalMessages = try {
+            generationHandler.generateText(
+                settings = settings,
+                model = model,
+                messages = initialMessages,
+                assistant = assistant,
+                tools = tools,
+                maxSteps = profile.maxSteps.coerceIn(1, 256),
+                memories = emptyList(),
+                workspaceCwd = workspaceCwd,
+            ).onEach { chunk ->
+                if (chunk is GenerationChunk.Messages) {
+                    throttledOnProgress?.invoke(chunk.messages)
+                }
+            }.fold(initialMessages) { _, chunk ->
+                when (chunk) {
+                    is GenerationChunk.Messages -> chunk.messages
+                }
+            }
+        } finally {
+            progressScope.cancel()
         }
 
         return RunCompletion(
@@ -310,6 +342,7 @@ class SubagentHost(
         fun buildTranscript(
             messages: List<UIMessage>,
             truncateChars: Int = 200,
+            truncateToolOutput: Int = 0,
         ): List<SubagentTranscriptStep> {
             val steps = mutableListOf<SubagentTranscriptStep>()
             for (message in messages) {
@@ -318,7 +351,12 @@ class SubagentHost(
                     when (part) {
                         is UIMessagePart.Reasoning -> {
                             if (part.reasoning.isNotBlank()) {
-                                steps.add(SubagentTranscriptStep.Reasoning(part.reasoning))
+                                steps.add(
+                                    SubagentTranscriptStep.Reasoning(
+                                        text = part.reasoning,
+                                        createdAt = part.createdAt.toEpochMilliseconds(),
+                                    ),
+                                )
                             }
                         }
 
@@ -326,11 +364,21 @@ class SubagentHost(
                             val outputText = part.output
                                 .filterIsInstance<UIMessagePart.Text>()
                                 .joinToString("\n") { it.text }
+                            val toolOutputLimit = when {
+                                truncateToolOutput > 0 -> truncateToolOutput
+                                truncateChars > 0 -> truncateChars
+                                else -> 0
+                            }
+                            val output = when {
+                                toolOutputLimit > 0 -> truncate(outputText, toolOutputLimit)
+                                else -> outputText
+                            }
                             steps.add(
                                 SubagentTranscriptStep.ToolCall(
                                     toolName = part.toolName,
                                     input = truncate(part.input, truncateChars),
-                                    output = truncate(outputText, truncateChars),
+                                    output = output,
+                                    executed = part.isExecuted,
                                 ),
                             )
                         }

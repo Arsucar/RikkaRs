@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -16,12 +17,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
-import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -79,6 +80,12 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Folder01, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_workspace)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_workspace_desc)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.ExtensionSubagents) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        headlineContent = { Text(stringResource(R.string.extensions_page_subagents_entry)) },
+                        supportingContent = { Text(stringResource(R.string.extensions_page_subagents_entry_desc)) },
                     )
                 }
             }

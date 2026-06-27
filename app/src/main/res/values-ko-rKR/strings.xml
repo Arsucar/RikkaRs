@@ -1179,6 +1179,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_terminal_exited">터미널 종료됨</string>
   <string name="extensions_page_workspace">작업 공간</string>
   <string name="extensions_page_workspace_desc">Agent가 접근할 수 있는 로컬 작업 디렉토리를 관리합니다.</string>
+  <string name="extensions_page_subagents_entry">서브에이전트</string>
+  <string name="extensions_page_subagents_entry_desc">전역 서브에이전트 설정 관리</string>
+  <string name="extensions_subagents_page_title">서브에이전트</string>
+  <string name="extensions_subagents_page_empty">서브에이전트 설정이 없습니다</string>
+  <string name="extensions_subagents_page_restore_defaults">기본 서브에이전트 복원</string>
+  <string name="extensions_subagents_page_restore_defaults_done">기본 서브에이전트가 복원되었습니다</string>
   <string name="workspace_select">워크스페이스 선택</string>
   <string name="workspace_no_binding">바인딩 없음</string>
   <string name="workspace_manage">작업 공간 관리</string>
@@ -1256,5 +1262,31 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_screen_time_permission_required">스크린 시간을 사용하려면 설정에서 사용 액세스 권한을 허용해 주세요.</string>
   <string name="chat_message_tool_screen_time">화면 시간 읽기</string>
   <string name="tool_ui_screen_time_total">전체 화면 시간</string>
+  <string name="common_clear">지우기</string>
+  <string name="common_copy">복사</string>
+  <string name="common_select_all">모두 선택</string>
+  <string name="common_search">검색</string>
+  <string name="common_edit">편집</string>
+  <string name="common_download">다운로드</string>
+  <string name="common_refresh">새로고침</string>
+  <string name="chat_list_clear_selection">선택 해제</string>
+  <string name="chat_list_confirm">확인</string>
+  <string name="chat_drawer_stats">통계 데이터</string>
+  <string name="translator_page_paste">텍스트 붙여넣기</string>
+  <string name="translator_page_copy_result">번역 복사</string>
+  <string name="route_dev_mode">[개발 모드]</string>
+  <string name="webview_open_in_browser">브라우저에서 열기</string>
+  <string name="webview_console_logs">콘솔 로그</string>
+  <string name="webview_more_options">추가 옵션</string>
+  <string name="webview_forward">앞으로</string>
+  <string name="share_sheet_title">LLM 모델 공유</string>
+  <string name="chain_of_thought_title">사고의 사슬</string>
+  <string name="setting_provider_page_aihubmix_discount">10%% 할인</string>
+  <string name="markdown_table_copy">복사</string>
+  <string name="markdown_table_download">다운로드</string>
+  <string name="mcp_tools_count">%1$d/%2$d개 도구</string>
+  <string name="extensions_page_section_subagent_profiles">서브에이전트 설정</string>
+  <string name="extensions_page_no_subagent_profiles">서브에이전트 설정이 없습니다</string>
+  <string name="extensions_page_add_subagent">서브에이전트 추가</string>
 </resources>
 

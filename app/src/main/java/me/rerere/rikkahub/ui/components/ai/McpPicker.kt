@@ -333,7 +333,7 @@ fun McpPicker(
                             Tag(
                                 type = TagType.INFO
                             ) {
-                                Text("${enabledTools.size}/${tools.size} tools")
+                                Text(stringResource(R.string.mcp_tools_count, enabledTools.size, tools.size))
                             }
                         }
                     }

@@ -54,18 +54,25 @@ object SubagentRegistry {
         ),
     )
 
-    private val builtinByName: Map<String, SubagentProfile> =
-        BUILTIN_PROFILES.associateBy { it.name }
-
-    fun resolveProfile(name: String, assistant: Assistant): SubagentProfile? {
-        if (name in assistant.disabledBuiltinSubagents && name !in assistant.subagentProfiles.map { it.name }) {
+    fun resolveProfile(
+        name: String,
+        assistant: Assistant,
+        globalProfiles: List<SubagentProfile> = emptyList(),
+    ): SubagentProfile? {
+        assistant.subagentProfiles.firstOrNull { it.name == name }?.let { return it }
+        if (name in assistant.disabledGlobalSubagents) {
             return null
         }
-        assistant.subagentProfiles.firstOrNull { it.name == name }?.let { return it }
-        if (name in assistant.disabledBuiltinSubagents) return null
-        return builtinByName[name]
+        return globalProfiles.firstOrNull { it.name == name }
     }
 
-    fun allProfiles(assistant: Assistant): List<SubagentProfile> =
-        mergeSubagentProfiles(assistant.subagentProfiles, assistant.disabledBuiltinSubagents)
+    fun allProfiles(
+        assistant: Assistant,
+        globalProfiles: List<SubagentProfile> = emptyList(),
+    ): List<SubagentProfile> =
+        mergeSubagentProfiles(
+            custom = assistant.subagentProfiles,
+            global = globalProfiles,
+            disabledGlobal = assistant.disabledGlobalSubagents,
+        )
 }

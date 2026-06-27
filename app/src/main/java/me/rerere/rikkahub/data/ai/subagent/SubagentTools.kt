@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -113,7 +114,15 @@ $profileListText
             val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
             val result = spawn(profileName, task, description)
             val payload = json.encodeToString(SubagentResult.serializer(), result)
-            listOf(UIMessagePart.Text(text = payload))
+            val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
+            val finalMetadata = buildJsonObject {
+                put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
+                put("subagent_profile", JsonPrimitive(result.profileName))
+                put("subagent_steps", JsonPrimitive(result.steps.coerceAtLeast(result.transcript.size)))
+                put("subagent_succeeded", JsonPrimitive(result.succeeded))
+                put("subagent_streaming", JsonPrimitive(false))
+            }
+            listOf(UIMessagePart.Text(text = payload, metadata = finalMetadata))
         },
     )
 
