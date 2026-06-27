@@ -22,6 +22,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import me.rerere.common.android.Logging
 import me.rerere.common.android.appTempFolder
 import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
@@ -84,6 +85,8 @@ class RikkaHubApp : Application() {
 
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
+
+        syncRequestLoggingFromSettings()
 
         // Increment launch count
         incrementLaunchCount()
@@ -150,6 +153,19 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun syncRequestLoggingFromSettings() {
+        get<AppScope>().launch {
+            runCatching {
+                val store = get<SettingsStore>()
+                store.settingsFlowRaw.collect { settings ->
+                    Logging.setRequestLoggingEnabled(settings.requestLoggingEnabled)
+                }
+            }.onFailure {
+                Log.e(TAG, "syncRequestLoggingFromSettings failed", it)
             }
         }
     }

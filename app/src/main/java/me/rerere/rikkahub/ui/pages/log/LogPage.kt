@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -40,7 +41,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import org.koin.compose.koinInject
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -52,8 +56,11 @@ import java.util.Locale
 
 @Composable
 fun LogPage() {
+    val settingsStore = koinInject<SettingsStore>()
+    val appScope = koinInject<AppScope>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
-    var requestLoggingEnabled by remember { mutableStateOf(Logging.isRequestLoggingEnabled()) }
+    val requestLoggingEnabled = settings.requestLoggingEnabled
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -81,9 +88,11 @@ fun LogPage() {
         UnifiedLogList(
             logs = logs,
             requestLoggingEnabled = requestLoggingEnabled,
-            onRequestLoggingChange = {
-                requestLoggingEnabled = it
-                Logging.setRequestLoggingEnabled(it)
+            onRequestLoggingChange = { enabled ->
+                Logging.setRequestLoggingEnabled(enabled)
+                appScope.launch {
+                    settingsStore.update { current -> current.copy(requestLoggingEnabled = enabled) }
+                }
             },
             modifier = Modifier
                 .fillMaxSize()

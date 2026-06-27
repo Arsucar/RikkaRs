@@ -74,7 +74,7 @@
   <string name="subagent_profile_memory">记忆</string>
   <string name="subagent_profile_summary_min_length">摘要最小长度</string>
   <string name="subagent_profile_summary_min_length_desc">摘要短于该长度时可能触发续写（0 表示关闭）</string>
-  <string name="subagent_profile_summary_min_length_value">%1 个字符</string>
+  <string name="subagent_profile_summary_min_length_value">%1$d 个字符</string>
   <string name="subagent_profile_summary_min_length_disabled">已关闭（0）</string>
   <string name="subagent_profile_summary_continuation_attempts">续写尝试次数</string>
   <string name="subagent_profile_summary_continuation_attempts_desc">摘要过短时额外续写轮数上限</string>

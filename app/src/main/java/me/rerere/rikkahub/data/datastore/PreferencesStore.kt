@@ -87,6 +87,7 @@ class SettingsStore(
         val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
+        val REQUEST_LOGGING_ENABLED = booleanPreferencesKey("request_logging_enabled")
 
         // 模型选择
         val ENABLE_WEB_SEARCH = booleanPreferencesKey("enable_web_search")
@@ -208,6 +209,7 @@ class SettingsStore(
                 customThemes = preferences[CUSTOM_THEMES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                requestLoggingEnabled = preferences[REQUEST_LOGGING_ENABLED] == true,
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
@@ -386,6 +388,7 @@ class SettingsStore(
             preferences[THEME_ID] = settings.themeId
             preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
             preferences[DEVELOPER_MODE] = settings.developerMode
+            preferences[REQUEST_LOGGING_ENABLED] = settings.requestLoggingEnabled
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
             preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
@@ -533,6 +536,7 @@ data class Settings(
     val themeId: String = PresetThemes[0].id,
     val customThemes: List<CustomTheme> = emptyList(),
     val developerMode: Boolean = false,
+    val requestLoggingEnabled: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val enableWebSearch: Boolean = false,
     val favoriteModels: List<Uuid> = emptyList(),

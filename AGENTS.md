@@ -8,13 +8,31 @@
 
 ```bash
 ./gradlew assembleDebug          # 构建 Debug APK
+./gradlew :app:installDebug      # 构建并安装 Debug 到已连接设备/模拟器（见下文「本地验证与装到设备」）
 ./gradlew test                   # 运行所有模块的 JVM 单元测试
-./gradlew connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试
+./gradlew connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试（用户未要求时不要默认跑）
 ./gradlew lint                   # 运行 Android Lint
 ```
 
 构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
 `web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
+
+## 本地验证与装到设备
+
+用户说「装到手机/设备」「真机验证」「改完安装」，或完成 **app 模块**功能改动且未明确只要编译时，助手应执行安装验收（Windows 下同样用 `.\gradlew`）：
+
+1. 确认设备：`adb devices`（至少一台状态为 `device`；无设备则说明情况并只做编译）。
+2. 默认：`.\gradlew :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
+3. 用户只要快速编译、不要装包：`.\gradlew :app:compileDebugKotlin`。
+4. 安装失败：汇报 Gradle/adb 末尾错误；常见为无设备、签名冲突、需先卸载旧包。
+
+不要默认跑 `connectedDebugAndroidTest`。
+
+## AI 改文件（Edit 工具）
+
+- 参数必须用 camelCase：`filePath`、`oldString`、`newString`。
+- 禁止 `old_string` / `new_string` 等 snake_case；禁止漏传 `oldString` 或 `newString`。
+- 每次 Edit 前用 Read 核对片段；`oldString` 须与文件原文一致（含缩进）。
 
 ## Coding Style & Naming Conventions
 
