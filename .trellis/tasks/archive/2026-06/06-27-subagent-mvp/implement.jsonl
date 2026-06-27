@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/06-27-subagent-mvp/research.md", "reason": "Codebase context for all children: key files, classes, line numbers, existing patterns"}
+{"file": ".trellis/tasks/06-27-subagent-mvp/prd.md", "reason": "Parent requirements and cross-child acceptance criteria"}
+{"file": ".trellis/tasks/06-27-subagent-mvp/design.md", "reason": "Architecture, contracts between children, data flow, shared types"}
+{"file": ".trellis/tasks/06-27-subagent-mvp/implement.md", "reason": "Execution order, validation commands, review gates, rollback points"}
+{"file": ".trellis/tasks/06-27-subagent-model/prd.md", "reason": "Data model requirements — consumed by all other children"}
+{"file": ".trellis/tasks/06-27-subagent-runtime/prd.md", "reason": "Runtime requirements — consumed by ui-chat"}
+{"file": ".trellis/tasks/06-27-subagent-permissions/prd.md", "reason": "Permission layer requirements — consumed by runtime"}
+{"file": ".trellis/tasks/06-27-subagent-ui-chat/prd.md", "reason": "Chat UI card requirements"}
+{"file": ".trellis/tasks/06-27-subagent-ui-settings/prd.md", "reason": "Settings UI requirements"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Project-level coding guidelines"}

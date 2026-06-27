@@ -1,0 +1,32 @@
+{
+  "id": "subagent-mvp",
+  "name": "subagent-mvp",
+  "title": "Subagent System MVP",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-06-27",
+  "completedAt": "2026-06-27",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-27-subagent-model",
+    "06-27-subagent-runtime",
+    "06-27-subagent-permissions",
+    "06-27-subagent-ui-chat",
+    "06-27-subagent-ui-settings"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
