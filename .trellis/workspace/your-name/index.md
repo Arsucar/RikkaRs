@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-06-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~146 | Active |
+| `journal-1.md` | ~184 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-06-27 | Subagent system feature set — archive & wrap-up | `4ee03943`, `2a3e4668`, `af64a774`, `5dfd3c11`, `6735ada4` | `release/rikka-arsucar` |
 | 4 | 2026-06-27 | Slash skill completion | `e852c9ac` | `release/rikka-arsucar` |
 | 3 | 2026-06-26 | 图片生成全屏预览UI增强 | `debe444f` | `release/rikka-arsucar` |
 | 2 | 2026-06-26 | Finish Work: Archive Bootstrap Task | `ff3f3efc` | `release/rikka-arsucar` |

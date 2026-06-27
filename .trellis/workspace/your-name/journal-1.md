@@ -144,3 +144,41 @@ Implemented / slash skill autocomplete, SlashSkill message parts, input transfor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Subagent system feature set — archive & wrap-up
+
+**Date**: 2026-06-27
+**Task**: Subagent system feature set — archive & wrap-up
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Archived all 6 subagent tasks (model, MVP, permissions, runtime, UI-chat, UI-settings) after feature commits were merged to release/rikka-arsucar. No active code changes left in working tree.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4ee03943` | (see git log) |
+| `2a3e4668` | (see git log) |
+| `af64a774` | (see git log) |
+| `5dfd3c11` | (see git log) |
+| `6735ada4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
