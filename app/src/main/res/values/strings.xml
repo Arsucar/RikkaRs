@@ -1326,6 +1326,9 @@
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
+  <string name="log_page_export_logs">Export Logs</string>
+  <string name="log_page_export_success">Logs exported</string>
+  <string name="log_page_export_failed">Failed to export logs</string>
   <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
@@ -1334,5 +1337,7 @@
   <string name="assistant_page_local_tools_screen_time_permission_required">Please grant the Usage access permission in settings to use screen time</string>
   <string name="chat_message_tool_screen_time">Read screen time</string>
   <string name="tool_ui_screen_time_total">Total screen time</string>
+  <string name="assistant_page_local_tools_logs_title">Logs</string>
+  <string name="assistant_page_local_tools_logs_desc">Let the AI read app runtime logs (redacted) for debugging</string>
 </resources>
 

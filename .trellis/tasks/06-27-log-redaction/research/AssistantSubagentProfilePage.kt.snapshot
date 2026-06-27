@@ -675,6 +675,7 @@ private fun LocalToolsSkillMcpSection(
         LocalToolOption.TimeInfo,
         LocalToolOption.Clipboard,
         LocalToolOption.Tts,
+        LocalToolOption.AskUser,
         LocalToolOption.ScreenTime,
         LocalToolOption.Logs,
     )

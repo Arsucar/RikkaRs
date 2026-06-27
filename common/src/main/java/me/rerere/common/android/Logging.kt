@@ -3,7 +3,7 @@ package me.rerere.common.android
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 
-private const val MAX_RECENT_LOGS = 100
+private const val MAX_RECENT_LOGS = 32
 
 @Serializable
 sealed class LogEntry {

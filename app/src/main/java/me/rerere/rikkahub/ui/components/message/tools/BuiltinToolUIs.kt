@@ -59,6 +59,7 @@ import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Time02
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
@@ -608,6 +609,16 @@ private fun formatMinutes(minutes: Long): String {
         h > 0 -> "${h}h"
         else -> "${m}m"
     }
+}
+
+object GetLogsToolUI : ToolUIRenderer {
+    override val toolName: String = "get_logs"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Tools
+
+    @Composable
+    override fun title(context: ToolUIContext): String =
+        stringResource(R.string.assistant_page_local_tools_logs_title)
 }
 
 @Composable
