@@ -70,7 +70,7 @@ Technology stack documentation:
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
 
 > [!TIP]
-> You need a `google-services.json` file at `app` folder to build the app.
+> **Rikka-arsucar fork:** Firebase has been removed; you do **not** need `google-services.json`. See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md).
 
 > [!IMPORTANT]  
 > The following PRs will be rejected:

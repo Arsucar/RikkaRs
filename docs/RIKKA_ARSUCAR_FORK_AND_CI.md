@@ -11,7 +11,7 @@
 |------|------|
 | 上游仓库 | `https://github.com/rikkahub/rikkahub`（remote 名常为 `upstream`） |
 | 本 Fork | `https://github.com/Arsucar/rikkahub`（remote 名常为 `origin`） |
-| 当前开发分支（历史） | `local/agent-trellis-setup`（含功能合并 + Trellis/Agent 文件） |
+| 当前开发分支 | `release/rikka-arsucar`（发行与日常开发；历史分支 `local/agent-trellis-setup` 仅本地 Agent 设置用） |
 | 目标 | 发布独立应用 **Rikka-arsucar**，与上游 **同时安装** |
 | 构建方式 | **仅 CI** 打 signed **release** APK；本地 `assembleDebug` |
 
@@ -44,7 +44,7 @@
 - Release 使用**专用 keystore**，密码沿用本地习惯：`Mima1234_`。
 - **Key alias**：`rikka-arsucar`。
 - Keystore **不进 Git**；CI 通过 **GitHub Secrets** 注入。
-- **注意**：当前 `local.properties` 使用 `keystore.path` / `keystore.password`，而 `app/build.gradle.kts` 读取的是 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`——**字段不一致，本地 release 签名可能从未生效**。实施时必须统一。
+- **注意**：`app/build.gradle.kts` 读取 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`，并**兼容**旧版 `local.properties` 键名（`keystore.path`、`keystore.password` 等）。新配置请优先使用 `storeFile` 等标准键名。
 
 ### 2.4 web-ui 构建
 
@@ -63,13 +63,17 @@
 | 项 | 规则 |
 |----|------|
 | 产物 | **仅 arm64-v8a** 的 **signed release APK**（不要 universal、不要 x86_64、不要 AAB，除非日后单独决策） |
-| 触发 | **`workflow_dispatch` only**（Actions 页手动 Run） |
-| versionCode | 每次正式 workflow **+1** |
-| versionName | **patch +1**（如 `2.3.2` → `2.3.3`） |
-| 版本写回 Git | **是**：构建成功后 **commit + push** 到触发 workflow 的分支 |
+| 正式 workflow | **仅** `Release APK (arm64)`（`.github/workflows/release-apk.yml`）。上游 `Release Build` 已删除，请勿使用。 |
 | 本地正式包 | **不做** |
 
-当前 `app/build.gradle.kts` 基线（实施前以文件为准）：`versionCode = 165`，`versionName = "2.3.2"`。
+**发版触发（方案 B，与仓库 YAML 一致）**
+
+| 路径 | 触发方式 | versionCode / versionName | 版本写回 Git | GitHub Release |
+|------|----------|---------------------------|--------------|----------------|
+| **A — tag** | `push` 标签 `v*` | **不 bump**；使用 tag 指向提交内已有版本 | **否** | **是**（arm64 APK 附件） |
+| **B — dispatch** | Actions 手动 Run `workflow_dispatch` | CI **+1** patch 与 versionCode | **是**（构建成功后 commit + push） | 否（主要为 artifact） |
+
+版本基线**始终以** `app/build.gradle.kts` **为准**（勿在文档中硬编码 versionCode/versionName）。
 
 ---
 
@@ -83,10 +87,10 @@ git remote -v
 git branch --show-current
 ```
 
-- **无** `.github/workflows/`（需新建）。
-- `app/google-services.json` 本地可能存在，**未跟踪**；移除 Firebase 后不再需要。
+- **已有** `.github/workflows/release-apk.yml`（`workflow_dispatch` + `push: tags: v*`）；上游 `release.yml`（`Release Build`）已从 fork 删除。
+- **不需要** `google-services.json`（Firebase 已移除）。
 - Release 配置：`isMinifyEnabled = true`，`isShrinkResources = true`。
-- ABI splits：当前含 `arm64-v8a`、`x86_64`，且 `isUniversalApk = true`（打 bundle 时 split 会关）。CI 只发 arm64 时需 **收窄 split 或 workflow 只上传 arm64 产物**（见 §6.4）。
+- CI 仅上传 **arm64-v8a** release APK；本地 Debug 仍可按 split 配置构建其他 ABI。
 
 ---
 
@@ -169,7 +173,7 @@ CI 无 `local.properties` 时，应通过 **环境变量** 或 workflow 写入�
 - `alias(libs.plugins.google.services) apply false`
 - `alias(libs.plugins.firebase.crashlytics) apply false`
 
-`libs.versions.toml` 中的 Firebase 版本条目可删可留（删更干净，merge 上游时可能冲突，按需处理）。
+`libs.versions.toml` 中的 Firebase 版本条目已在 fork **删除**（见 §12 merge 提示）。
 
 ### 5.3 应用显示名
 
@@ -308,17 +312,23 @@ permissions:
 ```yaml
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 ```
 
-（可选日后加 `workflow_dispatch` 输入 `skip_bump`，本次决策不需要。）
+- **`workflow_dispatch`**：执行 bump → 构建 → 上传 artifact → **commit + push** 版本号。
+- **`push` `v*` tag**：**不 bump**；用该提交内 `app/build.gradle.kts` 版本构建 → 上传 artifact → **创建 GitHub Release**（含 arm64 APK）。
+
+勿使用已删除的上游 **Release Build** workflow。
 
 ### 7.3 作业步骤（逻辑顺序）
 
-1. **Checkout**（`fetch-depth: 0` 若需 tag，当前可 `1`）。
-2. **Bump version**（在 `app/build.gradle.kts`）：
+1. **Checkout**（`submodules: recursive`；tag 路径需完整历史时可 `fetch-depth: 0`）。
+2. **Bump version**（**仅** `workflow_dispatch`；`if: github.event_name == 'workflow_dispatch'`）：
    - 读取 `versionCode`（Int）→ `+1`
-   - 读取 `versionName`（String，形如 `x.y.z`）→ patch `z + 1`（注意纯数字解析，避免 `-beta` 后缀除非日后支持）
-   - 可用 `sed`/Python 脚本；**必须**同时改 `versionCode` 与 `versionName`。
+   - 读取 `versionName`（String，形如 `x.y.z`）→ patch `z + 1`
+   - **必须**同时改 `versionCode` 与 `versionName`。
 3. **Setup JDK 17**（与项目 `JavaVersion.VERSION_17` 一致）。
 4. **Setup Android SDK**（`android-actions/setup-android` 或 `gradle` 自带机制）。
 5. **Setup Node + pnpm**：
@@ -327,13 +337,11 @@ on:
    - `working-directory: web-ui` → `pnpm install --frozen-lockfile`
 6. **Decode keystore + write local.properties**（§6.3）。
 7. **Build**：`./gradlew :app:assembleRelease --no-daemon`（Windows runner 用 `gradlew.bat`；推荐 `ubuntu-latest`）。
-8. **Upload artifact**：arm64 release APK，保留天数建议 30–90。
-9. **Commit version bump**：
-   - `git config user.name` / `user.email`（bot 身份即可）
-   - `git add app/build.gradle.kts`
-   - `git commit -m "chore(release): bump version to X.Y.Z (N)"`
-   - `git push`
-10. **失败时**：不要 push 版本号（用 `if: success()` 包住 push 步骤）。
+8. **Upload artifact**：arm64 release APK。
+9. **Tag 路径**：重命名 APK → **Create GitHub Release**（`softprops/action-gh-release`），**不** push 版本 commit。
+10. **Commit version bump**（**仅** `workflow_dispatch`，且 `if: success()`）：
+   - `git add app/build.gradle.kts` → commit → push
+11. **失败时**：不要 push 版本号。
 
 ### 7.4 Workflow 骨架（供新 AI 粘贴后微调）
 
@@ -342,6 +350,9 @@ name: Release APK (arm64)
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -353,6 +364,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Bump versionCode and versionName
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python3 << 'PY'
           import re, pathlib
@@ -416,6 +428,7 @@ jobs:
           path: app/build/outputs/apk/release/*arm64-v8a*release*.apk
 
       - name: Commit version bump
+        if: success() && github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -453,19 +466,35 @@ jobs:
 - [ ] 设置里版本号与 bump 后一致
 - [ ] 第二次 Run：versionCode 递增、可覆盖安装上一次 **同签名** 的 release
 
+### 9.1 Tag 发版检查清单（路径 A；CI **不** bump）
+
+打 `v*` 标签并 `git push origin <tag>` **之前**：
+
+1. 已更新 `CHANGELOG.md`（对应版本段落）。
+2. `app/build.gradle.kts` 中 `versionName` 与 tag 一致（如 tag `v2.3.6` → `versionName = "2.3.6"`）。
+3. `versionCode` 已相对上一发行 **递增**，且该提交已 push 到远程。
+4. 不在 tag 路径期待 CI 自动修改版本号或 push 版本 commit。
+
+交叉引用：`docs/CHANGELOG_GUIDE.md`、`AGENTS.md`「Rikka-arsucar：提交与发包」。
+
 ---
 
 ## 10. 仍缺什么 / 不在范围内
 
 | 项 | 状态 |
 |----|------|
-| `.github/workflows/release-apk.yml` | **需新建** |
-| Keystore + Secrets | **需人工生成并配置** |
-| applicationId / app_name / Firebase / web Gradle / ABI | **需按 §5 改代码** |
+| `.github/workflows/release-apk.yml` | **已存在**（唯一正式发版入口） |
+| 上游 `Release Build` (`release.yml`) | **已删除**（勿恢复误用） |
+| Keystore + Secrets | **需人工生成并配置**（若尚未配置） |
+| applicationId / app_name / Firebase / web Gradle / ABI | **已按 §5 落地**（merge 上游时保持无 Firebase） |
 | `google-services.json` | **不需要**（已移除 Firebase） |
 | Play 商店 / AAB | **未选** |
-| 自动 GitHub Release 附件 / tag | **未选**（仅 workflow artifact） |
+| GitHub Release（tag push） | **已启用**（`v*` tag）；dispatch 路径主要为 artifact + bump |
 | 换图标 | **可选** |
+
+### 已知问题：Baseline profile 含历史 Firebase 符号
+
+`app/src/release/generated/baselineProfiles/startup-prof.txt` 为历史生成物，仍含 `com/google/firebase/*` 等符号。本 fork 已移除 Firebase 依赖，这些符号**不影响**当前无 Firebase 的构建与运行；后续重新生成 baseline profile 时会自动清理。无需手改 `startup-prof.txt`。
 
 ---
 
@@ -477,8 +506,8 @@ jobs:
 2) 移除全部 Firebase；
 3) 修复 web/build.gradle.kts 的 pnpm 调用；
 4) release 仅 arm64-v8a APK；
-5) 统一签名配置并添加 .github/workflows/release-apk.yml（workflow_dispatch，自动 bump versionCode/versionName 并 push）；
-6) 本地只验证 assembleDebug。
+5) 确认 .github/workflows/release-apk.yml（dispatch 自动 bump；tag v* 创建 GitHub Release，不 bump）；
+6) tag 发版前见 §9.1；本地只验证 assembleDebug。
 不要向 upstream 提 PR。完成后列出改动的文件与验证命令。
 ```
 
@@ -487,6 +516,7 @@ jobs:
 ## 12. 风险与 merge 上游提示
 
 - 仅改 **applicationId** 时，合并 `upstream/master` 仍以应用代码为主；注意勿把上游重新引入的 Firebase 插件/依赖 blindly 合并回来，需保持本 fork「无 Firebase」策略。
+- `gradle/libs.versions.toml` 中 Firebase / google-services catalog 条目**已在 fork 删除**；merge 上游时勿盲目恢复，除非明确要重新接入 Firebase（本 fork 不需要）。
 - Trellis 文件在 fork 公开无妨，但 **upstream PR diff 不要包含** `.trellis/`、`.codex/` 等（见 `AGENTS.md`）。
 - Deep link `rikkahub://` scheme 与上游相同**不阻止共存**（按包名区分应用）；若日后要做品牌隔离可再改 scheme。
 

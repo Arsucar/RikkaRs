@@ -14,7 +14,7 @@
 ./gradlew lint                   # 运行 Android Lint
 ```
 
-构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
+Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）。
 `web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
 
 ## 本地验证与装到设备
@@ -75,21 +75,35 @@
 
 在分支 `release/rikka-arsucar` 上开发；勿提交 `*.jks`、`.omc/`。
 
+**正式发版 workflow 名称仅为 `Release APK (arm64)`**（`.github/workflows/release-apk.yml`）。**禁止**使用上游遗留的 `Release Build` workflow（已删除；无 Firebase、无 submodule/pnpm，不适用于本 fork）。
+
 ```bash
 git add <文件> && git commit -m "…" && git push origin release/rikka-arsucar
 ```
 
-发 arm64 正式包：推送标签（会出 GitHub Release APK）
+发 arm64 正式包有两种路径（方案 B，详见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`）：
+
+**路径 A — 推送 tag（会创建 GitHub Release + arm64 APK，CI 不 bump 版本）**
+
+1. 先更新 `CHANGELOG.md`。
+2. 确保 `app/build.gradle.kts` 中 `versionName` 与 tag 一致（如 tag `v2.3.6` → `versionName = "2.3.6"`），`versionCode` 已递增并已 push。
+3. 打标签并推送：
 
 ```bash
-git tag -a v2.3.2 -m "…" && git push origin v2.3.2
+git tag -a vX.Y.Z -m "…" && git push origin vX.Y.Z
 ```
 
-**发版前必须先更新 `CHANGELOG.md`**（见下文「更新日志维护」），再执行打标签。
+**路径 B — `workflow_dispatch`（自动 bump `versionCode` / `versionName` 并 push commit）**
 
-重打标签：先 `git push origin :refs/tags/v2.3.2` 删远程标签，再重新 `tag` + `push`。
+```bash
+gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar
+```
 
-或：`gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar`（仅 Actions 产物，并自动 bump 版本号）。本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等。
+**发版前必须先更新 `CHANGELOG.md`**（见下文「更新日志维护」）。tag 路径不会在 CI 中改版本号；dispatch 路径会在构建成功后自动 bump 并 push。
+
+重打标签：先 `git push origin :refs/tags/vX.Y.Z` 删远程标签，再重新 `tag` + `push`。
+
+本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等。
 
 更多见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。
 

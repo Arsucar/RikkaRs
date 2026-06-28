@@ -20,7 +20,6 @@ D:\2026Code\Group_android\rikkahub
 - Room 数据库，DataStore 设置存储
 - OkHttp / Retrofit / Ktor
 - kotlinx.serialization
-- Firebase Analytics / Crashlytics / Remote Config
 - React Router + React + TypeScript 的 `web-ui`
 
 ## 模块结构
@@ -51,10 +50,10 @@ D:\2026Code\Group_android\rikkahub
 
 构建注意事项：
 
-- `app/` 下需要提供 `google-services.json`，否则 Firebase 插件相关构建会失败。
+- Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）。
 - `web` 模块的 `preBuild` 会进入 `web-ui` 执行 `pnpm run build`，并复制静态资源到 `web/src/main/resources/static`。
 - 因此完整 Android 构建需要本机可用 `pnpm`，并且 `web-ui` 依赖已安装。
-- 当前 App 配置在 `app/build.gradle.kts`：`applicationId=me.rerere.rikkahub`，`minSdk=26`，`compileSdk/targetSdk=37`，`versionName=2.2.6`，`versionCode=162`。
+- 当前 App 配置在 `app/build.gradle.kts`（以文件为准）：`applicationId=me.arsucar.rikka`，`minSdk=26`，`compileSdk/targetSdk=37`，`versionName=2.3.6`，`versionCode=168`。
 
 ## 入口文件
 
@@ -65,7 +64,6 @@ D:\2026Code\Group_android\rikkahub
   - 初始化 QuickJS。
   - 清理临时文件。
   - 同步托管文件。
-  - 初始化 Firebase Remote Config。
   - 根据设置启动 Web Server。
 
 - `app/src/main/java/me/rerere/rikkahub/RouteActivity.kt`

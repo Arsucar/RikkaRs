@@ -12,6 +12,29 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+
+## v2.3.6
+
+### 修复 / Fixes
+
+- **LogPage 脱敏** — 请求详情与列表 URL 与导出/get_logs 使用相同脱敏规则（含 URL query 中的密钥）。
+  **LogPage redaction** — Request detail sheet and list URLs use the same redaction as export and get_logs (including sensitive query params).
+
+- **子代理审批** — 子代理工具链不再强制清除 `needsApproval`，与工作区审批配置一致。
+  **Subagent approval** — Subagent tools no longer unconditionally clear `needsApproval`; workspace approval settings apply.
+
+- **Web 服务默认** — 新默认仅监听 localhost；关闭 localhost 且未启用 JWT 时需确认并显示警告。
+  **Web server defaults** — New installs default to localhost-only; LAN without JWT requires confirmation and shows a warning.
+
+- **Workspace shell** — 应用层启发式拦截高危 shell 命令（如访问 /data/data、破坏性 `rm -rf /`、fork bomb、关机重启等）；**非强隔离**，真实隔离依赖 workspace cwd 限制。
+  **Workspace shell** — App-layer heuristic denylist blocks high-risk shell commands (sensitive paths, `rm -rf /`, fork bombs, power commands); **not a security boundary** — real isolation relies on workspace cwd limits.
+
+- **子代理流式一致性** — 流式结束/失败/取消后，同步清理 `spawn_subagent` 工具 JSON `text` 与 metadata 的 `streaming` 字段，避免消费者误判为仍在流式。
+  **Subagent streaming consistency** — On stream end/failure/cancel, the JSON `streaming` field in `spawn_subagent` tool `text` is now cleaned alongside `metadata.subagent_streaming`, preventing stale-streaming false positives.
+
+- **会话状态写入** — 用 `synchronized(session.stateLock)` 替代 CAS 重试循环，串行化会话状态读改写；DB 加载时清理残留的子代理流式标记并写回。
+  **Conversation state writes** — Replace CAS retry loops with `synchronized(session.stateLock)` to serialize state read-modify-write; stale subagent streaming flags are cleaned on DB load and persisted back.
+
 ## v2.3.5
 
 ### 新功能 / New Features
@@ -47,6 +70,12 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 - **子智能体配置页** — 从本地工具列表中移除了误导性的 AskUser 选项。
   **SubagentProfilePage** — Removed misleading AskUser option from local tools list.
+
+### Notes
+
+- Git tag 2.3.5 was built with embedded ersionName **2.3.4** (ersionCode 167). Use the in-app version or this note when matching APKs to tags.
+  Git 标签 2.3.5 对应构建内嵌版本为 **2.3.4**（ersionCode 167），核对 APK 时请以此为准。
+
 
 ---
 

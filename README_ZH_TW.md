@@ -63,7 +63,7 @@
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
 
 > [!TIP]
-> 你需要在 `app` 資料夾下添加 `google-services.json` 檔案才能構建應用。
+> **Rikka-arsucar fork** 已移除 Firebase，**不需要** `google-services.json`。詳見 [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)。
 
 > [!IMPORTANT]  
 > 以下PR將被拒絕：
