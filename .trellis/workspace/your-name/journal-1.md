@@ -356,3 +356,37 @@ Full morning plan: see `audit-report.md` §IV.
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: fix: 切换会话再切回时生成中消息内容被 DB 覆盖丢失
+
+**Date**: 2026-06-28
+**Task**: fix: 切换会话再切回时生成中消息内容被 DB 覆盖丢失
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Root cause: ChatVM is per-conversation-id, so switching away and back rebuilds ChatVM and calls initializeConversation again. That re-reads a stale DB snapshot and overwrites the in-memory streaming state (text/reasoning/subagent transcript), leaving an empty message + loading indicator. Fix: add early-return guard in ChatService.initializeConversation when session.isGenerating is true, so in-memory state is preserved. Extracted shouldSkipInitializeOnGenerating and hydrateConversationFromDb as top-level internal functions for testability, with 4 unit tests (guard 2 branches + hydrate 2 branches). Verified by compile + unit tests + manual device acceptance (content preserved across switch). Check agent: no FAIL.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da1166eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
