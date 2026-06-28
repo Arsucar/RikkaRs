@@ -279,6 +279,7 @@ class ConversationRepository(
             assistantId = conversation.assistantId.toString(),
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned,
+            isArchived = conversation.isArchived,
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
@@ -299,6 +300,7 @@ class ConversationRepository(
             assistantId = Uuid.parse(conversationEntity.assistantId),
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
+            isArchived = conversationEntity.isArchived,
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             modeInjectionIds = JsonInstant.decodeFromString(conversationEntity.modeInjectionIds),
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
@@ -321,6 +323,38 @@ class ConversationRepository(
             id = conversationId.toString(),
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
         )
+    }
+
+    suspend fun updateArchiveStatus(conversationId: Uuid, archived: Boolean) {
+        conversationDAO.updateArchiveStatus(
+            id = conversationId.toString(),
+            isArchived = archived,
+        )
+    }
+
+    fun getArchivedConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
+        return conversationDAO
+            .getArchivedConversationsOfAssistant(assistantId.toString())
+            .map { flow ->
+                flow.map { entity ->
+                    conversationEntityToConversation(entity, emptyList())
+                }
+            }
+    }
+
+    fun getArchivedConversationsOfAssistantPaging(assistantId: Uuid): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false,
+        ),
+        pagingSourceFactory = {
+            conversationDAO.getArchivedConversationsOfAssistantPaging(assistantId.toString())
+        },
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationSummaryToConversation(entity)
+        }
     }
 
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {

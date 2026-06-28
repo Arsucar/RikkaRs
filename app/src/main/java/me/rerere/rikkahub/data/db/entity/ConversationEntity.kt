@@ -30,4 +30,6 @@ data class ConversationEntity(
     val lorebookIds: String = "[]",
     @ColumnInfo("workspace_cwd", defaultValue = "")
     val workspaceCwd: String = "",
+    @ColumnInfo("is_archived", defaultValue = "0")
+    val isArchived: Boolean = false,
 )

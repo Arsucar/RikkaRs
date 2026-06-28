@@ -20,6 +20,7 @@ data class Conversation(
     val messageNodes: List<MessageNode>,
     val chatSuggestions: List<String> = emptyList(),
     val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
     @Serializable(with = InstantSerializer::class)
     val createAt: Instant = Instant.now(),
     @Serializable(with = InstantSerializer::class)

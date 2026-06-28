@@ -10,46 +10,72 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
-
-private const val API_URL = "https://updates.rikka-ai.com/"
+import java.util.Locale
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
         emit(UiState.Loading)
-        emit(
-            UiState.Success(
-                data = try {
-                    val response = client.newCall(
-                        Request.Builder()
-                            .url(API_URL)
-                            .get()
-                            .addHeader(
-                                "User-Agent",
-                                "RikkaHub ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
-                            )
-                            .build()
-                    ).await()
-                    if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
-                    } else {
-                        throw Exception("Failed to fetch update info")
-                    }
-                } catch (e: Exception) {
-                    throw Exception("Failed to fetch update info", e)
-                }
-            )
-        )
+        emit(UiState.Success(data = fetchLatestRelease()))
     }.catch {
         emit(UiState.Error(it))
     }.flowOn(Dispatchers.IO)
+
+    private suspend fun fetchLatestRelease(): UpdateInfo {
+        val response = client.newCall(
+            Request.Builder()
+                .url(ArsucarForkLinks.GITHUB_RELEASES_LATEST_API)
+                .get()
+                .addHeader("Accept", "application/vnd.github+json")
+                .addHeader(
+                    "User-Agent",
+                    "Rikka-arsucar/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                )
+                .build(),
+        ).await()
+        if (!response.isSuccessful) {
+            throw Exception(
+                when (response.code) {
+                    404 -> "No GitHub release found yet"
+                    else -> "Failed to fetch update info (HTTP ${response.code})"
+                },
+            )
+        }
+        val release = json.decodeFromString<GhRelease>(response.body.string())
+        val version = release.tagName.removePrefix("v").ifBlank { release.tagName }
+        val downloads = release.assets
+            .filter { it.name.endsWith(".apk", ignoreCase = true) }
+            .map { asset ->
+                UpdateDownload(
+                    name = asset.name,
+                    url = asset.browserDownloadUrl,
+                    size = formatDownloadSize(asset.size),
+                )
+            }
+        return UpdateInfo(
+            version = version,
+            publishedAt = release.publishedAt,
+            changelog = release.body?.trim().orEmpty().ifBlank { "_No release notes._" },
+            downloads = downloads,
+        )
+    }
+
+    private fun formatDownloadSize(bytes: Long): String {
+        val mb = bytes / (1024.0 * 1024.0)
+        return if (mb >= 1.0) {
+            String.format(Locale.US, "%.1f MB", mb)
+        } else {
+            String.format(Locale.US, "%.0f KB", bytes / 1024.0)
+        }
+    }
 
     fun downloadUpdate(context: Context, download: UpdateDownload) {
         runCatching {
@@ -76,6 +102,21 @@ class UpdateChecker(private val client: OkHttpClient) {
         }
     }
 }
+
+@Serializable
+private data class GhRelease(
+    @SerialName("tag_name") val tagName: String,
+    @SerialName("published_at") val publishedAt: String,
+    val body: String? = null,
+    val assets: List<GhAsset> = emptyList(),
+)
+
+@Serializable
+private data class GhAsset(
+    val name: String,
+    @SerialName("browser_download_url") val browserDownloadUrl: String,
+    val size: Long,
+)
 
 @Serializable
 data class UpdateDownload(
