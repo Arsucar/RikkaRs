@@ -7,7 +7,7 @@
   <string name="about_page_version">版本</string>
   <string name="about_page_website">官网</string>
   <string name="add">添加</string>
-  <string name="app_name">Rikka-arsucar</string>
+  <string name="app_name">RikkaRs</string>
   <string name="asr_button_content_description">语音识别</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">配置名称、头像、模型和参数</string>
@@ -473,6 +473,17 @@
   <string name="history_page_title">聊天历史</string>
   <string name="history_page_undo">撤销</string>
   <string name="history_page_unpin">取消置顶</string>
+  <string name="archive_title">归档</string>
+  <string name="conversation_archive">归档</string>
+  <string name="archive_unarchive">还原</string>
+  <string name="archive_delete_permanently">彻底删除</string>
+  <string name="archive_unarchive_all">全部还原</string>
+  <string name="archive_clear_all">清空归档</string>
+  <string name="archive_clear_all_confirm">清空所有归档会话？此操作不可撤销。</string>
+  <string name="archive_empty">没有归档会话</string>
+  <string name="archive_search_placeholder">搜索归档</string>
+  <string name="archive_search_mode_title">标题</string>
+  <string name="archive_search_mode_message">消息</string>
   <string name="imggen_page_aspect_ratio">图片比例</string>
   <string name="imggen_page_aspect_ratio_desc">选择生成图片的宽高比</string>
   <string name="imggen_page_aspect_ratio_landscape">16:9 横屏</string>

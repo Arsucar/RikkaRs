@@ -7,7 +7,7 @@
   <string name="about_page_version">Version</string>
   <string name="about_page_website">Website</string>
   <string name="add">Add</string>
-  <string name="app_name">Rikka-arsucar</string>
+  <string name="app_name">RikkaRs</string>
   <string name="asr_button_content_description">Speech Recognition</string>
   <string name="asr_button_stop">Stop</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
@@ -477,6 +477,17 @@
   <string name="history_page_title">Chat History</string>
   <string name="history_page_undo">Undo</string>
   <string name="history_page_unpin">Unpin</string>
+  <string name="archive_title">Archive</string>
+  <string name="conversation_archive">Archive</string>
+  <string name="archive_unarchive">Unarchive</string>
+  <string name="archive_delete_permanently">Delete permanently</string>
+  <string name="archive_unarchive_all">Unarchive all</string>
+  <string name="archive_clear_all">Clear archive</string>
+  <string name="archive_clear_all_confirm">Clear all archived conversations? This cannot be undone.</string>
+  <string name="archive_empty">No archived conversations</string>
+  <string name="archive_search_placeholder">Search archived</string>
+  <string name="archive_search_mode_title">Title</string>
+  <string name="archive_search_mode_message">Message</string>
   <string name="imggen_page_aspect_ratio">Image Aspect Ratio</string>
   <string name="imggen_page_aspect_ratio_desc">Select aspect ratio for generated images</string>
   <string name="imggen_page_aspect_ratio_landscape">16:9 Landscape</string>

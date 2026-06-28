@@ -7,10 +7,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 > AI 助手在用户请求「发版 / 打标签 / 推版本」时，应：
 > 1. 读取本文件，确认目标版本段落已存在且内容完整；
 > 2. 若不存在，先补写并提交；
-> 3. 从对应版本段落截取中英双语内容，作为 `git tag -a` 的消息体和 GitHub Release body；
+> 3. 从对应版本段落截取中英双语内容，作为 `git tag -a` 的消息体 and GitHub Release body；
 > 4. 再执行打标签和推送。
 
 ---
+
+
+## v2.3.9
+
+### 重构 / Refactor
+
+- **更新 App 图标与应用名称** — 更新整套自适应图标以及非自适应 fallback 图标，同时将应用显示名称重命名为 "RikkaRs"。
+  **App Icon and Name Update** — Updated the complete set of adaptive and non-adaptive launcher icons, and renamed the application display name to "RikkaRs".
 
 
 ## v2.3.8
