@@ -24,6 +24,9 @@ class ConversationSession(
     // 会话状态
     val state = MutableStateFlow(initial)
 
+    /** Serializes read-modify-write on [state] (replaces CAS retry loops in ChatService). */
+    val stateLock = Any()
+
     // 原子引用计数
     private val refCount = AtomicInteger(0)
 

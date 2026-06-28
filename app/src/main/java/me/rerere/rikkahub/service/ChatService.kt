@@ -58,9 +58,11 @@ import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.currentToolCallId
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.ai.subagent.SubagentHost
@@ -132,6 +134,66 @@ internal fun backgroundTextGenerationParams(
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
 )
+
+internal fun cleanStreamingTextPayload(text: String, json: Json): String {
+    val obj = runCatching { json.decodeFromString<JsonObject>(text) }.getOrNull() ?: return text
+    val streamingEl = obj["streaming"] ?: return text
+    if (streamingEl is JsonPrimitive && streamingEl.contentOrNull == "false") return text
+    val updated = buildJsonObject {
+        obj.forEach { (key, value) ->
+            if (key == "streaming") {
+                put("streaming", JsonPrimitive(false))
+            } else {
+                put(key, value)
+            }
+        }
+    }
+    return json.encodeToString(JsonObject.serializer(), updated)
+}
+
+internal fun isStreamingSubagentTool(part: UIMessagePart.Tool): Boolean {
+    val textPart = part.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+    return textPart?.metadata?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
+}
+
+internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation {
+    val updatedMessages = this.currentMessages.map { message ->
+        if (message.role != MessageRole.ASSISTANT) return@map message
+        var changed = false
+        val updatedParts = message.parts.map { part ->
+            if (part is UIMessagePart.Tool && part.toolName == "spawn_subagent" && isStreamingSubagentTool(part)) {
+                changed = true
+                val cleanedOutput = part.output.map { outputPart ->
+                    if (outputPart is UIMessagePart.Text) {
+                        val cleanedText = cleanStreamingTextPayload(outputPart.text, json)
+                        val sourceMeta = outputPart.metadata
+                        val cleanedMeta = if (sourceMeta != null) {
+                            buildJsonObject {
+                                sourceMeta.forEach { (key, value) ->
+                                    if (key == "subagent_streaming") {
+                                        put("subagent_streaming", JsonPrimitive(false))
+                                    } else {
+                                        put(key, value)
+                                    }
+                                }
+                            }
+                        } else {
+                            null
+                        }
+                        outputPart.copy(text = cleanedText, metadata = cleanedMeta)
+                    } else {
+                        outputPart
+                    }
+                }
+                part.copy(output = cleanedOutput)
+            } else {
+                part
+            }
+        }
+        if (changed) message.copy(parts = updatedParts) else message
+    }
+    return this.updateCurrentMessages(updatedMessages)
+}
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -329,10 +391,14 @@ class ChatService(
     // ---- 初始化对话 ----
 
     suspend fun initializeConversation(conversationId: Uuid) {
-        getOrCreateSession(conversationId) // 确保 session 存在
+        val session = getOrCreateSession(conversationId) // 确保 session 存在
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
-            updateConversation(conversationId, conversation)
+            val hydrated = hydrateConversationFromDb(conversation, session)
+            updateConversation(conversationId, hydrated)
+            if (hydrated != conversation) {
+                saveConversation(conversationId, hydrated)
+            }
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
@@ -1108,28 +1174,22 @@ class ChatService(
     private fun commitConversationState(conversationId: Uuid, newState: Conversation) {
         if (newState.id != conversationId) return
         val session = getOrCreateSession(conversationId)
-        repeat(50) {
+        synchronized(session.stateLock) {
             val prev = session.state.value
-            if (session.state.compareAndSet(prev, newState)) {
-                checkFilesDelete(newState, prev)
-                return
-            }
+            session.state.value = newState
+            checkFilesDelete(newState, prev)
         }
-        Log.w(TAG, "CAS retry limit exceeded for conversation $conversationId (commit)")
     }
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
         val session = getOrCreateSession(conversationId)
-        repeat(50) {
+        synchronized(session.stateLock) {
             val prev = session.state.value
             val updated = update(prev)
             if (updated.id != conversationId) return
-            if (session.state.compareAndSet(prev, updated)) {
-                checkFilesDelete(updated, prev)
-                return
-            }
+            session.state.value = updated
+            checkFilesDelete(updated, prev)
         }
-        Log.w(TAG, "CAS retry limit exceeded for conversation $conversationId")
     }
 
     private fun updateSubagentProgress(
@@ -1196,87 +1256,18 @@ class ChatService(
         }
     }
 
-    private fun isStreamingSubagent(part: UIMessagePart.Tool): Boolean {
-        val textPart = part.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
-        return textPart?.metadata?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
-    }
+    private fun isStreamingSubagent(part: UIMessagePart.Tool): Boolean = isStreamingSubagentTool(part)
 
-    private fun Conversation.cleanStaleStreamingMetadata(): Conversation {
-        val updatedMessages = this.currentMessages.map { message ->
-            if (message.role != MessageRole.ASSISTANT) return@map message
-            var changed = false
-            val updatedParts = message.parts.map { part ->
-                if (part is UIMessagePart.Tool && part.toolName == "spawn_subagent" && isStreamingSubagent(part)) {
-                    changed = true
-                    val cleanedOutput = part.output.map { outputPart ->
-                        if (outputPart is UIMessagePart.Text) {
-                            val sourceMeta = outputPart.metadata ?: return@map outputPart
-                            val cleanedMeta = buildJsonObject {
-                                sourceMeta.forEach { (key, value) ->
-                                    if (key == "subagent_streaming") {
-                                        put("subagent_streaming", JsonPrimitive(false))
-                                    } else {
-                                        put(key, value)
-                                    }
-                                }
-                            }
-                            outputPart.copy(metadata = cleanedMeta)
-                        } else {
-                            outputPart
-                        }
-                    }
-                    part.copy(output = cleanedOutput)
-                } else {
-                    part
-                }
-            }
-            if (changed) message.copy(parts = updatedParts) else message
-        }
-        return this.updateCurrentMessages(updatedMessages)
+    private fun Conversation.cleanStaleStreamingMetadata(): Conversation = cleanStaleSubagentStreaming(json)
+
+    private fun hydrateConversationFromDb(loaded: Conversation, session: ConversationSession): Conversation {
+        if (session.isGenerating) return loaded
+        return loaded.cleanStaleStreamingMetadata()
     }
 
     private fun cleanupStreamingSubagentMetadata(conversationId: Uuid) {
-        val conversation = getConversationFlow(conversationId).value
-        val lastAssistantIndex = conversation.currentMessages.indexOfLast { it.role == MessageRole.ASSISTANT }
-        if (lastAssistantIndex < 0) return
-
-        val message = conversation.currentMessages[lastAssistantIndex]
-        var needsUpdate = false
-        val updatedParts = message.parts.map { part ->
-            if (part is UIMessagePart.Tool &&
-                part.toolName == "spawn_subagent" &&
-                isStreamingSubagent(part)
-            ) {
-                needsUpdate = true
-                val cleanedOutput = part.output.map { outputPart ->
-                    if (outputPart is UIMessagePart.Text) {
-                        val sourceMeta = outputPart.metadata ?: return@map outputPart
-                        val cleanedMeta = buildJsonObject {
-                            sourceMeta.forEach { (key, value) ->
-                                if (key == "subagent_streaming") {
-                                    put("subagent_streaming", JsonPrimitive(false))
-                                } else {
-                                    put(key, value)
-                                }
-                            }
-                        }
-                        outputPart.copy(metadata = cleanedMeta)
-                    } else {
-                        outputPart
-                    }
-                }
-                part.copy(output = cleanedOutput)
-            } else {
-                part
-            }
-        }
-
-        if (needsUpdate) {
-            val updatedMessage = message.copy(parts = updatedParts)
-            val updatedMessages = conversation.currentMessages.mapIndexed { index, msg ->
-                if (index == lastAssistantIndex) updatedMessage else msg
-            }
-            updateConversationState(conversationId) { it.updateCurrentMessages(updatedMessages) }
+        updateConversationState(conversationId) { conversation ->
+            conversation.cleanStaleStreamingMetadata()
         }
     }
 

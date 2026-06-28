@@ -222,9 +222,7 @@ class ConversationRepository(
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
             )
-            // 删除旧的节点，插入新的节点
-            messageNodeDAO.deleteByConversation(conversation.id.toString())
-            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            syncMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
     }
@@ -390,6 +388,38 @@ class ConversationRepository(
         }
         messageNodeDAO.insertAll(entities)
     }
+
+    private suspend fun syncMessageNodes(conversationId: String, nodes: List<MessageNode>) {
+        val existing = messageNodeDAO.getNodesOfConversation(conversationId)
+        val (deleteIds, upsertNodes) = computeNodeSyncOps(
+            existingIds = existing.map { it.id },
+            newNodes = nodes,
+        )
+        deleteIds.forEach { messageNodeDAO.deleteById(it) }
+        upsertNodes.forEachIndexed { index, node ->
+            messageNodeDAO.insert(
+                MessageNodeEntity(
+                    id = node.id.toString(),
+                    conversationId = conversationId,
+                    nodeIndex = index,
+                    messages = JsonInstant.encodeToString(node.messages),
+                    selectIndex = node.selectIndex,
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Pure diff for [ConversationRepository.syncMessageNodes]: orphan ids to delete and nodes to upsert (order preserved).
+ */
+internal fun computeNodeSyncOps(
+    existingIds: List<String>,
+    newNodes: List<MessageNode>,
+): Pair<List<String>, List<MessageNode>> {
+    val newIds = newNodes.map { it.id.toString() }.toSet()
+    val deleteIds = existingIds.filter { it !in newIds }
+    return deleteIds to newNodes
 }
 
 /**
