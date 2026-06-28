@@ -60,6 +60,40 @@ import me.rerere.rikkahub.utils.formatNumber
 
 private const val TRUNCATE_LEN = 120
 
+private fun subagentToolContentKey(context: ToolUIContext): String {
+    val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+    val meta = textPart?.metadata
+    val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull
+    val steps = meta?.get("subagent_steps")?.jsonPrimitive?.contentOrNull
+    val textLen = textPart?.text?.length ?: 0
+    return buildString {
+        append(context.loading)
+        append('|')
+        append(context.tool.toolCallId)
+        append('|')
+        append(context.tool.isExecuted)
+        append('|')
+        append(streaming)
+        append('|')
+        append(steps)
+        append('|')
+        append(textLen)
+    }
+}
+
+private data class SubagentToolParsedState(
+    val meta: JsonObject?,
+    val metaTranscript: List<SubagentTranscriptStep>,
+    val result: SubagentResult?,
+)
+
+private fun parseSubagentToolState(context: ToolUIContext): SubagentToolParsedState {
+    val meta = parseSubagentMetadata(context)
+    val metaTranscript = transcriptStepsFromMetadata(context)
+    val result = parseSubagentResult(context)
+    return SubagentToolParsedState(meta, metaTranscript, result)
+}
+
 object SpawnSubagentToolUI : ToolUIRenderer {
     override val toolName: String = "spawn_subagent"
 
@@ -67,7 +101,8 @@ object SpawnSubagentToolUI : ToolUIRenderer {
 
     @Composable
     override fun title(context: ToolUIContext): String {
-        val meta = remember(context.tool) { parseSubagentMetadata(context) }
+        val parsed = remember(subagentToolContentKey(context)) { parseSubagentToolState(context) }
+        val meta = parsed.meta
         if (meta != null) {
             val profileName = meta["subagent_profile"]?.jsonPrimitive?.contentOrNull ?: "subagent"
             val displayName = resolveSubagentDisplayName(profileName)
@@ -81,7 +116,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                 }
             }
         }
-        val result = remember(context.tool) { parseSubagentResult(context) }
+        val result = parsed.result
         val profileName = result?.profileName
             ?: meta?.get("subagent_profile")?.jsonPrimitive?.contentOrNull
             ?: context.arguments.getStringContent("profile_name")
@@ -110,19 +145,26 @@ object SpawnSubagentToolUI : ToolUIRenderer {
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean {
-        val result = parseSubagentResult(context)
+        val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+        val meta = textPart?.metadata
+        val hasTranscript = meta?.containsKey("subagent_transcript") == true
+        val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
+        val hasTask = context.arguments.getStringContent("task") != null
+        val hasOutputText = !textPart?.text.isNullOrBlank()
         return context.loading ||
-            result != null ||
-            transcriptStepsFromMetadata(context).isNotEmpty() ||
-            context.arguments.getStringContent("task") != null
+            streaming ||
+            hasTranscript ||
+            hasTask ||
+            hasOutputText
     }
 
     @Composable
     override fun Summary(context: ToolUIContext) {
-        val meta = remember(context.tool) { parseSubagentMetadata(context) }
+        val parsed = remember(subagentToolContentKey(context)) { parseSubagentToolState(context) }
+        val meta = parsed.meta
         val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
-        val metaTranscript = remember(context.tool) { transcriptStepsFromMetadata(context) }
-        val result = remember(context.tool) { parseSubagentResult(context) }
+        val metaTranscript = parsed.metaTranscript
+        val result = parsed.result
         val failed = !streaming && (
             result?.succeeded == false ||
                 (result == null && meta?.get("subagent_succeeded")?.jsonPrimitive?.contentOrNull == "false")
@@ -378,7 +420,7 @@ private fun SubagentTranscriptStepRow(step: SubagentTranscriptStep) {
             ) {
                 Icon(
                     imageVector = subagentToolStepIcon(step.toolName),
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.subagent_step_tool),
                     modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.secondary,
                 )
@@ -432,7 +474,7 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(
                 icon = {
                     Icon(
                         imageVector = HugeIcons.Sparkles,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.subagent_step_thinking),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.secondary,
                     )
@@ -463,7 +505,7 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(
                 icon = {
                     Icon(
                         imageVector = subagentToolStepIcon(step.toolName),
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.subagent_step_tool),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.secondary,
                     )
@@ -517,7 +559,7 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(
                     icon = {
                         Icon(
                             imageVector = HugeIcons.Connect,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.subagent_step_text),
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.secondary,
                         )
@@ -547,7 +589,7 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(
                     icon = {
                         Icon(
                             imageVector = HugeIcons.Connect,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.subagent_step_text),
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.secondary,
                         )

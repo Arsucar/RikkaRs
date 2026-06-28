@@ -139,11 +139,17 @@ private fun AssistantSubagentContent(
                                 )
                             )
                         }) {
-                            Icon(HugeIcons.Refresh03, contentDescription = null)
+                            Icon(
+                                HugeIcons.Refresh03,
+                                contentDescription = stringResource(R.string.common_refresh),
+                            )
                         }
                     }
                     IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(HugeIcons.Add01, contentDescription = null)
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.extensions_page_add_subagent),
+                        )
                     }
                 }
             }
@@ -227,7 +233,10 @@ private fun AssistantSubagentContent(
                                         )
                                     )
                                 }) {
-                                    Icon(HugeIcons.Refresh03, contentDescription = null)
+                                    Icon(
+                                        HugeIcons.Refresh03,
+                                        contentDescription = stringResource(R.string.common_refresh),
+                                    )
                                 }
                             } else {
                                 if (entry.isGlobal) {
@@ -238,7 +247,10 @@ private fun AssistantSubagentContent(
                                             )
                                         )
                                     }) {
-                                        Icon(HugeIcons.Delete01, contentDescription = null)
+                                        Icon(
+                                            HugeIcons.Delete01,
+                                            contentDescription = stringResource(R.string.common_delete),
+                                        )
                                     }
                                 } else {
                                     IconButton(onClick = {
@@ -261,10 +273,16 @@ private fun AssistantSubagentContent(
                                         )
                                         onOpenProfile(cloneName, false)
                                     }) {
-                                        Icon(HugeIcons.Copy01, contentDescription = null)
+                                        Icon(
+                                            HugeIcons.Copy01,
+                                            contentDescription = stringResource(R.string.common_copy),
+                                        )
                                     }
                                     IconButton(onClick = { pendingDelete = entry }) {
-                                        Icon(HugeIcons.Delete01, contentDescription = null)
+                                        Icon(
+                                            HugeIcons.Delete01,
+                                            contentDescription = stringResource(R.string.common_delete),
+                                        )
                                     }
                                 }
                             }

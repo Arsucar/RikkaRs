@@ -319,21 +319,29 @@ private fun ColumnScope.ModelList(
     val settings = settingsStore.settingsFlow
         .collectAsStateWithLifecycle()
 
-    val favoriteModels = remember(settings.value.favoriteModels, settings.value.providers, providers, modelType) {
+    var favoriteCollapsed by remember { mutableStateOf(false) }
+    var searchKeywords by remember { mutableStateOf("") }
+    var providerTabsExpanded by remember { mutableStateOf(false) }
+    var selectedModelListTag by remember { mutableStateOf<String?>(null) }
+
+    val favoriteModels = remember(
+        settings.value.favoriteModels,
+        settings.value.providers,
+        providers,
+        modelType,
+        selectedModelListTag,
+    ) {
         settings.value.favoriteModels.mapNotNull { modelId ->
             val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
             if (model.type != modelType) return@mapNotNull null
             val provider =
                 model.findProvider(providers = settings.value.providers, checkOverwrite = false)
                     ?: return@mapNotNull null
+            val tag = selectedModelListTag
+            if (tag != null && !provider.tags.contains(tag)) return@mapNotNull null
             model to provider
         }
     }
-
-    var favoriteCollapsed by remember { mutableStateOf(false) }
-    var searchKeywords by remember { mutableStateOf("") }
-    var providerTabsExpanded by remember { mutableStateOf(false) }
-    var selectedModelListTag by remember { mutableStateOf<String?>(null) }
     val providerGroupExpanded = remember { mutableStateMapOf<Uuid, Boolean>() }
 
     val tagFilteredProviders = remember(providers, selectedModelListTag) {

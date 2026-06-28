@@ -74,10 +74,16 @@ fun ExtensionSubagentsPage() {
                 navigationIcon = { BackButton() },
                 actions = {
                     IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(HugeIcons.Add01, contentDescription = null)
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.extensions_page_add_subagent),
+                        )
                     }
                     IconButton(onClick = { showOverflowMenu = true }) {
-                        Icon(HugeIcons.MoreVertical, contentDescription = null)
+                        Icon(
+                            HugeIcons.MoreVertical,
+                            contentDescription = stringResource(R.string.skills_page_more_actions),
+                        )
                     }
                     DropdownMenu(
                         expanded = showOverflowMenu,
@@ -136,10 +142,16 @@ fun ExtensionSubagentsPage() {
                                         )
                                     },
                                 ) {
-                                    Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                                    Icon(
+                                        HugeIcons.ArrowRight01,
+                                        contentDescription = stringResource(R.string.extensions_subagents_open),
+                                    )
                                 }
                                 IconButton(onClick = { pendingDelete = profile }) {
-                                    Icon(HugeIcons.Delete01, contentDescription = null)
+                                    Icon(
+                                        HugeIcons.Delete01,
+                                        contentDescription = stringResource(R.string.common_delete),
+                                    )
                                 }
                             }
                         },

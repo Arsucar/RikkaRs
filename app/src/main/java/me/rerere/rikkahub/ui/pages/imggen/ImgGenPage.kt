@@ -223,7 +223,7 @@ private fun ImageSearchTitleField(
                     ) {
                         if (value.isBlank()) {
                             Text(
-                                text = "搜索图片关键字",
+                                text = stringResource(R.string.imggen_page_search_keyword_placeholder),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -277,9 +277,12 @@ fun ImageGenPage(
                 if (navigateToGeneration) {
                     pagerState.animateScrollToPage(0)
                 }
-                toaster.show(message = "已添加为引用图", type = ToastType.Success)
+                toaster.show(message = context.getString(R.string.imggen_page_reference_added), type = ToastType.Success)
             }.onFailure { error ->
-                toaster.show(message = "引用图片失败：${error.message}", type = ToastType.Error)
+                toaster.show(
+                    message = context.getString(R.string.imggen_page_reference_failed, error.message ?: ""),
+                    type = ToastType.Error,
+                )
             }
         }
     }
@@ -342,7 +345,7 @@ fun ImageGenPage(
                     ) {
                         Icon(
                             imageVector = HugeIcons.Search01,
-                            contentDescription = "Search images",
+                            contentDescription = stringResource(R.string.imggen_page_search_images),
                         )
                     }
                     Box {
@@ -360,7 +363,7 @@ fun ImageGenPage(
                             when (pagerState.currentPage) {
                                 0 -> {
                                     DropdownMenuItem(
-                                        text = { Text("管理图像快捷消息") },
+                                        text = { Text(stringResource(R.string.imggen_page_manage_quick_messages)) },
                                         leadingIcon = { Icon(HugeIcons.Edit01, null) },
                                         onClick = {
                                             showTopMenu = false
@@ -371,15 +374,15 @@ fun ImageGenPage(
                                 }
 
                                 1 -> {
-                                    MenuSectionLabel("显示模式")
+                                    MenuSectionLabel(stringResource(R.string.imggen_page_display_mode))
                                     ImageGalleryDisplayMode.entries.forEach { mode ->
                                         val selected = settings.imageGallerySettings.displayMode == mode
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
                                                     when (mode) {
-                                                        ImageGalleryDisplayMode.GRID -> "网格"
-                                                        ImageGalleryDisplayMode.GROUPED -> "分组"
+                                                        ImageGalleryDisplayMode.GRID -> stringResource(R.string.imggen_page_display_mode_grid)
+                                                        ImageGalleryDisplayMode.GROUPED -> stringResource(R.string.imggen_page_display_mode_grouped)
                                                     }
                                                 )
                                             },
@@ -446,7 +449,7 @@ fun ImageGenPage(
                                 }
                             }
                             DropdownMenuItem(
-                                text = { Text("回收站") },
+                                text = { Text(stringResource(R.string.imggen_page_trash)) },
                                 leadingIcon = { Icon(HugeIcons.Delete01, null) },
                                 onClick = {
                                     showTopMenu = false
@@ -557,7 +560,7 @@ private fun BottomBar(
         NavigationBarItem(
             selected = 2 == pagerState.currentPage,
             label = {
-                Text("空间")
+                Text(stringResource(R.string.imggen_page_space))
             },
             icon = {
                 Icon(HugeIcons.InLove, null)
@@ -704,7 +707,7 @@ private fun ActiveGenerationJobSection(
                         maxLines = 2,
                     )
                     Text(
-                        text = if (job.isEdit) "编辑" else "生成",
+                        text = if (job.isEdit) stringResource(R.string.imggen_page_job_edit) else stringResource(R.string.imggen_page_job_generate),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -724,7 +727,7 @@ private fun ActiveGenerationJobSection(
             }
             if (job.isRunning && job.images.isEmpty()) {
                 Text(
-                    text = if (job.isAwaitingPermit) "排队中…" else "生成中…",
+                    text = if (job.isAwaitingPermit) stringResource(R.string.imggen_page_job_queued) else stringResource(R.string.imggen_page_job_generating),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -950,7 +953,7 @@ private fun ImageQuickMessageButton(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = quickMessage.title.ifBlank { "未命名" },
+                                text = quickMessage.title.ifBlank { stringResource(R.string.imggen_page_untitled) },
                                 style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1,
                             )
@@ -985,12 +988,12 @@ private fun ImageQuickMessagesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("图像快捷消息") },
+        title = { Text(stringResource(R.string.imggen_page_image_quick_messages)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (quickMessages.isEmpty()) {
                     Text(
-                        text = "暂无图像快捷消息",
+                        text = stringResource(R.string.imggen_page_image_quick_messages_empty),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
@@ -1014,7 +1017,7 @@ private fun ImageQuickMessagesDialog(
                                         verticalArrangement = Arrangement.spacedBy(2.dp),
                                     ) {
                                         Text(
-                                            text = quickMessage.title.ifBlank { "未命名" },
+                                            text = quickMessage.title.ifBlank { stringResource(R.string.imggen_page_untitled) },
                                             style = MaterialTheme.typography.titleSmall,
                                             maxLines = 1,
                                         )
@@ -1044,7 +1047,7 @@ private fun ImageQuickMessagesDialog(
         },
         confirmButton = {
             TextButton(onClick = { showAddDialog = true }) {
-                Text("添加")
+                Text(stringResource(R.string.imggen_page_add))
             }
         },
         dismissButton = {
@@ -1056,7 +1059,7 @@ private fun ImageQuickMessagesDialog(
 
     if (showAddDialog) {
         ImageQuickMessageEditDialog(
-            title = "添加图像快捷消息",
+            title = stringResource(R.string.imggen_page_add_image_quick_message),
             initialQuickMessage = null,
             onDismiss = { showAddDialog = false },
             onConfirm = { title, content ->
@@ -1068,7 +1071,7 @@ private fun ImageQuickMessagesDialog(
 
     editTarget?.let { quickMessage ->
         ImageQuickMessageEditDialog(
-            title = "编辑图像快捷消息",
+            title = stringResource(R.string.imggen_page_edit_image_quick_message),
             initialQuickMessage = quickMessage,
             onDismiss = { editTarget = null },
             onConfirm = { title, content ->
@@ -1102,14 +1105,14 @@ private fun ImageQuickMessageEditDialog(
                     value = quickMessageTitle,
                     onValueChange = { quickMessageTitle = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("标题") },
+                    label = { Text(stringResource(R.string.imggen_page_title_label)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = quickMessageContent,
                     onValueChange = { quickMessageContent = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("内容") },
+                    label = { Text(stringResource(R.string.imggen_page_content_label)) },
                     minLines = 4,
                     maxLines = 8,
                 )
@@ -1417,17 +1420,19 @@ private fun ImageSpaceScreen(
         IMAGE_GALLERY_MAX_COLUMNS,
     )
     val showThumbnailActions = columns <= IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS
+    val ungroupedLabel = stringResource(R.string.imggen_page_ungrouped)
+    val deletedCollectionLabel = stringResource(R.string.imggen_page_deleted_collection)
 
-    val sectionKeys = remember(favorites, collections) {
+    val sectionKeys = remember(favorites, collections, ungroupedLabel, deletedCollectionLabel) {
         val ungroupedKey = "__ungrouped__"
         val knownIds = collections.map { it.id }.toSet()
         val keys = mutableListOf<Pair<String, String>>()
-        keys += ungroupedKey to "未分组"
+        keys += ungroupedKey to ungroupedLabel
         collections.forEach { c -> keys += c.id to c.name }
         favorites.mapNotNull { it.collectionId }
             .distinct()
             .filter { it !in knownIds }
-            .forEach { orphanId -> keys += orphanId to "已删除分组" }
+            .forEach { orphanId -> keys += orphanId to deletedCollectionLabel }
         keys.filter { (key, _) ->
             favorites.any { item ->
                 if (key == ungroupedKey) item.collectionId == null else item.collectionId == key
@@ -1470,7 +1475,7 @@ private fun ImageSpaceScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = "收藏 ${favorites.size} 张",
+                        text = stringResource(R.string.imggen_page_favorites_count, favorites.size),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
@@ -1483,10 +1488,10 @@ private fun ImageSpaceScreen(
                             }
                         },
                     ) {
-                        Text(if (allSectionsExpanded) "全部折叠" else "全部展开")
+                        Text(if (allSectionsExpanded) stringResource(R.string.imggen_page_collapse_all) else stringResource(R.string.imggen_page_expand_all))
                     }
                     TextButton(onClick = { showNewCollectionDialog = true }) {
-                        Text("新建分组")
+                        Text(stringResource(R.string.imggen_page_new_collection))
                     }
                 }
             }
@@ -1501,7 +1506,7 @@ private fun ImageSpaceScreen(
                     val managedCollection = collections.firstOrNull { it.id == sectionKey }
                     CollapsibleSectionHeader(
                         title = sectionTitle,
-                        subtitle = "${sectionItems.size} 张",
+                        subtitle = stringResource(R.string.imggen_page_images_count, sectionItems.size),
                         expanded = expanded,
                         onExpandedChange = { sectionExpanded[sectionKey] = it },
                         onRename = managedCollection?.let { c ->
@@ -1569,12 +1574,12 @@ private fun ImageSpaceScreen(
     if (showNewCollectionDialog) {
         AlertDialog(
             onDismissRequest = { showNewCollectionDialog = false },
-            title = { Text("新建分组") },
+            title = { Text(stringResource(R.string.imggen_page_new_collection)) },
             text = {
                 OutlinedTextField(
                     value = newCollectionName,
                     onValueChange = { newCollectionName = it },
-                    label = { Text("分组名称") },
+                    label = { Text(stringResource(R.string.imggen_page_collection_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1589,10 +1594,10 @@ private fun ImageSpaceScreen(
                             showNewCollectionDialog = false
                         }
                     },
-                ) { Text("确定") }
+                ) { Text(stringResource(R.string.confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showNewCollectionDialog = false }) { Text("取消") }
+                TextButton(onClick = { showNewCollectionDialog = false }) { Text(stringResource(R.string.imggen_page_cancel)) }
             },
         )
     }
@@ -1600,12 +1605,12 @@ private fun ImageSpaceScreen(
     renameCollectionTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { renameCollectionTarget = null },
-            title = { Text("重命名分组") },
+            title = { Text(stringResource(R.string.imggen_page_rename_collection)) },
             text = {
                 OutlinedTextField(
                     value = renameCollectionName,
                     onValueChange = { renameCollectionName = it },
-                    label = { Text("分组名称") },
+                    label = { Text(stringResource(R.string.imggen_page_collection_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1619,10 +1624,10 @@ private fun ImageSpaceScreen(
                             renameCollectionTarget = null
                         }
                     },
-                ) { Text("确定") }
+                ) { Text(stringResource(R.string.confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { renameCollectionTarget = null }) { Text("取消") }
+                TextButton(onClick = { renameCollectionTarget = null }) { Text(stringResource(R.string.imggen_page_cancel)) }
             },
         )
     }
@@ -1630,9 +1635,9 @@ private fun ImageSpaceScreen(
     deleteCollectionTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteCollectionTarget = null },
-            title = { Text("删除分组") },
+            title = { Text(stringResource(R.string.imggen_page_delete_collection)) },
             text = {
-                Text("将删除分组「${target.name}」，其中收藏会移入未分组，不会取消收藏。")
+                Text(stringResource(R.string.imggen_page_collection_delete_confirm, target.name))
             },
             confirmButton = {
                 TextButton(
@@ -1641,11 +1646,11 @@ private fun ImageSpaceScreen(
                         deleteCollectionTarget = null
                     },
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.imggen_page_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteCollectionTarget = null }) { Text("取消") }
+                TextButton(onClick = { deleteCollectionTarget = null }) { Text(stringResource(R.string.imggen_page_cancel)) }
             },
         )
     }
@@ -1691,7 +1696,7 @@ private fun CollapsibleSectionHeader(
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     onRename?.let { rename ->
                         DropdownMenuItem(
-                            text = { Text("重命名") },
+                            text = { Text(stringResource(R.string.imggen_page_rename)) },
                             onClick = {
                                 showMenu = false
                                 rename()
@@ -1700,7 +1705,7 @@ private fun CollapsibleSectionHeader(
                     }
                     onDelete?.let { delete ->
                         DropdownMenuItem(
-                            text = { Text("删除分组", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.imggen_page_delete_collection_action), color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 showMenu = false
                                 delete()
@@ -1767,7 +1772,7 @@ private fun SpaceFavoriteGridCell(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = collections.firstOrNull { it.id == item.collectionId }?.name ?: "未分组",
+                text = collections.firstOrNull { it.id == item.collectionId }?.name ?: stringResource(R.string.imggen_page_ungrouped),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
@@ -1777,14 +1782,14 @@ private fun SpaceFavoriteGridCell(
             if (canAssignCollection) {
                 Box {
                     TextButton(onClick = { showCollectionMenu = true }) {
-                        Text("分组", style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.imggen_page_collection), style = MaterialTheme.typography.labelSmall)
                     }
                     DropdownMenu(
                         expanded = showCollectionMenu,
                         onDismissRequest = { showCollectionMenu = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text("未分组") },
+                            text = { Text(stringResource(R.string.imggen_page_ungrouped)) },
                             onClick = {
                                 onAssignCollection(null)
                                 showCollectionMenu = false
@@ -1827,7 +1832,7 @@ private fun SpaceEmptyState() {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "暂无收藏",
+                text = stringResource(R.string.imggen_page_no_favorites),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -1904,7 +1909,7 @@ private fun GroupedImageGallery(
                         groupKeys.forEach { groupExpanded[it] = allGroupsExpanded }
                     },
                 ) {
-                    Text(if (allGroupsExpanded) "全部折叠" else "全部展开")
+                    Text(if (allGroupsExpanded) stringResource(R.string.imggen_page_collapse_all) else stringResource(R.string.imggen_page_expand_all))
                 }
             }
         }
@@ -1963,9 +1968,9 @@ private fun GroupedImageCard(
         group.prompt
     }
     val groupMeta = if (isTemplateGroup) {
-        "${formatImageDate(group.timestamp)} · ${group.images.size} 张 · ${group.variants.size} 变体"
+        stringResource(R.string.imggen_page_group_meta_variants, formatImageDate(group.timestamp), group.images.size, group.variants.size)
     } else {
-        "${formatImageDate(group.timestamp)} · ${group.images.size} 张"
+        stringResource(R.string.imggen_page_group_meta, formatImageDate(group.timestamp), group.images.size)
     }
     var previewImages by remember { mutableStateOf<List<GeneratedImage>>(emptyList()) }
     var previewStartIndex by remember { mutableStateOf<Int?>(null) }
@@ -2033,7 +2038,7 @@ private fun GroupedImageCard(
                                 maxLines = 2,
                             )
                             Text(
-                                text = "${formatImageDate(section.timestamp)} · ${section.model} · ${section.images.size} 张",
+                                text = stringResource(R.string.imggen_page_section_meta, formatImageDate(section.timestamp), section.model, section.images.size),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -2130,19 +2135,20 @@ private fun GroupedImageCard(
 @Composable
 private fun rememberImageFavoriteToggler(vm: ImgGenVM): (GeneratedImage) -> Unit {
     val toaster = LocalToaster.current
+    val context = LocalContext.current
     return remember(vm, toaster) {
         { image: GeneratedImage ->
             vm.toggleImageFavorite(
                 image = image,
                 onResult = { added ->
                     toaster.show(
-                        message = if (added) "已收藏" else "已取消收藏",
+                        message = if (added) context.getString(R.string.imggen_page_favorite_added) else context.getString(R.string.imggen_page_favorite_removed),
                         type = ToastType.Success,
                     )
                 },
                 onError = { error ->
                     toaster.show(
-                        message = "收藏失败：${error.message ?: "未知错误"}",
+                        message = context.getString(R.string.imggen_page_favorite_failed, error.message ?: context.getString(R.string.imggen_page_unknown_error)),
                         type = ToastType.Error,
                     )
                 },
@@ -2282,7 +2288,7 @@ private fun PromptPreviewText(
     maxLines: Int,
     modifier: Modifier = Modifier,
 ) {
-    val displayPrompt = prompt.ifBlank { "无提示词" }
+    val displayPrompt = prompt.ifBlank { stringResource(R.string.imggen_page_no_prompt) }
     var showPrompt by remember(displayPrompt) { mutableStateOf(false) }
 
     Text(
@@ -2297,7 +2303,7 @@ private fun PromptPreviewText(
     if (showPrompt) {
         AlertDialog(
             onDismissRequest = { showPrompt = false },
-            title = { Text("提示词") },
+            title = { Text(stringResource(R.string.imggen_page_prompt_title)) },
             text = {
                 Text(
                     text = displayPrompt,
@@ -2309,7 +2315,7 @@ private fun PromptPreviewText(
             },
             confirmButton = {
                 TextButton(onClick = { showPrompt = false }) {
-                    Text("关闭")
+                    Text(stringResource(R.string.imggen_page_close))
                 }
             },
         )
@@ -2357,10 +2363,10 @@ private fun RecycleBinScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("回收站") },
+                    title = { Text(stringResource(R.string.imggen_page_trash)) },
                     navigationIcon = {
                         IconButton(onClick = onDismiss) {
-                            Icon(HugeIcons.Cancel01, contentDescription = "Close")
+                            Icon(HugeIcons.Cancel01, contentDescription = stringResource(R.string.imggen_page_close))
                         }
                     },
                     actions = {
@@ -2368,7 +2374,7 @@ private fun RecycleBinScreen(
                             onClick = { showClearConfirm = true },
                             enabled = images.isNotEmpty(),
                         ) {
-                            Text("清空")
+                            Text(stringResource(R.string.imggen_page_trash_clear))
                         }
                     }
                 )
@@ -2382,7 +2388,7 @@ private fun RecycleBinScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "回收站为空",
+                        text = stringResource(R.string.imggen_page_trash_empty),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
                     )
@@ -2410,8 +2416,8 @@ private fun RecycleBinScreen(
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            title = { Text("清空回收站？") },
-            text = { Text("将彻底删除回收站内的所有图片和记录，无法恢复。") },
+            title = { Text(stringResource(R.string.imggen_page_trash_clear_title)) },
+            text = { Text(stringResource(R.string.imggen_page_trash_clear_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -2419,7 +2425,7 @@ private fun RecycleBinScreen(
                         showClearConfirm = false
                     }
                 ) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.imggen_page_trash_clear), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -2487,12 +2493,12 @@ private fun RecycleBinItem(
 
             Column(horizontalAlignment = Alignment.End) {
                 TextButton(onClick = { onRestore(image) }) {
-                    Text("恢复")
+                    Text(stringResource(R.string.imggen_page_restore))
                 }
                 IconButton(onClick = { showDeleteConfirm = true }) {
                     Icon(
                         imageVector = HugeIcons.Delete01,
-                        contentDescription = "Permanently delete",
+                        contentDescription = stringResource(R.string.imggen_page_delete_permanently),
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -2513,8 +2519,8 @@ private fun RecycleBinItem(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("彻底删除图片？") },
-            text = { Text("此操作会删除本地文件和记录，无法恢复。") },
+            title = { Text(stringResource(R.string.imggen_page_delete_permanently_title)) },
+            text = { Text(stringResource(R.string.imggen_page_delete_permanently_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -2522,7 +2528,7 @@ private fun RecycleBinItem(
                         showDeleteConfirm = false
                     }
                 ) {
-                    Text("彻底删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.imggen_page_delete_permanently), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -2615,7 +2621,7 @@ private fun SettingsBottomSheet(
                 }
             ) {
                 CompactStepper(
-                    label = "张",
+                    label = stringResource(R.string.imggen_page_unit_images),
                     value = numberOfImages,
                     onValueChange = vm::updateNumberOfImages,
                     min = 1,
@@ -2624,11 +2630,11 @@ private fun SettingsBottomSheet(
             }
 
             FormItem(
-                label = { Text("并发请求数") },
-                description = { Text("同时进行中的 API 请求上限；成功或失败的任务卡片不占名额，可继续发送") },
+                label = { Text(stringResource(R.string.imggen_page_concurrent_requests)) },
+                description = { Text(stringResource(R.string.imggen_page_concurrent_requests_desc)) },
             ) {
                 CompactStepper(
-                    label = "个",
+                    label = stringResource(R.string.imggen_page_unit_items),
                     value = imageSettings.maxConcurrentJobs.coerceIn(1, MAX_CONCURRENT_IMAGE_GENERATION_JOBS_CAP),
                     onValueChange = { count ->
                         updateImageSettings {
@@ -2641,8 +2647,8 @@ private fun SettingsBottomSheet(
             }
 
             FormItem(
-                label = { Text("流式预览") },
-                description = { Text("开启后边生成边显示部分图；若你的接口/中转不支持流式(SSE)，请关闭") }
+                label = { Text(stringResource(R.string.imggen_page_streaming_preview)) },
+                description = { Text(stringResource(R.string.imggen_page_streaming_preview_desc)) }
             ) {
                 Switch(
                     checked = imageSettings.imageStreaming,
@@ -2654,8 +2660,8 @@ private fun SettingsBottomSheet(
 
             if (isGptImage2) {
                 FormItem(
-                    label = { Text("gpt-image-2 尺寸") },
-                    description = { Text("支持 auto、常用尺寸和自定义宽x高；自定义会在生成前校验") }
+                    label = { Text(stringResource(R.string.imggen_page_gpt_image2_size)) },
+                    description = { Text(stringResource(R.string.imggen_page_gpt_image2_size_desc)) }
                 ) {
                     ImageSizeSelector(
                         selected = imageSettings.size,
@@ -2670,8 +2676,8 @@ private fun SettingsBottomSheet(
                 }
 
                 FormItem(
-                    label = { Text("质量") },
-                    description = { Text("仅在模型 ID 为 gpt-image-2 时发送 quality 字段") }
+                    label = { Text(stringResource(R.string.imggen_page_quality)) },
+                    description = { Text(stringResource(R.string.imggen_page_quality_desc)) }
                 ) {
                     CompactSegmentedOptions(
                         options = ImageQualityOption.entries,
@@ -2684,8 +2690,8 @@ private fun SettingsBottomSheet(
                 }
 
                 FormItem(
-                    label = { Text("输出格式") },
-                    description = { Text("对应 output_format；默认 png，jpeg/webp 可配置压缩") }
+                    label = { Text(stringResource(R.string.imggen_page_output_format)) },
+                    description = { Text(stringResource(R.string.imggen_page_output_format_desc)) }
                 ) {
                     CompactSegmentedOptions(
                         options = ImageOutputFormatOption.selectableEntries,
@@ -2699,8 +2705,8 @@ private fun SettingsBottomSheet(
 
                 if (imageSettings.outputFormat.selectableFormat().supportsCompression) {
                     FormItem(
-                        label = { Text("输出压缩") },
-                        description = { Text("仅 jpeg/webp 发送 output_compression，范围 0-100") }
+                        label = { Text(stringResource(R.string.imggen_page_output_compression)) },
+                        description = { Text(stringResource(R.string.imggen_page_output_compression_desc)) }
                     ) {
                         CompactStepper(
                             label = "%",
@@ -2716,8 +2722,8 @@ private fun SettingsBottomSheet(
                 }
 
                 FormItem(
-                    label = { Text("背景") },
-                    description = { Text("gpt-image-2 不适配透明背景，仅保留 auto/opaque") }
+                    label = { Text(stringResource(R.string.imggen_page_background)) },
+                    description = { Text(stringResource(R.string.imggen_page_background_desc)) }
                 ) {
                     CompactSegmentedOptions(
                         options = ImageBackgroundOption.entries,
@@ -2730,8 +2736,8 @@ private fun SettingsBottomSheet(
                 }
 
                 FormItem(
-                    label = { Text("审核") },
-                    description = { Text("对应 moderation；auto 为默认过滤，low 较宽松") }
+                    label = { Text(stringResource(R.string.imggen_page_moderation)) },
+                    description = { Text(stringResource(R.string.imggen_page_moderation_desc)) }
                 ) {
                     CompactSegmentedOptions(
                         options = ImageModerationOption.entries,
@@ -2795,7 +2801,7 @@ private fun ImageColumnsMenuRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "列数",
+            text = stringResource(R.string.imggen_page_columns),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
@@ -2805,7 +2811,7 @@ private fun ImageColumnsMenuRow(
             },
             enabled = columns > IMAGE_GALLERY_MIN_COLUMNS,
         ) {
-            Icon(Lucide.Minus, contentDescription = "减少列数")
+            Icon(Lucide.Minus, contentDescription = stringResource(R.string.imggen_page_decrease_columns))
         }
         Text(
             text = columns.toString(),
@@ -2819,7 +2825,7 @@ private fun ImageColumnsMenuRow(
             },
             enabled = columns < IMAGE_GALLERY_MAX_COLUMNS,
         ) {
-            Icon(Lucide.Plus, contentDescription = "增加列数")
+            Icon(Lucide.Plus, contentDescription = stringResource(R.string.imggen_page_increase_columns))
         }
     }
 }

@@ -321,7 +321,7 @@ private fun SettingProviderConfigPage(
                         ) {
                             Icon(
                                 imageVector = HugeIcons.Cancel01,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.common_delete),
                                 modifier = Modifier.size(12.dp)
                             )
                         }

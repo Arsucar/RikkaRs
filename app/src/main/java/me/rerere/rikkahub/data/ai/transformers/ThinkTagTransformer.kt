@@ -10,7 +10,7 @@ import kotlin.time.Clock
 private val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CLOSING_TAG_REGEX = Regex("</think>")
 
-private fun splitThinkTaggedText(text: String, createdAt: kotlinx.datetime.Instant, finishedAtOnClose: kotlinx.datetime.Instant?): List<UIMessagePart> {
+internal fun splitThinkTaggedText(text: String, createdAt: kotlinx.datetime.Instant, finishedAtOnClose: kotlinx.datetime.Instant?): List<UIMessagePart> {
     if (!THINKING_REGEX.containsMatchIn(text)) {
         return listOf(UIMessagePart.Text(text))
     }
