@@ -82,17 +82,34 @@ jobs:
           name: rikka-arsucar-arm64-${{ github.run_id }}
           path: app/build/outputs/apk/release/*arm64-v8a*release*.apk
 
-      - name: Prepare release asset filename
+      - name: Prepare release asset filename and notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           APK=$(ls app/build/outputs/apk/release/*arm64-v8a*release*.apk | head -1)
           cp "$APK" "rikka-arsucar-${{ github.ref_name }}-arm64.apk"
+          python3 << 'PY'
+          import pathlib, re
+          tag = "${{ github.ref_name }}"
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          pattern = re.compile(r"^## " + re.escape(tag) + r"\s*$", re.MULTILINE)
+          m = pattern.search(text)
+          if not m:
+              print(f"warning: {tag} section not found in CHANGELOG.md")
+              pathlib.Path("release_notes.md").write_text("", encoding="utf-8")
+          else:
+              start = m.end()
+              nxt = re.search(r"^## v", text[start:], re.MULTILINE)
+              end = start + nxt.start() if nxt else len(text)
+              pathlib.Path("release_notes.md").write_text(text[start:end].strip() + "\n", encoding="utf-8")
+              print(f"extracted {tag} section ({end - start} chars)")
+          PY
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: rikka-arsucar-${{ github.ref_name }}-arm64.apk
+          body_path: release_notes.md
           generate_release_notes: true
           draft: false
           prerelease: false
