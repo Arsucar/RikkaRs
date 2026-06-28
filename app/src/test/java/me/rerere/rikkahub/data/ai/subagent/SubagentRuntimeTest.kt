@@ -35,12 +35,12 @@ class SubagentRuntimeTest {
     @Test
     fun spawnSubagentTool_hasExpectedNameAndParameters() {
         val tools = createSubagentTools(
-            profiles = listOf(SubagentProfile(name = "explore", description = "d")),
             json = json,
             spawn = { _, _, _ ->
                 SubagentResult("explore", "s", true)
             },
             askBtw = { "a" },
+            getProfiles = { listOf(SubagentProfile(name = "explore", description = "d")) },
         )
         val spawn = tools.first { it.name == "spawn_subagent" }
         assertEquals("spawn_subagent", spawn.name)
@@ -52,10 +52,10 @@ class SubagentRuntimeTest {
     @Test
     fun askBtwTool_hasExpectedName() {
         val tools = createSubagentTools(
-            profiles = listOf(SubagentProfile(name = "explore")),
             json = json,
             spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
             askBtw = { "answer" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
         )
         val btw = tools.first { it.name == "ask_btw" }
         assertEquals("ask_btw", btw.name)
@@ -66,9 +66,9 @@ class SubagentRuntimeTest {
     @Test
     fun manageSubagentProfileTool_hasExpectedName() {
         val tool = createManageSubagentTool(
-            profiles = emptyList(),
             json = json,
             depth = 0,
+            resolveProfile = { null },
             manage = { _, _, _ -> "ok" },
         )
         assertEquals("manage_subagent_profile", tool!!.name)
@@ -78,7 +78,10 @@ class SubagentRuntimeTest {
 
     @Test
     fun manageSubagentProfileTool_absentWhenDepthNotZero() {
-        assertEquals(null, createManageSubagentTool(emptyList(), json, depth = 1) { _, _, _ -> "" })
+        assertEquals(
+            null,
+            createManageSubagentTool(json, depth = 1, resolveProfile = { null }) { _, _, _ -> "" },
+        )
     }
 
     @Test

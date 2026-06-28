@@ -29,17 +29,12 @@ val SUBAGENT_TOOL_NAMES: Set<String> = setOf(
 )
 
 fun createSubagentTools(
-    profiles: List<SubagentProfile>,
     json: Json,
     spawn: suspend (profileName: String, task: String, description: String) -> SubagentResult,
     askBtw: suspend (question: String) -> String,
+    getProfiles: () -> List<SubagentProfile>,
     includeAskBtw: Boolean = true,
 ): List<Tool> {
-    if (profiles.isEmpty()) return emptyList()
-
-    val profileNames = profiles.map { it.name }
-    val profileListText = profiles.joinToString("\n") { "  - ${it.name}: ${it.description}" }
-
     val spawnTool = Tool(
         name = "spawn_subagent",
         description = """
@@ -54,8 +49,7 @@ fun createSubagentTools(
 
             **Parallel execution:** Multiple `spawn_subagent` calls in the SAME response run concurrently when possible.
 
-            Available subagent profiles:
-$profileListText
+            Available subagent profile names are listed in the system prompt under <available_subagent_profiles>.
         """.trimIndent(),
         systemPrompt = { _, _ ->
             buildString {
@@ -67,7 +61,7 @@ $profileListText
                 appendLine("- `reviewer`: review and critique without changes")
                 appendLine()
                 appendLine("<available_subagent_profiles>")
-                profiles.forEach { p ->
+                getProfiles().forEach { p ->
                     appendLine("  <profile>")
                     appendLine("    <name>${p.name}</name>")
                     appendLine("    <description>${p.description}</description>")
@@ -83,8 +77,7 @@ $profileListText
                         "profile_name",
                         buildJsonObject {
                             put("type", "string")
-                            put("description", "Subagent profile to spawn")
-                            put("enum", buildJsonArray { profileNames.forEach { add(it) } })
+                            put("description", "Subagent profile to spawn (see system prompt for available names)")
                         },
                     )
                     put(
@@ -168,9 +161,9 @@ $profileListText
 }
 
 fun createManageSubagentTool(
-    profiles: List<SubagentProfile>,
     json: Json,
     depth: Int,
+    resolveProfile: (name: String) -> SubagentProfile?,
     manage: suspend (action: String, name: String, profile: SubagentProfile?) -> String,
 ): Tool? {
     if (depth != 0) return null
@@ -244,7 +237,7 @@ fun createManageSubagentTool(
                         error("name must be lowercase [a-z][a-z0-9_]*: $name")
                     }
                     val base = if (action == "update") {
-                        profiles.firstOrNull { it.name == name }
+                        resolveProfile(name)
                             ?: error("profile '$name' not found; use create instead")
                     } else {
                         SubagentProfile(name = name)

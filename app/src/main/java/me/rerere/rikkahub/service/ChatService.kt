@@ -1571,88 +1571,101 @@ class ChatService(
         depth: Int,
     ): List<Tool> {
         val maxDepth = assistant.subagentMaxDepth.coerceAtLeast(1)
-        val profiles = mergeSubagentProfiles(
-            custom = assistant.subagentProfiles,
-            global = settings.globalSubagentProfiles,
-            disabledGlobal = assistant.disabledGlobalSubagents,
-        )
+        val assistantId = assistant.id
         val workspaceId = assistant.workspaceId?.toString().orEmpty()
-        val result = mutableListOf<Tool>()
-        if (profiles.isNotEmpty()) {
-            result += createSubagentTools(
-                profiles = profiles,
-                json = json,
-                spawn = { profileName, task, _ ->
-                    val profile = SubagentRegistry.resolveProfile(
-                        profileName,
-                        assistant,
-                        settings.globalSubagentProfiles,
-                    )
-                    if (profile == null) {
-                        SubagentResult(
-                            profileName = profileName,
-                            summary = "",
-                            succeeded = false,
-                            error = "profile not found",
-                            depth = depth + 1,
-                        )
-                    } else {
-                        val toolCallId = currentToolCallId()
-                        subagentHost.spawn(
-                            profileName = profileName,
-                            task = task,
-                            settings = settings,
-                            parentAssistant = assistant,
-                            parentModel = parentModel,
-                            buildChildTools = { _, childDepth ->
-                                toolsForSubagentProfile(
-                                    profile = profile,
-                                    assistant = assistant,
-                                    settings = settings,
-                                    parentModel = parentModel,
-                                    parentTools = parentTools,
-                                    workspaceCwd = workspaceCwd,
-                                    workspaceId = workspaceId,
-                                    conversationId = conversationId,
-                                    depth = childDepth,
-                                    maxDepth = maxDepth,
-                                )
-                            },
-                            depth = depth + 1,
-                            maxDepth = maxDepth,
-                            workspaceCwd = workspaceCwd,
-                            onProgress = if (conversationId != null) {
-                                { subMessages ->
-                                    updateSubagentProgress(
-                                        conversationId,
-                                        toolCallId,
-                                        profile.name,
-                                        subMessages,
-                                    )
-                                }
-                            } else {
-                                null
-                            },
-                        )
-                    }
-                },
-                askBtw = { question ->
-                    subagentHost.askBtw(
-                        question = question,
-                        settings = settings,
-                        parentAssistant = assistant,
-                        parentModel = parentModel,
-                        workspaceCwd = workspaceCwd,
-                    )
-                },
+        fun liveSettings(): Settings = settingsStore.settingsFlow.value
+        fun liveAssistant(): Assistant =
+            liveSettings().assistants.firstOrNull { it.id == assistantId } ?: assistant
+        fun mergedProfiles(): List<SubagentProfile> {
+            val a = liveAssistant()
+            val s = liveSettings()
+            return mergeSubagentProfiles(
+                custom = a.subagentProfiles,
+                global = s.globalSubagentProfiles,
+                disabledGlobal = a.disabledGlobalSubagents,
             )
         }
+        val result = mutableListOf<Tool>()
+        result += createSubagentTools(
+            json = json,
+            getProfiles = { mergedProfiles() },
+            spawn = { profileName, task, _ ->
+                val live = liveSettings()
+                val parent = liveAssistant()
+                val profile = SubagentRegistry.resolveProfile(
+                    profileName,
+                    parent,
+                    live.globalSubagentProfiles,
+                )
+                if (profile == null) {
+                    val available = mergedProfiles().joinToString(", ") { it.name }
+                    SubagentResult(
+                        profileName = profileName,
+                        summary = "",
+                        succeeded = false,
+                        error = "profile not found; available: $available",
+                        depth = depth + 1,
+                    )
+                } else {
+                    val toolCallId = currentToolCallId()
+                    subagentHost.spawn(
+                        profileName = profileName,
+                        task = task,
+                        settings = live,
+                        parentAssistant = parent,
+                        parentModel = parentModel,
+                        buildChildTools = { _, childDepth ->
+                            toolsForSubagentProfile(
+                                profile = profile,
+                                assistant = parent,
+                                settings = live,
+                                parentModel = parentModel,
+                                parentTools = parentTools,
+                                workspaceCwd = workspaceCwd,
+                                workspaceId = workspaceId,
+                                conversationId = conversationId,
+                                depth = childDepth,
+                                maxDepth = maxDepth,
+                            )
+                        },
+                        depth = depth + 1,
+                        maxDepth = maxDepth,
+                        workspaceCwd = workspaceCwd,
+                        onProgress = if (conversationId != null) {
+                            { subMessages ->
+                                updateSubagentProgress(
+                                    conversationId,
+                                    toolCallId,
+                                    profile.name,
+                                    subMessages,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            },
+            askBtw = { question ->
+                val live = liveSettings()
+                subagentHost.askBtw(
+                    question = question,
+                    settings = live,
+                    parentAssistant = liveAssistant(),
+                    parentModel = parentModel,
+                    workspaceCwd = workspaceCwd,
+                )
+            },
+        )
         createManageSubagentTool(
-            profiles = profiles,
             json = json,
             depth = depth,
+            resolveProfile = { name ->
+                val parent = liveAssistant()
+                SubagentRegistry.resolveProfile(name, parent, liveSettings().globalSubagentProfiles)
+            },
             manage = { action, name, profile ->
-                manageSubagentProfile(assistant.id, action, name, profile)
+                manageSubagentProfile(assistantId, action, name, profile)
             },
         )?.let { result += it }
         return result
@@ -1685,17 +1698,23 @@ class ChatService(
             if (profile.canSpawn && depth + 1 < maxDepth) {
                 {
                     createSubagentTools(
-                        profiles = mergeSubagentProfiles(
-                            custom = assistant.subagentProfiles,
-                            global = settings.globalSubagentProfiles,
-                            disabledGlobal = assistant.disabledGlobalSubagents,
-                        ),
                         json = json,
+                        getProfiles = {
+                            val live = settingsStore.settingsFlow.value
+                            val parent = live.assistants.firstOrNull { it.id == assistant.id } ?: assistant
+                            mergeSubagentProfiles(
+                                custom = parent.subagentProfiles,
+                                global = live.globalSubagentProfiles,
+                                disabledGlobal = parent.disabledGlobalSubagents,
+                            )
+                        },
                         spawn = { nestedProfile, nestedTask, _ ->
+                            val live = settingsStore.settingsFlow.value
+                            val parent = live.assistants.firstOrNull { it.id == assistant.id } ?: assistant
                             val nested = SubagentRegistry.resolveProfile(
                                 nestedProfile,
-                                assistant,
-                                settings.globalSubagentProfiles,
+                                parent,
+                                live.globalSubagentProfiles,
                             )
                             if (nested == null) {
                                 SubagentResult(
@@ -1710,14 +1729,14 @@ class ChatService(
                                 subagentHost.spawn(
                                     profileName = nestedProfile,
                                     task = nestedTask,
-                                    settings = settings,
-                                    parentAssistant = assistant,
+                                    settings = live,
+                                    parentAssistant = parent,
                                     parentModel = parentModel,
                                     buildChildTools = { _, d ->
                                         toolsForSubagentProfile(
                                             profile = nested,
-                                            assistant = assistant,
-                                            settings = settings,
+                                            assistant = parent,
+                                            settings = live,
                                             parentModel = parentModel,
                                             parentTools = parentTools,
                                             workspaceCwd = workspaceCwd,
@@ -1746,7 +1765,9 @@ class ChatService(
                             }
                         },
                         askBtw = { q ->
-                            subagentHost.askBtw(q, settings, assistant, parentModel, workspaceCwd)
+                            val live = settingsStore.settingsFlow.value
+                            val parent = live.assistants.firstOrNull { it.id == assistant.id } ?: assistant
+                            subagentHost.askBtw(q, live, parent, parentModel, workspaceCwd)
                         },
                     ).first { it.name == "spawn_subagent" }
                 }
