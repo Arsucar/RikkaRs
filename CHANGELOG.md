@@ -13,6 +13,23 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 ---
 
 
+## v2.3.7
+
+### 修复 / Fixes
+
+- **子代理流式一致性** — 流式结束/失败/取消后，同步清理 `spawn_subagent` 工具 JSON `text` 与 metadata 的 `streaming` 字段，避免消费者误判为仍在流式。
+  **Subagent streaming consistency** — On stream end/failure/cancel, the JSON `streaming` field in `spawn_subagent` tool `text` is now cleaned alongside `metadata.subagent_streaming`, preventing stale-streaming false positives.
+
+- **会话状态写入** — 用 `synchronized(session.stateLock)` 替代 CAS 重试循环，串行化会话状态读改写；DB 加载时清理残留的子代理流式标记并写回；`syncMessageNodes` 改为按 id diff（删孤儿 + REPLACE upsert），避免中断导致整段消息丢失。
+  **Conversation state writes** — Replace CAS retry loops with `synchronized(session.stateLock)` to serialize state read-modify-write; stale subagent streaming flags are cleaned on DB load and persisted back; `syncMessageNodes` now uses id-diff (delete orphans + REPLACE upsert) to avoid losing all messages on interrupted saves.
+
+- **Workspace shell 加固** — 启发式拦截更多破坏命令（`rm -rf /*` / `~` / `$HOME`、fork bomb、`chmod -R 777 /`、关机重启等）；**非强隔离**，真实隔离依赖 workspace cwd 限制。
+  **Workspace shell hardening** — Heuristic denylist extended (more `rm -rf` root variants, fork bombs, `chmod -R 777 /`, power commands); **not a security boundary** — real isolation relies on workspace cwd limits.
+
+- **LogPage 性能** — 列表卡片脱敏结果 memoize，避免每次重组重复计算。
+  **LogPage performance** — Memoize redacted URL in list card to avoid recomputation on every recomposition.
+
+
 ## v2.3.6
 
 ### 修复 / Fixes
