@@ -392,9 +392,13 @@ class ChatService(
 
     suspend fun initializeConversation(conversationId: Uuid) {
         val session = getOrCreateSession(conversationId) // 确保 session 存在
+        if (shouldSkipInitializeOnGenerating(session)) {
+            Log.d(TAG, "initializeConversation: skipped $conversationId (generating)")
+            return
+        }
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
-            val hydrated = hydrateConversationFromDb(conversation, session)
+            val hydrated = hydrateConversationFromDb(conversation, session, json)
             updateConversation(conversationId, hydrated)
             if (hydrated != conversation) {
                 saveConversation(conversationId, hydrated)
@@ -1260,11 +1264,6 @@ class ChatService(
 
     private fun Conversation.cleanStaleStreamingMetadata(): Conversation = cleanStaleSubagentStreaming(json)
 
-    private fun hydrateConversationFromDb(loaded: Conversation, session: ConversationSession): Conversation {
-        if (session.isGenerating) return loaded
-        return loaded.cleanStaleStreamingMetadata()
-    }
-
     private fun cleanupStreamingSubagentMetadata(conversationId: Uuid) {
         updateConversationState(conversationId) { conversation ->
             conversation.cleanStaleStreamingMetadata()
@@ -1854,4 +1853,16 @@ class ChatService(
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
     }
+}
+
+internal fun shouldSkipInitializeOnGenerating(session: ConversationSession): Boolean =
+    session.isGenerating
+
+internal fun hydrateConversationFromDb(
+    loaded: Conversation,
+    session: ConversationSession,
+    json: Json,
+): Conversation {
+    if (session.isGenerating) return loaded
+    return loaded.cleanStaleSubagentStreaming(json)
 }
