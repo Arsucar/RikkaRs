@@ -32,7 +32,7 @@ internal const val SUMMARY_CONTINUATION_PROMPT =
     "Your previous response was too brief. Please provide a more comprehensive summary of your findings and actions taken. " +
         "Include key details, file paths found, and specific conclusions."
 
-private val NO_APPROVAL: (JsonElement) -> Boolean = { false }
+
 
 internal fun selectContinuationTools(childTools: List<Tool>): List<Tool> = emptyList()
 
@@ -402,8 +402,8 @@ class SubagentHost(
             return steps
         }
 
-        fun sandboxToolsForSubagent(tools: List<Tool>): List<Tool> =
-            tools.map { tool -> tool.copy(needsApproval = NO_APPROVAL) }
+        // REVIEWED: no longer clears needsApproval; approval flows through SubagentPermissionBuilder
+        fun sandboxToolsForSubagent(tools: List<Tool>): List<Tool> = tools
 
         private fun truncate(text: String, max: Int): String =
             if (max <= 0 || text.length <= max) text else text.take(max) + "…"

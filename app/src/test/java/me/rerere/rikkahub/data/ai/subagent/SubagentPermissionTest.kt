@@ -226,4 +226,28 @@ class SubagentPermissionTest {
         val input = buildJsonObject { put("cwd", "proj") }
         assertEquals("/workspace/proj", extractPathCandidateFromInput(input))
     }
+
+    @Test
+    fun sandboxToolsForSubagent_preservesNeedsApproval() {
+        val shell = mockTool("workspace_shell", needsApproval = { true })
+        val approved = applySubagentWorkspaceApproval(
+            shell,
+            profile(approval = WorkspaceApproval.OVERRIDE),
+            workspaceOverrides = mapOf("workspace_shell" to true),
+        )
+        val out = SubagentHost.sandboxToolsForSubagent(listOf(approved)).single()
+        assertTrue(out.needsApproval(buildJsonObject {}))
+    }
+
+    @Test
+    fun sandboxToolsForSubagent_autoApprovalStillFalse() {
+        val shell = mockTool("workspace_shell", needsApproval = { true })
+        val out = applySubagentWorkspaceApproval(
+            shell,
+            profile(approval = WorkspaceApproval.AUTO),
+            workspaceOverrides = mapOf("workspace_shell" to true),
+        )
+        val sandboxed = SubagentHost.sandboxToolsForSubagent(listOf(out)).single()
+        assertFalse(sandboxed.needsApproval(buildJsonObject {}))
+    }
 }

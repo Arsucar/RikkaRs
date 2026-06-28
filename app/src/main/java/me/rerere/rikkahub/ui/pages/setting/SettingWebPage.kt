@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,6 +104,9 @@ fun SettingWebPage() {
     PermissionManager(permissionState = permissionState)
 
     var pendingStart by remember { mutableStateOf(false) }
+    var showLanRiskDialog by remember { mutableStateOf(false) }
+    var pendingDisableLocalhostOnly by remember { mutableStateOf(false) }
+    var showStartLanRiskDialog by remember { mutableStateOf(false) }
 
     fun startWebServer() {
         val intent = Intent(context, WebServerService::class.java).apply {
@@ -127,6 +132,81 @@ fun SettingWebPage() {
         toaster.show(copiedText)
     }
 
+    fun requestStartWebServer() {
+        if (!settings.webServerLocalhostOnly && !settings.webServerJwtEnabled) {
+            showStartLanRiskDialog = true
+        } else if (permissionState.allPermissionsGranted) {
+            startWebServer()
+        } else {
+            pendingStart = true
+            permissionState.requestPermissions()
+        }
+    }
+
+    if (showLanRiskDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showLanRiskDialog = false
+                pendingDisableLocalhostOnly = false
+            },
+            title = { Text(stringResource(R.string.setting_page_web_server_lan_risk_title)) },
+            text = { Text(stringResource(R.string.setting_page_web_server_lan_risk_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLanRiskDialog = false
+                        if (pendingDisableLocalhostOnly) {
+                            scope.launch {
+                                settingsStore.update { it.copy(webServerLocalhostOnly = false) }
+                            }
+                            pendingDisableLocalhostOnly = false
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.setting_page_web_server_lan_risk_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showLanRiskDialog = false
+                        pendingDisableLocalhostOnly = false
+                    },
+                ) {
+                    Text(stringResource(R.string.setting_page_web_server_lan_risk_cancel))
+                }
+            },
+        )
+    }
+
+    if (showStartLanRiskDialog) {
+        AlertDialog(
+            onDismissRequest = { showStartLanRiskDialog = false },
+            title = { Text(stringResource(R.string.setting_page_web_server_lan_risk_title)) },
+            text = { Text(stringResource(R.string.setting_page_web_server_lan_risk_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showStartLanRiskDialog = false
+                        if (permissionState.allPermissionsGranted) {
+                            startWebServer()
+                        } else {
+                            pendingStart = true
+                            permissionState.requestPermissions()
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.setting_page_web_server_lan_risk_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartLanRiskDialog = false }) {
+                    Text(stringResource(R.string.setting_page_web_server_lan_risk_cancel))
+                }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -141,12 +221,7 @@ fun SettingWebPage() {
                 onClick = {
                     if (serverState.isLoading) return@ExtendedFloatingActionButton
                     if (!serverState.isRunning) {
-                        if (permissionState.allPermissionsGranted) {
-                            startWebServer()
-                        } else {
-                            pendingStart = true
-                            permissionState.requestPermissions()
-                        }
+                        requestStartWebServer()
                     } else {
                         val intent = Intent(context, WebServerService::class.java).apply {
                             action = WebServerService.ACTION_STOP
@@ -237,9 +312,14 @@ fun SettingWebPage() {
                             Switch(
                                 checked = settings.webServerLocalhostOnly,
                                 onCheckedChange = { checked ->
-                                    scope.launch {
-                                        settingsStore.update {
-                                            it.copy(webServerLocalhostOnly = checked)
+                                    if (!checked && !settings.webServerJwtEnabled) {
+                                        pendingDisableLocalhostOnly = true
+                                        showLanRiskDialog = true
+                                    } else {
+                                        scope.launch {
+                                            settingsStore.update {
+                                                it.copy(webServerLocalhostOnly = checked)
+                                            }
                                         }
                                     }
                                 },
@@ -309,6 +389,16 @@ fun SettingWebPage() {
                             )
                         },
                     )
+                    if (!settings.webServerLocalhostOnly && !settings.webServerJwtEnabled) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.setting_page_web_server_lan_unauth_warning),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
                     if (serverState.isRunning) {
                         val port = serverState.port
                         if (!serverState.localhostOnly) {

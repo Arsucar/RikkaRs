@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.withPrunedAssistantExtensionIds
 
 class PromptVM(
     private val settingsStore: SettingsStore
@@ -16,7 +17,7 @@ class PromptVM(
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(settings.withPrunedAssistantExtensionIds())
         }
     }
 }

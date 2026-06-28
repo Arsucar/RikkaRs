@@ -132,6 +132,19 @@ class WorkspaceManager(
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }
         require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
 
+        when (val verdict = evaluateShellCommand(command)) {
+            is ShellCommandVerdict.Rejected -> {
+                return WorkspaceCommandResult(
+                    exitCode = 1,
+                    stdout = "",
+                    stderr = verdict.userMessage,
+                    timedOut = false,
+                    truncated = false,
+                )
+            }
+            ShellCommandVerdict.Allowed -> Unit
+        }
+
         return shellRunner.execute(
             WorkspaceShellContext(
                 root = root,

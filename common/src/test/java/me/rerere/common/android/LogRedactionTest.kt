@@ -73,6 +73,26 @@ class LogRedactionTest {
     }
 
     @Test
+    fun requestLogRedactedRedactsSensitiveUrlQuery() {
+        val log = LogEntry.RequestLog(
+            id = Uuid.random(),
+            timestamp = 1L,
+            tag = "HTTP",
+            url = "https://x.example.com/v1?api_key=abc123&foo=bar",
+            method = "GET",
+            requestHeaders = emptyMap(),
+            requestBody = null,
+            responseCode = 200,
+            responseHeaders = emptyMap(),
+            durationMs = 1L,
+            error = null,
+        )
+        val result = log.redacted() as LogEntry.RequestLog
+        assertTrue(result.url.contains("api_key=***REDACTED***"))
+        assertTrue(result.url.contains("foo=bar"))
+    }
+
+    @Test
     fun textLogRedactedReturnsSameContent() {
         val log = LogEntry.TextLog(tag = "T", message = "hello")
         val result = log.redacted() as LogEntry.TextLog
