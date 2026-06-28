@@ -231,6 +231,7 @@ private fun RequestLoggingSwitchCard(
 @Composable
 private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val redacted = remember(log.id, log.url) { log.redacted() as LogEntry.RequestLog }
 
     Card(
         modifier = Modifier
@@ -260,7 +261,7 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
             }
 
             Text(
-                text = log.url,
+                text = redacted.url,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = JetbrainsMono,
                 maxLines = 2
@@ -303,6 +304,7 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
 @Composable
 private fun RequestLogDetail(log: LogEntry.RequestLog) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
+    val display = remember(log.id) { log.redacted() as LogEntry.RequestLog }
 
     SelectionContainer {
         LazyColumn(
@@ -319,36 +321,36 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
             }
 
             item {
-                DetailSection("Time", dateFormat.format(Date(log.timestamp)))
+                DetailSection("Time", dateFormat.format(Date(display.timestamp)))
             }
 
             item {
-                DetailSection("URL", log.url)
+                DetailSection("URL", display.url)
             }
 
             item {
-                DetailSection("Method", log.method)
+                DetailSection("Method", display.method)
             }
 
-            log.responseCode?.let { code ->
+            display.responseCode?.let { code ->
                 item {
                     DetailSection("Status Code", code.toString())
                 }
             }
 
-            log.durationMs?.let { duration ->
+            display.durationMs?.let { duration ->
                 item {
                     DetailSection("Duration", "${duration}ms")
                 }
             }
 
-            log.error?.let { error ->
+            display.error?.let { error ->
                 item {
                     DetailSection("Error", error)
                 }
             }
 
-            if (log.requestHeaders.isNotEmpty()) {
+            if (display.requestHeaders.isNotEmpty()) {
                 item {
                     HorizontalDivider()
                     Text(
@@ -358,14 +360,14 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                log.requestHeaders.forEach { (key, value) ->
+                display.requestHeaders.forEach { (key, value) ->
                     item {
                         HeaderItem(key, value)
                     }
                 }
             }
 
-            log.requestBody?.let { body ->
+            display.requestBody?.let { body ->
                 item {
                     HorizontalDivider()
                     Text(
@@ -393,7 +395,7 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                 }
             }
 
-            if (log.responseHeaders.isNotEmpty()) {
+            if (display.responseHeaders.isNotEmpty()) {
                 item {
                     HorizontalDivider()
                     Text(
@@ -403,7 +405,7 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                log.responseHeaders.forEach { (key, value) ->
+                display.responseHeaders.forEach { (key, value) ->
                     item {
                         HeaderItem(key, value)
                     }
