@@ -55,7 +55,7 @@ internal fun assistantHasSpawnableProfile(
     globalProfiles: List<SubagentProfile> = emptyList(),
 ): Boolean =
     subagentListEntries(assistant, globalProfiles).any { entry ->
-        !entry.isDisabledGlobal && entry.profile.canSpawn
+        !entry.isDisabledGlobal
     }
 
 @Composable

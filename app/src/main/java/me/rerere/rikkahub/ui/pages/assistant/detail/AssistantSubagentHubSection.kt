@@ -8,16 +8,12 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
+
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -29,9 +25,6 @@ fun AssistantSubagentHubControls(
     onUpdate: (Assistant) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showEnableBlockedDialog by remember { mutableStateOf(false) }
-    val canEnable = assistantHasSpawnableProfile(assistant)
-
     Card(
         colors = CustomColors.cardColorsOnSurfaceContainer,
         modifier = modifier,
@@ -40,23 +33,13 @@ fun AssistantSubagentHubControls(
             modifier = Modifier.padding(8.dp),
             label = { Text(stringResource(R.string.subagent_enable_title)) },
             description = {
-                Text(
-                    if (!canEnable && !assistant.enableSubagents) {
-                        stringResource(R.string.subagent_enable_blocked_desc)
-                    } else {
-                        stringResource(R.string.subagent_enable_desc)
-                    }
-                )
+                Text(stringResource(R.string.subagent_enable_desc))
             },
             tail = {
                 Switch(
                     checked = assistant.enableSubagents,
                     onCheckedChange = { enabled ->
-                        if (enabled && !canEnable) {
-                            showEnableBlockedDialog = true
-                        } else {
-                            onUpdate(assistant.copy(enableSubagents = enabled))
-                        }
+                        onUpdate(assistant.copy(enableSubagents = enabled))
                     },
                 )
             },
@@ -97,16 +80,4 @@ fun AssistantSubagentHubControls(
         }
     }
 
-    if (showEnableBlockedDialog) {
-        AlertDialog(
-            onDismissRequest = { showEnableBlockedDialog = false },
-            title = { Text(stringResource(R.string.subagent_enable_blocked_title)) },
-            text = { Text(stringResource(R.string.subagent_enable_blocked_desc)) },
-            confirmButton = {
-                TextButton(onClick = { showEnableBlockedDialog = false }) {
-                    Text(stringResource(R.string.common_confirm))
-                }
-            },
-        )
-    }
 }
