@@ -13,6 +13,22 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 ---
 
 
+## v2.3.8
+
+### 修复 / Fixes
+
+- **切换会话丢失生成内容** — 流式生成中（含子代理运行）切换到其它会话再切回时，不再用 DB 旧快照覆盖内存中的实时流式内容（文本 / reasoning / 子代理 transcript），避免出现「空消息 + 加载图标」。
+  **Switch-away content loss** — While streaming (including subagent runs), switching to another conversation and back no longer overwrites in-memory streaming content (text / reasoning / subagent transcript) with a stale DB snapshot, fixing the "empty message + loading indicator" regression.
+
+- **子代理启用前置条件** — 移除 `assistantHasSpawnableProfile` 的 `canSpawn` 前置条件与阻断弹窗；ModelListSheet 展开时移除 200dp 高度上限、隐藏拖拽条并将面板高度提至 90%，改善大屏与长列表体验。
+  **Subagent enablement & sheet layout** — Removed the `canSpawn` prerequisite and blocking dialog from `assistantHasSpawnableProfile`; ModelListSheet no longer caps expanded height at 200dp, hides the drag handle, and raises sheet height to 90% for better large-screen / long-list UX.
+
+### 重构 / Refactor
+
+- **子代理工具刷新与运行时测试** — 重构 `ChatService` 中子代理工具的刷新逻辑并补强运行时测试覆盖。
+  **Subagent tool refresh & runtime tests** — Refactored subagent tool refresh in `ChatService` and expanded runtime test coverage.
+
+
 ## v2.3.7
 
 ### 修复 / Fixes
