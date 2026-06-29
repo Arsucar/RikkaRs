@@ -34,6 +34,7 @@ fun createSubagentTools(
     askBtw: suspend (question: String) -> String,
     getProfiles: () -> List<SubagentProfile>,
     includeAskBtw: Boolean = true,
+    delegateOnly: Boolean = false,
 ): List<Tool> {
     val spawnTool = Tool(
         name = "spawn_subagent",
@@ -54,6 +55,11 @@ fun createSubagentTools(
         systemPrompt = { _, _ ->
             buildString {
                 appendLine()
+                if (delegateOnly) {
+                    appendLine("**Delegation-Only Mode**")
+                    appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent` (you may emit multiple in one response). Synthesize subagent results; do not paste raw transcripts.")
+                    appendLine()
+                }
                 appendLine("**Subagents — Delegation Guidance**")
                 appendLine("Use `spawn_subagent` to delegate substantial work. Task prompts must be self-contained.")
                 appendLine("- `explore`: research and context gathering")
@@ -120,6 +126,7 @@ fun createSubagentTools(
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
                 put("steps", JsonPrimitive(result.steps.coerceAtLeast(result.transcript.size)))
+                put("tool_calls", JsonPrimitive(result.toolCallCount))
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },

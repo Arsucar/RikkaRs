@@ -26,6 +26,12 @@
   <string name="subagent_max_depth_title">Max nesting depth</string>
   <string name="subagent_max_depth_desc">Depth %1$d allows up to %2$d nested delegation level(s). Applies to new spawns only.</string>
   <string name="subagent_max_depth_disabled">Depth 1: the main agent may spawn subagents, but nested subagent delegation is not available.</string>
+  <string name="subagent_delegate_only_title">Delegate only</string>
+  <string name="subagent_delegate_only_desc">Root agent keeps only read-only + spawn_subagent tools; no skills, MCP, or writable workspace</string>
+  <string name="subagent_parallel_execution_title">Parallel tool execution</string>
+  <string name="subagent_parallel_execution_desc">Run multiple tool calls in the same turn in parallel</string>
+  <string name="subagent_profile_extra_local_tools_title">Extra local tools (on inherit)</string>
+  <string name="subagent_profile_extra_local_tools_desc">Added on top of inherited parent local tools</string>
   <string name="subagent_profiles_section">Profiles</string>
   <string name="subagent_profiles_section_desc">Built-in, global, and assistant-specific profiles</string>
   <string name="subagent_profiles_empty">No profiles configured.</string>
@@ -44,6 +50,10 @@
   <string name="subagent_delete_profile_desc">Remove this custom profile from the assistant?</string>
   <string name="subagent_profile_name">Name</string>
   <string name="subagent_profile_name_desc">Lowercase letters, digits, underscore; must start with a letter</string>
+  <string name="subagent_profile_tab_basic">Basic</string>
+  <string name="subagent_profile_tab_model">Model</string>
+  <string name="subagent_profile_tab_tools">Tools</string>
+  <string name="subagent_profile_tab_output">Output</string>
   <string name="subagent_profile_display_name">Display name</string>
   <string name="subagent_profile_description">Description</string>
   <string name="subagent_profile_description_desc">Shown to the main model when choosing a profile</string>
@@ -61,6 +71,12 @@
   <string name="subagent_workspace_approval_inherit">Inherit</string>
   <string name="subagent_workspace_approval_auto">Auto</string>
   <string name="subagent_workspace_approval_override">Override</string>
+  <string name="subagent_workspace_access_none_desc">Subagent cannot access workspace files</string>
+  <string name="subagent_workspace_access_read_only_desc">Subagent can read workspace files and run shell commands</string>
+  <string name="subagent_workspace_access_full_desc">Subagent can read, write, edit workspace files and run shell commands</string>
+  <string name="subagent_workspace_approval_inherit_desc">Inherit approval settings from parent agent</string>
+  <string name="subagent_workspace_approval_auto_desc">Auto-approve all tool calls</string>
+  <string name="subagent_workspace_approval_override_desc">Customize approval per tool</string>
   <string name="subagent_profile_temperature">Temperature</string>
   <string name="subagent_profile_temperature_desc">Off inherits assistant settings</string>
   <string name="subagent_profile_top_p">Top P</string>
@@ -74,6 +90,7 @@
   <string name="subagent_profile_inherit_tools">Inherit tools</string>
   <string name="subagent_profile_inherit_tools_desc">Use parent tool surface minus exclusions, or pick tools explicitly</string>
   <string name="subagent_profile_excluded_tools">Excluded tools</string>
+  <string name="subagent_profile_excluded_tool_add_hint">Add tool name</string>
   <string name="subagent_profile_local_tools">Local tools</string>
   <string name="subagent_profile_skills">Skills</string>
   <string name="subagent_profile_mcp_servers">MCP servers</string>

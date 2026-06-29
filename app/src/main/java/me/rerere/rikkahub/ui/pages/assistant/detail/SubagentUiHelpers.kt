@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceApproval
 import me.rerere.rikkahub.data.model.Assistant
@@ -28,7 +29,7 @@ internal fun subagentListEntries(
 ): List<SubagentListEntry> {
     val customByName = assistant.subagentProfiles.associateBy { it.name }
 
-    val globals = globalProfiles
+    val globals = SubagentRegistry.effectiveGlobalProfiles(globalProfiles)
         .filter { it.name !in customByName }
         .map { profile ->
             val disabled = profile.name in assistant.disabledGlobalSubagents
@@ -72,5 +73,19 @@ internal fun workspaceApprovalLabel(approval: WorkspaceApproval): String = when 
     WorkspaceApproval.OVERRIDE -> stringResource(R.string.subagent_workspace_approval_override)
 }
 
+@Composable
+internal fun workspaceAccessDescription(access: WorkspaceAccess): String = when (access) {
+    WorkspaceAccess.NONE -> stringResource(R.string.subagent_workspace_access_none_desc)
+    WorkspaceAccess.READ_ONLY -> stringResource(R.string.subagent_workspace_access_read_only_desc)
+    WorkspaceAccess.FULL -> stringResource(R.string.subagent_workspace_access_full_desc)
+}
+
+@Composable
+internal fun workspaceApprovalDescription(approval: WorkspaceApproval): String = when (approval) {
+    WorkspaceApproval.INHERIT -> stringResource(R.string.subagent_workspace_approval_inherit_desc)
+    WorkspaceApproval.AUTO -> stringResource(R.string.subagent_workspace_approval_auto_desc)
+    WorkspaceApproval.OVERRIDE -> stringResource(R.string.subagent_workspace_approval_override_desc)
+}
+
 internal fun isGlobalSubagentName(name: String, globalProfiles: List<SubagentProfile>): Boolean =
-    name in globalProfiles.map { it.name }
+    name in SubagentRegistry.effectiveGlobalProfiles(globalProfiles).map { it.name }

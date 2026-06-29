@@ -374,12 +374,16 @@ internal fun AssistantBasicContent(
                     )
                 }
             ) {
+                var localContextMessageSize by remember(assistant.id, assistant.contextMessageSize) {
+                    mutableStateOf(assistant.contextMessageSize.toFloat())
+                }
                 Slider(
-                    value = assistant.contextMessageSize.toFloat(),
-                    onValueChange = {
+                    value = localContextMessageSize,
+                    onValueChange = { localContextMessageSize = it },
+                    onValueChangeFinished = {
                         onUpdate(
                             assistant.copy(
-                                contextMessageSize = it.roundToInt()
+                                contextMessageSize = localContextMessageSize.roundToInt()
                             )
                         )
                     },
@@ -524,6 +528,9 @@ internal fun AssistantBasicContent(
 
             if (!assistant.useGradientBackground && assistant.background != null) {
                 val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+                var localBackgroundOpacity by remember(assistant.id, assistant.backgroundOpacity) {
+                    mutableStateOf(backgroundOpacity)
+                }
                 HorizontalDivider()
                 FormItem(
                     modifier = Modifier.padding(8.dp),
@@ -535,11 +542,12 @@ internal fun AssistantBasicContent(
                     }
                 ) {
                     Slider(
-                        value = backgroundOpacity,
-                        onValueChange = {
+                        value = localBackgroundOpacity,
+                        onValueChange = { localBackgroundOpacity = it },
+                        onValueChangeFinished = {
                             onUpdate(
                                 assistant.copy(
-                                    backgroundOpacity = it.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
+                                    backgroundOpacity = localBackgroundOpacity.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
                                 )
                             )
                         },
@@ -550,7 +558,7 @@ internal fun AssistantBasicContent(
                     Text(
                         text = stringResource(
                             R.string.assistant_page_background_opacity_value,
-                            (backgroundOpacity * 100).roundToInt()
+                            (localBackgroundOpacity * 100).roundToInt()
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),

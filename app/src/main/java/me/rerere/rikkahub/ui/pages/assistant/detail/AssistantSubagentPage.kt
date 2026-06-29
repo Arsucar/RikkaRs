@@ -10,15 +10,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
-
-
+import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -49,7 +50,7 @@ import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-
+import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -110,6 +111,14 @@ private fun AssistantSubagentContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            AssistantSubagentHubCard(
+                assistant = assistant,
+                onUpdate = onUpdate,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         item {
             Box(
                 modifier = Modifier
@@ -398,5 +407,103 @@ private fun generateCloneName(
             return candidate
         }
         i++
+    }
+}
+
+@Composable
+private fun AssistantSubagentHubCard(
+    assistant: Assistant,
+    onUpdate: (Assistant) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+        modifier = modifier,
+    ) {
+        FormItem(
+            modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_enable_title)) },
+            description = { Text(stringResource(R.string.subagent_enable_desc)) },
+            tail = {
+                Switch(
+                    checked = assistant.enableSubagents,
+                    onCheckedChange = { enabled ->
+                        onUpdate(assistant.copy(enableSubagents = enabled))
+                    },
+                )
+            },
+        )
+
+        HorizontalDivider()
+
+        FormItem(
+            modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_max_depth_title)) },
+            description = {
+                if (assistant.subagentMaxDepth <= 1) {
+                    Text(stringResource(R.string.subagent_max_depth_disabled))
+                } else {
+                    Text(
+                        stringResource(
+                            R.string.subagent_max_depth_desc,
+                            assistant.subagentMaxDepth,
+                            assistant.subagentMaxDepth - 1,
+                        )
+                    )
+                }
+            },
+        ) {
+            var localMaxDepth by remember(assistant.id, assistant.subagentMaxDepth) {
+                mutableStateOf(assistant.subagentMaxDepth.toFloat())
+            }
+            Slider(
+                value = localMaxDepth,
+                onValueChange = { localMaxDepth = it },
+                onValueChangeFinished = {
+                    onUpdate(
+                        assistant.copy(
+                            subagentMaxDepth = localMaxDepth.toInt().coerceIn(1, 5)
+                        )
+                    )
+                },
+                valueRange = 1f..5f,
+                steps = 3,
+                enabled = assistant.enableSubagents,
+            )
+        }
+
+        HorizontalDivider()
+
+        FormItem(
+            modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_delegate_only_title)) },
+            description = { Text(stringResource(R.string.subagent_delegate_only_desc)) },
+            tail = {
+                Switch(
+                    checked = assistant.subagentDelegateOnly,
+                    onCheckedChange = { v ->
+                        onUpdate(assistant.copy(subagentDelegateOnly = v))
+                    },
+                    enabled = assistant.enableSubagents,
+                )
+            },
+        )
+
+        HorizontalDivider()
+
+        FormItem(
+            modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_parallel_execution_title)) },
+            description = { Text(stringResource(R.string.subagent_parallel_execution_desc)) },
+            tail = {
+                Switch(
+                    checked = assistant.parallelToolExecution,
+                    onCheckedChange = { v ->
+                        onUpdate(assistant.copy(parallelToolExecution = v))
+                    },
+                    enabled = assistant.enableSubagents,
+                )
+            },
+        )
     }
 }

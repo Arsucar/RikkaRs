@@ -273,7 +273,36 @@ class SubagentModelTest {
         val resolved = SubagentRegistry.resolveProfile("explore", assistant, listOf(exploreBuiltin))
         assertNotNull(resolved)
         assertEquals("Custom Explorer", resolved!!.displayName)
+        assertEquals(exploreBuiltin.description, resolved.description)
         assertEquals(99, resolved.maxSteps)
+    }
+
+    @Test
+    fun effectiveGlobalProfiles_emptyGlobal_returnsAllBuiltins() {
+        val effective = SubagentRegistry.effectiveGlobalProfiles(emptyList())
+        assertEquals(
+            SubagentRegistry.BUILTIN_PROFILES.map { it.name }.toSet(),
+            effective.map { it.name }.toSet(),
+        )
+    }
+
+    @Test
+    fun effectiveGlobalProfiles_partialGlobal_unionsMissingBuiltins() {
+        val customExplore = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }.copy(
+            displayName = "My Explore",
+        )
+        val effective = SubagentRegistry.effectiveGlobalProfiles(listOf(customExplore))
+        val names = effective.map { it.name }.toSet()
+        assertTrue(names.containsAll(setOf("explore", "coder", "reviewer")))
+        assertEquals("My Explore", effective.first { it.name == "explore" }.displayName)
+    }
+
+    @Test
+    fun effectiveGlobalProfiles_customOverridesBuiltinOnSameName() {
+        val customCoder = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "coder" }.copy(maxSteps = 7)
+        val effective = SubagentRegistry.effectiveGlobalProfiles(listOf(customCoder))
+        assertEquals(7, effective.first { it.name == "coder" }.maxSteps)
+        assertTrue(effective.any { it.name == "reviewer" })
     }
 
     @Test

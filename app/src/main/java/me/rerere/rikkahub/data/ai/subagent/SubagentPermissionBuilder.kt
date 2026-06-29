@@ -118,13 +118,17 @@ fun buildSubagentTools(
     parentTools: List<Tool>,
     workspaceToolsFactory: (WorkspaceAccess) -> List<Tool>,
     spawnToolBuilder: (() -> Tool)? = null,
+    extraLocalToolsProvider: () -> List<Tool> = { emptyList() },
 ): List<Tool> {
     val workspaceTools = workspaceToolsFactory(profile.workspaceAccess)
     val base = if (profile.inheritTools) {
         val nonWorkspaceParent = parentTools
             .filter { it.name !in WorkspaceToolNames }
             .filter { it.name !in profile.excludedTools }
-        nonWorkspaceParent + workspaceTools
+        val extras = extraLocalToolsProvider()
+            .filter { it.name !in WorkspaceToolNames }
+            .filter { it.name !in profile.excludedTools }
+        nonWorkspaceParent + extras + workspaceTools
     } else {
         // TODO: expand with profile.localTools, enabledSkills, mcpServerIds when inheritTools is false
         workspaceTools

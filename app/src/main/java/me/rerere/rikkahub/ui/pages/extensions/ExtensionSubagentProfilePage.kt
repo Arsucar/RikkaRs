@@ -3,12 +3,15 @@ package me.rerere.rikkahub.ui.pages.extensions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -16,12 +19,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.pages.assistant.detail.SubagentProfileForm
@@ -44,14 +53,15 @@ fun ExtensionSubagentProfilePage(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val globalProfiles = settings.globalSubagentProfiles
-    val resolved = globalProfiles.firstOrNull { it.name == profileName }
+    val effectiveGlobals = SubagentRegistry.effectiveGlobalProfiles(globalProfiles)
+    val resolved = effectiveGlobals.firstOrNull { it.name == profileName }
         ?: SubagentProfile(name = profileName)
 
     var pathDraft by remember(profileName) { mutableStateOf("") }
-    var excludedDraft by remember(profileName) { mutableStateOf("") }
 
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
         val base = globalProfiles.firstOrNull { it.name == profileName }
+            ?: effectiveGlobals.firstOrNull { it.name == profileName }
             ?: SubagentProfile(name = profileName)
         val updated = transform(base)
         val newProfiles = globalProfiles
@@ -74,29 +84,61 @@ fun ExtensionSubagentProfilePage(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
+        val scope = rememberCoroutineScope()
+        val pagerState = rememberPagerState { 4 }
+
         Column(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
                 .padding(16.dp)
-                .imePadding()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .imePadding(),
         ) {
-            SubagentProfileForm(
-                resolved = resolved,
-                profileName = profileName,
-                createMode = createMode,
-                providers = settings.providers,
-                mcpServers = settings.mcpServers,
-                skills = skills,
-                readOnly = false,
-                pathDraft = pathDraft,
-                onPathDraftChange = { pathDraft = it },
-                excludedDraft = excludedDraft,
-                onExcludedDraftChange = { excludedDraft = it },
-                onPersist = ::persist,
-            )
+            SecondaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = Color.Transparent,
+            ) {
+                Tab(
+                    selected = pagerState.currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    text = { Text(stringResource(R.string.subagent_profile_tab_basic)) },
+                )
+                Tab(
+                    selected = pagerState.currentPage == 1,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                    text = { Text(stringResource(R.string.subagent_profile_tab_model)) },
+                )
+                Tab(
+                    selected = pagerState.currentPage == 2,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    text = { Text(stringResource(R.string.subagent_profile_tab_tools)) },
+                )
+                Tab(
+                    selected = pagerState.currentPage == 3,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
+                    text = { Text(stringResource(R.string.subagent_profile_tab_output)) },
+                )
+            }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                SubagentProfileForm(
+                    resolved = resolved,
+                    profileName = profileName,
+                    createMode = createMode,
+                    providers = settings.providers,
+                    mcpServers = settings.mcpServers,
+                    skills = skills,
+                    readOnly = false,
+                    pathDraft = pathDraft,
+                    onPathDraftChange = { pathDraft = it },
+                    onPersist = ::persist,
+                    tabPage = page,
+                )
+            }
         }
     }
 }

@@ -152,14 +152,6 @@ fun AssistantDetailPage(id: String) {
                     )
                 }
             }
-
-            item {
-                AssistantSubagentHubControls(
-                    assistant = assistant,
-                    onUpdate = { vm.update(it) },
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-            }
         }
     }
 }

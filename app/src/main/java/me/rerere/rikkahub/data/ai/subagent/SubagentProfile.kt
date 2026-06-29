@@ -75,6 +75,7 @@ data class SubagentProfile(
     val inheritTools: Boolean = true,
     val excludedTools: Set<String> = emptySet(),
     val localTools: List<LocalToolOption> = emptyList(),
+    val extraLocalTools: List<LocalToolOption> = emptyList(),
     val enabledSkills: Set<String> = emptySet(),
     val mcpServerIds: Set<Uuid> = emptySet(),
     val toolApprovalOverrides: Map<String, Boolean> = emptyMap(),
@@ -103,6 +104,8 @@ data class SubagentResult(
     @SerialName("depth") val depth: Int = 0,
     @SerialName("usage") val usage: TokenUsage? = null,
     @SerialName("steps") val steps: Int = 0,
+    /// 子代理本轮调用的工具总数（便于父代理审计"它是否真干了活"，区别于 generation 轮次 steps）。
+    @SerialName("tool_call_count") val toolCallCount: Int = 0,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
 )
 
@@ -168,3 +171,22 @@ fun removeSubagentProfile(
 
 fun SubagentProfile.toggleSkill(skillName: String, enabled: Boolean): SubagentProfile =
     copy(enabledSkills = if (enabled) enabledSkills + skillName else enabledSkills - skillName)
+
+fun SubagentProfile.withLocalToolOptions(
+    options: List<LocalToolOption>,
+    extra: Boolean,
+): SubagentProfile =
+    if (extra) copy(extraLocalTools = options) else copy(localTools = options)
+
+/**
+ * Fills fields that are still at [SubagentProfile] defaults from [base] (typically a global/builtin profile).
+ * Used when a sparse assistant-local override is stored without copying inherited metadata.
+ */
+internal fun SubagentProfile.mergeInheritedFrom(base: SubagentProfile): SubagentProfile {
+    if (name != base.name) return this
+    return copy(
+        displayName = displayName.takeIf { it.isNotBlank() && it != name } ?: base.displayName,
+        description = description.ifBlank { base.description },
+        systemPrompt = systemPrompt.ifBlank { base.systemPrompt },
+    )
+}

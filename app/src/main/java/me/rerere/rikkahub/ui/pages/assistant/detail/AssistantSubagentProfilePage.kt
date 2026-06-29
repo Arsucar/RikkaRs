@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -17,13 +20,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -31,10 +38,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,14 +51,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.rikkahub.data.ai.subagent.SUBAGENT_TOOL_NAMES
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceApproval
 import me.rerere.rikkahub.data.ai.subagent.toggleSkill
 import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.withLocalToolOptions
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
@@ -124,23 +138,22 @@ internal fun AssistantSubagentProfileContent(
     onUpdate: (Assistant) -> Unit,
     readOnly: Boolean = false,
 ) {
+    val effectiveGlobals = SubagentRegistry.effectiveGlobalProfiles(globalProfiles)
     val resolved = SubagentRegistry.resolveProfile(profileName, assistant, globalProfiles)
-        ?: assistant.subagentProfiles.firstOrNull { it.name == profileName }
-        ?: globalProfiles.firstOrNull { it.name == profileName }
+        ?: effectiveGlobals.firstOrNull { it.name == profileName }
         ?: SubagentProfile(name = profileName)
 
-    val isGlobalOnly = profileName in globalProfiles.map { it.name } &&
+    val isGlobalOnly = profileName in effectiveGlobals.map { it.name } &&
         profileName !in assistant.subagentProfiles.map { it.name }
 
     val latestAssistant = rememberUpdatedState(assistant)
     var pathDraft by remember(profileName) { mutableStateOf("") }
-    var excludedDraft by remember(profileName) { mutableStateOf("") }
 
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
         if (readOnly || isGlobalOnly) return
-        val base = SubagentRegistry.resolveProfile(profileName, latestAssistant.value, globalProfiles)
-            ?: latestAssistant.value.subagentProfiles.firstOrNull { it.name == profileName }
-            ?: globalProfiles.firstOrNull { it.name == profileName }
+        val base = latestAssistant.value.subagentProfiles.firstOrNull { it.name == profileName }
+            ?: SubagentRegistry.resolveProfile(profileName, latestAssistant.value, globalProfiles)
+            ?: SubagentRegistry.effectiveGlobalProfiles(globalProfiles).firstOrNull { it.name == profileName }
             ?: SubagentProfile(name = profileName)
         val updated = transform(base)
         onUpdate(
@@ -153,36 +166,69 @@ internal fun AssistantSubagentProfileContent(
         )
     }
 
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState { 4 }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
-            .imePadding()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .imePadding(),
     ) {
         if (isGlobalOnly) {
             Text(
                 text = stringResource(R.string.subagent_global_edit_in_extensions),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp),
             )
         }
-        SubagentProfileForm(
-            resolved = resolved,
-            profileName = profileName,
-            createMode = createMode,
-            globalProfiles = globalProfiles,
-            providers = providers,
-            mcpServers = mcpServers,
-            skills = skills,
-            readOnly = readOnly || isGlobalOnly,
-            pathDraft = pathDraft,
-            onPathDraftChange = { pathDraft = it },
-            excludedDraft = excludedDraft,
-            onExcludedDraftChange = { excludedDraft = it },
-            onPersist = ::persist,
-        )
+        SecondaryTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            containerColor = Color.Transparent,
+        ) {
+            Tab(
+                selected = pagerState.currentPage == 0,
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                text = { Text(stringResource(R.string.subagent_profile_tab_basic)) },
+            )
+            Tab(
+                selected = pagerState.currentPage == 1,
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                text = { Text(stringResource(R.string.subagent_profile_tab_model)) },
+            )
+            Tab(
+                selected = pagerState.currentPage == 2,
+                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                text = { Text(stringResource(R.string.subagent_profile_tab_tools)) },
+            )
+            Tab(
+                selected = pagerState.currentPage == 3,
+                onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
+                text = { Text(stringResource(R.string.subagent_profile_tab_output)) },
+            )
+        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) { page ->
+            SubagentProfileForm(
+                resolved = resolved,
+                profileName = profileName,
+                createMode = createMode,
+                globalProfiles = globalProfiles,
+                providers = providers,
+                mcpServers = mcpServers,
+                skills = skills,
+                readOnly = readOnly || isGlobalOnly,
+                pathDraft = pathDraft,
+                onPathDraftChange = { pathDraft = it },
+                onPersist = ::persist,
+                tabPage = page,
+            )
+        }
     }
 }
 
@@ -198,96 +244,99 @@ internal fun SubagentProfileForm(
     readOnly: Boolean,
     pathDraft: String,
     onPathDraftChange: (String) -> Unit,
-    excludedDraft: String,
-    onExcludedDraftChange: (String) -> Unit,
     onPersist: (transform: (SubagentProfile) -> SubagentProfile) -> Unit,
+    tabPage: Int,
 ) {
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
         if (!readOnly) onPersist(transform)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_name)) },
-                description = { Text(stringResource(R.string.subagent_profile_name_desc)) },
-            ) {
-                if (createMode && profileName !in globalProfiles.map { it.name }) {
-                    OutlinedTextField(
-                        value = resolved.name,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        supportingText = {
-                            Text(stringResource(R.string.subagent_profile_name_desc))
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        when (tabPage) {
+            0 -> {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                    FormItem(
+                        modifier = Modifier.padding(8.dp),
+                        label = { Text(stringResource(R.string.subagent_profile_display_name)) },
+                    ) {
+                        OutlinedTextField(
+                            value = resolved.displayName,
+                            onValueChange = { v -> persist { it.copy(displayName = v) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    FormItem(
+                        modifier = Modifier.padding(8.dp),
+                        label = { Text(stringResource(R.string.subagent_profile_description)) },
+                        description = { Text(stringResource(R.string.subagent_profile_description_desc)) },
+                    ) {
+                        OutlinedTextField(
+                            value = resolved.description,
+                            onValueChange = { v -> persist { it.copy(description = v) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    FormItem(
+                        modifier = Modifier.padding(8.dp),
+                        label = { Text(stringResource(R.string.subagent_profile_system_prompt)) },
+                        description = { Text(stringResource(R.string.subagent_profile_system_prompt_desc)) },
+                    ) {
+                        val promptState = rememberTextFieldState(initialText = resolved.systemPrompt)
+                        // Sync when profile changes (user navigates to another subagent)
+                        LaunchedEffect(profileName) {
+                            promptState.edit { replace(0, length, resolved.systemPrompt) }
+                        }
+                        // Sync when async-loaded data arrives after composition
+                        if (promptState.text.isEmpty() && resolved.systemPrompt.isNotEmpty()) {
+                            LaunchedEffect(Unit) {
+                                promptState.edit { replace(0, length, resolved.systemPrompt) }
+                            }
+                        }
+                        LaunchedEffect(promptState) {
+                            snapshotFlow { promptState.text.toString() }.collect { text ->
+                                persist { it.copy(systemPrompt = text) }
+                            }
+                        }
+                        TextArea(
+                            state = promptState,
+                            label = stringResource(R.string.subagent_profile_system_prompt),
+                            minLines = 6,
+                            maxLines = 15,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    FormItem(
+                        modifier = Modifier.padding(8.dp),
+                        label = { Text(stringResource(R.string.subagent_profile_can_spawn)) },
+                        description = { Text(stringResource(R.string.subagent_profile_can_spawn_desc)) },
+                        tail = {
+                            Switch(
+                                checked = resolved.canSpawn,
+                                onCheckedChange = { v -> persist { it.copy(canSpawn = v) } },
+                            )
                         },
                     )
-                } else {
-                    OutlinedTextField(
-                        value = resolved.name,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
             }
 
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_display_name)) },
-            ) {
-                OutlinedTextField(
-                    value = resolved.displayName,
-                    onValueChange = { v -> persist { it.copy(displayName = v) } },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_description)) },
-                description = { Text(stringResource(R.string.subagent_profile_description_desc)) },
-            ) {
-                OutlinedTextField(
-                    value = resolved.description,
-                    onValueChange = { v -> persist { it.copy(description = v) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                )
-            }
-
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_system_prompt)) },
-                description = { Text(stringResource(R.string.subagent_profile_system_prompt_desc)) },
-            ) {
-                val promptState = rememberTextFieldState(initialText = resolved.systemPrompt)
-                LaunchedEffect(profileName) {
-                    promptState.edit { replace(0, length, resolved.systemPrompt) }
-                }
-                LaunchedEffect(promptState) {
-                    snapshotFlow { promptState.text.toString() }.collect { text ->
-                        persist { it.copy(systemPrompt = text) }
-                    }
-                }
-                TextArea(
-                    state = promptState,
-                    label = stringResource(R.string.subagent_profile_system_prompt),
-                    minLines = 6,
-                    maxLines = 15,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            HorizontalDivider()
-
+            1 -> {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_model)) },
@@ -303,67 +352,6 @@ internal fun SubagentProfileForm(
             }
 
             HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_workspace_access)) },
-            ) {
-                Select(
-                    options = WorkspaceAccess.entries,
-                    selectedOption = resolved.workspaceAccess,
-                    onOptionSelected = { access -> persist { it.copy(workspaceAccess = access) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    optionToString = { workspaceAccessLabel(it) },
-                )
-            }
-
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_workspace_approval)) },
-            ) {
-                Select(
-                    options = WorkspaceApproval.entries,
-                    selectedOption = resolved.workspaceApproval,
-                    onOptionSelected = { approval -> persist { it.copy(workspaceApproval = approval) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    optionToString = { workspaceApprovalLabel(it) },
-                )
-            }
-
-            HorizontalDivider()
-
-
-            if (resolved.workspaceApproval == WorkspaceApproval.OVERRIDE) {
-                HorizontalDivider()
-
-                FormItem(
-                    modifier = Modifier.padding(8.dp),
-                    label = { Text(stringResource(R.string.subagent_profile_tool_approval_overrides)) },
-                    description = { Text(stringResource(R.string.subagent_profile_tool_approval_overrides_desc)) },
-                ) {
-                    SubagentToolApprovalOverridesEditor(
-                        overrides = resolved.toolApprovalOverrides,
-                        onChange = { map -> persist { it.copy(toolApprovalOverrides = map) } },
-                    )
-                }
-            }
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_can_spawn)) },
-                description = { Text(stringResource(R.string.subagent_profile_can_spawn_desc)) },
-                tail = {
-                    Switch(
-                        checked = resolved.canSpawn,
-                        onCheckedChange = { v -> persist { it.copy(canSpawn = v) } },
-                    )
-                },
-            )
-        }
-
-        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_temperature)) },
@@ -464,18 +452,71 @@ internal fun SubagentProfileForm(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_max_steps)) },
             ) {
+                var localMaxSteps by remember(profileName, resolved.maxSteps) {
+                    mutableStateOf(resolved.maxSteps.toFloat())
+                }
                 Slider(
-                    value = resolved.maxSteps.toFloat(),
-                    onValueChange = { v ->
-                        persist { it.copy(maxSteps = v.roundToInt().coerceIn(1, 256)) }
+                    value = localMaxSteps,
+                    onValueChange = { localMaxSteps = it },
+                    onValueChangeFinished = {
+                        persist { it.copy(maxSteps = localMaxSteps.roundToInt().coerceIn(1, 256)) }
                     },
                     valueRange = 1f..256f,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    text = resolved.maxSteps.toString(),
+                    text = localMaxSteps.roundToInt().toString(),
                     style = MaterialTheme.typography.labelSmall,
                 )
+            }
+                }
+            }
+
+            2 -> {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_workspace_access)) },
+            ) {
+                Select(
+                    options = WorkspaceAccess.entries,
+                    selectedOption = resolved.workspaceAccess,
+                    onOptionSelected = { access -> persist { it.copy(workspaceAccess = access) } },
+                    modifier = Modifier.fillMaxWidth(),
+                    optionToString = { workspaceAccessLabel(it) },
+                    optionDescription = { workspaceAccessDescription(it) },
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_workspace_approval)) },
+            ) {
+                Select(
+                    options = WorkspaceApproval.entries,
+                    selectedOption = resolved.workspaceApproval,
+                    onOptionSelected = { approval -> persist { it.copy(workspaceApproval = approval) } },
+                    modifier = Modifier.fillMaxWidth(),
+                    optionToString = { workspaceApprovalLabel(it) },
+                    optionDescription = { workspaceApprovalDescription(it) },
+                )
+            }
+
+            if (resolved.workspaceApproval == WorkspaceApproval.OVERRIDE) {
+                HorizontalDivider()
+
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text(stringResource(R.string.subagent_profile_tool_approval_overrides)) },
+                    description = { Text(stringResource(R.string.subagent_profile_tool_approval_overrides_desc)) },
+                ) {
+                    SubagentToolApprovalOverridesEditor(
+                        overrides = resolved.toolApprovalOverrides,
+                        onChange = { map -> persist { it.copy(toolApprovalOverrides = map) } },
+                    )
+                }
             }
 
             HorizontalDivider()
@@ -502,19 +543,6 @@ internal fun SubagentProfileForm(
 
             FormItem(
                 modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_stream)) },
-                tail = {
-                    Switch(
-                        checked = resolved.streamOutput,
-                        onCheckedChange = { v -> persist { it.copy(streamOutput = v) } },
-                    )
-                },
-            )
-
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_inherit_tools)) },
                 description = { Text(stringResource(R.string.subagent_profile_inherit_tools_desc)) },
                 tail = {
@@ -531,32 +559,54 @@ internal fun SubagentProfileForm(
                     modifier = Modifier.padding(8.dp),
                     label = { Text(stringResource(R.string.subagent_profile_excluded_tools)) },
                 ) {
-                    PathChipEditor(
-                        paths = resolved.excludedTools.toList(),
-                        draft = excludedDraft,
-                        onDraftChange = onExcludedDraftChange,
-                        onAdd = { tool ->
-                            if (tool.isNotBlank()) {
-                                persist { it.copy(excludedTools = it.excludedTools + tool) }
-                                onExcludedDraftChange("")
-                            }
+                    SubagentExcludedToolChips(
+                        selected = resolved.excludedTools,
+                        onSelectionChange = { next ->
+                            persist { it.copy(excludedTools = next) }
                         },
-                        onRemove = { tool -> persist { it.copy(excludedTools = it.excludedTools - tool) } },
+                    )
+                }
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text(stringResource(R.string.subagent_profile_extra_local_tools_title)) },
+                    description = { Text(stringResource(R.string.subagent_profile_extra_local_tools_desc)) },
+                ) {
+                    SubagentLocalToolOptionChips(
+                        selected = resolved.extraLocalTools,
+                        onSelectionChange = { next ->
+                            persist { it.withLocalToolOptions(next, extra = true) }
+                        },
                     )
                 }
             }
-        }
+                }
 
-        if (!resolved.inheritTools) {
-            LocalToolsSkillMcpSection(
-                resolved = resolved,
-                skills = skills,
-                mcpServers = mcpServers,
-                onPersist = ::persist,
+                if (!resolved.inheritTools) {
+                    LocalToolsSkillMcpSection(
+                        resolved = resolved,
+                        skills = skills,
+                        mcpServers = mcpServers,
+                        onPersist = ::persist,
+                    )
+                }
+            }
+
+            3 -> {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_stream)) },
+                tail = {
+                    Switch(
+                        checked = resolved.streamOutput,
+                        onCheckedChange = { v -> persist { it.copy(streamOutput = v) } },
+                    )
+                },
             )
-        }
 
-        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            HorizontalDivider()
+
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_memory)) },
@@ -574,17 +624,21 @@ internal fun SubagentProfileForm(
                 label = { Text(stringResource(R.string.subagent_profile_summary_min_length)) },
                 description = { Text(stringResource(R.string.subagent_profile_summary_min_length_desc)) },
             ) {
+                var localSummaryMinLength by remember(profileName, resolved.summaryMinLength) {
+                    mutableStateOf(resolved.summaryMinLength.toFloat())
+                }
                 Slider(
-                    value = resolved.summaryMinLength.toFloat(),
-                    onValueChange = { v ->
-                        persist { it.copy(summaryMinLength = v.roundToInt().coerceIn(0, 1000)) }
+                    value = localSummaryMinLength,
+                    onValueChange = { localSummaryMinLength = it },
+                    onValueChangeFinished = {
+                        persist { it.copy(summaryMinLength = localSummaryMinLength.roundToInt().coerceIn(0, 1000)) }
                     },
                     valueRange = 0f..1000f,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    text = if (resolved.summaryMinLength > 0) {
-                        stringResource(R.string.subagent_profile_summary_min_length_value, resolved.summaryMinLength)
+                    text = if (localSummaryMinLength.roundToInt() > 0) {
+                        stringResource(R.string.subagent_profile_summary_min_length_value, localSummaryMinLength.roundToInt())
                     } else {
                         stringResource(R.string.subagent_profile_summary_min_length_disabled)
                     },
@@ -599,21 +653,27 @@ internal fun SubagentProfileForm(
                 label = { Text(stringResource(R.string.subagent_profile_summary_continuation_attempts)) },
                 description = { Text(stringResource(R.string.subagent_profile_summary_continuation_attempts_desc)) },
             ) {
+                var localSummaryContAttempts by remember(profileName, resolved.summaryContinuationAttempts) {
+                    mutableStateOf(resolved.summaryContinuationAttempts.toFloat())
+                }
                 Slider(
-                    value = resolved.summaryContinuationAttempts.toFloat(),
-                    onValueChange = { v ->
-                        persist { it.copy(summaryContinuationAttempts = v.roundToInt().coerceIn(0, 5)) }
+                    value = localSummaryContAttempts,
+                    onValueChange = { localSummaryContAttempts = it },
+                    onValueChangeFinished = {
+                        persist { it.copy(summaryContinuationAttempts = localSummaryContAttempts.roundToInt().coerceIn(0, 5)) }
                     },
                     valueRange = 0f..5f,
                     steps = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    text = resolved.summaryContinuationAttempts.toString(),
+                    text = localSummaryContAttempts.roundToInt().toString(),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
 
+                }
+            }
         }
     }
 }
@@ -625,6 +685,86 @@ private val SubagentWorkspaceToolNames = listOf(
     "workspace_edit_file",
     "workspace_shell",
 )
+
+private val SubagentExcludedToolSuggestions: List<String> =
+    SubagentWorkspaceToolNames + SUBAGENT_TOOL_NAMES.toList()
+
+private val SubagentProfileLocalToolChipOptions = listOf(
+    LocalToolOption.JavascriptEngine,
+    LocalToolOption.TimeInfo,
+    LocalToolOption.Clipboard,
+    LocalToolOption.Tts,
+    LocalToolOption.ScreenTime,
+    LocalToolOption.Logs,
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SubagentExcludedToolChips(
+    selected: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
+) {
+    var localSelected by remember { mutableStateOf(selected) }
+    LaunchedEffect(selected) {
+        if (selected != localSelected) {
+            localSelected = selected
+        }
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        SubagentExcludedToolSuggestions.forEach { tool ->
+            FilterChip(
+                selected = tool in localSelected,
+                onClick = {
+                    val next = if (tool in localSelected) {
+                        localSelected - tool
+                    } else {
+                        localSelected + tool
+                    }
+                    localSelected = next
+                    onSelectionChange(next)
+                },
+                label = { Text(tool) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SubagentLocalToolOptionChips(
+    selected: List<LocalToolOption>,
+    onSelectionChange: (List<LocalToolOption>) -> Unit,
+) {
+    var localSelected by remember { mutableStateOf(selected) }
+    LaunchedEffect(selected) {
+        if (selected != localSelected) {
+            localSelected = selected
+        }
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        SubagentProfileLocalToolChipOptions.forEach { option ->
+            FilterChip(
+                selected = option in localSelected,
+                onClick = {
+                    val next = if (option in localSelected) {
+                        localSelected - option
+                    } else {
+                        localSelected + option
+                    }
+                    localSelected = next
+                    onSelectionChange(next)
+                },
+                label = { Text(localToolLabel(option)) },
+            )
+        }
+    }
+}
 
 @Composable
 private fun SubagentToolApprovalOverridesEditor(
@@ -678,6 +818,11 @@ private fun PathChipEditor(
     onDraftChange: (String) -> Unit,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
+    addPlaceholder: @Composable () -> Unit = {
+        Text(stringResource(R.string.subagent_profile_path_add_hint))
+    },
+    suggestions: List<String> = emptyList(),
+    onToggleSuggestion: ((String) -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FlowRow(
@@ -687,8 +832,20 @@ private fun PathChipEditor(
             paths.forEach { path ->
                 InputChip(
                     selected = true,
-                    onClick = { onRemove(path) },
+                    onClick = {},
                     label = { Text(path) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { onRemove(path) },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Cancel01,
+                                contentDescription = stringResource(R.string.common_delete),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    },
                 )
             }
         }
@@ -701,7 +858,7 @@ private fun PathChipEditor(
                 onValueChange = onDraftChange,
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                placeholder = { Text(stringResource(R.string.subagent_profile_path_add_hint)) },
+                placeholder = addPlaceholder,
             )
             androidx.compose.material3.TextButton(
                 onClick = {
@@ -711,6 +868,20 @@ private fun PathChipEditor(
                 },
             ) {
                 Text(stringResource(R.string.common_confirm))
+            }
+        }
+        if (suggestions.isNotEmpty() && onToggleSuggestion != null) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                suggestions.forEach { tool ->
+                    FilterChip(
+                        selected = tool in paths,
+                        onClick = { onToggleSuggestion(tool) },
+                        label = { Text(tool) },
+                    )
+                }
             }
         }
     }
@@ -724,42 +895,17 @@ private fun LocalToolsSkillMcpSection(
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     onPersist: ((SubagentProfile) -> SubagentProfile) -> Unit,
 ) {
-    val localToolOptions = listOf(
-        LocalToolOption.JavascriptEngine,
-        LocalToolOption.TimeInfo,
-        LocalToolOption.Clipboard,
-        LocalToolOption.Tts,
-        LocalToolOption.ScreenTime,
-        LocalToolOption.Logs,
-    )
-
     Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         FormItem(
             modifier = Modifier.padding(8.dp),
             label = { Text(stringResource(R.string.subagent_profile_local_tools)) },
         ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                localToolOptions.forEach { option ->
-                    FilterChip(
-                        selected = option in resolved.localTools,
-                        onClick = {
-                            onPersist {
-                                it.copy(
-                                    localTools = if (option in it.localTools) {
-                                        it.localTools - option
-                                    } else {
-                                        it.localTools + option
-                                    }
-                                )
-                            }
-                        },
-                        label = { Text(localToolLabel(option)) },
-                    )
-                }
-            }
+            SubagentLocalToolOptionChips(
+                selected = resolved.localTools,
+                onSelectionChange = { next ->
+                    onPersist { it.withLocalToolOptions(next, extra = false) }
+                },
+            )
         }
 
         if (skills.isNotEmpty()) {

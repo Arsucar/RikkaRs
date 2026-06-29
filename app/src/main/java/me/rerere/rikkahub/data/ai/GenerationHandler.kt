@@ -255,7 +255,8 @@ class GenerationHandler(
             }
 
             val subagentCount = toolsToProcess.count { it.toolName == "spawn_subagent" }
-            val runInParallel = toolsToProcess.size > 1 && subagentCount > 1
+            val runInParallel =
+                (assistant.parallelToolExecution && toolsToProcess.size > 1) || subagentCount > 1
             val executedTools: List<UIMessagePart.Tool> = if (runInParallel) {
                 Log.i(TAG, "generateText: executing ${toolsToProcess.size} tools in parallel (subagents=$subagentCount)")
                 coroutineScope {

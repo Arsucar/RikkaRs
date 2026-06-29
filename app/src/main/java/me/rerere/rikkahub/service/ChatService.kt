@@ -81,6 +81,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
@@ -226,6 +227,13 @@ private val outputTransformers by lazy {
         RegexOutputTransformer,
     )
 }
+
+private val DELEGATE_ALLOWED_LOCAL_TOOLS = setOf(
+    LocalToolOption.TimeInfo,
+    LocalToolOption.Clipboard,
+    LocalToolOption.Logs,
+    LocalToolOption.AskUser,
+)
 
 class ChatService(
     private val context: Application,
@@ -655,15 +663,30 @@ class ChatService(
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
+                    val delegateOnly = assistant.enableSubagents && assistant.subagentDelegateOnly
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(assistant.localTools))
+                    addAll(
+                        localTools.getTools(
+                            if (delegateOnly) {
+                                assistant.localTools.filter { it in DELEGATE_ALLOWED_LOCAL_TOOLS }
+                            } else {
+                                assistant.localTools
+                            }
+                        )
+                    )
                     if (assistant.enableRecentChatsReference) {
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-                    if (assistant.enabledSkills.isNotEmpty()) {
+                    addAll(
+                        createWorkspaceToolsIfReady(
+                            assistant.workspaceId?.toString(),
+                            conversation.workspaceCwd,
+                            readOnly = delegateOnly,
+                        )
+                    )
+                    if (!delegateOnly && assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
                                 enabledSkills = assistant.enabledSkills,
@@ -672,35 +695,37 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().also { allTools ->
-                        val invalidNames = allTools
-                            .map { it.second }
-                            .distinct()
-                            .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
-                        if (invalidNames.isNotEmpty()) {
-                            addError(
-                                error = IllegalStateException(
-                                    context.getString(
-                                        R.string.error_mcp_invalid_server_name,
-                                        invalidNames.joinToString(", ")
-                                    )
-                                ),
-                                conversationId = conversationId,
+                    if (!delegateOnly) {
+                        mcpManager.getAllAvailableTools().also { allTools ->
+                            val invalidNames = allTools
+                                .map { it.second }
+                                .distinct()
+                                .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
+                            if (invalidNames.isNotEmpty()) {
+                                addError(
+                                    error = IllegalStateException(
+                                        context.getString(
+                                            R.string.error_mcp_invalid_server_name,
+                                            invalidNames.joinToString(", ")
+                                        )
+                                    ),
+                                    conversationId = conversationId,
+                                )
+                                return
+                            }
+                        }.forEach { (serverId, serverName, tool) ->
+                            add(
+                                Tool(
+                                    name = "mcp__${serverName}__${tool.name}",
+                                    description = tool.description ?: "",
+                                    parameters = { tool.inputSchema },
+                                    needsApproval = { tool.needsApproval },
+                                    execute = {
+                                        mcpManager.callTool(serverId, tool.name, it.jsonObject)
+                                    },
+                                )
                             )
-                            return
                         }
-                    }.forEach { (serverId, serverName, tool) ->
-                        add(
-                            Tool(
-                                name = "mcp__${serverName}__${tool.name}",
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = { tool.needsApproval },
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
                     }
                     if (assistant.enableSubagents) {
                         addAll(
@@ -712,6 +737,7 @@ class ChatService(
                                 workspaceCwd = conversation.workspaceCwd,
                                 conversationId = conversationId,
                                 depth = 0,
+                                delegateOnly = delegateOnly,
                             ),
                         )
                     }
@@ -777,7 +803,11 @@ class ChatService(
         }
     }
 
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+    private suspend fun createWorkspaceToolsIfReady(
+        workspaceId: String?,
+        cwd: String? = null,
+        readOnly: Boolean = false,
+    ): List<Tool> {
         if (workspaceId.isNullOrBlank()) return emptyList()
         val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
@@ -787,7 +817,8 @@ class ChatService(
             )
             return emptyList()
         }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        val all = createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        return if (readOnly) all.filter { it.name == "workspace_read_file" } else all
     }
 
     // ---- 检查无效消息 ----
@@ -1568,6 +1599,7 @@ class ChatService(
         workspaceCwd: String?,
         conversationId: Uuid?,
         depth: Int,
+        delegateOnly: Boolean = false,
     ): List<Tool> {
         val maxDepth = assistant.subagentMaxDepth.coerceAtLeast(1)
         val assistantId = assistant.id
@@ -1655,6 +1687,7 @@ class ChatService(
                     workspaceCwd = workspaceCwd,
                 )
             },
+            delegateOnly = delegateOnly && depth == 0,
         )
         createManageSubagentTool(
             json = json,
@@ -1768,6 +1801,7 @@ class ChatService(
                             val parent = live.assistants.firstOrNull { it.id == assistant.id } ?: assistant
                             subagentHost.askBtw(q, live, parent, parentModel, workspaceCwd)
                         },
+                        delegateOnly = false,
                     ).first { it.name == "spawn_subagent" }
                 }
             } else {
@@ -1781,6 +1815,13 @@ class ChatService(
                 parentTools = parentTools,
                 workspaceToolsFactory = workspaceToolsFactory,
                 spawnToolBuilder = spawnToolBuilder,
+                extraLocalToolsProvider = {
+                    if (profile.inheritTools) {
+                        localTools.getTools(profile.extraLocalTools)
+                    } else {
+                        emptyList()
+                    }
+                },
             ),
         )
     }

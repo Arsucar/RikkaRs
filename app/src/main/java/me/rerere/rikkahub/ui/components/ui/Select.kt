@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,7 @@ fun <T> Select(
     onOptionSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
     optionToString: @Composable (T) -> String = { it.toString() },
+    optionDescription: (@Composable (T) -> String)? = null,
     optionLeading: @Composable ((T) -> Unit)? = null,
     leading: @Composable () -> Unit = {},
     trailing: @Composable () -> Unit = {}
@@ -85,7 +87,22 @@ fun <T> Select(
                         expanded = false
                     },
                     text = {
-                        Text(text = optionToString(option), maxLines = 1)
+                        if (optionDescription != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = optionToString(option),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = optionDescription(option),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                )
+                            }
+                        } else {
+                            Text(text = optionToString(option), maxLines = 1)
+                        }
                     },
                     leadingIcon = optionLeading?.let {
                         { it(option) }

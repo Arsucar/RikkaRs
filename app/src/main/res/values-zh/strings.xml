@@ -26,6 +26,12 @@
   <string name="subagent_max_depth_title">最大嵌套深度</string>
   <string name="subagent_max_depth_desc">深度 %1$d 最多允许 %2$d 层嵌套委派，仅对新发起的子代理生效。</string>
   <string name="subagent_max_depth_disabled">深度为 1：主代理可派生子代理，但不支持子代理继续嵌套委派。</string>
+  <string name="subagent_delegate_only_title">仅委派</string>
+  <string name="subagent_delegate_only_desc">根代理仅保留只读与委派工具；不含 skills、MCP、可写 workspace</string>
+  <string name="subagent_parallel_execution_title">并行工具执行</string>
+  <string name="subagent_parallel_execution_desc">同一轮次并行执行多个工具调用</string>
+  <string name="subagent_profile_extra_local_tools_title">额外本地工具（继承时）</string>
+  <string name="subagent_profile_extra_local_tools_desc">在继承的父本地工具之上追加</string>
   <string name="subagent_profiles_section">档案</string>
   <string name="subagent_profiles_section_desc">内置、全局及助手专属子代理档案</string>
   <string name="subagent_profiles_empty">暂无档案。</string>
@@ -43,6 +49,10 @@
   <string name="subagent_delete_profile_desc">从本助手中移除此自定义档案？</string>
   <string name="subagent_profile_name">名称</string>
   <string name="subagent_profile_name_desc">小写字母、数字、下划线，且以字母开头</string>
+  <string name="subagent_profile_tab_basic">基础</string>
+  <string name="subagent_profile_tab_model">模型</string>
+  <string name="subagent_profile_tab_tools">工具</string>
+  <string name="subagent_profile_tab_output">输出</string>
   <string name="subagent_profile_display_name">显示名称</string>
   <string name="subagent_profile_description">描述</string>
   <string name="subagent_profile_description_desc">供主模型选择档案时阅读</string>
@@ -60,6 +70,12 @@
   <string name="subagent_workspace_approval_inherit">继承</string>
   <string name="subagent_workspace_approval_auto">自动</string>
   <string name="subagent_workspace_approval_override">覆盖</string>
+  <string name="subagent_workspace_access_none_desc">子代理无法访问工作区文件</string>
+  <string name="subagent_workspace_access_read_only_desc">子代理可以读取工作区文件，可以执行 shell 命令</string>
+  <string name="subagent_workspace_access_full_desc">子代理可以读取、写入、编辑工作区文件，可以执行 shell 命令</string>
+  <string name="subagent_workspace_approval_inherit_desc">沿用父代理的审批设置</string>
+  <string name="subagent_workspace_approval_auto_desc">自动批准所有工具调用</string>
+  <string name="subagent_workspace_approval_override_desc">自定义每个工具的审批策略</string>
   <string name="subagent_profile_temperature">温度</string>
   <string name="subagent_profile_temperature_desc">关闭则继承助手设置</string>
   <string name="subagent_profile_top_p">Top P</string>
@@ -73,6 +89,7 @@
   <string name="subagent_profile_inherit_tools">继承工具</string>
   <string name="subagent_profile_inherit_tools_desc">继承主代理工具并排除部分，或自行选择工具</string>
   <string name="subagent_profile_excluded_tools">排除的工具</string>
+  <string name="subagent_profile_excluded_tool_add_hint">添加工具名称</string>
   <string name="subagent_profile_local_tools">本地工具</string>
   <string name="subagent_profile_skills">技能</string>
   <string name="subagent_profile_mcp_servers">MCP 服务</string>

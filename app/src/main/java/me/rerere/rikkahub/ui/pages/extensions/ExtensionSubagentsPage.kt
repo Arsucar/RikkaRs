@@ -42,6 +42,7 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
+import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -65,7 +66,7 @@ fun ExtensionSubagentsPage() {
     var pendingDelete by remember { mutableStateOf<SubagentProfile?>(null) }
     var showOverflowMenu by remember { mutableStateOf(false) }
 
-    val profiles = settings.globalSubagentProfiles
+    val profiles = SubagentRegistry.effectiveGlobalProfiles(settings.globalSubagentProfiles)
 
     Scaffold(
         topBar = {

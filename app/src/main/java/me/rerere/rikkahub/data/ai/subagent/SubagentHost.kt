@@ -137,6 +137,7 @@ class SubagentHost(
                 depth = depth,
                 usage = totalUsage,
                 steps = steps,
+                toolCallCount = countToolCalls(messages),
                 transcript = transcript,
             )
             logResult(result)
@@ -256,6 +257,7 @@ class SubagentHost(
         val localTools = buildList {
             if (profile.inheritTools) {
                 addAll(parent.localTools)
+                addAll(profile.extraLocalTools)
             } else {
                 addAll(profile.localTools)
             }
@@ -304,6 +306,19 @@ class SubagentHost(
             if (text.isNotBlank()) return text.trim()
         }
         return ""
+    }
+
+    /**
+     * 统计子代理本次运行累计调用的工具次数（供父代理审计"是否真干了活"）。
+     * 计所有 assistant 消息中是 [UIMessagePart.Tool] 的 part 数；区别于 generation 轮次 [steps]。
+     */
+    private fun countToolCalls(messages: List<UIMessage>): Int {
+        var n = 0
+        for (message in messages) {
+            if (message.role != MessageRole.ASSISTANT) continue
+            n += message.parts.count { it is UIMessagePart.Tool }
+        }
+        return n
     }
 
     private fun accumulateUsage(messages: List<UIMessage>): TokenUsage? {
