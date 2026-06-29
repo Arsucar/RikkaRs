@@ -1525,4 +1525,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="imggen_page_decrease_columns">减少列数</string>
   <string name="imggen_page_increase_columns">增加列数</string>
   <string name="imggen_page_search_images">搜索图片</string>
+  <string name="permission_calendar_read">读取日历</string>
+  <string name="permission_calendar_read_desc">读取日历事件，以回答您与日程相关的问题</string>
+  <string name="permission_calendar_write">写入日历</string>
+  <string name="permission_calendar_write_desc">代表您创建日历事件</string>
+  <string name="assistant_page_local_tools_calendar_title">日历</string>
+  <string name="assistant_page_local_tools_calendar_desc">让AI查询和创建日历事件</string>
+  <string name="chat_message_tool_calendar_query">查询日历事件</string>
+  <string name="chat_message_tool_calendar_create">创建事件: %1$s</string>
 </resources>

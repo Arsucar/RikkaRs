@@ -590,6 +590,10 @@
   <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
+  <string name="permission_calendar_read">Read Calendar</string>
+  <string name="permission_calendar_read_desc">Read calendar events to answer your schedule-related questions</string>
+  <string name="permission_calendar_write">Write Calendar</string>
+  <string name="permission_calendar_write_desc">Create calendar events on your behalf</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
   <string name="permission_required">Required</string>
   <string name="photo">Photo</string>
@@ -1523,4 +1527,8 @@
   <string name="imggen_page_decrease_columns">Decrease columns</string>
   <string name="imggen_page_increase_columns">Increase columns</string>
   <string name="imggen_page_search_images">Search images</string>
+  <string name="assistant_page_local_tools_calendar_title">Calendar</string>
+  <string name="assistant_page_local_tools_calendar_desc">Let the AI query and create calendar events</string>
+  <string name="chat_message_tool_calendar_query">Query calendar events</string>
+  <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
 </resources>

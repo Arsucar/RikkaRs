@@ -1495,4 +1495,12 @@
   <string name="imggen_page_decrease_columns">Уменьшить число столбцов</string>
   <string name="imggen_page_increase_columns">Увеличить число столбцов</string>
   <string name="imggen_page_search_images">Поиск изображений</string>
+  <string name="permission_calendar_read">Чтение календаря</string>
+  <string name="permission_calendar_read_desc">Чтение событий календаря для ответов на вопросы о вашем расписании.</string>
+  <string name="permission_calendar_write">Запись в календарь</string>
+  <string name="permission_calendar_write_desc">Создавать события календаря от вашего имени</string>
+  <string name="assistant_page_local_tools_calendar_title">Календарь</string>
+  <string name="assistant_page_local_tools_calendar_desc">Позволяет ИИ запрашивать и создавать события календаря</string>
+  <string name="chat_message_tool_calendar_query">Запросить события календаря</string>
+  <string name="chat_message_tool_calendar_create">Создать событие: %1$s</string>
 </resources>

@@ -975,4 +975,5 @@ private fun localToolLabel(option: LocalToolOption): String = when (option) {
     LocalToolOption.AskUser -> stringResource(R.string.assistant_page_local_tools_ask_user_title)
     LocalToolOption.ScreenTime -> stringResource(R.string.assistant_page_local_tools_screen_time_title)
     LocalToolOption.Logs -> stringResource(R.string.assistant_page_local_tools_logs_title)
+    LocalToolOption.Calendar -> stringResource(R.string.assistant_page_local_tools_calendar_title)
 }

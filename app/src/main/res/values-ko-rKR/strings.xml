@@ -1495,4 +1495,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="imggen_page_decrease_columns">열 수 줄이기</string>
   <string name="imggen_page_increase_columns">열 수 늘리기</string>
   <string name="imggen_page_search_images">이미지 검색</string>
+  <string name="permission_calendar_read">캘린더 읽기</string>
+  <string name="permission_calendar_read_desc">일정 관련 질문에 답변하기 위해 캘린더 이벤트를 읽습니다.</string>
+  <string name="permission_calendar_write">캘린더 쓰기</string>
+  <string name="permission_calendar_write_desc">사용자를 대신하여 캘린더 이벤트를 생성합니다</string>
+  <string name="assistant_page_local_tools_calendar_title">캘린더</string>
+  <string name="assistant_page_local_tools_calendar_desc">AI가 캘린더 이벤트를 조회하고 생성할 수 있도록 합니다</string>
+  <string name="chat_message_tool_calendar_query">캘린더 일정 조회</string>
+  <string name="chat_message_tool_calendar_create">일정 생성: %1$s</string>
 </resources>
