@@ -390,3 +390,37 @@ Root cause: ChatVM is per-conversation-id, so switching away and back rebuilds C
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Conversation archive feature (full pipeline + data-loss incident)
+
+**Date**: 2026-06-29
+**Task**: Conversation archive feature (full pipeline + data-loss incident)
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+实现对话归档区：可逆冷藏语义，isArchived+archivedAt 字段，AutoMigration 23->24->25，跨助手归档查询，自动解档契约（messageNodes 变化触发），ArchivePage 双模式搜索（标题+消息 FTS），Drawer 入口+角标。三类测试（Migration/DAO/Repository 契约）。严重事故：阶段A sub-agent 未发现仓库已有手写 Migration_23_24，又加 AutoMigration(23,24)，双重注册导致 duplicate column 异常，用户 DB 被清空（1024字节空库）。已在同一 commit 修复（DataSourceModule 移除手写引用）。教训：sub-agent 改迁移前必须 grep 既有手写 migration；check agent 应包含运行时迁移验证而非仅 MigrationTestHelper 干净环境测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2f2aa527` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
