@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/prd.md", "reason": "验收标准与约束清单 —— check 阶段逐条核对"}
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/design.md", "reason": "design §10 验收映射表 + §3.1 白名单 + §4.3 additive 顺序 + §5.2 UI 草图 —— check 重点对照"}
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/research/code-facts-subagent-features-working-tree.md", "reason": "file:line 锚点用于核对改动是否落在正确位置（GenerationHandler L257、ChatService L656-717、SubagentPermissionBuilder L114-141 等）"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "extraLocalTools UI 应复用 localTools 选择组件；check 时确认未重复造轮子"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "并行工具执行的并发安全审查；Compose 状态正确性（enableSubagents 联动 enabled）"}

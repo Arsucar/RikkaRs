@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/design.md", "reason": "本任务技术设计契约：数据模型/运行时/UI 改造、白名单、additive 顺序、并发分析、验收映射"}
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/implement.md", "reason": "分步执行清单（parallel→nav→delegate→extra）+ 验证命令 + 回滚点 + 子代理派发清单"}
+{"file": ".trellis/tasks/06-29-subagent-nav-and-features/research/code-facts-subagent-features-working-tree.md", "reason": "working-tree 代码事实核对（file:line 锚点）：确认三字段缺失、runInParallel 现状、白名单 enum、UI 现状"}
+{"file": ".trellis/tasks/06-29-local-tool-ui-consolidation/research/sub-master-three-subagent-runtime-features.md", "reason": "sub/master 三功能运行时行为与移植面评估（delegate/parallel/extra 的 sub 实现细节）"}
+{"file": ".trellis/tasks/06-29-local-tool-ui-consolidation/research/sub-vs-rikka-subagent-nav-and-fields.md", "reason": "sub vs rikka-arsucar 导航路径与配置项差异表（UI 重组对照依据）"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "parallelToolExecution 涉及 coroutineScope/async 并行；Compose UI 改造遵循状态管理约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本任务跨数据层(Assistant/SubagentProfile)+运行时(ChatService/GenerationHandler/SubagentHost)+UI(SubagentPage)三层，需对齐跨层契约"}
