@@ -13,6 +13,36 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 ---
 
 
+## v2.3.10
+
+### 新功能 / Features
+
+- **会话归档** — 支持将对话归档，便于整理长期会话列表。
+  **Conversation archive** — Archive conversations to keep the main list manageable.
+
+- **子代理能力移植** — 从子 fork 移植并行/委托与额外本地工具，并调整子代理相关导航结构。
+  **Subagent port** — Parallel/delegate flows, extra local tools, and navigation updates ported from the sub fork.
+
+### 修复 / Fixes
+
+- **屏幕使用时间** — 改用事件配对计算时长，修正应用名解析，并排除桌面启动器统计。
+  **Screen time** — Event-pair duration, app label resolution, and launcher exclusion.
+
+- **后台文本生成** — 默认使用 AUTO 推理级别。
+  **Background text generation** — Default reasoning level set to AUTO.
+
+- **技能扩展面板** — 打开时清理已删除技能的残留引用。
+  **Skills panel** — Drop stale references to removed skills on open.
+
+### 其他 / Other
+
+- **日历工具** — 新增查询与创建日历事件工具。
+  **Calendar tools** — Query and create calendar events.
+
+- **合并上游** — 合并 `upstream/master` 至 `release/rikka-arsucar`。
+  **Upstream merge** — Merged `upstream/master` into `release/rikka-arsucar`.
+
+
 ## v2.3.9
 
 ### 重构 / Refactor
