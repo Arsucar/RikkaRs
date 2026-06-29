@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check 阶段核对字段是否在 Model/Entity/Mapper/DTO/Web 各层一致映射、自动还原契约是否仅在 Repository 单一入口生效、Flow 是否正确跨层推送归档状态变化。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "check 阶段核对是否重复实现已有 UI 模式（Badge/Surface/DropdownMenu）、DAO 查询是否复用现有 ORDER BY 惯例、strings key 是否与现有命名风格一致。"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "check 阶段核对 archivedCount 是否多 VM 共享同一 StateFlow（避免重复 observe）、自动还原 contentChanged 判断是否有竞态、Compose 列表 key 是否稳定（Uuid）。"}
