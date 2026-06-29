@@ -272,6 +272,12 @@ class ChatVM(
         }
     }
 
+    fun archiveConversation(conversation: Conversation) {
+        viewModelScope.launch {
+            conversationRepo.archiveConversation(conversation.id)
+        }
+    }
+
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
             val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch

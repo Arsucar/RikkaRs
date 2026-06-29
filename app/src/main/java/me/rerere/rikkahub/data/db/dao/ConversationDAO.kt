@@ -39,10 +39,21 @@ interface ConversationDAO {
     @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsOfAssistantPaging(assistantId: String, searchText: String): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY update_at DESC")
+    @Query("SELECT * FROM conversationentity WHERE is_archived = 1 ORDER BY archived_at DESC")
+    fun getArchivedConversations(): Flow<List<ConversationEntity>>
+
+    @Query("SELECT COUNT(*) FROM conversationentity WHERE is_archived = 1")
+    fun getArchivedCount(): Flow<Int>
+
+    @Query(
+        "SELECT * FROM conversationentity WHERE is_archived = 1 AND title LIKE '%' || :query || '%' ORDER BY archived_at DESC"
+    )
+    fun searchArchivedConversations(query: String): Flow<List<ConversationEntity>>
+
+    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY archived_at DESC")
     fun getArchivedConversationsOfAssistant(assistantId: String): Flow<List<ConversationEntity>>
 
-    @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY archived_at DESC")
     fun getArchivedConversationsOfAssistantPaging(assistantId: String): PagingSource<Int, LightConversationEntity>
 
     @Query("SELECT * FROM conversationentity WHERE id = :id")
@@ -81,8 +92,14 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET is_pinned = :isPinned WHERE id = :id")
     suspend fun updatePinStatus(id: String, isPinned: Boolean)
 
-    @Query("UPDATE conversationentity SET is_archived = :isArchived WHERE id = :id")
-    suspend fun updateArchiveStatus(id: String, isArchived: Boolean)
+    @Query("UPDATE conversationentity SET is_archived = :archived, archived_at = :archivedAt WHERE id = :id")
+    suspend fun updateArchiveStatus(id: String, archived: Boolean, archivedAt: Long)
+
+    @Query("UPDATE conversationentity SET is_archived = 0, archived_at = 0 WHERE is_archived = 1")
+    suspend fun unarchiveAll()
+
+    @Query("SELECT id FROM conversationentity WHERE is_archived = 1")
+    suspend fun getArchivedConversationIds(): List<String>
 
     @Query("SELECT COUNT(*) FROM conversationentity WHERE is_archived = 0")
     suspend fun countAll(): Int

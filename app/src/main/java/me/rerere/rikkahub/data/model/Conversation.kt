@@ -22,6 +22,8 @@ data class Conversation(
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     @Serializable(with = InstantSerializer::class)
+    val archivedAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
     val createAt: Instant = Instant.now(),
     @Serializable(with = InstantSerializer::class)
     val updateAt: Instant = Instant.now(),

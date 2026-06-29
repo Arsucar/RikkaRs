@@ -9,9 +9,11 @@ import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -87,6 +89,9 @@ class ChatDrawerVM(
                     }
             }
             .cachedIn(viewModelScope)
+
+    val archivedCount = conversationRepo.getArchivedCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val scrollIndex: Int get() = savedStateHandle["scrollIndex"] ?: 0
     val scrollOffset: Int get() = savedStateHandle["scrollOffset"] ?: 0

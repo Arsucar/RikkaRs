@@ -105,6 +105,7 @@ import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
+import me.rerere.rikkahub.ui.pages.archive.ArchivePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
@@ -344,6 +345,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.History> {
                                 HistoryPage()
+                            }
+
+                            entry<Screen.Archive> {
+                                ArchivePage()
                             }
 
                             entry<Screen.Favorite> {
@@ -603,6 +608,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object History : Screen
+
+    @Serializable
+    data object Archive : Screen
 
     @Serializable
     data object Favorite : Screen

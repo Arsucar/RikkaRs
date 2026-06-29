@@ -8,6 +8,7 @@ import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
+import me.rerere.rikkahub.ui.pages.archive.ArchiveVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
 import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
@@ -41,6 +42,7 @@ val viewModelModule = module {
     viewModelOf(::SettingVM)
     viewModelOf(::DebugVM)
     viewModelOf(::HistoryVM)
+    viewModelOf(::ArchiveVM)
     viewModelOf(::AssistantVM)
     viewModel<AssistantDetailVM> {
         AssistantDetailVM(

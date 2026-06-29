@@ -32,4 +32,6 @@ data class ConversationEntity(
     val workspaceCwd: String = "",
     @ColumnInfo("is_archived", defaultValue = "0")
     val isArchived: Boolean = false,
+    @ColumnInfo("archived_at", defaultValue = "0")
+    val archivedAt: Long = 0,
 )

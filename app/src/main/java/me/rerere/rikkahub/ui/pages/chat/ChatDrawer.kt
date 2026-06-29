@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -51,6 +54,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Archive
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.InLove
@@ -213,7 +217,12 @@ fun ChatDrawerContent(
                 }
             }
 
-            DrawerActions(navController = navController)
+            val archivedCount by drawerVm.archivedCount.collectAsStateWithLifecycle()
+
+            DrawerActions(
+                navController = navController,
+                archivedCount = archivedCount,
+            )
 
             ConversationList(
                 current = current,
@@ -245,7 +254,11 @@ fun ChatDrawerContent(
                 onMoveToAssistant = {
                     conversationToMove = it
                     showMoveToAssistantSheet = true
-                }
+                },
+                onArchive = {
+                    vm.archiveConversation(it)
+                    conversations.refresh()
+                },
             )
 
             // 助手选择器
@@ -455,44 +468,63 @@ fun ChatDrawerContent(
 }
 
 @Composable
-private fun DrawerActions(navController: Navigator) {
-    Column {
-        // 搜索入口
-        Surface(
-            onClick = { navController.navigate(Screen.MessageSearch) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+private fun DrawerActions(
+    navController: Navigator,
+    archivedCount: Int,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Search01,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.chat_page_search_chats),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            DrawerActionTile(
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.MessageSearch) },
+                icon = HugeIcons.Search01,
+                text = stringResource(R.string.chat_page_search_chats),
+            )
+            DrawerActionTile(
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.History) },
+                icon = HugeIcons.TransactionHistory,
+                text = stringResource(R.string.chat_page_history),
+            )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            DrawerActionTile(
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.Archive) },
+                icon = HugeIcons.Archive,
+                text = stringResource(R.string.archive_title),
+                badgeCount = archivedCount,
+            )
+            Spacer(Modifier.weight(1f))
+        }
+    }
+}
 
-        // 历史记录入口
+@Composable
+private fun DrawerActionTile(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
+) {
+    BadgedBox(
+        modifier = modifier.padding(horizontal = 4.dp),
+        badge = {
+            if (badgeCount > 0) {
+                Badge { Text(badgeCount.toString()) }
+            }
+        },
+    ) {
         Surface(
-            onClick = { navController.navigate(Screen.History) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
@@ -504,13 +536,13 @@ private fun DrawerActions(navController: Navigator) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    imageVector = HugeIcons.TransactionHistory,
+                    imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = stringResource(R.string.chat_page_history),
+                    text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

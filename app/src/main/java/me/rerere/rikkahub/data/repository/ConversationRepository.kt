@@ -218,13 +218,23 @@ class ConversationRepository(
     }
 
     suspend fun updateConversation(conversation: Conversation) {
+        val existing = getConversationById(conversation.id)
+        val toPersist = if (
+            existing != null &&
+            existing.isArchived &&
+            existing.messageNodes != conversation.messageNodes
+        ) {
+            conversation.copy(isArchived = false, archivedAt = null)
+        } else {
+            conversation
+        }
         database.withTransaction {
             conversationDAO.update(
-                conversationToConversationEntity(conversation)
+                conversationToConversationEntity(toPersist)
             )
-            syncMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            syncMessageNodes(toPersist.id.toString(), toPersist.messageNodes)
         }
-        messageFtsManager.indexConversation(conversation)
+        messageFtsManager.indexConversation(toPersist)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -248,6 +258,11 @@ class ConversationRepository(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
     ) = messageFtsManager.search(keyword, sort)
+
+    suspend fun searchArchivedMessages(
+        keyword: String,
+        sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
+    ) = messageFtsManager.searchArchived(keyword, sort)
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
@@ -280,6 +295,7 @@ class ConversationRepository(
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned,
             isArchived = conversation.isArchived,
+            archivedAt = conversation.archivedAt?.toEpochMilli() ?: 0L,
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
@@ -301,6 +317,7 @@ class ConversationRepository(
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
             isArchived = conversationEntity.isArchived,
+            archivedAt = conversationEntity.archivedAt.takeIf { it != 0L }?.let { Instant.ofEpochMilli(it) },
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             modeInjectionIds = JsonInstant.decodeFromString(conversationEntity.modeInjectionIds),
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
@@ -326,10 +343,63 @@ class ConversationRepository(
     }
 
     suspend fun updateArchiveStatus(conversationId: Uuid, archived: Boolean) {
+        val archivedAt = if (archived) System.currentTimeMillis() else 0L
         conversationDAO.updateArchiveStatus(
             id = conversationId.toString(),
-            isArchived = archived,
+            archived = archived,
+            archivedAt = archivedAt,
         )
+    }
+
+    suspend fun archiveConversation(id: Uuid) {
+        conversationDAO.updateArchiveStatus(
+            id = id.toString(),
+            archived = true,
+            archivedAt = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun unarchiveConversation(id: Uuid) {
+        conversationDAO.updateArchiveStatus(
+            id = id.toString(),
+            archived = false,
+            archivedAt = 0L,
+        )
+    }
+
+    suspend fun unarchiveAll() {
+        conversationDAO.unarchiveAll()
+    }
+
+    suspend fun deleteAllArchived() {
+        val ids = conversationDAO.getArchivedConversationIds()
+        ids.forEach { id ->
+            val uuid = Uuid.parse(id)
+            val conversation = getConversationById(uuid) ?: return@forEach
+            deleteConversation(conversation)
+        }
+    }
+
+    fun getArchivedConversations(): Flow<List<Conversation>> {
+        return conversationDAO
+            .getArchivedConversations()
+            .map { flow ->
+                flow.map { entity ->
+                    conversationEntityToConversation(entity, emptyList())
+                }
+            }
+    }
+
+    fun getArchivedCount(): Flow<Int> = conversationDAO.getArchivedCount()
+
+    fun searchArchivedConversations(query: String): Flow<List<Conversation>> {
+        return conversationDAO
+            .searchArchivedConversations(query)
+            .map { flow ->
+                flow.map { entity ->
+                    conversationEntityToConversation(entity, emptyList())
+                }
+            }
     }
 
     fun getArchivedConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
