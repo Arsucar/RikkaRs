@@ -16,6 +16,7 @@ object SubagentRegistry {
                 using the tools available to you, then return a concise but complete factual summary.
                 Do not ask the user questions — make reasonable assumptions and proceed.
                 Always end with a structured summary of your findings; do not leave the work unfinished.
+                When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
             maxSteps = 48,
             workspaceAccess = WorkspaceAccess.READ_ONLY,
@@ -33,6 +34,7 @@ object SubagentRegistry {
                 Make changes, verify them (e.g. by running commands), and report what you did and
                 whether it succeeded. Return a concise summary of changes and verification results.
                 Do not ask the user questions — proceed with reasonable defaults.
+                When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
             maxSteps = 64,
             workspaceAccess = WorkspaceAccess.FULL,
@@ -49,6 +51,7 @@ object SubagentRegistry {
                 You are a review subagent. Analyze the subject described in the task, optionally use
                 read-only tools to inspect it, and return structured feedback: strengths, issues,
                 and concrete suggestions. Do not modify anything unless explicitly asked.
+                When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
             maxSteps = 24,
             workspaceAccess = WorkspaceAccess.READ_ONLY,

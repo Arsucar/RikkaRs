@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.createFinishWorkTool
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 
@@ -145,5 +146,5 @@ fun buildSubagentTools(
     } else {
         withoutExcludedWorkspace
     }
-    return withSpawn.distinctBy { it.name }
+    return (withSpawn + createFinishWorkTool()).distinctBy { it.name }
 }

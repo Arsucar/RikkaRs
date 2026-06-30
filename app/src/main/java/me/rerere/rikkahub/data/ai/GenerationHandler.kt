@@ -48,6 +48,7 @@ import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
+import me.rerere.rikkahub.data.ai.tools.FINISH_WORK_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -308,6 +309,11 @@ class GenerationHandler(
                     )
                 )
             )
+
+            if (executedTools.any { it.toolName == FINISH_WORK_TOOL_NAME }) {
+                Log.i(TAG, "generateText: finish_work executed, terminating tool loop")
+                break
+            }
         }
 
     }.flowOn(Dispatchers.IO)

@@ -65,6 +65,7 @@ class SubagentPermissionTest {
         )
         assertTrue(result.none { it.name.startsWith("workspace_") })
         assertEquals(1, result.count { it.name == "search" })
+        assertTrue(result.any { it.name == "finish_work" })
     }
 
     @Test
@@ -79,7 +80,7 @@ class SubagentPermissionTest {
             },
         )
         val names = result.map { it.name }.toSet()
-        assertEquals(setOf("workspace_read_file", "workspace_shell"), names)
+        assertEquals(setOf("workspace_read_file", "workspace_shell", "finish_work"), names)
     }
 
     @Test
@@ -93,8 +94,9 @@ class SubagentPermissionTest {
                 filterWorkspaceToolsByAccess(workspaceMocks(), access)
             },
         )
-        assertEquals(4, result.size)
+        assertEquals(5, result.size)
         assertTrue(result.map { it.name }.containsAll(WorkspaceToolNames))
+        assertTrue(result.any { it.name == "finish_work" })
     }
 
     @Test
@@ -173,6 +175,7 @@ class SubagentPermissionTest {
         assertFalse(result.any { it.name == "search" })
         assertFalse(result.any { it.name == "workspace_shell" })
         assertTrue(result.any { it.name == "mcp_x" })
+        assertTrue(result.any { it.name == "finish_work" })
     }
 
     @Test
@@ -200,8 +203,8 @@ class SubagentPermissionTest {
             spawnToolBuilder = { mockTool("spawn_subagent") },
         )
         assertTrue(
-            result.any { it.name == "spawn_subagent" },
             "depth=1 maxDepth=2: child at depth+1=2 is allowed; spawn should be injected",
+            result.any { it.name == "spawn_subagent" },
         )
     }
 
@@ -216,8 +219,8 @@ class SubagentPermissionTest {
             spawnToolBuilder = { mockTool("spawn_subagent") },
         )
         assertFalse(
-            result.any { it.name == "spawn_subagent" },
             "depth=1 maxDepth=1: no room for depth-2 child; spawn must not be injected",
+            result.any { it.name == "spawn_subagent" },
         )
     }
 
@@ -232,8 +235,8 @@ class SubagentPermissionTest {
             spawnToolBuilder = { mockTool("spawn_subagent") },
         )
         assertFalse(
-            result.any { it.name == "spawn_subagent" },
             "depth=2 maxDepth=2: agent at max depth cannot nest further",
+            result.any { it.name == "spawn_subagent" },
         )
     }
 
@@ -284,5 +287,46 @@ class SubagentPermissionTest {
         )
         val sandboxed = SubagentHost.sandboxToolsForSubagent(listOf(out)).single()
         assertFalse(sandboxed.needsApproval(buildJsonObject {}))
+    }
+
+    @Test
+    fun finishWork_alwaysInjectedForSubagentEvenWhenExcluded() {
+        val result = buildSubagentTools(
+            profile = profile(excluded = setOf("finish_work")),
+            depth = 0,
+            maxDepth = 2,
+            parentTools = emptyList(),
+            workspaceToolsFactory = { emptyList() },
+        )
+        assertTrue(
+            "finish_work must be injected even when listed in excludedTools",
+            result.any { it.name == "finish_work" },
+        )
+    }
+
+    @Test
+    fun finishWork_injectedWhenInheritToolsFalse() {
+        val result = buildSubagentTools(
+            profile = profile(inherit = false),
+            depth = 0,
+            maxDepth = 2,
+            parentTools = listOf(mockTool("search")),
+            workspaceToolsFactory = { emptyList() },
+        )
+        assertTrue(result.any { it.name == "finish_work" })
+        // inherit=false means parent tools are NOT inherited
+        assertFalse(result.any { it.name == "search" })
+    }
+
+    @Test
+    fun finishWork_injectedOnceWhenParentAlsoCarriesIt() {
+        val result = buildSubagentTools(
+            profile = profile(),
+            depth = 0,
+            maxDepth = 2,
+            parentTools = listOf(mockTool("finish_work")),
+            workspaceToolsFactory = { emptyList() },
+        )
+        assertEquals(1, result.count { it.name == "finish_work" })
     }
 }
