@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "验证 common 层 truncateLogEntry 与 app 层 LogsTool 引用一致"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "搜索高亮复用 ChatList buildHighlightedText，检查是否应提取为 shared util"}
