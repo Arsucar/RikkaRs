@@ -13,6 +13,33 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 ---
 
 
+## v2.3.11
+
+### 新功能 / Features
+
+- **消息隐藏（软删除）** — 新增「隐藏消息」操作：被隐藏的消息以半透明 + 左侧指示条显示，标注「已隐藏 · 不在上下文」，不再计入上下文与 token；压缩上下文时默认改为隐藏旧消息而非删除，并在摘要前注入 `[已隐藏 N 条消息]` 提示。
+  **Message hiding (soft delete)** — New "Hide" action: hidden messages render at low opacity with a side marker and "Hidden · not in context" label, excluded from context and token count; compress-context now hides old messages instead of deleting, with a `[N messages hidden]` prefix in the summary.
+
+- **子代理最大并发配置** — 助手新增 `subagentMaxConcurrent`（1–5），通过 Semaphore 限流 `spawn_subagent` 并发执行，超出的子代理自动排队；助手详情页提供滑块配置。
+  **Max concurrent subagents** — New per-assistant `subagentMaxConcurrent` (1–5) limits parallel `spawn_subagent` execution via a Semaphore; excess subagents queue. Configurable via a slider on the assistant detail page.
+
+### 修复 / Fixes
+
+- **子代理嵌套深度 off-by-one** — 统一 depth 边界条件为 `depth > maxDepth` 与 `(depth+1) <= maxDepth`：`maxDepth=1` 时主代理可正常派生首层子代理，`maxDepth=2` 时允许深度 2 的子代理存在但不再继续嵌套。补充单元测试覆盖三类边界。
+  **Subagent nesting depth off-by-one** — Unified depth bounds to `depth > maxDepth` and `(depth+1) <= maxDepth`: `maxDepth=1` now correctly allows the main agent to spawn one layer; `maxDepth=2` permits depth-2 subagents but blocks further nesting. Added unit tests for three boundary cases.
+
+- **关闭 spawn 后子代理仍可继承调用** — `SubagentPermissionBuilder` 现从 `inheritTools` 工具集中剥离 `SUBAGENT_TOOL_NAMES`（`spawn_subagent` / `ask_btw` / `manage_subagent_profile`）；`spawn_subagent` 只能通过 `spawnToolBuilder` 按 depth 条件显式注入。
+  **Spawn still callable via inheritance when disabled** — `SubagentPermissionBuilder` now strips `SUBAGENT_TOOL_NAMES` (`spawn_subagent` / `ask_btw` / `manage_subagent_profile`) from inherited tool sets; `spawn_subagent` is only injected explicitly via `spawnToolBuilder` when depth allows.
+
+- **子代理工作区文件操作不显示 chip** — 父消息文件芯片现聚合子代理 transcript 中所有 `workspace_write_file` / `workspace_edit_file` 调用路径，与顶层工具结果合并去重后统一展示。
+  **Subagent workspace file chips missing** — Parent message file chips now aggregate `workspace_write_file` / `workspace_edit_file` paths from subagent transcripts, merged and deduped with top-level tool results.
+
+### 其他 / Other
+
+- **数据库迁移** — `AppDatabase` v25 → v26：`MessageNodeEntity` 新增 `hidden` 列（默认 0），通过自动迁移升级。
+  **Database migration** — `AppDatabase` v25 → v26: added `hidden` column (default 0) to `MessageNodeEntity` via auto-migration.
+
+
 ## v2.3.10
 
 ### 新功能 / Features
