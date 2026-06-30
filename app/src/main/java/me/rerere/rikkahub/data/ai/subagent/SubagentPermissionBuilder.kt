@@ -124,9 +124,11 @@ fun buildSubagentTools(
     val base = if (profile.inheritTools) {
         val nonWorkspaceParent = parentTools
             .filter { it.name !in WorkspaceToolNames }
+            .filter { it.name !in SUBAGENT_TOOL_NAMES }
             .filter { it.name !in profile.excludedTools }
         val extras = extraLocalToolsProvider()
             .filter { it.name !in WorkspaceToolNames }
+            .filter { it.name !in SUBAGENT_TOOL_NAMES }
             .filter { it.name !in profile.excludedTools }
         nonWorkspaceParent + extras + workspaceTools
     } else {
@@ -136,7 +138,7 @@ fun buildSubagentTools(
     val withoutExcludedWorkspace = base.filter { it.name !in profile.excludedTools }
     val withSpawn = if (
         profile.canSpawn &&
-        (depth + 1) < maxDepth &&
+        (depth + 1) <= maxDepth &&
         spawnToolBuilder != null
     ) {
         withoutExcludedWorkspace + spawnToolBuilder()

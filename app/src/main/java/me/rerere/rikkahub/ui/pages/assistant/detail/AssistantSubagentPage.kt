@@ -476,6 +476,39 @@ private fun AssistantSubagentHubCard(
 
         FormItem(
             modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_max_concurrent_title)) },
+            description = {
+                Text(
+                    stringResource(
+                        R.string.subagent_max_concurrent_desc,
+                        assistant.subagentMaxConcurrent,
+                    )
+                )
+            },
+        ) {
+            var localMaxConcurrent by remember(assistant.id, assistant.subagentMaxConcurrent) {
+                mutableStateOf(assistant.subagentMaxConcurrent.toFloat())
+            }
+            Slider(
+                value = localMaxConcurrent,
+                onValueChange = { localMaxConcurrent = it },
+                onValueChangeFinished = {
+                    onUpdate(
+                        assistant.copy(
+                            subagentMaxConcurrent = localMaxConcurrent.toInt().coerceIn(1, 5)
+                        )
+                    )
+                },
+                valueRange = 1f..5f,
+                steps = 3,
+                enabled = assistant.enableSubagents,
+            )
+        }
+
+        HorizontalDivider()
+
+        FormItem(
+            modifier = Modifier.padding(8.dp),
             label = { Text(stringResource(R.string.subagent_delegate_only_title)) },
             description = { Text(stringResource(R.string.subagent_delegate_only_desc)) },
             tail = {

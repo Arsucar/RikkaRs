@@ -46,7 +46,9 @@ data class Conversation(
      */
     val currentMessages
         get(): List<UIMessage> {
-            return messageNodes.map { node -> node.messages[node.selectIndex] }
+            return messageNodes
+                .filter { !it.hidden }
+                .map { node -> node.messages[node.selectIndex] }
         }
 
     fun getMessageNodeByMessage(message: UIMessage): MessageNode? {
@@ -111,6 +113,7 @@ data class MessageNode(
     val id: Uuid = Uuid.random(),
     val messages: List<UIMessage>,
     val selectIndex: Int = 0,
+    val hidden: Boolean = false,
     @Transient
     val isFavorite: Boolean = false,
 ) {

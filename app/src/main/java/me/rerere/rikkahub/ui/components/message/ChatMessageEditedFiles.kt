@@ -35,10 +35,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.FileImport
@@ -52,6 +55,7 @@ import java.io.File
 
 private const val DEFAULT_VISIBLE_COUNT = 3
 private val WORKSPACE_FILE_TOOL_NAMES = setOf("workspace_write_file", "workspace_edit_file")
+private val subagentTranscriptListSerializer = ListSerializer(SubagentTranscriptStep.serializer())
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -61,12 +65,12 @@ internal fun EditedFilesList(
 ) {
     val workspaceId = assistant?.workspaceId?.toString() ?: return
     val editedFiles = remember(parts) {
-        parts.filterIsInstance<UIMessagePart.Tool>()
+        val fromTopLevelTools = parts.filterIsInstance<UIMessagePart.Tool>()
             .filter { it.toolName in WORKSPACE_FILE_TOOL_NAMES && it.isExecuted }
             .mapNotNull { tool ->
                 tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
             }
-            .distinct()
+        (fromTopLevelTools + extractSubagentEditedPaths(parts)).distinct()
     }
     if (editedFiles.isEmpty()) return
 
@@ -237,6 +241,27 @@ internal fun EditedFilesList(
             }
         }
     }
+}
+
+private fun extractSubagentEditedPaths(parts: List<UIMessagePart>): List<String> {
+    return parts.filterIsInstance<UIMessagePart.Tool>()
+        .filter { it.toolName == "spawn_subagent" }
+        .flatMap { tool ->
+            val meta = tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()?.metadata
+                ?: return@flatMap emptyList()
+            val transcriptJson = meta["subagent_transcript"] ?: return@flatMap emptyList()
+            val steps = runCatching {
+                JsonInstant.decodeFromJsonElement(subagentTranscriptListSerializer, transcriptJson)
+            }.getOrElse { emptyList() }
+            steps.filterIsInstance<SubagentTranscriptStep.ToolCall>()
+                .filter { it.toolName in WORKSPACE_FILE_TOOL_NAMES && it.executed }
+                .mapNotNull { step ->
+                    runCatching {
+                        JsonInstant.parseToJsonElement(step.input).jsonObject["path"]
+                            ?.jsonPrimitive?.contentOrNull
+                    }.getOrNull()
+                }
+        }
 }
 
 private fun resolveWorkspacePath(path: String): Pair<WorkspaceStorageArea, String> {

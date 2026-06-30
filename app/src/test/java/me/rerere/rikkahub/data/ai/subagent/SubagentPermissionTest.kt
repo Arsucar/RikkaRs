@@ -176,7 +176,7 @@ class SubagentPermissionTest {
     }
 
     @Test
-    fun spawnInjected_whenCanSpawnAndDepthAllows() {
+    fun spawnInjected_whenCanSpawnAndChildDepthWithinMax() {
         val spawn = mockTool("spawn_subagent")
         val result = buildSubagentTools(
             profile = profile(canSpawn = true),
@@ -190,7 +190,7 @@ class SubagentPermissionTest {
     }
 
     @Test
-    fun spawnNotInjected_whenDepthAtMax() {
+    fun spawnInjected_whenDepthOneBelowMaxDepth() {
         val result = buildSubagentTools(
             profile = profile(canSpawn = true),
             depth = 1,
@@ -199,7 +199,42 @@ class SubagentPermissionTest {
             workspaceToolsFactory = { emptyList() },
             spawnToolBuilder = { mockTool("spawn_subagent") },
         )
-        assertFalse(result.any { it.name == "spawn_subagent" })
+        assertTrue(
+            result.any { it.name == "spawn_subagent" },
+            "depth=1 maxDepth=2: child at depth+1=2 is allowed; spawn should be injected",
+        )
+    }
+
+    @Test
+    fun spawnNotInjected_whenMaxDepthOneOnlyFirstLayerRuns() {
+        val result = buildSubagentTools(
+            profile = profile(canSpawn = true),
+            depth = 1,
+            maxDepth = 1,
+            parentTools = emptyList(),
+            workspaceToolsFactory = { emptyList() },
+            spawnToolBuilder = { mockTool("spawn_subagent") },
+        )
+        assertFalse(
+            result.any { it.name == "spawn_subagent" },
+            "depth=1 maxDepth=1: no room for depth-2 child; spawn must not be injected",
+        )
+    }
+
+    @Test
+    fun spawnNotInjected_whenDepthAtMaxNoNestedSpawn() {
+        val result = buildSubagentTools(
+            profile = profile(canSpawn = true),
+            depth = 2,
+            maxDepth = 2,
+            parentTools = emptyList(),
+            workspaceToolsFactory = { emptyList() },
+            spawnToolBuilder = { mockTool("spawn_subagent") },
+        )
+        assertFalse(
+            result.any { it.name == "spawn_subagent" },
+            "depth=2 maxDepth=2: agent at max depth cannot nest further",
+        )
     }
 
     @Test

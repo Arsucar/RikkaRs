@@ -53,6 +53,8 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.TextSelection
 import me.rerere.hugeicons.stroke.Translate
 import me.rerere.hugeicons.stroke.VolumeHigh
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.WebDesign01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MessageNode
@@ -250,6 +252,8 @@ fun ChatMessageActionsSheet(
     onSelectAndCopy: () -> Unit,
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
+    hidden: Boolean = false,
+    onToggleHidden: () -> Unit = {},
     onWebViewPreview: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
@@ -432,6 +436,34 @@ fun ChatMessageActionsSheet(
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
+                }
+            }
+
+            Card(
+                onClick = {
+                    onDismissRequest()
+                    onToggleHidden()
+                },
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = if (hidden) HugeIcons.View else HugeIcons.ViewOff,
+                        contentDescription = null,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                    Text(
+                        text = stringResource(
+                            if (hidden) R.string.message_unhide else R.string.message_hide
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
             }
 

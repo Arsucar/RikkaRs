@@ -211,6 +211,10 @@ class ChatVM(
         }
     }
 
+    fun toggleMessageHidden(messageId: Uuid) = viewModelScope.launch {
+        chatService.toggleMessageHidden(_conversationId, messageId)
+    }
+
     fun showDeleteBlockedWhileGeneratingError() {
         chatService.addError(
             error = IllegalStateException("请先停止生成再删除消息"),

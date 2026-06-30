@@ -1072,12 +1072,36 @@ class ChatService(
                 .awaitAll()
         }
 
-        // Create new conversation with compressed history as multiple user messages + kept messages
-        val newMessageNodes = buildList {
-            compressedSummaries.forEach { summary ->
-                add(UIMessage.user(summary).toMessageNode())
+        val keepMessageIds = messagesToKeep.map { it.id }.toSet()
+        var hiddenCount = 0
+        val nodesWithHidden = conversation.messageNodes.map { node ->
+            val messageId = node.currentMessage.id
+            if (messageId !in keepMessageIds && !node.hidden) {
+                hiddenCount++
+                node.copy(hidden = true)
+            } else {
+                node
             }
-            addAll(messagesToKeep.map { it.toMessageNode() })
+        }
+
+        val summaryNodes = compressedSummaries.map { summary ->
+            val prefix = if (hiddenCount > 0) {
+                context.getString(R.string.compress_hidden_count, hiddenCount) + "\n\n"
+            } else {
+                ""
+            }
+            UIMessage.user(prefix + summary).toMessageNode()
+        }
+
+        val insertAt = nodesWithHidden.indexOfFirst { node ->
+            !node.hidden && node.currentMessage.id in keepMessageIds
+        }.let { if (it < 0) nodesWithHidden.size else it }
+
+        val newMessageNodes = buildList {
+            addAll(nodesWithHidden)
+            summaryNodes.forEachIndexed { offset, summaryNode ->
+                add(insertAt + offset, summaryNode)
+            }
         }
         val newConversation = conversation.copy(
             messageNodes = newMessageNodes,
@@ -1522,6 +1546,22 @@ class ChatService(
         deleteMessage(conversationId, message.id, failIfMissing = false)
     }
 
+    suspend fun toggleMessageHidden(
+        conversationId: Uuid,
+        messageId: Uuid,
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (node.messages.any { it.id == messageId }) {
+                node.copy(hidden = !node.hidden)
+            } else {
+                node
+            }
+        }
+        val updatedConversation = currentConversation.copy(messageNodes = updatedNodes)
+        saveConversation(conversationId, updatedConversation)
+    }
+
     private fun buildConversationAfterMessageDelete(
         conversation: Conversation,
         messageId: Uuid,
@@ -1727,7 +1767,7 @@ class ChatService(
             }
         }
         val spawnToolBuilder: (() -> Tool)? =
-            if (profile.canSpawn && depth + 1 < maxDepth) {
+            if (profile.canSpawn && depth + 1 <= maxDepth) {
                 {
                     createSubagentTools(
                         json = json,

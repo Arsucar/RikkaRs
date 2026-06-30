@@ -49,6 +49,7 @@ data class Assistant(
     val allowConversationPromptInjection: Boolean = false, // 允许对话级别绑定提示词注入
     val enableSubagents: Boolean = false,
     val subagentMaxDepth: Int = 2,
+    val subagentMaxConcurrent: Int = 3,
     val parallelToolExecution: Boolean = false,
     val subagentDelegateOnly: Boolean = false,
     val subagentProfiles: List<SubagentProfile> = emptyList(),

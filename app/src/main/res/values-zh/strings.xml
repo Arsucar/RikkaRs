@@ -26,6 +26,8 @@
   <string name="subagent_max_depth_title">最大嵌套深度</string>
   <string name="subagent_max_depth_desc">深度 %1$d 最多允许 %2$d 层嵌套委派，仅对新发起的子代理生效。</string>
   <string name="subagent_max_depth_disabled">深度为 1：主代理可派生子代理，但不支持子代理继续嵌套委派。</string>
+  <string name="subagent_max_concurrent_title">最大同时子代理数</string>
+  <string name="subagent_max_concurrent_desc">最多同时运行 %1$d 个子代理，其余排队。</string>
   <string name="subagent_delegate_only_title">仅委派</string>
   <string name="subagent_delegate_only_desc">根代理仅保留只读与委派工具；不含 skills、MCP、可写 workspace</string>
   <string name="subagent_parallel_execution_title">并行工具执行</string>
@@ -338,6 +340,10 @@
   <string name="chat_input_file_read_failed">文件读取失败：%s</string>
   <string name="chat_message_add_favorite">添加收藏</string>
   <string name="chat_message_remove_favorite">取消收藏</string>
+  <string name="message_hide">隐藏</string>
+  <string name="message_unhide">取消隐藏</string>
+  <string name="message_hidden_label">已隐藏 · 不在上下文中</string>
+  <string name="compress_hidden_count">[已隐藏 %1$d 条消息]</string>
   <string name="chat_message_tool_approve">批准</string>
   <string name="chat_message_tool_ask_questions">询问 %d 个问题</string>
   <string name="chat_message_tool_call_generic">调用工具 %1$s</string>

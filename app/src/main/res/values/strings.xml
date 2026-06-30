@@ -26,6 +26,8 @@
   <string name="subagent_max_depth_title">Max nesting depth</string>
   <string name="subagent_max_depth_desc">Depth %1$d allows up to %2$d nested delegation level(s). Applies to new spawns only.</string>
   <string name="subagent_max_depth_disabled">Depth 1: the main agent may spawn subagents, but nested subagent delegation is not available.</string>
+  <string name="subagent_max_concurrent_title">Max concurrent subagents</string>
+  <string name="subagent_max_concurrent_desc">Up to %1$d subagent(s) can run at the same time; the rest will queue.</string>
   <string name="subagent_delegate_only_title">Delegate only</string>
   <string name="subagent_delegate_only_desc">Root agent keeps only read-only + spawn_subagent tools; no skills, MCP, or writable workspace</string>
   <string name="subagent_parallel_execution_title">Parallel tool execution</string>
@@ -339,6 +341,10 @@
   <string name="chat_input_file_read_failed">Failed to read file: %s</string>
   <string name="chat_message_add_favorite">Add Favorite</string>
   <string name="chat_message_remove_favorite">Remove Favorite</string>
+  <string name="message_hide">Hide</string>
+  <string name="message_unhide">Unhide</string>
+  <string name="message_hidden_label">Hidden · not in context</string>
+  <string name="compress_hidden_count">[%1$d messages hidden]</string>
   <string name="chat_message_tool_approve">Approve</string>
   <string name="chat_message_tool_ask_questions">Ask %d questions</string>
   <string name="chat_message_tool_call_generic">Called tool %1$s</string>

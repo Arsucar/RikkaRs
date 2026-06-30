@@ -444,6 +444,9 @@ private fun ChatPageContent(
                         vm.deleteMessage(it)
                     }
                 },
+                onToggleHidden = {
+                    vm.toggleMessageHidden(it.id)
+                },
                 onUpdateMessage = { newNode ->
                     vm.updateConversation(
                         conversation.copy(

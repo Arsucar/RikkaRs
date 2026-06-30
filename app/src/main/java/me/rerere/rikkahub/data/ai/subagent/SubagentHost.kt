@@ -64,7 +64,7 @@ class SubagentHost(
                 depth = depth,
             )
 
-        if (depth >= maxDepth) {
+        if (depth > maxDepth) {
             return SubagentResult(
                 profileName = profile.name,
                 summary = "",
@@ -264,7 +264,7 @@ class SubagentHost(
             removeAll { it == LocalToolOption.AskUser }
         }.distinct()
 
-        val childCanSpawn = profile.canSpawn && (depth + 1) < maxDepth
+        val childCanSpawn = profile.canSpawn && (depth + 1) <= maxDepth
 
         return parent.copy(
             id = Uuid.random(),

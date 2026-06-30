@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -258,10 +260,22 @@ class GenerationHandler(
             val runInParallel =
                 (assistant.parallelToolExecution && toolsToProcess.size > 1) || subagentCount > 1
             val executedTools: List<UIMessagePart.Tool> = if (runInParallel) {
-                Log.i(TAG, "generateText: executing ${toolsToProcess.size} tools in parallel (subagents=$subagentCount)")
+                Log.i(
+                    TAG,
+                    "generateText: executing ${toolsToProcess.size} tools in parallel (subagents=$subagentCount, maxConcurrent=${assistant.subagentMaxConcurrent})",
+                )
+                val subagentSemaphore = Semaphore(assistant.subagentMaxConcurrent.coerceIn(1, 5))
                 coroutineScope {
                     toolsToProcess.map { tool ->
-                        async { executeSingleTool(tool, toolsInternal) }
+                        async {
+                            if (tool.toolName == "spawn_subagent") {
+                                subagentSemaphore.withPermit {
+                                    executeSingleTool(tool, toolsInternal)
+                                }
+                            } else {
+                                executeSingleTool(tool, toolsInternal)
+                            }
+                        }
                     }.awaitAll().filterNotNull()
                 }
             } else {
