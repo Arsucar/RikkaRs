@@ -11,13 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,35 +43,17 @@ import me.rerere.rikkahub.ui.theme.JetbrainsMono
 fun JsonTree(
     json: JsonElement,
     modifier: Modifier = Modifier,
-    initialExpandLevel: Int = 1
+    initialExpandLevel: Int = 1,
+    onStringClick: ((String) -> Unit)? = null
 ) {
-    var selectedString by remember { mutableStateOf<String?>(null) }
-
     Column(modifier = modifier.horizontalScroll(rememberScrollState())) {
         JsonNode(
             element = json,
             key = null,
             depth = 0,
             initialExpandLevel = initialExpandLevel,
-            onStringClick = { selectedString = it }
+            onStringClick = onStringClick ?: {}
         )
-    }
-
-    selectedString?.let { content ->
-        ModalBottomSheet(
-            onDismissRequest = { selectedString = null },
-            sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-        ) {
-            Text(
-                text = content,
-                fontFamily = JetbrainsMono,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
     }
 }
 

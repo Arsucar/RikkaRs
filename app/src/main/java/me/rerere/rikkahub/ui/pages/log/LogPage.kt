@@ -1,9 +1,12 @@
 package me.rerere.rikkahub.ui.pages.log
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
 import androidx.compose.foundation.clickable
@@ -12,11 +15,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -25,7 +36,10 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Switch
@@ -37,10 +51,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -152,8 +169,11 @@ private fun UnifiedLogList(
     modifier: Modifier = Modifier
 ) {
     var selectedLog by remember { mutableStateOf<LogEntry.RequestLog?>(null) }
+    var sheetInner by remember { mutableStateOf<RequestLogSheetInner>(RequestLogSheetInner.Detail) }
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val copiedText = stringResource(R.string.copied)
     val sortedLogs = remember(logs) { logs.sortedByDescending { it.timestamp } }
 
     LazyColumn(
@@ -174,6 +194,7 @@ private fun UnifiedLogList(
                     log = log,
                     onClick = {
                         selectedLog = log
+                        sheetInner = RequestLogSheetInner.Detail
                         scope.launch { sheetState.show() }
                     }
                 )
@@ -184,11 +205,98 @@ private fun UnifiedLogList(
     }
 
     selectedLog?.let { log ->
+        val detailListState = rememberLazyListState()
+        val sheetSnackbarHostState = remember { SnackbarHostState() }
         ModalBottomSheet(
-            onDismissRequest = { selectedLog = null },
-            sheetState = sheetState
+            onDismissRequest = {
+                selectedLog = null
+                sheetInner = RequestLogSheetInner.Detail
+            },
+            sheetState = sheetState,
+            sheetGesturesEnabled = sheetInner is RequestLogSheetInner.Detail,
         ) {
-            RequestLogDetail(log)
+            val copyText = (sheetInner as? RequestLogSheetInner.Copy)?.text
+            BackHandler(enabled = copyText != null) {
+                sheetInner = RequestLogSheetInner.Detail
+            }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                when (val inner = sheetInner) {
+                    RequestLogSheetInner.Detail -> RequestLogDetail(
+                        log = log,
+                        listState = detailListState,
+                        onStringClick = { value ->
+                            sheetInner = RequestLogSheetInner.Copy(value)
+                        },
+                    )
+                    is RequestLogSheetInner.Copy -> LogJsonStringCopyPanel(
+                        text = inner.text,
+                        onBack = { sheetInner = RequestLogSheetInner.Detail },
+                        onCopyAll = {
+                            clipboardManager.setText(AnnotatedString(inner.text))
+                            scope.launch {
+                                sheetSnackbarHostState.showSnackbar(copiedText)
+                            }
+                            sheetInner = RequestLogSheetInner.Detail
+                        },
+                    )
+                }
+                SnackbarHost(
+                    hostState = sheetSnackbarHostState,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+        }
+    }
+}
+
+private sealed interface RequestLogSheetInner {
+    data object Detail : RequestLogSheetInner
+    data class Copy(val text: String) : RequestLogSheetInner
+}
+
+@Composable
+private fun LogJsonStringCopyPanel(
+    text: String,
+    onBack: () -> Unit,
+    onCopyAll: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(HugeIcons.Cancel01, null)
+            }
+            Text(
+                text = stringResource(R.string.select_and_copy),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            TextButton(onClick = onCopyAll) {
+                Icon(
+                    imageVector = HugeIcons.Copy01,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.copy_all))
+            }
+        }
+        SelectionContainer {
+            Text(
+                text = text,
+                fontFamily = JetbrainsMono,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -302,15 +410,20 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RequestLogDetail(log: LogEntry.RequestLog) {
+private fun RequestLogDetail(
+    log: LogEntry.RequestLog,
+    listState: LazyListState,
+    onStringClick: (String) -> Unit = {},
+) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
     val display = remember(log.id) { log.redacted() as LogEntry.RequestLog }
 
     SelectionContainer {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 Text(
@@ -383,7 +496,8 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                         JsonTree(
                             json = jsonElement,
                             modifier = Modifier.padding(top = 4.dp),
-                            initialExpandLevel = 2
+                            initialExpandLevel = 2,
+                            onStringClick = onStringClick
                         )
                     } else {
                         Text(

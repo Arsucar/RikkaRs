@@ -78,11 +78,13 @@ android {
             )
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+            buildConfigField("String", "GITHUB_API_TOKEN", "\"${project.findProperty("github.api.token")?.toString() ?: ""}\"")
         }
         debug {
             applicationIdSuffix = ".debug"
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+            buildConfigField("String", "GITHUB_API_TOKEN", "\"${project.findProperty("github.api.token")?.toString() ?: ""}\"")
         }
     }
     compileOptions {

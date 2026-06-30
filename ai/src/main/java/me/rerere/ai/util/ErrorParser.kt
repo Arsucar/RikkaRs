@@ -49,3 +49,27 @@ fun JsonElement.parseErrorDetail(): HttpException {
         }
     }
 }
+
+fun parseErrorDetailFromResponseBody(bodyRaw: String): HttpException? {
+    val trimmed = bodyRaw.trim()
+    if (trimmed.isBlank()) return null
+
+    runCatching { Json.parseToJsonElement(trimmed) }
+        .onSuccess { return it.parseErrorDetail() }
+
+    val lines = trimmed.split("\n")
+        .map { it.trim().removePrefix("data:").trim() }
+        .filter { it.isNotBlank() && it != "[DONE]" }
+
+    var firstParsed: HttpException? = null
+    for (line in lines) {
+        runCatching { Json.parseToJsonElement(line) }
+            .onSuccess { element ->
+                val detail = element.parseErrorDetail()
+                if (element is JsonObject && element.containsKey("error")) return detail
+                if (firstParsed == null) firstParsed = detail
+            }
+    }
+
+    return firstParsed ?: HttpException(trimmed.take(500))
+}

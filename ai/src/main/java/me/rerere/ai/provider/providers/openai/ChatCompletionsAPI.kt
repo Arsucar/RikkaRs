@@ -43,7 +43,9 @@ import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.parseErrorDetailFromResponseBody
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -217,15 +219,13 @@ class ChatCompletionsAPI(
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
-                        val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
-                        exception = bodyElement.parseErrorDetail()
+                        exception = parseErrorDetailFromResponseBody(bodyRaw) ?: exception
+                            ?: HttpException("Unknown error")
                         Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
                     Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
                     e.printStackTrace()
-                    exception = e
                 } finally {
                     close(exception)
                 }

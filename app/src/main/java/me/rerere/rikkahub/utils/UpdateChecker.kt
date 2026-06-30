@@ -30,20 +30,24 @@ class UpdateChecker(private val client: OkHttpClient) {
     }.flowOn(Dispatchers.IO)
 
     private suspend fun fetchLatestRelease(): UpdateInfo {
-        val response = client.newCall(
-            Request.Builder()
-                .url(ArsucarForkLinks.GITHUB_RELEASES_LATEST_API)
-                .get()
-                .addHeader("Accept", "application/vnd.github+json")
-                .addHeader(
-                    "User-Agent",
-                    "Rikka-arsucar/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                )
-                .build(),
-        ).await()
+        val requestBuilder = Request.Builder()
+            .url(ArsucarForkLinks.GITHUB_RELEASES_LATEST_API)
+            .get()
+            .addHeader("Accept", "application/vnd.github+json")
+            .addHeader("X-GitHub-Api-Version", "2022-11-28")
+            .addHeader(
+                "User-Agent",
+                "Rikka-arsucar/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            )
+        val token = BuildConfig.GITHUB_API_TOKEN.trim()
+        if (token.isNotEmpty()) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
+        val response = client.newCall(requestBuilder.build()).await()
         if (!response.isSuccessful) {
             throw Exception(
                 when (response.code) {
+                    403 -> "GitHub API rate limit exceeded, try again later"
                     404 -> "No GitHub release found yet"
                     else -> "Failed to fetch update info (HTTP ${response.code})"
                 },
