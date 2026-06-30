@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-06-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~460 | Active |
+| `journal-1.md` | ~494 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-06-30 | feat: finish_work meta-tool | `24b4fc2f` | `release/rikka-arsucar` |
 | 10 | 2026-06-30 | Fix workspace shell /dev/ redirect false-positive (#16) | `c3ac4392` | `release/rikka-arsucar` |
 | 9 | 2026-06-29 | Conversation archive feature (full pipeline + data-loss incident) | `2f2aa527` | `release/rikka-arsucar` |
 | 8 | 2026-06-28 | fix: 切换会话再切回时生成中消息内容被 DB 覆盖丢失 | `da1166eb` | `release/rikka-arsucar` |
