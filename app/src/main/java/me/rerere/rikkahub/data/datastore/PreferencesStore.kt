@@ -95,7 +95,6 @@ class SettingsStore(
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val REQUEST_LOGGING_ENABLED = booleanPreferencesKey("request_logging_enabled")
-
         // 模型选择
         val ENABLE_WEB_SEARCH = booleanPreferencesKey("enable_web_search")
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")

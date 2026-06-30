@@ -14,6 +14,11 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ## Unreleased
 
+### 新功能 / Features
+
+- **日志长按多选导出** — 日志页长按条目进入选择模式，底部 toolbar 全选/确认/取消；确认仅导出选中项（redacted）。`truncateLogEntry` 抽到 `common` 层供 `LogsTool` 复用。（#15）
+  **Log long-press multi-select export** — Long-press an entry to enter selection mode with a bottom toolbar (select all / confirm / cancel); confirm exports only selected entries (redacted). `truncateLogEntry` extracted to `common` for reuse by `LogsTool`. (#15)
+
 ### 修复 / Fixes
 
 - **流式错误体多段 JSON** — `parseErrorDetailFromResponseBody` 容错解析 SSE/粘连 body；Claude、ChatCompletions、Response、Google 流式 `onFailure` 统一使用。（#12）
