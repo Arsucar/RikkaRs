@@ -9,10 +9,6 @@ body:
         感谢你花时间提交 Bug 报告！请尽量填写完整信息以便我们复现和修复问题。
         Thanks for taking the time to report a bug! Please fill in as much detail as possible.
 
-        > **注意 | Note**
-        > 请勿提交由 AI 生成的 Issue，此类 Issue 将被直接关闭。
-        > Do not submit AI-generated issues — they will be closed without review.
-
   - type: textarea
     id: description
     attributes:
@@ -40,61 +36,3 @@ body:
       description: 如有相关截图或录屏，请粘贴到此处。 / Attach relevant screenshots or screen recordings here.
     validations:
       required: false
-
-  - type: input
-    id: provider
-    attributes:
-      label: 使用的提供商 | Provider
-      description: 例如 OpenAI、Anthropic、Google、本地部署等 / e.g. OpenAI, Anthropic, Google, local deployment
-      placeholder: OpenAI
-    validations:
-      required: false
-
-  - type: input
-    id: model
-    attributes:
-      label: 使用的模型 | Model
-      description: 例如 gpt-4o、claude-3-5-sonnet 等 / e.g. gpt-4o, claude-3-5-sonnet
-      placeholder: gpt-4o
-    validations:
-      required: false
-
-  - type: dropdown
-    id: api-type
-    attributes:
-      label: 接口类型 | API Type
-      description: 使用的接口协议类型 / The API protocol type being used
-      options:
-        - OpenAI ChatCompletion
-        - Response API
-        - Google Gemini
-        - Anthropic
-    validations:
-      required: false
-
-  - type: input
-    id: app-version
-    attributes:
-      label: APP 版本 | App Version
-      description: 例如 v1.2.3 / e.g. v1.2.3
-      placeholder: v1.2.3
-    validations:
-      required: true
-
-  - type: input
-    id: android-version
-    attributes:
-      label: 安卓版本 | Android Version
-      description: 例如 Android 14 / e.g. Android 14
-      placeholder: Android 14
-    validations:
-      required: true
-
-  - type: input
-    id: device-model
-    attributes:
-      label: 手机型号 | Device Model
-      description: 例如 小米 14 / e.g. Xiaomi 14
-      placeholder: Xiaomi 14
-    validations:
-      required: true
