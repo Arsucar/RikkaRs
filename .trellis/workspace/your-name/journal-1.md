@@ -424,3 +424,37 @@ Root cause: ChatVM is per-conversation-id, so switching away and back rebuilds C
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Fix workspace shell /dev/ redirect false-positive (#16)
+
+**Date**: 2026-06-30
+**Task**: Fix workspace shell /dev/ redirect false-positive (#16)
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Fixed WorkspaceShellPolicy regex that rejected legitimate 2>/dev/null redirects. Replaced substring match with negative lookahead whitelist: /dev/null, /dev/zero, /dev/urandom, /dev/random. Added test coverage for safe and unsafe device redirections. Archived task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c3ac4392` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
