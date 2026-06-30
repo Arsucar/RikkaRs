@@ -60,4 +60,33 @@ class WorkspaceShellPolicyTest {
             assertTrue("$cmd should be allowed", evaluateShellCommand(cmd) is ShellCommandVerdict.Allowed)
         }
     }
+
+    @Test
+    fun allowsSafeDeviceRedirection() {
+        val allowed = listOf(
+            "echo test 2>/dev/null",
+            "grep -r TODO . 2>/dev/null | head -5",
+            ">/dev/null",
+            "2> /dev/null",
+            "1>/dev/urandom",
+            "cat file.txt >/dev/null",
+            "make 2>/dev/urandom",
+        )
+        for (cmd in allowed) {
+            assertTrue("$cmd should be allowed", evaluateShellCommand(cmd) is ShellCommandVerdict.Allowed)
+        }
+    }
+
+    @Test
+    fun rejectsUnsafeDeviceRedirection() {
+        val rejected = listOf(
+            "dd if=/dev/zero of=/dev/sda",
+            "cat /dev/sda > /dev/sda1",
+            "echo data > /dev/mmcblk0",
+            "dd if=input.img > /dev/sda",
+        )
+        for (cmd in rejected) {
+            assertTrue("$cmd should be rejected", evaluateShellCommand(cmd) is ShellCommandVerdict.Rejected)
+        }
+    }
 }

@@ -71,7 +71,7 @@ fun evaluateShellCommand(command: String): ShellCommandVerdict {
         return ShellCommandVerdict.Rejected(NOT_ALLOWED)
     }
 
-    if (Regex(""">/dev/""").containsMatchIn(lower)) {
+    if (Regex("""[0-9]*>\s*/dev/(?!null|zero|urandom|random)""").containsMatchIn(lower)) {
         return ShellCommandVerdict.Rejected(NOT_ALLOWED)
     }
 
