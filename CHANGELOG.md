@@ -12,6 +12,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## Unreleased
+
+### 修复 / Fixes
+
+- **流式错误体多段 JSON** — `parseErrorDetailFromResponseBody` 容错解析 SSE/粘连 body；Claude、ChatCompletions、Response、Google 流式 `onFailure` 统一使用。（#12）
+  **Streaming error body with extra JSON** — `parseErrorDetailFromResponseBody` tolerates multi-segment bodies; all streaming `onFailure` paths use it. (#12)
+
+- **检查更新 GitHub API 403** — 可选 `github.api.token` → `GITHUB_API_TOKEN`、Bearer 与 API 版本头；403 显示明确限流提示。（#10）
+  **Update check GitHub 403** — Optional token in BuildConfig, auth headers, clearer rate-limit message. (#10)
+
+- **日志 JSON 字符串选择与复制** — 单 Sheet 内详情/「选择复制」切换，保留详情滚动位置，复制成功 Snackbar；不再嵌套 Sheet 闪退。（#9）
+  **Log JSON select-and-copy** — Single bottom sheet with detail/copy states, scroll preservation, in-sheet snackbar; fixes nested sheet crash. (#9)
 
 ## v2.3.11
 
