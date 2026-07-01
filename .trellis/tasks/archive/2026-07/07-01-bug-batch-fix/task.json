@@ -1,0 +1,32 @@
+{
+  "id": "bug-batch-fix",
+  "name": "bug-batch-fix",
+  "title": "Fix all open bugs from issue tracker (7 bugs, 5 groups)",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-01",
+  "completedAt": "2026-07-01",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-01-bug-compress-hidden-stats",
+    "07-01-bug-subagent-control-ui",
+    "07-01-bug-fts-ambiguous-col",
+    "07-01-bug-duplicate-default-assistant",
+    "07-01-bug-shell-policy-redirect"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
