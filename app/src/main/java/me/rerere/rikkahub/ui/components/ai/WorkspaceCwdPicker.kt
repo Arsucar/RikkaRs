@@ -181,7 +181,7 @@ fun WorkspaceCwdPickerSheet(
                         onSetAssistantDefault(normalizeWorkspaceCwd(toAbsolutePath(browsePath)))
                         onDismiss()
                     }) {
-                        Text("设为助手默认")
+                        Text(stringResource(R.string.workspace_cwd_set_assistant_default))
                     }
                 }
                 FilledTonalButton(onClick = {

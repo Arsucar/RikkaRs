@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
@@ -286,7 +287,13 @@ private fun ChatPageContent(
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
 
-    val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository, assistant.enabledSkills, skillManager) {
+    val completionProviders = remember(
+        assistant.workspaceId,
+        resolveEffectiveWorkspaceCwd(conversation, assistant),
+        workspaceRepository,
+        assistant.enabledSkills,
+        skillManager,
+    ) {
         buildList {
             // Add workspace file completion (@)
             assistant.workspaceId?.let { workspaceId ->
@@ -294,7 +301,7 @@ private fun ChatPageContent(
                     WorkspaceCompletionProvider(
                         workspaceId = workspaceId.toString(),
                         repository = workspaceRepository,
-                        currentCwd = conversation.workspaceCwd,
+                        currentCwd = resolveEffectiveWorkspaceCwd(conversation, assistant),
                     )
                 )
             }
