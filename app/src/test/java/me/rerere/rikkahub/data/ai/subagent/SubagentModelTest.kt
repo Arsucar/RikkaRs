@@ -47,6 +47,7 @@ class SubagentModelTest {
             depth = 1,
             usage = TokenUsage(promptTokens = 10, completionTokens = 5, totalTokens = 15),
             steps = 3,
+            toolLoopSteps = 2,
             transcript = listOf(
                 SubagentTranscriptStep.Reasoning("think"),
                 SubagentTranscriptStep.ToolCall("workspace_read_file", "{}", "ok"),

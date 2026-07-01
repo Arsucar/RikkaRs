@@ -88,11 +88,14 @@ class SubagentHost(
 
         var totalUsage: TokenUsage? = null
         var steps = 0
+        var totalToolLoopSteps = 0
 
         return runCatching {
             Log.i(TAG, "spawn: subagent '${profile.name}' (depth=$depth) started")
 
             var messages = listOf(UIMessage.user(task))
+
+            var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
             var run = runToCompletion(
                 profile = profile,
                 settings = settings,
@@ -104,6 +107,7 @@ class SubagentHost(
                 onProgress = onProgress,
             )
             steps += 1
+            totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
             totalUsage = mergeUsage(totalUsage, run.usage)
             messages = run.messages
 
@@ -112,6 +116,7 @@ class SubagentHost(
             val minLength = profile.summaryMinLength
             while (remainingContinuations > 0 && minLength > 0 && summary.length < minLength) {
                 remainingContinuations -= 1
+                preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
                 val continuationMessages = messages + UIMessage.user(SUMMARY_CONTINUATION_PROMPT)
                 run = runToCompletion(
                     profile = profile.copy(maxSteps = 1),
@@ -124,6 +129,7 @@ class SubagentHost(
                     onProgress = onProgress,
                 )
                 steps += 1
+                totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
                 totalUsage = mergeUsage(totalUsage, run.usage)
                 messages = run.messages
                 summary = run.summary
@@ -138,6 +144,7 @@ class SubagentHost(
                 usage = totalUsage,
                 steps = steps,
                 toolCallCount = countToolCalls(messages),
+                toolLoopSteps = totalToolLoopSteps,
                 transcript = transcript,
             )
             logResult(result)

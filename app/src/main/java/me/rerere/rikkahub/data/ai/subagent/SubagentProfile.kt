@@ -106,6 +106,8 @@ data class SubagentResult(
     @SerialName("steps") val steps: Int = 0,
     /// 子代理本轮调用的工具总数（便于父代理审计"它是否真干了活"，区别于 generation 轮次 steps）。
     @SerialName("tool_call_count") val toolCallCount: Int = 0,
+    /// 实际工具循环步数（受 maxSteps 控制），每步 = 一次 LLM 调用 + 工具执行。
+    @SerialName("tool_loop_steps") val toolLoopSteps: Int = 0,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
 )
 

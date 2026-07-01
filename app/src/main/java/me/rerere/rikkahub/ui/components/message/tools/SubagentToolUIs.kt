@@ -125,7 +125,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         if (result == null) {
             return displayName
         }
-        val steps = result.steps.coerceAtLeast(result.transcript.size)
+        val steps = result.toolLoopSteps
         val usage = result.usage
         val totalTokens = usage?.let {
             when {
@@ -704,6 +704,7 @@ private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
             succeeded = obj["succeeded"]?.jsonPrimitive?.contentOrNull == "true",
             error = obj["error"]?.jsonPrimitive?.contentOrNull,
             steps = obj["steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+            toolLoopSteps = obj["tool_loop_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
             transcript = transcript,
         )
     }.getOrNull()

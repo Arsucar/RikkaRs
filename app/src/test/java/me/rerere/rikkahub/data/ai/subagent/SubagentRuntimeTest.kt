@@ -25,6 +25,7 @@ class SubagentRuntimeTest {
             depth = 1,
             usage = TokenUsage(promptTokens = 1, completionTokens = 2, totalTokens = 3),
             steps = 2,
+            toolLoopSteps = 2,
             transcript = listOf(SubagentTranscriptStep.Text("ok")),
         )
         val encoded = json.encodeToString(SubagentResult.serializer(), result)

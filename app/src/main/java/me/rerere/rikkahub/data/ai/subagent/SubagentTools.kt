@@ -116,7 +116,9 @@ fun createSubagentTools(
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
                 put("subagent_profile", JsonPrimitive(result.profileName))
-                put("subagent_steps", JsonPrimitive(result.steps.coerceAtLeast(result.transcript.size)))
+                put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
+                put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
+                put("subagent_transcript_size", JsonPrimitive(result.transcript.size))
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
                 put("subagent_streaming", JsonPrimitive(false))
             }
@@ -125,7 +127,9 @@ fun createSubagentTools(
                 put("summary", JsonPrimitive(result.summary))
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
-                put("steps", JsonPrimitive(result.steps.coerceAtLeast(result.transcript.size)))
+                put("steps", JsonPrimitive(result.toolLoopSteps))
+                put("tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
+                put("transcript_size", JsonPrimitive(result.transcript.size))
                 put("tool_calls", JsonPrimitive(result.toolCallCount))
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
