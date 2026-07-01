@@ -12,12 +12,21 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
-## Unreleased
+## v2.3.12
 
 ### 新功能 / Features
 
 - **日志长按多选导出** — 日志页长按条目进入选择模式，底部 toolbar 全选/确认/取消；确认仅导出选中项（redacted）。`truncateLogEntry` 抽到 `common` 层供 `LogsTool` 复用。（#15）
   **Log long-press multi-select export** — Long-press an entry to enter selection mode with a bottom toolbar (select all / confirm / cancel); confirm exports only selected entries (redacted). `truncateLogEntry` extracted to `common` for reuse by `LogsTool`. (#15)
+
+- **助手级持久化工作目录** — 每个助手可配置独立 CWD，路径规范化后持久化；补全提供器与 i18n 的「默认目录」按钮均使用 effective CWD。
+  **Assistant-level persistent workspace CWD** — Per-assistant configurable CWD with path normalization; completion provider and i18n default-directory button both use the effective CWD.
+
+- **子代理 steps 字段拆分** — `steps` 拆分为 `tool_loop_steps`（最大循环轮次）与 `transcript_size`（最大 transcript 字符数），语义更清晰。
+  **Subagent steps field split** — `steps` split into `tool_loop_steps` (max loop rounds) and `transcript_size` (max transcript chars) for clearer semantics.
+
+- **finish_work 元工具** — 新增 `finish_work` meta-tool，供子代理在收敛时主动结束 agent loop，避免无效循环。
+  **finish_work meta-tool** — New `finish_work` meta-tool allows subagents to proactively end the agent loop on convergence, avoiding wasted cycles.
 
 ### 修复 / Fixes
 
@@ -29,6 +38,12 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 - **日志 JSON 字符串选择与复制** — 单 Sheet 内详情/「选择复制」切换，保留详情滚动位置，复制成功 Snackbar；不再嵌套 Sheet 闪退。（#9）
   **Log JSON select-and-copy** — Single bottom sheet with detail/copy states, scroll preservation, in-sheet snackbar; fixes nested sheet crash. (#9)
+
+- **日志导出空选全量** — 选择模式确认时若选中列表为空，不再意外导出全部日志。（#15 附带修复）
+  **Log export empty-selection bug** — Confirming export with empty selection no longer falls back to exporting all logs. (bundled with #15)
+
+- **工作区 shell /dev/ 重定向误拒** — 工作区 shell 策略对 `2>/dev/null` 等安全重定向误判为违规，现已修复。（#16）
+  **Workspace shell /dev/ redirect false positive** — Shell policy incorrectly flagged safe redirects like `2>/dev/null`; now fixed. (#16)
 
 ## v2.3.11
 
