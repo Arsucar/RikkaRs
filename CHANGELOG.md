@@ -12,6 +12,31 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.13
+
+### 修复 / Fixes
+
+- **FTS 搜索列名歧义崩溃** — `MessageSearchSort.orderBy` 中 `update_at` 用 `m.update_at` 限定表别名，FTS 查询不再报 ambiguous column。（#26）
+  **FTS search ambiguous column crash** — `MessageSearchSort.orderBy` now qualifies `update_at` with table alias `m.update_at`, resolving the ambiguous column crash in FTS queries. (#26)
+
+- **重复默认助手** — `DEFAULT_ASSISTANTS` 第二个条目 name 改为「Template Assistant」，新用户不再出现两个同名默认助手。（#23）
+  **Duplicate default assistant** — Second `DEFAULT_ASSISTANTS` entry renamed to "Template Assistant"; new users no longer see two identically-named default assistants. (#23)
+
+- **Shell /dev/ 重定向误拒** — Shell 策略正则使用负向前瞻，`2>/dev/null` 等安全重定向不再被误判为违规。（#16）
+  **Shell /dev/ redirect false positive** — Shell policy regex now uses negative lookahead; safe redirects like `2>/dev/null` are no longer falsely blocked. (#16)
+
+- **压缩 hidden 消息统计与正文泄漏** — `compressHiddenCount` 作为 `MessageNode` 独立属性存储，不再写入模型可见正文；`FilesPicker`/`ChatSizeChecker` 改用 `count{ !it.hidden }` 计算可见消息条数。（#24 #25）
+  **Compress hidden count leak + stats mismatch** — `compressHiddenCount` is now a separate `MessageNode` property, not embedded in model-visible text; `FilesPicker`/`ChatSizeChecker` use `count{ !it.hidden }` for visible message count. (#24 #25)
+
+- **子代理强制停止后仍在后台运行** — `ChatService` 新增 `activeSubagents` 注册表，`stopGeneration()` 委托至 `requestCancel()` 取消所有活跃子代理；`finishInterruptedPendingTools` 处理流式子代理未完成工具调用。（#18）
+  **Subagent keeps running after force-stop** — `ChatService` tracks active subagents; `stopGeneration()` delegates to `requestCancel()` to cancel all running subagents; `finishInterruptedPendingTools` handles streaming subagent pending tool calls. (#18)
+
+- **子代理语义混淆与累计上限** — `tool_loop_steps`/`transcript_size` 语义明确化；slim JSON 新增 `tool_call_count` 与 `usage` 字段；标题显示工具调用次数 + token 消耗；`SubagentProfile` 新增 `maxToolCalls` 累计工具次数上限。（#21）
+  **Subagent semantic confusion + cumulative limit** — Clarified `tool_loop_steps`/`transcript_size` semantics; slim JSON now includes `tool_call_count` and `usage`; card title shows tool calls count + token usage; added `maxToolCalls` limit on `SubagentProfile`. (#21)
+
+- **子代理工具调用 UI 与主代理不一致** — Transcript 行通过 `ToolUIRegistry` 复用主代理 ToolUI 图标/标题逻辑，点击可查看工具调用详情 Preview；内嵌工具输出默认折叠 10 行可展开；`buildTranscript` 默认 `truncateToolOutput` 提升至 2000 字符。（#22）
+  **Subagent tool call UI inconsistent with main agent** — Transcript rows now use `ToolUIRegistry` for consistent icon/title with main agent ToolUI; click-through Preview shows tool call details; inline tool output with 10-line collapse/expand; `buildTranscript` default `truncateToolOutput` raised to 2000 chars. (#22)
+
 ## v2.3.12
 
 ### 新功能 / Features
