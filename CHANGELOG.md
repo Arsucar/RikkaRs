@@ -5,8 +5,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 > **发版流程**：每次推送版本标签前，必须先在本文件中新增对应版本段落并提交。
 > AI 助手在用户请求「发版 / 打标签 / 推版本」时，应：
-> 1. 读取本文件，确认目标版本段落已存在且内容完整；
-> 2. 若不存在，先补写并提交；
+> 1. 用 `git log <上个标签>..HEAD --oneline` 列出上个标签至今的所有提交，逐条判断是否为用户可见变更（忽略 chore/task archive/docs 等）；
+> 2. 将用户可见变更写入本文件对应版本段落（未存在则新建 `## vX.Y.Z`），格式为中英双语，包含 issue 编号；
 > 3. 从对应版本段落截取中英双语内容，作为 `git tag -a` 的消息体 and GitHub Release body；
 > 4. 再执行打标签和推送。
 
