@@ -40,6 +40,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.normalizeWorkspaceCwd
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
@@ -51,6 +52,7 @@ fun WorkspaceCwdPickerSheet(
     currentCwd: String?,
     onSelectCwd: (String?) -> Unit,
     onDismiss: () -> Unit,
+    onSetAssistantDefault: ((String?) -> Unit)? = null,
 ) {
     val workspaceRepository: WorkspaceRepository = koinInject()
 
@@ -172,6 +174,14 @@ fun WorkspaceCwdPickerSheet(
                         onDismiss()
                     }) {
                         Text(stringResource(R.string.workspace_cwd_reset))
+                    }
+                }
+                if (onSetAssistantDefault != null) {
+                    TextButton(onClick = {
+                        onSetAssistantDefault(normalizeWorkspaceCwd(toAbsolutePath(browsePath)))
+                        onDismiss()
+                    }) {
+                        Text("设为助手默认")
                     }
                 }
                 FilledTonalButton(onClick = {

@@ -110,6 +110,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -633,6 +634,8 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
+            // 有效 CWD：会话级 > 助手默认 > /workspace，统一规范化
+            val effectiveWorkspaceCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
 
             // start generating
             val session = getOrCreateSession(conversationId)
@@ -651,7 +654,7 @@ class ChatService(
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
-                workspaceCwd = conversation.workspaceCwd,
+                workspaceCwd = effectiveWorkspaceCwd,
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -683,7 +686,7 @@ class ChatService(
                     addAll(
                         createWorkspaceToolsIfReady(
                             assistant.workspaceId?.toString(),
-                            conversation.workspaceCwd,
+                            effectiveWorkspaceCwd,
                             readOnly = delegateOnly,
                         )
                     )
@@ -736,7 +739,7 @@ class ChatService(
                                 settings = settings,
                                 parentModel = model,
                                 parentTools = this@buildList,
-                                workspaceCwd = conversation.workspaceCwd,
+                                workspaceCwd = effectiveWorkspaceCwd,
                                 conversationId = conversationId,
                                 depth = 0,
                                 delegateOnly = delegateOnly,

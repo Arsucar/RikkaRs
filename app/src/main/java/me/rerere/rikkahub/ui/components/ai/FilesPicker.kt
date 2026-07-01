@@ -75,6 +75,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -247,6 +248,9 @@ internal fun FilesPicker(
         }
         if (boundWorkspace != null && boundWorkspace.shellStatus == WorkspaceShellStatus.READY.name) {
             var showCwdSheet by remember { mutableStateOf(false) }
+            // 展示有效 cwd（会话级 > 助手默认 > /workspace）；来源为助手默认时附 (default) 标注
+            val effectiveCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
+            val isAssistantDefault = conversation.workspaceCwd == null && assistant.defaultWorkspaceCwd != null
             TextButton(
                 onClick = { showCwdSheet = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -259,7 +263,7 @@ internal fun FilesPicker(
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = conversation.workspaceCwd ?: "/workspace",
+                    text = if (isAssistantDefault) "$effectiveCwd (default)" else effectiveCwd,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -270,6 +274,9 @@ internal fun FilesPicker(
                     currentCwd = conversation.workspaceCwd,
                     onSelectCwd = { newCwd ->
                         onUpdateConversation(conversation.copy(workspaceCwd = newCwd))
+                    },
+                    onSetAssistantDefault = { newDefault ->
+                        onUpdateAssistant(assistant.copy(defaultWorkspaceCwd = newDefault))
                     },
                     onDismiss = { showCwdSheet = false },
                 )
