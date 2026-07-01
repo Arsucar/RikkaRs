@@ -566,3 +566,39 @@ Reviewed and closed GitHub issues #14 (finish_work) and #15 (log export). Found 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Bug batch fix: 7 issues closed, v2.3.13 released
+
+**Date**: 2026-07-01
+**Task**: Bug batch fix: 7 issues closed, v2.3.13 released
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Batch-fixed 7 open bug issues (#16 #18 #21 #22 #23 #24 #25 #26). FTS ambiguous column, duplicate default assistant, shell redirect, compress hidden stats, subagent control/cancel/UI. All issues closed with fix comments. Updated CHANGELOG, bumped version to 2.3.13, tagged and pushed v2.3.13.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6afb70ba` | (see git log) |
+| `16c2f83c` | (see git log) |
+| `2dd1dd92` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

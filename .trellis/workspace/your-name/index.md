@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~568 | Active |
+| `journal-1.md` | ~604 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-07-01 | Bug batch fix: 7 issues closed, v2.3.13 released | `6afb70ba`, `16c2f83c`, `2dd1dd92` | `release/rikka-arsucar` |
 | 12 | 2026-07-01 | Close #13 #14 #15 — review, fix, and archive | `58923409`, `ed44b719`, `4435c885`, `13250bf2` | `release/rikka-arsucar` |
 | 11 | 2026-06-30 | feat: finish_work meta-tool | `24b4fc2f` | `release/rikka-arsucar` |
 | 10 | 2026-06-30 | Fix workspace shell /dev/ redirect false-positive (#16) | `c3ac4392` | `release/rikka-arsucar` |
