@@ -35,6 +35,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.math.roundToInt
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -538,5 +539,40 @@ private fun AssistantSubagentHubCard(
                 )
             },
         )
+
+        HorizontalDivider()
+
+        FormItem(
+            modifier = Modifier.padding(8.dp),
+            label = { Text(stringResource(R.string.subagent_profile_steps_countdown_threshold)) },
+            description = { Text(stringResource(R.string.subagent_profile_steps_countdown_off)) },
+        ) {
+            var localThreshold by remember(assistant.id, assistant.stepsCountdownThreshold) {
+                mutableStateOf(assistant.stepsCountdownThreshold?.toFloat() ?: -1f)
+            }
+            Slider(
+                value = localThreshold,
+                onValueChange = { localThreshold = it },
+                onValueChangeFinished = {
+                    val persistedValue = when {
+                        localThreshold < 0f -> null
+                        localThreshold.roundToInt() == 0 -> 0
+                        else -> localThreshold.roundToInt().coerceIn(1, 16)
+                    }
+                    onUpdate(assistant.copy(stepsCountdownThreshold = persistedValue))
+                },
+                valueRange = -1f..16f,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = assistant.enableSubagents,
+            )
+            Text(
+                text = when {
+                    localThreshold < 0f -> stringResource(R.string.subagent_profile_steps_countdown_auto)
+                    localThreshold.roundToInt() == 0 -> stringResource(R.string.subagent_profile_steps_countdown_off)
+                    else -> localThreshold.roundToInt().toString()
+                },
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }

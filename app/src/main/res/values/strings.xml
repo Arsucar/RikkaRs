@@ -86,6 +86,9 @@
   <string name="subagent_profile_max_tokens_inherit">Inherit</string>
   <string name="subagent_profile_reasoning">Reasoning</string>
   <string name="subagent_profile_max_steps">Max steps</string>
+  <string name="subagent_profile_steps_countdown_threshold">Steps countdown threshold</string>
+  <string name="subagent_profile_steps_countdown_auto">Auto</string>
+  <string name="subagent_profile_steps_countdown_off">Off</string>
   <string name="subagent_profile_allowed_paths">Allowed path prefixes</string>
   <string name="subagent_profile_path_add_hint">Add path prefix</string>
   <string name="subagent_profile_stream">Stream output</string>

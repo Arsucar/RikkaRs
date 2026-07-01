@@ -85,6 +85,9 @@
   <string name="subagent_profile_max_tokens_inherit">继承</string>
   <string name="subagent_profile_reasoning">推理</string>
   <string name="subagent_profile_max_steps">最大步数</string>
+  <string name="subagent_profile_steps_countdown_threshold">倒计时提醒阈值</string>
+  <string name="subagent_profile_steps_countdown_auto">自动</string>
+  <string name="subagent_profile_steps_countdown_off">关闭</string>
   <string name="subagent_profile_allowed_paths">允许的路径前缀</string>
   <string name="subagent_profile_path_add_hint">添加路径前缀</string>
   <string name="subagent_profile_stream">流式输出</string>

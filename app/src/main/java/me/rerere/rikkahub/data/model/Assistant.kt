@@ -56,6 +56,7 @@ data class Assistant(
     val subagentProfiles: List<SubagentProfile> = emptyList(),
     val disabledBuiltinSubagents: Set<String> = emptySet(),
     val disabledGlobalSubagents: Set<String> = emptySet(),
+    val stepsCountdownThreshold: Int? = null,
 )
 
 @Serializable

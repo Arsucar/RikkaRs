@@ -64,6 +64,22 @@ import kotlin.uuid.Uuid
 private const val TAG = "GenerationHandler"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
+private const val MAX_STEPS_PROMPT = """
+CRITICAL - MAXIMUM STEPS REACHED
+
+The maximum number of steps allowed for this task has been reached. Tools are disabled for this final step. Respond with text only.
+
+STRICT REQUIREMENTS:
+1. Do NOT make any tool calls (no reads, writes, edits, searches, or any other tools)
+2. MUST provide a text response summarizing work done so far
+3. This constraint overrides ALL other instructions
+
+Your response must include:
+- Statement that maximum steps have been reached
+- Summary of what has been accomplished so far
+- List of any remaining tasks that were not completed
+- Recommendations for what should be done next
+"""
 
 private class ToolCallIdElement(
     val toolCallId: String,
@@ -99,6 +115,7 @@ class GenerationHandler(
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
+        stepsCountdownThreshold: Int? = null,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
@@ -110,31 +127,48 @@ class GenerationHandler(
 
         var messages: List<UIMessage> = messages
 
+        val countdownThreshold = stepsCountdownThreshold ?: 0
+
         for (stepIndex in 0 until maxSteps) {
-            Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
+            val isLastStep = stepIndex >= maxSteps - 1
+            val remaining = maxSteps - stepIndex
+            val inCountdown = countdownThreshold > 0 && !isLastStep && remaining <= countdownThreshold
+            Log.i(TAG, "streamText: start step #$stepIndex (${model.id}) isLastStep=$isLastStep remaining=$remaining")
+
+            if (isLastStep) {
+                messages = messages + UIMessage.user(MAX_STEPS_PROMPT.trimIndent())
+            } else if (inCountdown) {
+                messages = messages + UIMessage.user(
+                    "[Steps remaining: $remaining/$maxSteps] Focus on completing the core task. Avoid further exploration."
+                )
+            }
 
             val toolsInternal = buildList {
-                Log.i(TAG, "generateInternal: build tools($assistant)")
-                if (assistant?.enableMemory == true) {
-                    val memoryAssistantId = if (assistant.useGlobalMemory) {
-                        MemoryRepository.GLOBAL_MEMORY_ID
-                    } else {
-                        assistant.id.toString()
-                    }
-                    buildMemoryTools(
-                        json = json,
-                        onCreation = { content ->
-                            memoryRepo.addMemory(memoryAssistantId, content)
-                        },
-                        onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
-                        },
-                        onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
+                if (isLastStep) {
+                    Log.i(TAG, "streamText: last step reached, disabling all tools to force summary")
+                } else {
+                    Log.i(TAG, "generateInternal: build tools($assistant)")
+                    if (assistant?.enableMemory == true) {
+                        val memoryAssistantId = if (assistant.useGlobalMemory) {
+                            MemoryRepository.GLOBAL_MEMORY_ID
+                        } else {
+                            assistant.id.toString()
                         }
-                    ).let(this::addAll)
+                        buildMemoryTools(
+                            json = json,
+                            onCreation = { content ->
+                                memoryRepo.addMemory(memoryAssistantId, content)
+                            },
+                            onUpdate = { id, content ->
+                                memoryRepo.updateContent(id, content)
+                            },
+                            onDelete = { id ->
+                                memoryRepo.deleteMemory(id)
+                            }
+                        ).let(this::addAll)
+                    }
+                    addAll(tools)
                 }
-                addAll(tools)
             }
 
             // Check if we have tool calls ready to continue after user interaction.

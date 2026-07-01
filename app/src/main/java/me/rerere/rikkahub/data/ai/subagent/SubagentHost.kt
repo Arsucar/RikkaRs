@@ -138,7 +138,7 @@ class SubagentHost(
             val transcript = buildTranscript(messages)
             val result = SubagentResult(
                 profileName = profile.name,
-                summary = summary.ifBlank { "(subagent produced no textual summary)" },
+                summary = summary.ifBlank { buildFallbackSummary(transcript) },
                 succeeded = true,
                 depth = depth,
                 usage = totalUsage,
@@ -233,6 +233,7 @@ class SubagentHost(
                 assistant = assistant,
                 tools = tools,
                 maxSteps = profile.maxSteps.coerceIn(1, 256),
+                stepsCountdownThreshold = assistant.stepsCountdownThreshold,
                 memories = emptyList(),
                 workspaceCwd = workspaceCwd,
             ).onEach { chunk ->
@@ -422,6 +423,36 @@ class SubagentHost(
                 }
             }
             return steps
+        }
+
+        fun buildFallbackSummary(transcript: List<SubagentTranscriptStep>): String {
+            if (transcript.isEmpty()) return "(subagent ran out of steps with no output)"
+            val sb = StringBuilder()
+            sb.appendLine("(Max steps reached — auto-generated summary from transcript)")
+            sb.appendLine()
+            var toolCount = 0
+            for (step in transcript) {
+                when (step) {
+                    is SubagentTranscriptStep.Text -> {
+                        val trimmed = step.content.take(500)
+                        sb.appendLine(trimmed)
+                        sb.appendLine()
+                    }
+                    is SubagentTranscriptStep.ToolCall -> {
+                        toolCount++
+                        if (toolCount <= 15) {
+                            val outputPreview = step.output.take(300)
+                            sb.appendLine("[${step.toolName}] ${step.input.take(200)} → $outputPreview")
+                        }
+                    }
+                    is SubagentTranscriptStep.Reasoning -> {
+                    }
+                }
+            }
+            if (toolCount > 15) {
+                sb.appendLine("... and ${toolCount - 15} more tool calls")
+            }
+            return sb.toString().take(4000)
         }
 
         // REVIEWED: no longer clears needsApproval; approval flows through SubagentPermissionBuilder
