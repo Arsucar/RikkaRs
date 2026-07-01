@@ -110,6 +110,11 @@
   <string name="subagent_profile_tool_approval_overrides_desc">When approval is Override, set whether each workspace tool runs without user confirmation</string>
   <string name="subagent_profile_tool_auto_approve">Auto-approve</string>
   <string name="subagent_tool_ui_steps">%1$d steps</string>
+  <string name="subagent_tool_ui_steps_and_tool_calls">%1$d steps · %2$d tool calls</string>
+  <string name="subagent_tool_ui_tool_calls_count">%1$d tool calls</string>
+  <string name="tool_output_expand">Show more</string>
+  <string name="tool_output_collapse">Show less</string>
+  <string name="subagent_tool_ui_cancelled">Subagent cancelled</string>
   <string name="subagent_tool_ui_token_count">%1$s tokens</string>
   <string name="subagent_tool_ui_expand_details">Expand details</string>
   <string name="subagent_tool_ui_collapse_details">Collapse details</string>

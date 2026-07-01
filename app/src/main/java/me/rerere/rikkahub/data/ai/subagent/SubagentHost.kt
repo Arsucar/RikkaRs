@@ -10,6 +10,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
@@ -34,11 +37,54 @@ internal const val SUMMARY_CONTINUATION_PROMPT =
 
 
 
+private object ToolCallBudgetStop : Exception()
+
+internal object SubagentSessionRegistry {
+    private val activeSessions = ConcurrentHashMap<Uuid, AtomicInteger>()
+    private val cancelFlags = ConcurrentHashMap<Uuid, AtomicBoolean>()
+    private val cancelReasons = ConcurrentHashMap<Uuid, String>()
+
+    fun register(conversationId: Uuid) {
+        activeSessions.merge(conversationId, AtomicInteger(1)) { existing, _ ->
+            existing.incrementAndGet()
+            existing
+        }
+        cancelFlags.computeIfAbsent(conversationId) { AtomicBoolean(false) }
+    }
+
+    fun unregister(conversationId: Uuid) {
+        activeSessions.computeIfPresent(conversationId) { _, count ->
+            if (count.decrementAndGet() <= 0) {
+                cancelFlags.remove(conversationId)
+                cancelReasons.remove(conversationId)
+                null
+            } else {
+                count
+            }
+        }
+    }
+
+    fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user") {
+        cancelReasons[conversationId] = reason
+        cancelFlags.computeIfAbsent(conversationId) { AtomicBoolean(false) }.set(true)
+    }
+
+    fun isCancelRequested(conversationId: Uuid?): Boolean =
+        conversationId != null && cancelFlags[conversationId]?.get() == true
+
+    fun cancelReason(conversationId: Uuid?): String? =
+        conversationId?.let { cancelReasons[it] }
+}
+
 internal fun selectContinuationTools(childTools: List<Tool>): List<Tool> = emptyList()
 
 class SubagentHost(
     private val generationHandler: GenerationHandler,
 ) {
+    fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user") {
+        SubagentSessionRegistry.requestCancel(conversationId, reason)
+    }
+
     suspend fun spawn(
         profileName: String,
         task: String,
@@ -49,7 +95,45 @@ class SubagentHost(
         depth: Int = 0,
         maxDepth: Int = parentAssistant.subagentMaxDepth,
         workspaceCwd: String? = null,
+        conversationId: Uuid? = null,
         onProgress: ((List<UIMessage>) -> Unit)? = null,
+    ): SubagentResult {
+        if (conversationId != null) {
+            SubagentSessionRegistry.register(conversationId)
+        }
+        try {
+            return spawnBody(
+                profileName,
+                task,
+                settings,
+                parentAssistant,
+                parentModel,
+                buildChildTools,
+                depth,
+                maxDepth,
+                workspaceCwd,
+                conversationId,
+                onProgress,
+            )
+        } finally {
+            if (conversationId != null) {
+                SubagentSessionRegistry.unregister(conversationId)
+            }
+        }
+    }
+
+    private suspend fun spawnBody(
+        profileName: String,
+        task: String,
+        settings: Settings,
+        parentAssistant: Assistant,
+        parentModel: Model,
+        buildChildTools: suspend (childAssistant: Assistant, depth: Int) -> List<Tool>,
+        depth: Int,
+        maxDepth: Int,
+        workspaceCwd: String?,
+        conversationId: Uuid?,
+        onProgress: ((List<UIMessage>) -> Unit)?,
     ): SubagentResult {
         val profile = SubagentRegistry.resolveProfile(
             profileName,
@@ -89,6 +173,7 @@ class SubagentHost(
         var totalUsage: TokenUsage? = null
         var steps = 0
         var totalToolLoopSteps = 0
+        var lastMessages = listOf<UIMessage>()
 
         return runCatching {
             Log.i(TAG, "spawn: subagent '${profile.name}' (depth=$depth) started")
@@ -104,17 +189,37 @@ class SubagentHost(
                 tools = childTools,
                 initialMessages = messages,
                 workspaceCwd = workspaceCwd,
+                conversationId = conversationId,
                 onProgress = onProgress,
             )
             steps += 1
             totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
             totalUsage = mergeUsage(totalUsage, run.usage)
             messages = run.messages
+            lastMessages = messages
 
             var summary = run.summary
+            var truncated = run.truncated
             var remainingContinuations = profile.summaryContinuationAttempts
             val minLength = profile.summaryMinLength
             while (remainingContinuations > 0 && minLength > 0 && summary.length < minLength) {
+                if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
+                    val transcript = buildTranscript(messages)
+                    val reason = SubagentSessionRegistry.cancelReason(conversationId)
+                        ?: "Generation cancelled by user"
+                    return@runCatching SubagentResult(
+                        profileName = profile.name,
+                        summary = "Task cancelled by user",
+                        succeeded = false,
+                        error = reason,
+                        depth = depth,
+                        usage = totalUsage,
+                        steps = steps,
+                        toolCallCount = countToolCalls(messages),
+                        toolLoopSteps = totalToolLoopSteps,
+                        transcript = transcript,
+                    )
+                }
                 remainingContinuations -= 1
                 preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
                 val continuationMessages = messages + UIMessage.user(SUMMARY_CONTINUATION_PROMPT)
@@ -126,13 +231,16 @@ class SubagentHost(
                     tools = selectContinuationTools(childTools),
                     initialMessages = continuationMessages,
                     workspaceCwd = workspaceCwd,
+                    conversationId = conversationId,
                     onProgress = onProgress,
                 )
                 steps += 1
                 totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
                 totalUsage = mergeUsage(totalUsage, run.usage)
                 messages = run.messages
+                lastMessages = messages
                 summary = run.summary
+                truncated = truncated || run.truncated
             }
 
             val transcript = buildTranscript(messages)
@@ -145,19 +253,41 @@ class SubagentHost(
                 steps = steps,
                 toolCallCount = countToolCalls(messages),
                 toolLoopSteps = totalToolLoopSteps,
+                truncated = truncated,
                 transcript = transcript,
             )
             logResult(result)
             result
         }.onFailure {
-            if (it is CancellationException) throw it
+            if (it is CancellationException) {
+                if (SubagentSessionRegistry.isCancelRequested(conversationId)) return@onFailure
+                throw it
+            }
             Log.e(TAG, "spawn: subagent '${profile.name}' failed: ${it.message}", it)
-        }.getOrElse {
+        }.getOrElse { failure ->
+            if (failure is CancellationException && SubagentSessionRegistry.isCancelRequested(conversationId)) {
+                val transcript = buildTranscript(lastMessages)
+                val reason = SubagentSessionRegistry.cancelReason(conversationId)
+                    ?: "Generation cancelled by user"
+                return SubagentResult(
+                    profileName = profile.name,
+                    summary = "Task cancelled by user",
+                    succeeded = false,
+                    error = reason,
+                    depth = depth,
+                    usage = totalUsage,
+                    steps = steps,
+                    toolCallCount = countToolCalls(lastMessages),
+                    toolLoopSteps = totalToolLoopSteps,
+                    transcript = transcript,
+                )
+            }
+            if (failure is CancellationException) throw failure
             SubagentResult(
                 profileName = profile.name,
                 summary = "",
                 succeeded = false,
-                error = it.message ?: it.javaClass.name,
+                error = failure.message ?: failure.javaClass.name,
                 depth = depth,
                 usage = totalUsage,
                 steps = steps,
@@ -201,6 +331,7 @@ class SubagentHost(
         tools: List<Tool>,
         initialMessages: List<UIMessage>,
         workspaceCwd: String?,
+        conversationId: Uuid? = null,
         onProgress: ((List<UIMessage>) -> Unit)?,
     ): RunCompletion {
         val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -225,7 +356,10 @@ class SubagentHost(
                 }
             }
         }
-        val finalMessages = try {
+        var finalMessages = initialMessages
+        var truncated = false
+        val maxToolCalls = profile.maxToolCalls
+        try {
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -238,13 +372,21 @@ class SubagentHost(
                 workspaceCwd = workspaceCwd,
             ).onEach { chunk ->
                 if (chunk is GenerationChunk.Messages) {
+                    finalMessages = chunk.messages
                     throttledOnProgress?.invoke(chunk.messages)
+                    if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
+                        throw CancellationException(
+                            SubagentSessionRegistry.cancelReason(conversationId)
+                                ?: "Generation cancelled by user",
+                        )
+                    }
+                    if (maxToolCalls != null && countToolCalls(finalMessages) >= maxToolCalls) {
+                        truncated = true
+                        throw ToolCallBudgetStop
+                    }
                 }
-            }.fold(initialMessages) { _, chunk ->
-                when (chunk) {
-                    is GenerationChunk.Messages -> chunk.messages
-                }
-            }
+            }.collect { }
+        } catch (_: ToolCallBudgetStop) {
         } finally {
             progressScope.cancel()
         }
@@ -253,6 +395,7 @@ class SubagentHost(
             messages = finalMessages,
             summary = lastAssistantText(finalMessages),
             usage = accumulateUsage(finalMessages),
+            truncated = truncated,
         )
     }
 
@@ -365,13 +508,14 @@ class SubagentHost(
         val messages: List<UIMessage>,
         val summary: String,
         val usage: TokenUsage?,
+        val truncated: Boolean = false,
     )
 
     companion object {
         fun buildTranscript(
             messages: List<UIMessage>,
             truncateChars: Int = 200,
-            truncateToolOutput: Int = 0,
+            truncateToolOutput: Int = 2000,
         ): List<SubagentTranscriptStep> {
             val steps = mutableListOf<SubagentTranscriptStep>()
             for (message in messages) {

@@ -114,6 +114,7 @@ data class MessageNode(
     val messages: List<UIMessage>,
     val selectIndex: Int = 0,
     val hidden: Boolean = false,
+    val compressHiddenCount: Int? = null,
     @Transient
     val isFavorite: Boolean = false,
 ) {

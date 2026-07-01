@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,10 +23,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,8 +57,11 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
+
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.utils.JsonInstant
+import kotlinx.serialization.json.Json
+import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.formatNumber
 
 private const val TRUNCATE_LEN = 120
@@ -65,6 +71,7 @@ private fun subagentToolContentKey(context: ToolUIContext): String {
     val meta = textPart?.metadata
     val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull
     val steps = meta?.get("subagent_steps")?.jsonPrimitive?.contentOrNull
+    val toolCalls = meta?.get("subagent_tool_calls")?.jsonPrimitive?.contentOrNull
     val textLen = textPart?.text?.length ?: 0
     return buildString {
         append(context.loading)
@@ -76,6 +83,8 @@ private fun subagentToolContentKey(context: ToolUIContext): String {
         append(streaming)
         append('|')
         append(steps)
+        append('|')
+        append(toolCalls)
         append('|')
         append(textLen)
     }
@@ -107,10 +116,16 @@ object SpawnSubagentToolUI : ToolUIRenderer {
             val profileName = meta["subagent_profile"]?.jsonPrimitive?.contentOrNull ?: "subagent"
             val displayName = resolveSubagentDisplayName(profileName)
             val streaming = meta["subagent_streaming"]?.jsonPrimitive?.contentOrNull == "true"
-            val steps = meta["subagent_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+            val loopSteps = meta["subagent_tool_loop_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: meta["subagent_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: 0
+            val toolCalls = meta["subagent_tool_calls"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+            val cancelled = meta["subagent_cancelled"]?.jsonPrimitive?.contentOrNull == "true"
             if (streaming) {
-                return if (steps > 0) {
-                    "$displayName (${stringResource(R.string.subagent_tool_ui_steps, steps)})"
+                return if (cancelled) {
+                    stringResource(R.string.subagent_tool_ui_cancelled)
+                } else if (toolCalls > 0) {
+                    "$displayName · $toolCalls"
                 } else {
                     displayName
                 }
@@ -125,7 +140,8 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         if (result == null) {
             return displayName
         }
-        val steps = result.toolLoopSteps
+        val loopSteps = result.toolLoopSteps
+        val toolCalls = result.toolCallCount
         val usage = result.usage
         val totalTokens = usage?.let {
             when {
@@ -135,8 +151,10 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         } ?: 0
         return buildString {
             append(displayName)
-            append(" · ")
-            append(stringResource(R.string.subagent_tool_ui_steps, steps))
+            if (toolCalls > 0) {
+                append(" · ")
+                append(stringResource(R.string.subagent_tool_ui_tool_calls_count, toolCalls))
+            }
             if (totalTokens > 0) {
                 append(" · ")
                 append(stringResource(R.string.subagent_tool_ui_token_count, totalTokens.formatNumber()))
@@ -165,8 +183,10 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         val streaming = meta?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
         val metaTranscript = parsed.metaTranscript
         val result = parsed.result
+        val cancelled = meta?.get("subagent_cancelled")?.jsonPrimitive?.contentOrNull == "true"
         val failed = !streaming && (
-            result?.succeeded == false ||
+            cancelled ||
+                result?.succeeded == false ||
                 (result == null && meta?.get("subagent_succeeded")?.jsonPrimitive?.contentOrNull == "false")
         )
 
@@ -190,7 +210,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
             ) { step ->
                 val stepIndex = metaTranscript.indexOf(step)
                 val isFinalSummary = stepIndex == lastTextStepIndex && step is SubagentTranscriptStep.Text
-                SubagentStreamingStepView(step = step, isFinalSummary = isFinalSummary)
+                SubagentStreamingStepView(step = step, isFinalSummary = isFinalSummary, cancelled = cancelled)
             }
         } else if ((context.loading || streaming) && result?.summary.isNullOrBlank()) {
             Row(
@@ -375,6 +395,147 @@ private fun SubagentTranscriptSection(steps: List<SubagentTranscriptStep>) {
     }
 }
 
+private const val SUBAGENT_TOOL_OUTPUT_PREVIEW_LINES = 10
+
+@Composable
+private fun SubagentTranscriptToolOutputInline(
+    outputText: String,
+    modifier: Modifier = Modifier,
+) {
+    if (outputText.isBlank()) return
+    var outputExpanded by rememberSaveable(outputText) { mutableStateOf(false) }
+    val lineCount = remember(outputText) { outputText.lineSequence().count() }
+    val needsToggle = lineCount > SUBAGENT_TOOL_OUTPUT_PREVIEW_LINES
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = outputText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (outputExpanded) Int.MAX_VALUE else SUBAGENT_TOOL_OUTPUT_PREVIEW_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (needsToggle || outputExpanded) {
+            TextButton(
+                onClick = { outputExpanded = !outputExpanded },
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (outputExpanded) {
+                            R.string.tool_output_collapse
+                        } else {
+                            R.string.tool_output_expand
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubagentTranscriptToolCallCompactRow(
+    step: SubagentTranscriptStep.ToolCall,
+    cancelled: Boolean = false,
+) {
+    val renderer = remember(step.toolName) { ToolUIRegistry.resolve(step.toolName) }
+    val arguments = remember(step.input) {
+        runCatching { JsonInstant.parseToJsonElement(step.input) }.getOrElse {
+            kotlinx.serialization.json.buildJsonObject {
+                put("input", kotlinx.serialization.json.JsonPrimitive(step.input))
+            }
+        }
+    }
+    val content = remember(step.output) {
+        if (step.output.isBlank()) {
+            null
+        } else {
+            runCatching { JsonInstant.parseToJsonElement(step.output) }.getOrElse {
+                kotlinx.serialization.json.buildJsonObject {
+                    put("output", kotlinx.serialization.json.JsonPrimitive(step.output))
+                }
+            }
+        }
+    }
+    val syntheticTool = remember(step) {
+        UIMessagePart.Tool(
+            toolCallId = "subagent-transcript-row-${step.toolName}-${step.input.hashCode()}",
+            toolName = step.toolName,
+            input = step.input,
+            output = if (step.executed && step.output.isNotBlank()) {
+                listOf(UIMessagePart.Text(step.output))
+            } else {
+                emptyList()
+            },
+        )
+    }
+    val context = remember(syntheticTool, step.executed, cancelled) {
+        ToolUIContext(
+            tool = syntheticTool,
+            arguments = arguments,
+            content = content,
+            loading = !step.executed && !cancelled,
+        )
+    }
+    var showPreview by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showPreview = true },
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = renderer.icon(context),
+                contentDescription = stringResource(R.string.subagent_step_tool),
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+            Text(
+                text = renderer.title(context),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (!step.executed && !cancelled) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
+        SubagentTranscriptToolOutputInline(
+            outputText = step.output,
+            modifier = Modifier.padding(start = 20.dp),
+        )
+    }
+    if (showPreview) {
+        ModalBottomSheet(
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Expanded,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            ),
+            onDismissRequest = { showPreview = false },
+        ) {
+            renderer.Preview(
+                context = context,
+                onDismissRequest = { showPreview = false },
+            )
+        }
+    }
+}
+
 @Composable
 private fun SubagentTranscriptStepRow(step: SubagentTranscriptStep) {
     when (step) {
@@ -414,29 +575,7 @@ private fun SubagentTranscriptStepRow(step: SubagentTranscriptStep) {
         }
 
         is SubagentTranscriptStep.ToolCall -> {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Icon(
-                    imageVector = subagentToolStepIcon(step.toolName),
-                    contentDescription = stringResource(R.string.subagent_step_tool),
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = stringResource(
-                            R.string.subagent_tool_ui_tool_call,
-                            step.toolName,
-                            truncate(step.input),
-                            truncate(step.output),
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            SubagentTranscriptToolCallCompactRow(step = step)
         }
 
         is SubagentTranscriptStep.Text -> {
@@ -464,9 +603,105 @@ private fun transcriptStepsFromMetadata(context: ToolUIContext): List<SubagentTr
 }
 
 @Composable
+private fun ChainOfThoughtScope.SubagentTranscriptToolCallStep(
+    step: SubagentTranscriptStep.ToolCall,
+    cancelled: Boolean = false,
+) {
+    val renderer = remember(step.toolName) { ToolUIRegistry.resolve(step.toolName) }
+    val arguments = remember(step.input) {
+        runCatching { JsonInstant.parseToJsonElement(step.input) }.getOrElse {
+            kotlinx.serialization.json.buildJsonObject {
+                put("input", kotlinx.serialization.json.JsonPrimitive(step.input))
+            }
+        }
+    }
+    val content = remember(step.output) {
+        if (step.output.isBlank()) {
+            null
+        } else {
+            runCatching { JsonInstant.parseToJsonElement(step.output) }.getOrElse {
+                kotlinx.serialization.json.buildJsonObject {
+                    put("output", kotlinx.serialization.json.JsonPrimitive(step.output))
+                }
+            }
+        }
+    }
+    val syntheticTool = remember(step) {
+        UIMessagePart.Tool(
+            toolCallId = "subagent-transcript-${step.toolName}-${step.input.hashCode()}",
+            toolName = step.toolName,
+            input = step.input,
+            output = if (step.executed && step.output.isNotBlank()) {
+                listOf(UIMessagePart.Text(step.output))
+            } else {
+                emptyList()
+            },
+        )
+    }
+    val context = remember(syntheticTool, step.executed, cancelled) {
+        ToolUIContext(
+            tool = syntheticTool,
+            arguments = arguments,
+            content = content,
+            loading = !step.executed && !cancelled,
+        )
+    }
+    var showPreview by remember { mutableStateOf(false) }
+    ChainOfThoughtStep(
+        icon = {
+            Icon(
+                imageVector = renderer.icon(context),
+                contentDescription = stringResource(R.string.subagent_step_tool),
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+        },
+        label = {
+            Text(
+                text = renderer.title(context),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        extra = {
+            if (!step.executed && !cancelled) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 2.dp,
+                )
+            }
+        },
+        onClick = { showPreview = true },
+        content = {
+            SubagentTranscriptToolOutputInline(
+                outputText = step.output,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        },
+    )
+    if (showPreview) {
+        ModalBottomSheet(
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Expanded,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            ),
+            onDismissRequest = { showPreview = false },
+        ) {
+            renderer.Preview(
+                context = context,
+                onDismissRequest = { showPreview = false },
+            )
+        }
+    }
+}
+
+@Composable
 private fun ChainOfThoughtScope.SubagentStreamingStepView(
     step: SubagentTranscriptStep,
     isFinalSummary: Boolean = false,
+    cancelled: Boolean = false,
 ) {
     when (step) {
         is SubagentTranscriptStep.Reasoning -> {
@@ -501,55 +736,7 @@ private fun ChainOfThoughtScope.SubagentStreamingStepView(
         }
 
         is SubagentTranscriptStep.ToolCall -> {
-            ChainOfThoughtStep(
-                icon = {
-                    Icon(
-                        imageVector = subagentToolStepIcon(step.toolName),
-                        contentDescription = stringResource(R.string.subagent_step_tool),
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
-                },
-                label = {
-                    Text(
-                        text = step.toolName,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                extra = {
-                    if (!step.executed) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(12.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                },
-                content = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (step.input.isNotBlank()) {
-                            Text(
-                                text = truncate(step.input),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 5,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        if (step.output.isNotBlank()) {
-                            Text(
-                                text = step.output.take(2000),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 10,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                },
-            )
+            SubagentTranscriptToolCallStep(step = step, cancelled = cancelled)
         }
 
         is SubagentTranscriptStep.Text -> {
@@ -705,6 +892,9 @@ private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
             error = obj["error"]?.jsonPrimitive?.contentOrNull,
             steps = obj["steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
             toolLoopSteps = obj["tool_loop_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
+            toolCallCount = obj["tool_call_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: obj["tool_calls"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: 0,
             transcript = transcript,
         )
     }.getOrNull()

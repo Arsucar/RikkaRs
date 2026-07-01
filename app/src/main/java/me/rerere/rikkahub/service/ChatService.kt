@@ -66,6 +66,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.ai.subagent.SubagentHost
+import me.rerere.rikkahub.data.ai.subagent.SubagentSessionRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
@@ -175,10 +176,14 @@ internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation 
                                 sourceMeta.forEach { (key, value) ->
                                     if (key == "subagent_streaming") {
                                         put("subagent_streaming", JsonPrimitive(false))
+                                    } else if (key == "subagent_cancelled" || key == "subagent_succeeded") {
+                                        // skip existing values, will be set below
                                     } else {
                                         put(key, value)
                                     }
                                 }
+                                put("subagent_cancelled", JsonPrimitive(true))
+                                put("subagent_succeeded", JsonPrimitive(false))
                             }
                         } else {
                             null
@@ -891,7 +896,16 @@ class ChatService(
         val currentConversation = getConversationFlow(conversationId).value
         val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
         val lastMessage = lastNode.currentMessage
-        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
+        val afterPending = lastMessage.finishPendingTools(::cancelToolByUser)
+        val updatedMessage = afterPending.copy(
+            parts = afterPending.parts.map { part ->
+                if (part is UIMessagePart.Tool && part.isExecuted && isStreamingSubagentTool(part)) {
+                    cancelStreamingSubagentTool(part)
+                } else {
+                    part
+                }
+            },
+        )
         if (updatedMessage == lastMessage) {
             return
         }
@@ -904,6 +918,26 @@ class ChatService(
             )
         )
         saveConversation(conversationId, updatedConversation)
+    }
+
+    private fun cancelStreamingSubagentTool(part: UIMessagePart.Tool): UIMessagePart.Tool {
+        val cancelledOutput = listOf(
+            UIMessagePart.Text(
+                text = """{"status":"cancelled","error":"Generation cancelled by user","succeeded":false}""",
+                metadata = buildJsonObject {
+                    val existing = part.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()?.metadata
+                    existing?.forEach { (key, value) ->
+                        if (key != "subagent_streaming" && key != "subagent_cancelled" && key != "subagent_succeeded") {
+                            put(key, value)
+                        }
+                    }
+                    put("subagent_streaming", JsonPrimitive(false))
+                    put("subagent_cancelled", JsonPrimitive(true))
+                    put("subagent_succeeded", JsonPrimitive(false))
+                },
+            ),
+        )
+        return part.copy(output = cancelledOutput)
     }
 
     // ---- 生成标题 ----
@@ -1027,6 +1061,10 @@ class ChatService(
         val maxMessagesPerChunk = 256
         val allMessages = conversation.currentMessages
 
+        if (allMessages.isEmpty()) {
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+        }
+
         // Split messages into those to compress and those to keep
         val messagesToCompress: List<UIMessage>
         val messagesToKeep: List<UIMessage>
@@ -1035,7 +1073,6 @@ class ChatService(
             messagesToCompress = allMessages.dropLast(keepRecentMessages)
             messagesToKeep = allMessages.takeLast(keepRecentMessages)
         } else if (keepRecentMessages > 0) {
-            // Not enough messages to compress while keeping recent ones
             throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
         } else {
             messagesToCompress = allMessages
@@ -1090,12 +1127,9 @@ class ChatService(
         }
 
         val summaryNodes = compressedSummaries.map { summary ->
-            val prefix = if (hiddenCount > 0) {
-                context.getString(R.string.compress_hidden_count, hiddenCount) + "\n\n"
-            } else {
-                ""
-            }
-            UIMessage.user(prefix + summary).toMessageNode()
+            UIMessage.user(summary).toMessageNode().copy(
+                compressHiddenCount = hiddenCount.takeIf { it > 0 },
+            )
         }
 
         val insertAt = nodesWithHidden.indexOfFirst { node ->
@@ -1263,7 +1297,7 @@ class ChatService(
         subMessages: List<UIMessage>,
     ) {
         runCatching {
-            // No early return for null toolCallId - allow fallback matching
+            if (SubagentSessionRegistry.isCancelRequested(conversationId)) return@runCatching
 
             val transcript = SubagentHost.buildTranscript(
                 subMessages,
@@ -1273,10 +1307,20 @@ class ChatService(
             if (transcript.isEmpty()) return@runCatching
 
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
+            val loopSteps = subMessages.count { it.role == MessageRole.ASSISTANT }
+            val toolCalls = subMessages.sumOf { msg ->
+                if (msg.role == MessageRole.ASSISTANT) {
+                    msg.parts.count { it is UIMessagePart.Tool }
+                } else {
+                    0
+                }
+            }
             val transcriptMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, transcript))
                 put("subagent_profile", JsonPrimitive(profileName))
-                put("subagent_steps", JsonPrimitive(transcript.size))
+                put("subagent_steps", JsonPrimitive(loopSteps))
+                put("subagent_tool_loop_steps", JsonPrimitive(loopSteps))
+                put("subagent_tool_calls", JsonPrimitive(toolCalls))
                 put("subagent_succeeded", JsonPrimitive(false))
                 put("subagent_streaming", JsonPrimitive(true))
             }
@@ -1707,6 +1751,7 @@ class ChatService(
                         depth = depth + 1,
                         maxDepth = maxDepth,
                         workspaceCwd = workspaceCwd,
+                        conversationId = conversationId,
                         onProgress = if (conversationId != null) {
                             { subMessages ->
                                 updateSubagentProgress(
@@ -1826,6 +1871,7 @@ class ChatService(
                                     depth = depth + 1,
                                     maxDepth = maxDepth,
                                     workspaceCwd = workspaceCwd,
+                                    conversationId = conversationId,
                                     onProgress = if (conversationId != null) {
                                         { subMessages ->
                                             updateSubagentProgress(
@@ -1934,7 +1980,11 @@ class ChatService(
 
 
     suspend fun stopGeneration(conversationId: Uuid) {
-        val job = sessions[conversationId]?.getJob() ?: return
+        subagentHost.requestCancel(conversationId)
+        val job = sessions[conversationId]?.getJob() ?: run {
+            finishInterruptedPendingTools(conversationId)
+            return
+        }
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)

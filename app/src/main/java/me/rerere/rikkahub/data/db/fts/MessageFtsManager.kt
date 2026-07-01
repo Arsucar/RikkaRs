@@ -20,9 +20,9 @@ data class MessageSearchResult(
 )
 
 enum class MessageSearchSort(val orderBy: String) {
-    RELEVANCE("rank, update_at DESC"),
-    NEWEST_FIRST("update_at DESC, rank"),
-    OLDEST_FIRST("update_at ASC, rank"),
+    RELEVANCE("rank, m.update_at DESC"),
+    NEWEST_FIRST("m.update_at DESC, rank"),
+    OLDEST_FIRST("m.update_at ASC, rank"),
 }
 
 private const val TAG = "MessageFtsManager"

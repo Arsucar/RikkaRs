@@ -18,6 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import kotlin.uuid.Uuid
@@ -116,8 +117,9 @@ fun createSubagentTools(
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
                 put("subagent_profile", JsonPrimitive(result.profileName))
-                put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
+                put("subagent_steps", JsonPrimitive(result.steps))
                 put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
+                put("subagent_tool_calls", JsonPrimitive(result.toolCallCount))
                 put("subagent_transcript_size", JsonPrimitive(result.transcript.size))
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
                 put("subagent_streaming", JsonPrimitive(false))
@@ -127,10 +129,11 @@ fun createSubagentTools(
                 put("summary", JsonPrimitive(result.summary))
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
-                put("steps", JsonPrimitive(result.toolLoopSteps))
+                put("steps", JsonPrimitive(result.steps))
                 put("tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
                 put("transcript_size", JsonPrimitive(result.transcript.size))
-                put("tool_calls", JsonPrimitive(result.toolCallCount))
+                put("tool_call_count", JsonPrimitive(result.toolCallCount))
+                result.usage?.let { put("usage", Json.encodeToJsonElement(TokenUsage.serializer(), it)) }
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },
@@ -291,6 +294,7 @@ private fun SubagentProfile.applyPatch(params: JsonObject): SubagentProfile {
         topP = flt("top_p") ?: topP,
         maxTokens = int("max_tokens") ?: maxTokens,
         maxSteps = int("max_steps") ?: maxSteps,
+        maxToolCalls = if ("max_tool_calls" in params) int("max_tool_calls") else maxToolCalls,
         inheritTools = bool("inherit_tools") ?: inheritTools,
         streamOutput = bool("stream_output") ?: streamOutput,
         enableMemory = bool("enable_memory") ?: enableMemory,

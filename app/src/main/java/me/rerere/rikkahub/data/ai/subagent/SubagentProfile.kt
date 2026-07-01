@@ -67,6 +67,7 @@ data class SubagentProfile(
     val maxTokens: Int? = null,
     val reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val maxSteps: Int = 32,
+    val maxToolCalls: Int? = null,
     val workspaceAccess: WorkspaceAccess = WorkspaceAccess.READ_ONLY,
     val workspaceApproval: WorkspaceApproval = WorkspaceApproval.INHERIT,
     val allowedPathPrefixes: List<String> = listOf("/workspace"),
@@ -108,6 +109,7 @@ data class SubagentResult(
     @SerialName("tool_call_count") val toolCallCount: Int = 0,
     /// 实际工具循环步数（受 maxSteps 控制），每步 = 一次 LLM 调用 + 工具执行。
     @SerialName("tool_loop_steps") val toolLoopSteps: Int = 0,
+    @SerialName("truncated") val truncated: Boolean = false,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
 )
 

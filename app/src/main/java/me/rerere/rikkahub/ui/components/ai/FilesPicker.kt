@@ -226,7 +226,10 @@ internal fun FilesPicker(
             trailingContent = {
                 if (conversation.messageNodes.isNotEmpty()) {
                     Text(
-                        text = stringResource(R.string.chat_page_message_count, conversation.messageNodes.size),
+                        text = stringResource(
+                            R.string.chat_page_message_count,
+                            conversation.messageNodes.count { !it.hidden },
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

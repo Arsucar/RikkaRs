@@ -149,6 +149,14 @@ fun ChatMessage(
                 modifier = Modifier.padding(bottom = 2.dp),
             )
         }
+        node.compressHiddenCount?.takeIf { it > 0 }?.let { count ->
+            Text(
+                text = stringResource(R.string.compress_hidden_count, count),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(bottom = 2.dp),
+            )
+        }
         if (!message.parts.isEmptyUIMessage()) {
             Row(
                 modifier = Modifier
@@ -362,9 +370,16 @@ private fun MessagePartsBlock(
                                         ?.get("subagent_streaming")
                                         ?.jsonPrimitive
                                         ?.contentOrNull == "true"
+                                    val isSubagentCancelled = step.tool.output
+                                        .filterIsInstance<UIMessagePart.Text>()
+                                        .firstOrNull()
+                                        ?.metadata
+                                        ?.get("subagent_cancelled")
+                                        ?.jsonPrimitive
+                                        ?.contentOrNull == "true"
                                     ChatMessageToolStep(
                                         tool = step.tool,
-                                        loading = loading && (!step.tool.isExecuted || isSubagentStreaming),
+                                        loading = loading && (!step.tool.isExecuted || isSubagentStreaming) && !isSubagentCancelled,
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
                                     )
