@@ -492,3 +492,77 @@ Implemented finish_work meta-tool: new FinishWorkTool.kt, GenerationHandler loop
 ### Next Steps
 
 - None - task complete
+
+## Session 12: 历史任务全面审查、补全与归档
+
+### Summary
+
+对 `.trellis/tasks/` 下全部历史任务做完成度审查，发现 `06-30-feat-assistant-persistent-cwd` 标记 in_progress 实为源码零实现，予以完整补全；其余任务核验后判定已完成或为空壳。全部任务归档。
+
+### Audit Results
+
+| 任务 | 审查结论 |
+|------|---------|
+| 06-27-fix-modellist-interactions | AC1-4 均已落地（一键折叠/展开、折叠组自动展开定位、chip 跳转+收纳、全高 sheet）→ 完成 |
+| 06-29-backup-optimization | 仅空 research/ 目录，无 prd/task.json/代码，无交付定义 → 空壳归档 |
+| 06-30-feat-assistant-persistent-cwd | 源码零实现 → 本次完整补全 |
+| 06-30-fix-subagent-steps-field | 工作树已完整实现 steps/tool_loop_steps/transcript_size 三字段拆分，自洽，测试通过 → 完成 |
+
+### Main Changes (assistant-persistent-cwd 补全)
+
+- 新增 `data/model/WorkspaceCwdUtils.kt`：`normalizeWorkspaceCwd`（反斜杠/冗余斜杠/`.`/`..` 规范化 + `/workspace` 边界回落）、`resolveEffectiveWorkspaceCwd`（conversation > assistant default > /workspace）
+- `Assistant.kt`：新增 `defaultWorkspaceCwd: String? = null`（DataStore JSON 默认值兼容旧数据）
+- `ChatService.kt`：计算 `effectiveWorkspaceCwd` 并统一用于 GenerationHandler / createWorkspaceToolsIfReady / buildSubagentToolsForChat
+- `WorkspaceCwdPicker.kt`：新增 `onSetAssistantDefault` 参数与「设为助手默认」按钮
+- `FilesPicker.kt`：展示有效 cwd（助手默认来源附 `(default)` 标注），接线「设为助手默认」回调
+- 新增测试 `WorkspaceCwdUtilsTest.kt`（11 个用例）
+
+### Testing
+
+- [OK] `./gradlew :app:compileDebugKotlin -x :web:buildWebUi` BUILD SUCCESSFUL
+- [OK] `./gradlew :app:testDebugUnitTest`（WorkspaceCwdUtilsTest + subagent.*）BUILD SUCCESSFUL
+
+### Status
+
+[OK] **Completed** — 四个任务全部审查并归档，缺失功能已补全验证
+
+### Next Steps
+
+- None - all historical tasks archived
+
+
+## Session 12: Close #13 #14 #15 — review, fix, and archive
+
+**Date**: 2026-07-01
+**Task**: Close #13 #14 #15 — review, fix, and archive
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Reviewed and closed GitHub issues #14 (finish_work) and #15 (log export). Found and fixed empty-selection bug in LogPage.kt (#15). Completed #13 (assistant persistent CWD): fixed ChatPage.kt to use resolveEffectiveWorkspaceCwd for completion provider, replaced hardcoded Chinese string with stringResource in WorkspaceCwdPicker. Built and installed on arm64 device. Archived 3 tasks: fix-modellist-interactions, feat-assistant-persistent-cwd, fix-subagent-steps-field.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58923409` | (see git log) |
+| `ed44b719` | (see git log) |
+| `4435c885` | (see git log) |
+| `13250bf2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

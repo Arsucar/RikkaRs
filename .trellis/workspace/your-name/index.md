@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
-- **Last Active**: 2026-06-30
+- **Total Sessions**: 12
+- **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~494 | Active |
+| `journal-1.md` | ~568 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-07-01 | Close #13 #14 #15 — review, fix, and archive | `58923409`, `ed44b719`, `4435c885`, `13250bf2` | `release/rikka-arsucar` |
 | 11 | 2026-06-30 | feat: finish_work meta-tool | `24b4fc2f` | `release/rikka-arsucar` |
 | 10 | 2026-06-30 | Fix workspace shell /dev/ redirect false-positive (#16) | `c3ac4392` | `release/rikka-arsucar` |
 | 9 | 2026-06-29 | Conversation archive feature (full pipeline + data-loss incident) | `2f2aa527` | `release/rikka-arsucar` |
