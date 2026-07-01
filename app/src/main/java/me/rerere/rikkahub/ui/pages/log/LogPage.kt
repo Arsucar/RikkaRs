@@ -125,10 +125,10 @@ fun LogPage() {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val entries = if (exportIds != null && exportIds.isNotEmpty()) {
-                        logs.filter { it.id in exportIds }
-                    } else {
-                        logs
+                    val entries = when {
+                        exportIds == null -> logs
+                        exportIds.isEmpty() -> emptyList()
+                        else -> logs.filter { it.id in exportIds }
                     }
                     val logsJson = JsonInstantPretty.encodeToString(
                         ListSerializer(LogEntry.serializer()),
@@ -203,6 +203,7 @@ fun LogPage() {
                 }
             },
             onConfirmSelection = {
+                if (selectedIds.isEmpty()) return@UnifiedLogList
                 val ids = selectedIds.toSet()
                 selecting = false
                 launchExport(ids)
@@ -317,7 +318,10 @@ private fun UnifiedLogList(
                     }
                 }
                 Tooltip(tooltip = { Text(stringResource(R.string.chat_list_confirm)) }) {
-                    FilledIconButton(onClick = onConfirmSelection) {
+                    FilledIconButton(
+                        onClick = onConfirmSelection,
+                        enabled = selectedIds.isNotEmpty(),
+                    ) {
                         Icon(HugeIcons.Tick01, contentDescription = null)
                     }
                 }
