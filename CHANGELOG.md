@@ -30,6 +30,9 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ### 修复 / Fixes
 
+- **世界书/条目编辑全屏化** — 世界书与 Regex 条目编辑改为与聊天全屏编辑器同款的 `BasicAlertDialog` 全屏铺平，不再使用 BottomSheet 叠 Dialog，避免编辑时底层对话输入框 IME 抖动。（#17）
+  **Lorebook entry fullscreen edit** — Lorebook and regex entry editing use the same fullscreen `BasicAlertDialog` pattern as chat input, replacing stacked bottom sheets/dialogs that caused bottom chat input jitter. (#17)
+
 - **流式错误体多段 JSON** — `parseErrorDetailFromResponseBody` 容错解析 SSE/粘连 body；Claude、ChatCompletions、Response、Google 流式 `onFailure` 统一使用。（#12）
   **Streaming error body with extra JSON** — `parseErrorDetailFromResponseBody` tolerates multi-segment bodies; all streaming `onFailure` paths use it. (#12)
 

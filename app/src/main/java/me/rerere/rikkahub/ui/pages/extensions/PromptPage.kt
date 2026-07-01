@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,7 +39,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +53,7 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -64,6 +67,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +77,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -400,6 +405,10 @@ private fun ModeInjectionEditSheet(
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(sheetState) {
+        sheetState.show()
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -698,7 +707,7 @@ private fun LorebookTab(
 
     if (editState.isEditing) {
         editState.currentState?.let { state ->
-            LorebookEditSheet(
+            LorebookEditFullscreen(
                 book = state,
                 onDismiss = { editState.dismiss() },
                 onConfirm = { editState.confirm() },
@@ -814,132 +823,135 @@ private fun LorebookCard(
 }
 
 @Composable
-private fun LorebookEditSheet(
+private fun LorebookEditFullscreen(
     book: Lorebook,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     onEdit: (Lorebook) -> Unit
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-    val scope = rememberCoroutineScope()
-    val entryEditState = useEditState<PromptInjection.RegexInjection> { edited ->
+    var editingEntry by remember { mutableStateOf<PromptInjection.RegexInjection?>(null) }
+
+    fun commitEntry(edited: PromptInjection.RegexInjection) {
         val index = book.entries.indexOfFirst { it.id == edited.id }
-        if (index >= 0) {
-            onEdit(book.copy(entries = book.entries.toMutableList().apply { set(index, edited) }))
-        } else {
-            onEdit(book.copy(entries = book.entries + edited))
-        }
+        onEdit(
+            if (index >= 0) {
+                book.copy(entries = book.entries.toMutableList().apply { set(index, edited) })
+            } else {
+                book.copy(entries = book.entries + edited)
+            }
+        )
     }
 
-    ModalBottomSheet(
+    BasicAlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetGesturesEnabled = false,
-        dragHandle = {
-            IconButton(onClick = {
-                scope.launch {
-                    sheetState.hide()
-                    onDismiss()
-                }
-            }) {
-                Icon(HugeIcons.ArrowDown01, null)
-            }
-        }
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.95f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding(),
         ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_lorebook),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             ) {
-                OutlinedTextField(
-                    value = book.name,
-                    onValueChange = { onEdit(book.copy(name = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = book.description,
-                    onValueChange = { onEdit(book.copy(description = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_description)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
-                    tail = {
-                        Switch(
-                            checked = book.enabled,
-                            onCheckedChange = { onEdit(book.copy(enabled = it)) }
-                        )
-                    }
-                )
-
-                // 条目列表
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.prompt_page_entries_format, book.entries.size),
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    IconButton(onClick = {
-                        entryEditState.open(PromptInjection.RegexInjection())
-                    }) {
-                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_entry))
-                    }
-                }
-
-                book.entries.forEach { entry ->
-                    RegexInjectionEntryCard(
-                        entry = entry,
-                        onEdit = { entryEditState.open(entry) },
-                        onDelete = {
-                            onEdit(book.copy(entries = book.entries - entry))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.prompt_page_edit_lorebook),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onDismiss) {
+                                Text(stringResource(R.string.prompt_page_cancel))
+                            }
+                            TextButton(onClick = onConfirm) {
+                                Text(stringResource(R.string.prompt_page_confirm))
+                            }
                         }
-                    )
-                }
-            }
+                    }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.prompt_page_cancel))
-                }
-                TextButton(onClick = onConfirm) {
-                    Text(stringResource(R.string.prompt_page_confirm))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = book.name,
+                            onValueChange = { onEdit(book.copy(name = it)) },
+                            label = { Text(stringResource(R.string.prompt_page_name)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        OutlinedTextField(
+                            value = book.description,
+                            onValueChange = { onEdit(book.copy(description = it)) },
+                            label = { Text(stringResource(R.string.prompt_page_description)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        FormItem(
+                            label = { Text(stringResource(R.string.prompt_page_enabled)) },
+                            tail = {
+                                Switch(
+                                    checked = book.enabled,
+                                    onCheckedChange = { onEdit(book.copy(enabled = it)) },
+                                )
+                            },
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.prompt_page_entries_format, book.entries.size),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            IconButton(onClick = { editingEntry = PromptInjection.RegexInjection() }) {
+                                Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_entry))
+                            }
+                        }
+
+                        book.entries.forEach { entry ->
+                            RegexInjectionEntryCard(
+                                entry = entry,
+                                onEdit = { editingEntry = entry },
+                                onDelete = { onEdit(book.copy(entries = book.entries - entry)) },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    if (entryEditState.isEditing) {
-        entryEditState.currentState?.let { state ->
-            RegexInjectionEditDialog(
-                entry = state,
-                onDismiss = { entryEditState.dismiss() },
-                onConfirm = { entryEditState.confirm() },
-                onEdit = { entryEditState.currentState = it }
-            )
-        }
+    editingEntry?.let { entry ->
+        RegexInjectionEditFullscreen(
+            entry = entry,
+            onDismiss = { editingEntry = null },
+            onConfirm = {
+                editingEntry?.let { commitEntry(it) }
+                editingEntry = null
+            },
+            onEdit = { editingEntry = it },
+        )
     }
 }
 
@@ -996,25 +1008,66 @@ private fun RegexInjectionEntryCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RegexInjectionEditDialog(
+private fun RegexInjectionEditFullscreen(
     entry: PromptInjection.RegexInjection,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.RegexInjection) -> Unit
 ) {
     var newKeyword by remember { mutableStateOf("") }
+    val canSave = entry.keywords.isNotEmpty() || entry.constantActive
 
-    AlertDialog(
+    BasicAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.prompt_page_edit_entry)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding(),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(R.string.prompt_page_edit_entry),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onDismiss) {
+                                Text(stringResource(R.string.prompt_page_cancel))
+                            }
+                            TextButton(
+                                onClick = onConfirm,
+                                enabled = canSave,
+                            ) {
+                                Text(stringResource(R.string.prompt_page_confirm))
+                            }
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                 OutlinedTextField(
                     value = entry.name,
                     onValueChange = { onEdit(entry.copy(name = it)) },
@@ -1174,21 +1227,9 @@ private fun RegexInjectionEditDialog(
                         .height(150.dp),
                     minLines = 4
                 )
-            }
-        },
-        confirmButton = {
-            val canSave = entry.keywords.isNotEmpty() || entry.constantActive
-            TextButton(
-                onClick = onConfirm,
-                enabled = canSave
-            ) {
-                Text(stringResource(R.string.prompt_page_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.prompt_page_cancel))
+                    }
+                }
             }
         }
-    )
+    }
 }
