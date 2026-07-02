@@ -81,7 +81,11 @@ class WorkspaceDetailVM(
                     path = state.value.path,
                 )
             }.onSuccess { entries ->
-                _state.update { it.copy(entries = entries, loading = false) }
+                val workspace = state.value.workspace
+                val filesPath = workspace?.let { w ->
+                    File(File(repository.managerFilesBaseDir(), w.root), "files").absolutePath
+                }
+                _state.update { it.copy(entries = entries, loading = false, filesPath = filesPath) }
             }.onFailure { error ->
                 _state.update {
                     it.copy(
@@ -245,13 +249,17 @@ class WorkspaceDetailVM(
     private fun loadWorkspace() {
         viewModelScope.launch {
             val workspace = repository.getById(id)
-            _state.update { it.copy(workspace = workspace) }
+            val filesPath = workspace?.let { w ->
+                File(File(repository.managerFilesBaseDir(), w.root), "files").absolutePath
+            }
+            _state.update { it.copy(workspace = workspace, filesPath = filesPath) }
         }
     }
 }
 
 data class WorkspaceDetailState(
     val workspace: WorkspaceEntity? = null,
+    val filesPath: String? = null,
     val area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
     val path: String = "",
     val entries: List<WorkspaceFileEntry> = emptyList(),

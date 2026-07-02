@@ -30,6 +30,10 @@ class WorkspaceRepository(
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
+    fun managerFilesBaseDir() = manager.filesBaseDir()
+
+    suspend fun listWorkspaceRoots(): List<String> = dao.getAll().map { it.root }
+
     suspend fun checkIntegrity() = withContext(Dispatchers.IO) {
         val workspaces = dao.getAll()
         for (workspace in workspaces) {

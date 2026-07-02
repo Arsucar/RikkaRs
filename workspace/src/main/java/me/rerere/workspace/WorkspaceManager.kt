@@ -10,6 +10,8 @@ class WorkspaceManager(
     private val baseDir: File,
     private val config: WorkspaceConfig = WorkspaceConfig(),
     private val shellRunner: WorkspaceShellRunner = HostShellRunner(),
+    private val filesBaseDirProvider: () -> File = { baseDir },
+    private val globalLock: WorkspaceGlobalLock? = null,
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
 
@@ -30,7 +32,12 @@ class WorkspaceManager(
         return File(baseDir, root)
     }
 
-    fun filesDir(root: String): File = File(workspaceDir(root), FILES_DIR)
+    fun filesBaseDir(): File = filesBaseDirProvider()
+
+    fun filesDir(root: String): File {
+        requireValidRoot(root)
+        return File(File(filesBaseDirProvider(), root), FILES_DIR)
+    }
 
     fun linuxDir(root: String): File = File(workspaceDir(root), LINUX_DIR)
 
@@ -38,7 +45,17 @@ class WorkspaceManager(
 
     fun hasRootfs(root: String): Boolean = File(linuxDir(root), "bin/sh").isFile
 
-    fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
+    fun deleteWorkspace(root: String): Boolean {
+        val workspaceDeleted = workspaceDir(root).deleteRecursively()
+        val files = filesDir(root)
+        val filesUnderWorkspace = File(workspaceDir(root), FILES_DIR)
+        val filesDeleted = if (files.absolutePath != filesUnderWorkspace.absolutePath) {
+            !files.exists() || files.deleteRecursively()
+        } else {
+            true
+        }
+        return workspaceDeleted && filesDeleted
+    }
 
     fun listFiles(
         root: String,
@@ -127,6 +144,15 @@ class WorkspaceManager(
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
         stdin: ByteArray? = null,
     ): WorkspaceCommandResult {
+        if (globalLock?.isLocked() == true) {
+            return WorkspaceCommandResult(
+                exitCode = 1,
+                stdout = "",
+                stderr = "Workspace storage migration in progress, please retry shortly",
+                timedOut = false,
+                truncated = false,
+            )
+        }
         require(command.isNotBlank()) { "Command is required" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }

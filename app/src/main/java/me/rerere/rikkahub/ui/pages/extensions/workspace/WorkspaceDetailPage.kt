@@ -182,6 +182,7 @@ fun WorkspaceDetailPage(id: String) {
             when (page) {
                 0 -> WorkspaceBasicPage(
                     workspace = state.workspace,
+                    filesPath = state.filesPath,
                     installProgress = installProgress,
                     onInstallRootfs = { showInstallDialog = true },
                     onToolApprovalChange = vm::setToolApproval,
@@ -264,6 +265,7 @@ fun WorkspaceDetailPage(id: String) {
 @Composable
 private fun WorkspaceBasicPage(
     workspace: WorkspaceEntity?,
+    filesPath: String?,
     installProgress: RootfsInstallProgress?,
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
@@ -299,6 +301,11 @@ private fun WorkspaceBasicPage(
                     )
                     WorkspaceInfoRow(stringResource(R.string.workspace_detail_name), workspace?.name ?: stringResource(R.string.workspace_detail_loading))
                     WorkspaceInfoRow(stringResource(R.string.workspace_detail_shell_status), workspace?.shellStatus?.toShellStatusLabel() ?: "-")
+                    WorkspaceInfoRow(
+                        stringResource(R.string.workspace_detail_files_path),
+                        filesPath ?: "-",
+                        valueMaxLines = 2,
+                    )
                 }
             }
         }
@@ -426,6 +433,7 @@ private fun workspaceToolApprovalItems() = listOf(
 private fun WorkspaceInfoRow(
     label: String,
     value: String,
+    valueMaxLines: Int = 1,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -444,7 +452,7 @@ private fun WorkspaceInfoRow(
             text = value,
             modifier = Modifier.weight(0.65f),
             style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
+            maxLines = valueMaxLines,
             overflow = TextOverflow.Ellipsis,
         )
     }

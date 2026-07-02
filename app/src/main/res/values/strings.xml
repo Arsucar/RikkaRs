@@ -1355,6 +1355,23 @@
   <string name="workspace_terminal_title_with_name">%s · Terminal</string>
   <string name="workspace_terminal_not_installed">Please install Rootfs first</string>
   <string name="workspace_terminal_loading">Loading workspace…</string>
+  <string name="workspace_terminal_migration_in_progress">Workspace storage migration in progress, please wait…</string>
+  <string name="workspace_storage_setting">Project files storage</string>
+  <string name="workspace_storage_setting_desc">Store workspace project files in app-specific external storage so they can be edited via file manager / USB / PC.</string>
+  <string name="workspace_storage_private">App private (default)</string>
+  <string name="workspace_storage_external">App external storage</string>
+  <string name="workspace_storage_current">Current: %1$s</string>
+  <string name="workspace_storage_migrate_title">Migrate workspace files?</string>
+  <string name="workspace_storage_migrate_message">All workspace project files will be copied to %1$s and verified. Source will be removed after successful migration. This may take a moment.</string>
+  <string name="workspace_storage_migrating">Migrating workspace files…</string>
+  <string name="workspace_storage_migrate_success">Migrated %1$d workspace(s) to %2$s</string>
+  <string name="workspace_storage_migrate_failed">Migration failed: %1$s</string>
+  <string name="workspace_storage_external_unavailable">External storage is unavailable</string>
+  <string name="workspace_storage_current_unavailable">Current workspace files storage is unavailable</string>
+  <string name="workspace_storage_not_writable">Target workspace files storage is not writable</string>
+  <string name="workspace_storage_verify_failed">Verification failed for workspace: %1$s</string>
+  <string name="workspace_storage_source_remove_failed">Failed to remove source files for workspace: %1$s</string>
+  <string name="workspace_detail_files_path">Project files path</string>
   <string name="workspace_terminal_exited">Terminal exited</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
@@ -1563,3 +1580,4 @@
   <string name="chat_page_delete_folder_confirm">Delete folder "%1$s"? Conversations inside will not be deleted, only removed from the folder.</string>
   <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
 </resources>
+

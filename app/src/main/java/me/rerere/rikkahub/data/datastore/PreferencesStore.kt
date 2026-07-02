@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -170,6 +171,8 @@ class SettingsStore(
 
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+
+        val WORKSPACE_FILES_STORAGE = stringPreferencesKey("workspace_files_storage")
     }
 
     private val dataStore = context.settingsStore
@@ -280,6 +283,9 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                workspaceFilesStorage = preferences[WORKSPACE_FILES_STORAGE]
+                    ?.let { runCatching { WorkspaceFilesStorage.valueOf(it) }.getOrNull() }
+                    ?: WorkspaceFilesStorage.PRIVATE,
             )
         }
         .map {
@@ -486,6 +492,7 @@ class SettingsStore(
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
+            preferences[WORKSPACE_FILES_STORAGE] = settings.workspaceFilesStorage.name
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
         }
     }
@@ -624,6 +631,7 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    val workspaceFilesStorage: WorkspaceFilesStorage = WorkspaceFilesStorage.PRIVATE,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

@@ -23,13 +23,14 @@ import java.io.File
 internal fun createWorkspaceTerminalSession(
     context: Context,
     root: String,
+    filesBaseDir: File,
     client: TerminalSessionClient,
 ): TerminalSession {
     val appContext = context.applicationContext
-    val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
-    val filesDir = File(workspaceDir, "files")
-    val linuxDir = File(workspaceDir, "linux")
-    val tempDir = File(workspaceDir, "tmp")
+    val rootfsBaseDir = File(appContext.filesDir, "workspaces")
+    val filesDir = File(File(filesBaseDir, root), "files")
+    val linuxDir = File(File(rootfsBaseDir, root), "linux")
+    val tempDir = File(File(rootfsBaseDir, root), "tmp")
     val skillsDir = File(appContext.filesDir, FileFolders.SKILLS).apply { mkdirs() }
     val nativeLibraryDir = File(appContext.applicationInfo.nativeLibraryDir)
     val proot = File(nativeLibraryDir, "libproot_exec.so")
@@ -85,12 +86,16 @@ internal fun createWorkspaceTerminalSession(
     }
 }
 
-internal fun prepareWorkspaceTerminalSession(context: Context, root: String) {
+internal fun prepareWorkspaceTerminalSession(
+    context: Context,
+    root: String,
+    filesBaseDir: File,
+) {
     val appContext = context.applicationContext
-    val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
-    val linuxDir = File(workspaceDir, "linux")
-    File(workspaceDir, "files").mkdirs()
-    File(workspaceDir, "tmp").mkdirs()
+    val rootfsBaseDir = File(appContext.filesDir, "workspaces")
+    val linuxDir = File(File(rootfsBaseDir, root), "linux")
+    File(File(filesBaseDir, root), "files").mkdirs()
+    File(File(rootfsBaseDir, root), "tmp").mkdirs()
     File(appContext.filesDir, FileFolders.SKILLS).mkdirs()
     RootfsPatcher().patch(
         linuxDir,

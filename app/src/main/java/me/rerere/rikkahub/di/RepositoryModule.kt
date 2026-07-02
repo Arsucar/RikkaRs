@@ -10,7 +10,11 @@ import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.WorkspaceStorageMigrator
+import me.rerere.rikkahub.workspace.resolveWorkspaceFilesBaseDir
+import me.rerere.workspace.WorkspaceGlobalLock
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
@@ -43,10 +47,21 @@ val repositoryModule = module {
         FavoriteRepository(get())
     }
 
+    single { WorkspaceGlobalLock() }
+
     single {
         val context: Context = get()
+        val settingsStore: SettingsStore = get()
+        val globalLock: WorkspaceGlobalLock = get()
         WorkspaceManager(
             baseDir = File(context.filesDir, "workspaces"),
+            filesBaseDirProvider = {
+                resolveWorkspaceFilesBaseDir(
+                    context,
+                    settingsStore.settingsFlow.value.workspaceFilesStorage,
+                )
+            },
+            globalLock = globalLock,
             shellRunner = ProotShellRunner(
                 nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir),
                 extraBindMounts = listOf(
@@ -73,6 +88,10 @@ val repositoryModule = module {
 
     single {
         WorkspaceRepository(get(), get(), get(), get())
+    }
+
+    single {
+        WorkspaceStorageMigrator(get(), get(), get(), get())
     }
 
     single {

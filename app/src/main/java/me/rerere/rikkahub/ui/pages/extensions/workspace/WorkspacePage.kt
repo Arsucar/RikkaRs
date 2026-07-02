@@ -20,9 +20,13 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -30,11 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,23 +53,37 @@ import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
+import me.rerere.rikkahub.data.repository.MigrationResult
+import me.rerere.rikkahub.data.repository.WorkspaceStorageMigrator
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @Composable
 fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     val navController = LocalNavController.current
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
+    val settings by rememberUserSettingsState()
+    val migrator: WorkspaceStorageMigrator = koinInject()
+    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
+    var showStoragePicker by remember { mutableStateOf(false) }
+    var migrateConfirmTarget by remember { mutableStateOf<WorkspaceFilesStorage?>(null) }
+    var isMigrating by remember { mutableStateOf(false) }
+    var migrationResultMessage by remember { mutableStateOf<String?>(null) }
+    val currentStorage = settings.workspaceFilesStorage
+    val workspaceActionsEnabled = !isMigrating
 
     Scaffold(
         topBar = {
@@ -74,7 +95,13 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(
+                onClick = {
+                    if (workspaceActionsEnabled) {
+                        showAddDialog = true
+                    }
+                },
+            ) {
                 Icon(HugeIcons.Add01, contentDescription = null)
             }
         },
@@ -86,6 +113,14 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             contentPadding = innerPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item {
+                WorkspaceStorageSettingCard(
+                    currentStorage = currentStorage,
+                    enabled = workspaceActionsEnabled,
+                    onClick = { showStoragePicker = true },
+                )
+            }
+
             if (workspaces.isEmpty()) {
                 item {
                     EmptyWorkspaceState()
@@ -95,6 +130,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             items(workspaces, key = { it.id }) { workspace ->
                 WorkspaceCard(
                     workspace = workspace,
+                    enabled = workspaceActionsEnabled,
                     onRename = { editTarget = workspace },
                     onDelete = { deleteTarget = workspace },
                     onOpen = { navController.navigate(Screen.WorkspaceDetail(workspace.id)) },
@@ -129,6 +165,90 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
         )
     }
 
+    if (showStoragePicker) {
+        WorkspaceStoragePickerDialog(
+            currentStorage = currentStorage,
+            onDismiss = { showStoragePicker = false },
+            onRequestMigrate = { target ->
+                showStoragePicker = false
+                migrateConfirmTarget = target
+            },
+        )
+    }
+
+    val context = LocalContext.current
+    migrateConfirmTarget?.let { target ->
+        RikkaConfirmDialog(
+            show = true,
+            title = stringResource(R.string.workspace_storage_migrate_title),
+            confirmText = stringResource(R.string.common_confirm),
+            dismissText = stringResource(R.string.common_cancel),
+            onConfirm = {
+                val confirmedTarget = target
+                migrateConfirmTarget = null
+                scope.launch {
+                    isMigrating = true
+                    when (val result = migrator.migrate(confirmedTarget)) {
+                        is MigrationResult.Success -> {
+                            val label = when (confirmedTarget) {
+                                WorkspaceFilesStorage.PRIVATE -> context.getString(R.string.workspace_storage_private)
+                                WorkspaceFilesStorage.EXTERNAL -> context.getString(R.string.workspace_storage_external)
+                            }
+                            migrationResultMessage = context.getString(
+                                R.string.workspace_storage_migrate_success,
+                                result.count,
+                                label,
+                            )
+                        }
+                        is MigrationResult.Failed -> {
+                            migrationResultMessage = context.getString(
+                                R.string.workspace_storage_migrate_failed,
+                                result.message,
+                            )
+                        }
+                        MigrationResult.Noop -> Unit
+                    }
+                    isMigrating = false
+                }
+            },
+            onDismiss = { migrateConfirmTarget = null },
+        ) {
+            Text(
+                stringResource(
+                    R.string.workspace_storage_migrate_message,
+                    workspaceFilesStorageLabel(target),
+                ),
+            )
+        }
+    }
+
+    if (isMigrating) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.workspace_storage_migrating)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.workspace_terminal_migration_in_progress))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    migrationResultMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { migrationResultMessage = null },
+            title = { Text(stringResource(R.string.workspace_storage_setting)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { migrationResultMessage = null }) {
+                    Text(stringResource(R.string.common_confirm))
+                }
+            },
+        )
+    }
+
     RikkaConfirmDialog(
         show = deleteTarget != null,
         title = stringResource(R.string.workspace_page_delete),
@@ -142,6 +262,100 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     ) {
         Text(stringResource(R.string.workspace_page_delete_confirm))
     }
+}
+
+@Composable
+private fun workspaceFilesStorageLabel(storage: WorkspaceFilesStorage): String = when (storage) {
+    WorkspaceFilesStorage.PRIVATE -> stringResource(R.string.workspace_storage_private)
+    WorkspaceFilesStorage.EXTERNAL -> stringResource(R.string.workspace_storage_external)
+}
+
+@Composable
+private fun WorkspaceStorageSettingCard(
+    currentStorage: WorkspaceFilesStorage,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.workspace_storage_setting),
+                style = MaterialTheme.typography.titleSmallEmphasized,
+            )
+            Text(
+                text = stringResource(R.string.workspace_storage_setting_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(
+                    R.string.workspace_storage_current,
+                    workspaceFilesStorageLabel(currentStorage),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceStoragePickerDialog(
+    currentStorage: WorkspaceFilesStorage,
+    onDismiss: () -> Unit,
+    onRequestMigrate: (WorkspaceFilesStorage) -> Unit,
+) {
+    var selected by remember(currentStorage) { mutableStateOf(currentStorage) }
+    val canApply = selected != currentStorage
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.workspace_storage_setting)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    WorkspaceFilesStorage.entries.forEachIndexed { index, storage ->
+                        SegmentedButton(
+                            selected = selected == storage,
+                            onClick = { selected = storage },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = WorkspaceFilesStorage.entries.size,
+                            ),
+                        ) {
+                            Text(
+                                text = workspaceFilesStorageLabel(storage),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onRequestMigrate(selected) },
+                enabled = canApply,
+            ) {
+                Text(stringResource(R.string.common_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -175,6 +389,7 @@ private fun EmptyWorkspaceState() {
 @Composable
 private fun WorkspaceCard(
     workspace: WorkspaceEntity,
+    enabled: Boolean = true,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -184,7 +399,7 @@ private fun WorkspaceCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen),
+            .clickable(enabled = enabled, onClick = onOpen),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Column(

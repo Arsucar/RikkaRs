@@ -46,6 +46,9 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceGlobalLock
+import org.koin.compose.koinInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -86,6 +89,8 @@ private fun WorkspaceTerminalContent(
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
+    val workspaceRepository: WorkspaceRepository = koinInject()
+    val globalLock: WorkspaceGlobalLock = koinInject()
     val terminalTextSizePx = with(LocalDensity.current) { 12.sp.roundToPx() }
     val terminalTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.jetbrains_mono) ?: Typeface.MONOSPACE
@@ -112,14 +117,15 @@ private fun WorkspaceTerminalContent(
         val current = root
         value = if (current == null) {
             TerminalSessionUiState.Loading
+        } else if (globalLock.isLocked()) {
+            TerminalSessionUiState.MigrationInProgress
         } else {
-            // rootfs stat 与 RootfsPatcher().patch()/DNS 查询都是阻塞 I/O, 放到 IO 线程执行;
-            // TerminalSession 构造内部会创建 Handler, 必须回到主线程执行
+            val filesBaseDir = workspaceRepository.managerFilesBaseDir()
             val prepared = withContext(Dispatchers.IO) {
                 if (!workspaceRootfsReady(context, current)) {
                     false
                 } else {
-                    prepareWorkspaceTerminalSession(context, current)
+                    prepareWorkspaceTerminalSession(context, current, filesBaseDir)
                     true
                 }
             }
@@ -127,7 +133,7 @@ private fun WorkspaceTerminalContent(
                 TerminalSessionUiState.NotInstalled
             } else {
                 if (!isActive) return@produceState
-                val created = createWorkspaceTerminalSession(context, current, sessionClient)
+                val created = createWorkspaceTerminalSession(context, current, filesBaseDir, sessionClient)
                 // 创建后若组合已离开, 主动回收以免泄漏 proot 进程, 且不再把已 finish 的 session 暴露为 Ready
                 if (!isActive) {
                     created.finishIfRunning()
@@ -148,10 +154,12 @@ private fun WorkspaceTerminalContent(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = if (currentState is TerminalSessionUiState.NotInstalled) {
-                    stringResource(R.string.workspace_terminal_not_installed)
-                } else {
-                    stringResource(R.string.workspace_terminal_loading)
+                text = when (currentState) {
+                    TerminalSessionUiState.NotInstalled ->
+                        stringResource(R.string.workspace_terminal_not_installed)
+                    TerminalSessionUiState.MigrationInProgress ->
+                        stringResource(R.string.workspace_terminal_migration_in_progress)
+                    else -> stringResource(R.string.workspace_terminal_loading)
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
@@ -314,5 +322,6 @@ private fun TerminalSession.writeText(text: String) {
 private sealed interface TerminalSessionUiState {
     data object Loading : TerminalSessionUiState
     data object NotInstalled : TerminalSessionUiState
+    data object MigrationInProgress : TerminalSessionUiState
     data class Ready(val session: TerminalSession) : TerminalSessionUiState
 }
