@@ -14,15 +14,49 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ## v2.3.15
 
-### 新功能 / Features
+### 修复 / Fixes（本 Fork，v2.3.14 之后）
 
-- **合并上游 master** — 会话文件夹（助手内分组）、MCP OAuth 2.1 授权、OpenAI 多模态工具调用与 Google 工具多媒体响应、Workspace 写入 `/tmp` 免强制审批等。
-  **Merge upstream master** — Conversation folders per assistant, MCP OAuth 2.1, OpenAI multimodal tool calls and Google tool multimedia responses, workspace writes under `/tmp` without forced approval, and related upstream fixes.
-
-### 修复 / Fixes
+- **压缩上下文后消息错位** — 存在 `hidden` 节点时，`updateCurrentMessages` 按可见下标映射物理节点会写错槽位；改为按可见下标与 `messageNodes` 映射更新，并补充单元测试。（#28）
+  **Message order after compress context** — With `hidden` nodes, visible indices no longer map 1:1 to `messageNodes` slots; updates use visible-index mapping; unit tests added. (#28)
 
 - **合并后 Room 与启动崩溃** — 修正 AutoMigration 8→9、补全 24→25 / 25→26 / 26→27 迁移；fork 旧 v26 库可升到 v27，避免 identity hash 校验闪退。
   **Post-merge Room startup crash** — Fix AutoMigration 8→9, add manual migrations 24→25 / 25→26 / 26→27; legacy fork v26 databases upgrade to v27 without identity-hash crash.
+
+### 新功能 / Features（合并 upstream/master）
+
+- **会话文件夹** — 按助手分组管理会话，侧栏新建/重命名/删除文件夹，会话可归入文件夹。
+  **Conversation folders** — Per-assistant folder groups in the drawer; create, rename, delete folders; assign conversations to folders.
+
+- **MCP OAuth 2.1** — MCP 服务器支持 OAuth 授权（PKCE、动态注册、令牌刷新），设置页与回调 Activity 接入。
+  **MCP OAuth 2.1** — OAuth for MCP servers (PKCE, DCR, token refresh); settings and callback activity.
+
+- **助手头像裁剪** — 设置助手头像时可裁剪图片。
+  **Assistant avatar crop** — Crop image when setting assistant avatar.
+
+- **Workspace `/tmp` 免审批** — 工作区工具写入 `/tmp` 不再强制走审批流程。
+  **Workspace /tmp writes** — Workspace tool writes under `/tmp` skip forced approval.
+
+### 改进 / Improvements（合并 upstream/master）
+
+- **OpenAI Chat Completions** — 多模态工具调用路径增强；工具参数 JSON 归一化，避免残缺 JSON 发往模型。
+  **OpenAI Chat Completions** — Multimodal tool-call path; normalized tool-call JSON to avoid sending broken payloads.
+
+- **Google API** — 工具响应中的多媒体内容解析。
+  **Google API** — Multimedia content in tool responses.
+
+- **S3/COS 同步** — 修复下载丢数据及腾讯云 COS endpoint 兼容。
+  **S3/COS sync** — Fix incomplete downloads and Tencent COS endpoint compatibility.
+
+### 修复 / Fixes（合并 upstream/master）
+
+- **Markdown 粗体** — 使用 Bold 字重，修复部分 OEM 字体 `fontWeight` 加粗不生效。
+  **Markdown bold** — Use Bold weight for OEM fonts where synthetic bold fails.
+
+- **聊天页渐变背景** — 修复动态 Mesh 渐变动画循环跳变。
+  **Chat gradient background** — Fix mesh gradient animation loop jump.
+
+- **MCP** — 工具调用前刷新 OAuth 令牌并按需重连。
+  **MCP** — Refresh OAuth tokens before tool calls and reconnect when needed.
 
 ## v2.3.14
 
