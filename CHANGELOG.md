@@ -12,6 +12,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.14
+
+### 新功能 / Features
+
+- **NewAPI 渠道 JSON 导入** — 提供商设置页支持从剪贴板粘贴 `newapi_channel_conn` JSON，并与现有 `ai-provider:v1:` 格式自动分流；可映射为 OpenAI 兼容提供商并命名保存。（#19 #20）
+  **NewAPI channel JSON import** — Provider settings can paste `newapi_channel_conn` JSON from the clipboard, routed alongside existing `ai-provider:v1:` payloads; maps to an OpenAI-compatible provider with a name dialog. (#19 #20)
+
+### 改进 / Improvements
+
+- **子代理档案提示** — `spawn_subagent` 系统提示中的可用档案列表改为输出 `workspace_access`，移除硬编码的 explore/coder 用途说明。（#27）
+  **Subagent profile hints** — Available profiles in `spawn_subagent` system prompt now expose `workspace_access` instead of hardcoded explore/coder usage hints. (#27)
+
 ## v2.3.13
 
 ### 修复 / Fixes
