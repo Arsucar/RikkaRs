@@ -1,0 +1,29 @@
+{
+  "id": "issue-19-20",
+  "name": "issue-19-20",
+  "title": "Handle Open Issues #19 and #20",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-02",
+  "completedAt": "2026-07-02",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-02-newapi-import",
+    "07-02-msg-collapse"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

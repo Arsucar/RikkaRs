@@ -103,7 +103,7 @@ gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar
 
 重打标签：先 `git push origin :refs/tags/vX.Y.Z` 删远程标签，再重新 `tag` + `push`。
 
-本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等。
+本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等；关 issue / 评论请用终端 `gh issue close` / `gh issue comment`，勿依赖 MCP 的 `github_*` 工具（token 常无 issue 写权限）。
 
 更多见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。
 
