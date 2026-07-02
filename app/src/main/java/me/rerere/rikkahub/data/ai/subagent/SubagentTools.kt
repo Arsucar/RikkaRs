@@ -63,15 +63,13 @@ fun createSubagentTools(
                 }
                 appendLine("**Subagents — Delegation Guidance**")
                 appendLine("Use `spawn_subagent` to delegate substantial work. Task prompts must be self-contained.")
-                appendLine("- `explore`: research and context gathering")
-                appendLine("- `coder`: coding and editing tasks")
-                appendLine("- `reviewer`: review and critique without changes")
                 appendLine()
                 appendLine("<available_subagent_profiles>")
                 getProfiles().forEach { p ->
                     appendLine("  <profile>")
                     appendLine("    <name>${p.name}</name>")
                     appendLine("    <description>${p.description}</description>")
+                    appendLine("    <workspace_access>${p.workspaceAccess.name}</workspace_access>")
                     appendLine("  </profile>")
                 }
                 append("</available_subagent_profiles>")
