@@ -61,30 +61,33 @@ data class Conversation(
 
     fun updateCurrentMessages(messages: List<UIMessage>): Conversation {
         val newNodes = this.messageNodes.toMutableList()
+        // 可见节点（!hidden）的物理下标列表，使可见下标与物理下标正确对应
+        val visibleIndices = newNodes.mapIndexed { index, node ->
+            index to node
+        }.filter { !it.second.hidden }.map { it.first }
 
         messages.forEachIndexed { index, message ->
-            val node = newNodes
-                .getOrElse(index) { message.toMessageNode() }
+            val physicalIndex = visibleIndices.getOrNull(index)
 
-            val newMessages = node.messages.toMutableList()
-            var newMessageIndex = node.selectIndex
-            if (newMessages.any { it.id == message.id }) {
-                newMessages[newMessages.indexOfFirst { it.id == message.id }] = message
+            if (physicalIndex != null) {
+                val node = newNodes[physicalIndex]
+                val newMessages = node.messages.toMutableList()
+                var newMessageIndex = node.selectIndex
+                val existingIdx = newMessages.indexOfFirst { it.id == message.id }
+                if (existingIdx >= 0) {
+                    newMessages[existingIdx] = message
+                    newMessageIndex = existingIdx
+                } else {
+                    newMessages.add(message)
+                    newMessageIndex = newMessages.lastIndex
+                }
+                newNodes[physicalIndex] = node.copy(
+                    messages = newMessages,
+                    selectIndex = newMessageIndex,
+                )
             } else {
-                newMessages.add(message)
-                newMessageIndex = newMessages.lastIndex
-            }
-
-            val newNode = node.copy(
-                messages = newMessages,
-                selectIndex = newMessageIndex
-            )
-
-            // 更新newNodes
-            if (index > newNodes.lastIndex) {
-                newNodes.add(newNode)
-            } else {
-                newNodes[index] = newNode
+                // 超出可见节点数量，追加到末尾
+                newNodes.add(message.toMessageNode())
             }
         }
 

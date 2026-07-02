@@ -523,8 +523,10 @@ class ChatService(
                 } else {
                     if (regenerateAssistantMsg) {
                         val node = conversation.getMessageNodeByMessage(message)
-                        val nodeIndex = conversation.messageNodes.indexOf(node)
-                        handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
+                        val visibleIndex = conversation.messageNodes
+                            .filter { !it.hidden }
+                            .indexOf(node)
+                        handleMessageComplete(conversationId, messageRange = 0..<visibleIndex)
                     } else {
                         saveConversation(conversationId, conversation)
                     }
