@@ -12,6 +12,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.16
+
+### 新功能 / Features（本 Fork，v2.3.15 之后）
+
+- **工作区项目文件支持外部存储目录** — 新增全局设置，可将工作区项目文件切换到应用专属外部存储目录（`Android/data/<包名>/files/workspaces/`），用户可通过文件管理器、USB 或 PC 直接编辑文件，无需每次导出导入。切换时自动迁移（复制→校验→删除源文件），迁移失败自动回滚；迁移期间锁定工作区操作防止数据不一致。工作区详情页展示当前项目文件的设备路径。（#30）
+  **Workspace project files external storage** — New global setting to store workspace project files in app-specific external storage (`Android/data/<pkg>/files/workspaces/`), accessible via file manager, USB, or PC. One-tap migration with copy→verify→delete-source and automatic rollback on failure; workspace operations locked during migration. Workspace detail page shows the project files device path. (#30)
+
+---
+
 ## v2.3.15
 
 ### 修复 / Fixes（本 Fork，v2.3.14 之后）
