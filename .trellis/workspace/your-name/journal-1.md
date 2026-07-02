@@ -602,3 +602,37 @@ Batch-fixed 7 open bug issues (#16 #18 #21 #22 #23 #24 #25 #26). FTS ambiguous c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: feat: workspace external storage (#30)
+
+**Date**: 2026-07-03
+**Task**: feat: workspace external storage (#30)
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+实现工作区项目文件外部存储支持：全局 PRIVATE/EXTERNAL 开关、WorkspaceManager 路径分离（files 用 provider, rootfs 保持私有）、WorkspaceStorageMigrator 迁移+回滚、WorkspaceGlobalLock 迁移期锁、终端路径对齐去硬编码、WorkspacePage 存储卡片+迁移 UI、WorkspaceDetailPage 展示 files path、中英日韩俄六语翻译、单元测试。Check agent 修复 AC-6 静默回退问题。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9608707d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
