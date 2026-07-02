@@ -5,6 +5,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.DragDropHorizontal
 import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
@@ -79,7 +80,9 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
+import me.rerere.rikkahub.data.sync.importer.ProviderImportResult
+import me.rerere.rikkahub.data.sync.importer.decodeProviderImportText
+import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -362,16 +365,23 @@ private fun ImportProviderButton(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     var showImportDialog by remember { mutableStateOf(false) }
+    var pendingNameSetting by remember { mutableStateOf<ProviderSetting?>(null) }
+    var importNameInput by remember { mutableStateOf("") }
+
+    val onNeedsName: (ProviderSetting) -> Unit = { setting ->
+        pendingNameSetting = setting
+        importNameInput = defaultImportProviderName(setting)
+    }
 
     val scanQrCodeLauncher = rememberLauncherForActivityResult(ScanQRCode()) { result ->
-        handleQRResult(result, onAdd, toaster, context)
+        handleQRResult(result, onAdd, toaster, context, onNeedsName)
     }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
-            handleImageQRCode(it, onAdd, toaster, context)
+            handleImageQRCode(it, onAdd, toaster, context, onNeedsName)
         }
     }
 
@@ -467,6 +477,42 @@ private fun ImportProviderButton(
                                 )
                             }
                         }
+
+                        OutlinedButton(
+                            onClick = {
+                                val text = context.readClipboardText().trim()
+                                if (text.isEmpty()) {
+                                    toaster.show(
+                                        context.getString(R.string.setting_provider_page_clipboard_empty),
+                                        type = ToastType.Error,
+                                    )
+                                    return@OutlinedButton
+                                }
+                                showImportDialog = false
+                                processProviderImportText(text, onAdd, toaster, context, onNeedsName)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.large
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = HugeIcons.Clipboard,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(R.string.setting_provider_page_paste_from_clipboard),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -484,48 +530,164 @@ private fun ImportProviderButton(
             }
         )
     }
+
+    pendingNameSetting?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingNameSetting = null },
+            title = {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_import_name_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = importNameInput,
+                    onValueChange = { importNameInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = {
+                        Text(stringResource(R.string.setting_provider_page_import_name_hint))
+                    },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = importNameInput.trim()
+                        if (name.isBlank()) {
+                            toaster.show(
+                                context.getString(R.string.setting_provider_page_import_name_hint),
+                                type = ToastType.Error,
+                            )
+                            return@TextButton
+                        }
+                        onAdd(pending.copyProvider(name = name))
+                        pendingNameSetting = null
+                        toaster.show(
+                            context.getString(R.string.setting_provider_page_import_success),
+                            type = ToastType.Success,
+                        )
+                    },
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        text = stringResource(R.string.confirm),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingNameSetting = null },
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            },
+        )
+    }
+}
+
+private fun importFormatErrorMessage(context: android.content.Context, error: Throwable): String {
+    val msg = error.message.orEmpty()
+    return if (msg == "Invalid import format") {
+        context.getString(R.string.setting_provider_page_import_invalid_format)
+    } else {
+        context.getString(R.string.setting_provider_page_qr_decode_failed, msg)
+    }
+}
+
+private fun defaultImportProviderName(setting: ProviderSetting): String {
+    if (setting.name.isNotBlank() && setting.name != "NewAPI") {
+        return setting.name
+    }
+    val openAi = setting as? ProviderSetting.OpenAI ?: return setting.name.ifBlank { "NewAPI" }
+    return runCatching {
+        val host = java.net.URI(openAi.baseUrl.trim()).host
+        host?.ifBlank { null } ?: "NewAPI"
+    }.getOrDefault("NewAPI")
+}
+
+private fun applyProviderImportResult(
+    result: ProviderImportResult,
+    onAdd: (ProviderSetting) -> Unit,
+    toaster: ToasterState,
+    context: android.content.Context,
+    onNeedsName: (ProviderSetting) -> Unit,
+) {
+    when (result) {
+        is ProviderImportResult.Complete -> {
+            onAdd(result.setting)
+            toaster.show(
+                context.getString(R.string.setting_provider_page_import_success),
+                type = ToastType.Success,
+            )
+        }
+
+        is ProviderImportResult.NeedsName -> onNeedsName(result.setting)
+    }
+}
+
+private fun processProviderImportText(
+    raw: String,
+    onAdd: (ProviderSetting) -> Unit,
+    toaster: ToasterState,
+    context: android.content.Context,
+    onNeedsName: (ProviderSetting) -> Unit,
+) {
+    runCatching {
+        applyProviderImportResult(
+            decodeProviderImportText(raw),
+            onAdd,
+            toaster,
+            context,
+            onNeedsName,
+        )
+    }.onFailure { error ->
+        toaster.show(importFormatErrorMessage(context, error), type = ToastType.Error)
+    }
 }
 
 private fun handleQRResult(
     result: QRResult,
     onAdd: (ProviderSetting) -> Unit,
     toaster: ToasterState,
-    context: android.content.Context
+    context: android.content.Context,
+    onNeedsName: (ProviderSetting) -> Unit,
 ) {
-    runCatching {
-        when (result) {
-            is QRResult.QRError -> {
-                toaster.show(
-                    context.getString(
-                        R.string.setting_provider_page_scan_error,
-                        result
-                    ), type = ToastType.Error
-                )
-            }
-
-            QRResult.QRMissingPermission -> {
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_no_permission),
-                    type = ToastType.Error
-                )
-            }
-
-            is QRResult.QRSuccess -> {
-                val setting = decodeProviderSetting(result.content.rawValue ?: "")
-                onAdd(setting)
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_import_success),
-                    type = ToastType.Success
-                )
-            }
-
-            QRResult.QRUserCanceled -> {}
+    when (result) {
+        is QRResult.QRError -> {
+            toaster.show(
+                context.getString(
+                    R.string.setting_provider_page_scan_error,
+                    result,
+                ),
+                type = ToastType.Error,
+            )
         }
-    }.onFailure { error ->
-        toaster.show(
-            context.getString(R.string.setting_provider_page_qr_decode_failed, error.message ?: ""),
-            type = ToastType.Error
-        )
+
+        QRResult.QRMissingPermission -> {
+            toaster.show(
+                context.getString(R.string.setting_provider_page_no_permission),
+                type = ToastType.Error,
+            )
+        }
+
+        is QRResult.QRSuccess -> {
+            processProviderImportText(
+                result.content.rawValue ?: "",
+                onAdd,
+                toaster,
+                context,
+                onNeedsName,
+            )
+        }
+
+        QRResult.QRUserCanceled -> {}
     }
 }
 
@@ -533,30 +695,25 @@ private fun handleImageQRCode(
     uri: Uri,
     onAdd: (ProviderSetting) -> Unit,
     toaster: ToasterState,
-    context: android.content.Context
+    context: android.content.Context,
+    onNeedsName: (ProviderSetting) -> Unit,
 ) {
     runCatching {
-        // 使用ImageUtils解析二维码
         val qrContent = ImageUtils.decodeQRCodeFromUri(context, uri)
 
         if (qrContent.isNullOrEmpty()) {
             toaster.show(
                 context.getString(R.string.setting_provider_page_no_qr_found),
-                type = ToastType.Error
+                type = ToastType.Error,
             )
             return
         }
 
-        val setting = decodeProviderSetting(qrContent)
-        onAdd(setting)
-        toaster.show(
-            context.getString(R.string.setting_provider_page_import_success),
-            type = ToastType.Success
-        )
+        processProviderImportText(qrContent, onAdd, toaster, context, onNeedsName)
     }.onFailure { error ->
         toaster.show(
             context.getString(R.string.setting_provider_page_image_qr_decode_failed, error.message ?: ""),
-            type = ToastType.Error
+            type = ToastType.Error,
         )
     }
 }
