@@ -34,4 +34,6 @@ data class ConversationEntity(
     val isArchived: Boolean = false,
     @ColumnInfo("archived_at", defaultValue = "0")
     val archivedAt: Long = 0,
+    @ColumnInfo("folder_id", defaultValue = "")
+    val folderId: String = "",
 )

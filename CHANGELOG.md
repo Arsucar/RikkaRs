@@ -12,6 +12,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.15
+
+### 新功能 / Features
+
+- **合并上游 master** — 会话文件夹（助手内分组）、MCP OAuth 2.1 授权、OpenAI 多模态工具调用与 Google 工具多媒体响应、Workspace 写入 `/tmp` 免强制审批等。
+  **Merge upstream master** — Conversation folders per assistant, MCP OAuth 2.1, OpenAI multimodal tool calls and Google tool multimedia responses, workspace writes under `/tmp` without forced approval, and related upstream fixes.
+
+### 修复 / Fixes
+
+- **合并后 Room 与启动崩溃** — 修正 AutoMigration 8→9、补全 24→25 / 25→26 / 26→27 迁移；fork 旧 v26 库可升到 v27，避免 identity hash 校验闪退。
+  **Post-merge Room startup crash** — Fix AutoMigration 8→9, add manual migrations 24→25 / 25→26 / 26→27; legacy fork v26 databases upgrade to v27 without identity-hash crash.
+
 ## v2.3.14
 
 ### 新功能 / Features
