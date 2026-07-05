@@ -1,0 +1,5 @@
+{"check":"rg maxSteps/maxToolCalls/subagent metadata usage","status":"passed","notes":"Confirmed nullable maxSteps usage is routed through effective fallback helpers or UI resolved defaults; final subagent_steps matches toolLoopSteps."}
+{"check":".\\gradlew :app:compileDebugKotlin --no-daemon","status":"passed","notes":"BUILD SUCCESSFUL; existing Navigation3 opt-in warnings only."}
+{"check":"adb devices","status":"passed","notes":"Device 100.99.129.110:5555 connected as device."}
+{"check":".\\gradlew :app:installDebug --no-daemon","status":"passed","notes":"Installed app-arm64-v8a-debug.apk on PJF110 - 16; BUILD SUCCESSFUL."}
+{"check":"trellis-update-spec","status":"skipped","notes":"No app/AI code-spec package exists in .trellis/spec; task PRD/design capture the subagent payload contract changes."}
