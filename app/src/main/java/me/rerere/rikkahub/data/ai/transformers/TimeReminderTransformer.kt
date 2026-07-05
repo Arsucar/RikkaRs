@@ -39,7 +39,6 @@ internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
             val currInstant = current.createdAt.toInstant(tz)
             if (!firstUserFound) {
                 firstUserFound = true
-                result.add(buildTimeReminderMessage(null, currInstant))
             } else {
                 val previous = messages[i - 1]
                 val prevInstant = previous.createdAt.toInstant(tz)
