@@ -18,11 +18,29 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
 
+## About This Fork
+
+This repository is a downstream fork of [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
+It tracks upstream while shipping a more agent-oriented Android build named **RikkaRs**.
+
+User-visible differences from upstream include:
+
+- **Separate app identity**: the installed app is shown as RikkaRs with fork-specific icons and releases.
+- **Agent-first workflows**: richer subagent/delegation flows, slash skill completion, per-assistant working directories, and clearer tool-call transcripts.
+- **Workspace access improvements**: workspace project files can be stored in Android app-specific external storage so they are easier to edit from file managers, USB, or a PC.
+- **Local diagnostic tools**: request/text logs can be viewed, exported with sensitive data redacted, and shared with AI tools when enabled.
+- **More device-aware tools**: optional screen-time and calendar tools let assistants use local device context after the required Android permissions are granted.
+- **Provider import conveniences**: supports importing NewAPI channel JSON and keeps QR-based provider import/export.
+- **Safer defaults for remote access**: the embedded web server defaults to localhost-only, with clearer warnings before exposing it on LAN without JWT.
+
+This fork is not the official upstream build. For upstream behavior and support, use
+[rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
+
 ## 🚀 Download
 
-🔗 [Download from Website](https://rikka-ai.com/download) (Recommended)
+🔗 [Download this fork from GitHub Releases](https://github.com/Arsucar/rikkahub/releases) (RikkaRs)
 
-🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+🔗 Upstream official downloads: [Website](https://rikka-ai.com/download) / [Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 ## 💖 Sponsors
 

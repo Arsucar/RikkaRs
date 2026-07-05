@@ -15,10 +15,28 @@
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
 
+## 關於本 Fork
+
+本倉庫是 [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub) 的下游 Fork，會跟隨上游合併，同時發布更偏向智能體工作流的 Android 版本 **RikkaRs**。
+
+和上游相比，使用者能直接感知到的差異包括：
+
+- **獨立應用身份**：安裝後應用名稱顯示為 RikkaRs，並使用本 fork 的圖標與發布版本。
+- **更偏智能體的使用方式**：增強子智能體/委託流程，支持斜線技能補全、助手級工作目錄和更清晰的工具呼叫記錄。
+- **工作區文件更容易存取**：工作區項目文件可放到 Android 應用專屬外部儲存目錄，便於透過文件管理器、USB 或電腦直接編輯。
+- **本地診斷能力**：可查看請求/文字日誌，匯出時自動脫敏；使用者啟用後，也可讓 AI 工具讀取脫敏後的日誌輔助排查。
+- **更多設備上下文工具**：在使用者授予權限後，助手可使用螢幕使用時間、日曆等本地設備資訊。
+- **供應商匯入更方便**：支持匯入 NewAPI 渠道 JSON，並保留二維碼匯入/匯出供應商配置。
+- **遠端存取預設更保守**：內建 Web 服務預設僅監聽本機；未啟用 JWT 且準備開放到區域網路時會給出更明確的提醒。
+
+本 fork 不是上游官方版本；如果你需要上游官方行為與支持，請使用
+[rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)。
+
 ## 🚀 下載
 
-🔗 [前往官網下載](https://rikka-ai.com/download)（推薦）
-🔗 [前往 Google Play 下載](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+🔗 [從 GitHub Releases 下載本 fork](https://github.com/Arsucar/rikkahub/releases)（RikkaRs）
+
+🔗 上游官方版本：[官網下載](https://rikka-ai.com/download) / [Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 ## 💖 贊助商
 
