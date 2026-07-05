@@ -288,6 +288,7 @@ private fun ChatPageContent(
     var showFilesSheet by remember { mutableStateOf(false) }
 
     val completionProviders = remember(
+        assistant.id,
         assistant.workspaceId,
         resolveEffectiveWorkspaceCwd(conversation, assistant),
         workspaceRepository,
@@ -310,6 +311,7 @@ private fun ChatPageContent(
                 add(
                     SlashCompletionProvider(
                         enabledSkills = assistant.enabledSkills,
+                        assistantId = assistant.id,
                         skillManager = skillManager,
                     )
                 )

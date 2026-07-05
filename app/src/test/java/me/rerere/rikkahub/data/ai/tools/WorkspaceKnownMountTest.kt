@@ -1,0 +1,90 @@
+package me.rerere.rikkahub.data.ai.tools
+
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assume.assumeNoException
+import org.junit.Test
+
+class WorkspaceKnownMountTest {
+    @Test
+    fun resolveKnownMountFile_mapsSkillsPathToSource() {
+        val root = Files.createTempDirectory("known-mount").toFile()
+        val skillFile = File(root, "demo/SKILL.md").apply {
+            parentFile?.mkdirs()
+            writeText("skill")
+        }
+
+        try {
+            val resolved = resolveKnownMountFile(
+                path = "/skills/demo/SKILL.md",
+                knownMounts = listOf(WorkspaceKnownMount("/skills", root)),
+            )
+
+            assertEquals(skillFile.canonicalFile, resolved)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun resolveKnownMountFile_rejectsTraversal() {
+        val root = Files.createTempDirectory("known-mount").toFile()
+        try {
+            val resolved = resolveKnownMountFile(
+                path = "/skills/../secret.txt",
+                knownMounts = listOf(WorkspaceKnownMount("/skills", root)),
+            )
+
+            assertNull(resolved)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun resolveKnownMountFile_allowsSymlinkUnderExplicitRoot() {
+        val root = Files.createTempDirectory("known-mount").toFile()
+        val skillDir = File(root, "demo").apply { mkdirs() }
+        val sharedRoot = Files.createTempDirectory("known-mount-shared").toFile()
+        val sharedFile = File(sharedRoot, "guide.md").apply { writeText("shared") }
+
+        try {
+            createSymlinkOrSkip(skillDir.toPath().resolve("guide.md"), sharedFile.toPath())
+
+            val allowed = resolveKnownMountFile(
+                path = "/skills/demo/guide.md",
+                knownMounts = listOf(
+                    WorkspaceKnownMount(
+                        target = "/skills",
+                        source = root,
+                        allowedSymlinkRoots = listOf(sharedRoot),
+                    )
+                ),
+            )
+            val rejected = resolveKnownMountFile(
+                path = "/skills/demo/guide.md",
+                knownMounts = listOf(WorkspaceKnownMount("/skills", root)),
+            )
+
+            assertEquals(sharedFile.canonicalFile, allowed)
+            assertNull(rejected)
+        } finally {
+            root.deleteRecursively()
+            sharedRoot.deleteRecursively()
+        }
+    }
+
+    private fun createSymlinkOrSkip(link: Path, target: Path) {
+        try {
+            Files.createSymbolicLink(link, target)
+        } catch (e: UnsupportedOperationException) {
+            assumeNoException(e)
+        } catch (e: IOException) {
+            assumeNoException(e)
+        }
+    }
+}

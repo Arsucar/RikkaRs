@@ -88,6 +88,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
+import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -703,8 +704,7 @@ class ChatService(
                         addAll(
                             createSkillTools(
                                 enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
+                                allSkills = skillManager.listSkillsForAssistant(assistant.id),
                             )
                         )
                     }
@@ -830,7 +830,18 @@ class ChatService(
             )
             return emptyList()
         }
-        val all = createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        val all = createWorkspaceTools(
+            workspaceId = workspaceId,
+            workspaceRepository = workspaceRepository,
+            cwd = cwd,
+            knownMounts = listOf(
+                WorkspaceKnownMount(
+                    target = "/skills",
+                    source = skillManager.getSkillsDir(),
+                    allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
+                )
+            ),
+        )
         return if (readOnly) all.filter { it.name == "workspace_read_file" } else all
     }
 
@@ -1854,6 +1865,13 @@ class ChatService(
                     workspaceRepository = workspaceRepository,
                     workspaceId = workspaceId,
                     workspaceCwd = workspaceCwd,
+                    knownMounts = listOf(
+                        WorkspaceKnownMount(
+                            target = "/skills",
+                            source = skillManager.getSkillsDir(),
+                            allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
+                        )
+                    ),
                 )
             }
         }

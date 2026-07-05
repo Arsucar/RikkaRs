@@ -20,6 +20,7 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
@@ -34,10 +35,17 @@ val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
     overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
 
+data class WorkspaceKnownMount(
+    val target: String,
+    val source: File,
+    val allowedSymlinkRoots: List<File> = emptyList(),
+)
+
 suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
+    knownMounts: List<WorkspaceKnownMount> = emptyList(),
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -46,7 +54,7 @@ suspend fun createWorkspaceTools(
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 
     return listOf(
-        createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
+        createReadFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts),
         createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
@@ -62,11 +70,12 @@ private fun createReadFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    knownMounts: List<WorkspaceKnownMount>,
 ) = Tool(
     name = "workspace_read_file",
     description = """
         Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
-        Use /workspace for the workspace files area.
+        Use /workspace for the workspace files area. Use /skills for global skill files.
         Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp).
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -81,9 +90,9 @@ private fun createReadFileTool(
     execute = {
         val path = it.jsonObject.absolutePath("path")
         if (path.isImagePath()) {
-            workspaceRepository.readImageInRootfs(workspaceId, path)
+            workspaceRepository.readImageInRootfs(workspaceId, path, knownMounts)
         } else {
-            val text = workspaceRepository.readTextInRootfs(workspaceId, path)
+            val text = workspaceRepository.readTextInRootfs(workspaceId, path, knownMounts)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -274,16 +283,29 @@ private fun kotlinx.serialization.json.JsonObject.string(name: String): String? 
 private suspend fun WorkspaceRepository.readTextInRootfs(
     workspaceId: String,
     path: String,
+    knownMounts: List<WorkspaceKnownMount> = emptyList(),
 ): String {
+    resolveKnownMountFile(path, knownMounts)?.let { file ->
+        require(file.isFile) { "Path is not a file: $path" }
+        require(file.length() <= MAX_READ_FILE_BYTES) {
+            fileTooLargeMessage(path, file.length())
+        }
+        return file.readText()
+    }
     val (area, relativePath) = rootfsPathToAreaAndRelative(path)
     val size = fileSize(workspaceId, area, relativePath)
     require(size <= MAX_READ_FILE_BYTES) {
-        "File is too large to read: $path (${size / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
+        fileTooLargeMessage(path, size)
     }
     val buffer = ByteArrayOutputStream(size.toInt())
     exportFile(workspaceId, area, relativePath, buffer)
     return buffer.toString(Charsets.UTF_8.name())
 }
+
+private fun fileTooLargeMessage(path: String, sizeBytes: Long): String =
+    "File is too large to read: $path (${sizeBytes / 1024 / 1024}MB, " +
+        "max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). " +
+        "Use shell commands like head, tail, or grep to read parts of it."
 
 private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea, String> {
     val trimmed = path.trimEnd('/')
@@ -294,14 +316,61 @@ private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea
     }
 }
 
+internal fun resolveKnownMountFile(path: String, knownMounts: List<WorkspaceKnownMount>): File? {
+    val normalized = normalizeRootfsAbsolutePath(path) ?: return null
+    for (mount in knownMounts) {
+        val target = normalizeRootfsAbsolutePath(mount.target)?.trimEnd('/') ?: continue
+        val relative = when {
+            normalized == target -> ""
+            normalized.startsWith("$target/") -> normalized.removePrefix("$target/").trimStart('/')
+            else -> continue
+        }
+        val sourceRoot = mount.source.canonicalFile
+        val lexicalFile = sourceRoot.toPath().resolve(relative).normalize().toFile()
+        if (!lexicalFile.isSameOrInsidePath(sourceRoot)) continue
+        val file = lexicalFile.canonicalFile
+        val allowedRoots = listOf(sourceRoot) + mount.allowedSymlinkRoots.map { it.canonicalFile }
+        if (allowedRoots.any { root -> file.isSameOrInside(root) }) return file
+    }
+    return null
+}
+
+private fun normalizeRootfsAbsolutePath(path: String): String? {
+    val normalized = path.replace('\\', '/').trim()
+    if (normalized.isBlank()) return null
+    if (!normalized.startsWith("/")) return null
+    if (normalized.contains('\u0000')) return null
+    val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
+    if (parts.any { it == ".." }) return null
+    return "/" + parts.joinToString("/")
+}
+
+private fun File.isSameOrInside(root: File): Boolean {
+    val rootPath = root.canonicalFile.path
+    val currentPath = canonicalFile.path
+    return currentPath == rootPath || currentPath.startsWith(rootPath + File.separator)
+}
+
+private fun File.isSameOrInsidePath(root: File): Boolean {
+    val rootPath = root.absoluteFile.path
+    val currentPath = absoluteFile.path
+    return currentPath == rootPath || currentPath.startsWith(rootPath + File.separator)
+}
+
 private suspend fun WorkspaceRepository.readImageInRootfs(
     workspaceId: String,
     path: String,
+    knownMounts: List<WorkspaceKnownMount> = emptyList(),
 ): List<UIMessagePart> {
-    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
-    val buffer = ByteArrayOutputStream()
-    exportFile(workspaceId, area, relativePath, buffer)
-    val bytes = buffer.toByteArray()
+    val bytes = resolveKnownMountFile(path, knownMounts)?.let { file ->
+        require(file.isFile) { "Path is not a file: $path" }
+        file.readBytes()
+    } ?: run {
+        val (area, relativePath) = rootfsPathToAreaAndRelative(path)
+        val buffer = ByteArrayOutputStream()
+        exportFile(workspaceId, area, relativePath, buffer)
+        buffer.toByteArray()
+    }
 
     val filesManager = getKoin().get<FilesManager>()
     val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))

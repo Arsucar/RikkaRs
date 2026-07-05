@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.ai.tools.createFinishWorkTool
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -101,11 +102,12 @@ suspend fun createSubagentWorkspaceTools(
     workspaceRepository: WorkspaceRepository,
     workspaceId: String,
     workspaceCwd: String? = null,
+    knownMounts: List<WorkspaceKnownMount> = emptyList(),
 ): List<Tool> {
     if (access == WorkspaceAccess.NONE || workspaceId.isBlank()) return emptyList()
     val workspaceOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
     return filterWorkspaceToolsByAccess(
-        createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd),
+        createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd, knownMounts),
         access,
     )
         .map { applySubagentWorkspaceApproval(it, profile, workspaceOverrides) }

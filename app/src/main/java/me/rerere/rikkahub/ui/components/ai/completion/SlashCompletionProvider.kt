@@ -6,10 +6,12 @@ import me.rerere.hugeicons.stroke.Book02
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.files.skillsAvailableForSlash
+import kotlin.uuid.Uuid
 import kotlin.math.max
 
 class SlashCompletionProvider(
     private val enabledSkills: Set<String>,
+    private val assistantId: Uuid,
     private val skillManager: SkillManager,
 ) : ChatCompletionProvider {
     override val id: String = "slash_skills"
@@ -19,7 +21,7 @@ class SlashCompletionProvider(
         val slash = findSlashCommand(context.text, context.cursor) ?: return null
         val query = slash.query
 
-        val available = skillManager.skillsAvailableForSlash(enabledSkills)
+        val available = skillManager.skillsAvailableForSlash(enabledSkills, assistantId)
 
         val items = available
             .asSequence()

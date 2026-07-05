@@ -2,12 +2,13 @@ package me.rerere.rikkahub.data.ai
 
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.readSkillBodyByIdentifier
+import kotlin.uuid.Uuid
 
-fun SkillManager.buildActiveSkillSystemAppend(skillNames: Collection<String>): String? {
+fun SkillManager.buildActiveSkillSystemAppend(skillNames: Collection<String>, assistantId: Uuid? = null): String? {
     val names = skillNames.map { it.trim() }.filter { it.isNotBlank() }.distinct()
     if (names.isEmpty()) return null
     val blocks = names.mapNotNull { name ->
-        val body = readSkillBodyByIdentifier(name)?.trim().orEmpty()
+        val body = readSkillBodyByIdentifier(name, assistantId)?.trim().orEmpty()
         if (body.isBlank()) return@mapNotNull null
         buildString {
             appendLine("<active_skill name=\"$name\">")

@@ -6,6 +6,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import kotlin.uuid.Uuid
 
 class SkillManager(
     private val context: Context,
@@ -33,6 +34,12 @@ class SkillManager(
         return result
     }
 
+    fun listSkillsForAssistant(assistantId: Uuid?): List<SkillMetadata> {
+        val global = listSkills()
+        if (assistantId == null) return global
+        return (listAssistantSkills(assistantId) + global).distinctBy { it.name }
+    }
+
     fun invalidateListCache() {
         listCache = null
     }
@@ -43,26 +50,53 @@ class SkillManager(
         return dir
     }
 
+    fun getAssistantSkillsDir(assistantId: Uuid): File {
+        val dir = context.filesDir
+            .resolve(FileFolders.ASSISTANT_SKILLS)
+            .resolve(assistantId.toString())
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun getSkillSharedDir(): File {
+        val dir = context.filesDir.resolve(FileFolders.SKILL_SHARED)
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     private fun listSkillsUncached(): List<SkillMetadata> {
         val skillsDir = getSkillsDir()
+        return listSkillsInDir(skillsDir, ownerAssistantId = null)
+    }
+
+    private fun listAssistantSkills(assistantId: Uuid): List<SkillMetadata> {
+        val skillsDir = getAssistantSkillsDir(assistantId)
+        return listSkillsInDir(skillsDir, ownerAssistantId = assistantId)
+    }
+
+    private fun listSkillsInDir(skillsDir: File, ownerAssistantId: Uuid?): List<SkillMetadata> {
         return skillsDir.listFiles()
             ?.filter { it.isDirectory }
             ?.mapNotNull { dir ->
-                val skillFile = dir.resolve("SKILL.md")
+                val skillFile = SkillPaths.resolveSkillFile(
+                    skillDir = dir,
+                    relativePath = "SKILL.md",
+                    allowedSymlinkRoots = listOf(getSkillSharedDir()),
+                ) ?: return@mapNotNull null
                 if (!skillFile.exists()) return@mapNotNull null
-                parseSkillFile(skillFile, dir)
+                parseSkillFile(skillFile, dir, ownerAssistantId)
             }
             ?: emptyList()
     }
 
-    fun readSkillBody(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
+    fun readSkillBody(skillName: String, assistantId: Uuid? = null): String? {
+        val skillFile = resolveSkillFile(skillName, "SKILL.md", assistantId) ?: return null
         if (!skillFile.exists()) return null
         return SkillFrontmatterParser.extractBody(skillFile.readText())
     }
 
-    fun readSkillContent(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
+    fun readSkillContent(skillName: String, assistantId: Uuid? = null): String? {
+        val skillFile = resolveSkillFile(skillName, "SKILL.md", assistantId) ?: return null
         if (!skillFile.exists()) return null
         return skillFile.readText()
     }
@@ -72,7 +106,20 @@ class SkillManager(
             return null
         }
         val skillDir = resolveSkillDir(name) ?: return null
-        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir)
+        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir, ownerAssistantId = null)
+    }
+
+    fun saveAssistantSkill(assistantId: Uuid, name: String, content: String): SkillMetadata? {
+        if (!saveSkillFilesAtomically(
+                skillsDir = getAssistantSkillsDir(assistantId),
+                skillName = name,
+                files = mapOf("SKILL.md" to content),
+            )
+        ) {
+            return null
+        }
+        val skillDir = resolveAssistantSkillDir(assistantId, name) ?: return null
+        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir, ownerAssistantId = assistantId)
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
@@ -103,11 +150,12 @@ class SkillManager(
      */
     suspend fun pruneOrphanedEnabledSkills(): List<SkillMetadata> = withContext(Dispatchers.IO) {
         val skills = listSkills()
-        val existing = skills.mapTo(HashSet()) { it.name }
+        val globalExisting = skills.mapTo(HashSet()) { it.name }
         settingsStore.update { settings ->
             var changed = false
             val newAssistants = settings.assistants.map { assistant ->
-                val pruned = assistant.enabledSkills.filterTo(LinkedHashSet()) { it in existing }
+                val visible = (globalExisting + listAssistantSkills(assistant.id).map { it.name }).toHashSet()
+                val pruned = assistant.enabledSkills.filterTo(LinkedHashSet()) { it in visible }
                 if (pruned.size != assistant.enabledSkills.size) {
                     changed = true
                     assistant.copy(enabledSkills = pruned)
@@ -122,6 +170,9 @@ class SkillManager(
 
     fun getSkillDir(skillName: String): File? = resolveSkillDir(skillName)
 
+    fun getAssistantSkillDir(assistantId: Uuid, skillName: String): File? =
+        resolveAssistantSkillDir(assistantId, skillName)
+
     fun saveSkillFile(skillName: String, relativePath: String, content: String): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
@@ -132,15 +183,35 @@ class SkillManager(
     }
 
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
+        return saveSkillFilesAtomically(
+            skillsDir = getSkillsDir(),
+            skillName = skillName,
+            files = files,
+        )
+    }
+
+    private fun saveSkillFilesAtomically(
+        skillsDir: File,
+        skillName: String,
+        files: Map<String, String>,
+    ): Boolean {
         return saveSkillFileBytesAtomically(
+            skillsDir = skillsDir,
             skillName = skillName,
             files = files.mapValues { it.value.toByteArray() },
         )
     }
 
     fun saveSkillFileBytesAtomically(skillName: String, files: Map<String, ByteArray>): Boolean {
-        val skillsDir = getSkillsDir()
-        val targetDir = resolveSkillDir(skillName) ?: return false
+        return saveSkillFileBytesAtomically(getSkillsDir(), skillName, files)
+    }
+
+    private fun saveSkillFileBytesAtomically(
+        skillsDir: File,
+        skillName: String,
+        files: Map<String, ByteArray>,
+    ): Boolean {
+        val targetDir = SkillPaths.resolveSkillDir(skillsDir, skillName) ?: return false
         val stagingDir = createTempSkillDir(skillsDir, skillName, "staging") ?: return false
         var backupDir: File? = null
 
@@ -192,13 +263,46 @@ class SkillManager(
         return deleted
     }
 
-    fun resolveSkillFile(skillName: String, relativePath: String): File? {
-        val skillDir = resolveSkillDir(skillName) ?: return null
-        return SkillPaths.resolveSkillFile(skillDir, relativePath)
+    fun resolveSkillFile(skillName: String, relativePath: String, assistantId: Uuid? = null): File? {
+        val metadata = findVisibleSkillMetadata(skillName, assistantId) ?: return null
+        return resolveSkillFile(metadata, relativePath)
+    }
+
+    fun resolveMountedSkillFile(rootfsPath: String): File? {
+        return SkillPaths.resolveMountedSkillFile(
+            skillsRoot = getSkillsDir(),
+            rootfsPath = rootfsPath,
+            allowedSymlinkRoots = listOf(getSkillSharedDir()),
+        )
+    }
+
+    fun resolveSkillFile(skill: SkillMetadata, relativePath: String): File? {
+        return SkillPaths.resolveSkillFile(
+            skillDir = skill.skillDir,
+            relativePath = relativePath,
+            allowedSymlinkRoots = skill.allowedSymlinkRoots,
+        )
     }
 
     private fun resolveSkillDir(skillName: String): File? {
         return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
+    }
+
+    private fun resolveAssistantSkillDir(assistantId: Uuid, skillName: String): File? {
+        return SkillPaths.resolveSkillDir(getAssistantSkillsDir(assistantId), skillName)
+    }
+
+    private fun findGlobalSkillMetadata(skillName: String): SkillMetadata? {
+        return listSkills().firstOrNull { it.name == skillName || it.skillDir.name == skillName }
+    }
+
+    private fun findVisibleSkillMetadata(skillName: String, assistantId: Uuid?): SkillMetadata? {
+        if (assistantId != null) {
+            listAssistantSkills(assistantId).firstOrNull {
+                it.name == skillName || it.skillDir.name == skillName
+            }?.let { return it }
+        }
+        return findGlobalSkillMetadata(skillName)
     }
 
     private fun createTempSkillDir(skillsRoot: File, skillName: String, suffix: String): File? {
@@ -211,7 +315,7 @@ class SkillManager(
         return null
     }
 
-    private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata? {
+    private fun parseSkillFile(skillFile: File, skillDir: File, ownerAssistantId: Uuid?): SkillMetadata? {
         return runCatching {
             val content = skillFile.readText()
             val frontmatter = SkillFrontmatterParser.parse(content)
@@ -223,6 +327,8 @@ class SkillManager(
                 compatibility = frontmatter["compatibility"],
                 allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
                 skillDir = skillDir,
+                ownerAssistantId = ownerAssistantId,
+                allowedSymlinkRoots = listOf(getSkillSharedDir()),
             )
         }.getOrElse {
             Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)
@@ -237,8 +343,11 @@ data class SkillMetadata(
     val compatibility: String? = null,
     val allowedTools: List<String> = emptyList(),
     val skillDir: File,
+    val ownerAssistantId: Uuid? = null,
+    val allowedSymlinkRoots: List<File> = emptyList(),
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
+    val isAssistantPrivate: Boolean get() = ownerAssistantId != null
 }
 
 object SkillFrontmatterParser {
