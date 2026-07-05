@@ -218,6 +218,10 @@ internal fun AssistantSubagentProfileContent(
                 resolved = resolved,
                 profileName = profileName,
                 createMode = createMode,
+                maxStepsShowsInherit = !isGlobalOnly &&
+                    assistant.subagentProfiles.firstOrNull { it.name == profileName }?.maxSteps == null,
+                maxToolCallsShowsInherit = !isGlobalOnly &&
+                    assistant.subagentProfiles.firstOrNull { it.name == profileName }?.maxToolCalls == null,
                 globalProfiles = globalProfiles,
                 providers = providers,
                 mcpServers = mcpServers,
@@ -237,6 +241,8 @@ internal fun SubagentProfileForm(
     resolved: SubagentProfile,
     profileName: String,
     createMode: Boolean,
+    maxStepsShowsInherit: Boolean = false,
+    maxToolCallsShowsInherit: Boolean = false,
     globalProfiles: List<SubagentProfile> = emptyList(),
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
@@ -452,8 +458,9 @@ internal fun SubagentProfileForm(
                 modifier = Modifier.padding(8.dp),
                 label = { Text(stringResource(R.string.subagent_profile_max_steps)) },
             ) {
-                var localMaxSteps by remember(profileName, resolved.maxSteps) {
-                    mutableStateOf(resolved.maxSteps.toFloat())
+                val resolvedMaxSteps = resolved.maxSteps ?: 32
+                var localMaxSteps by remember(profileName, resolvedMaxSteps) {
+                    mutableStateOf(resolvedMaxSteps.toFloat())
                 }
                 Slider(
                     value = localMaxSteps,
@@ -465,10 +472,63 @@ internal fun SubagentProfileForm(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    text = localMaxSteps.roundToInt().toString(),
+                    text = buildString {
+                        append(localMaxSteps.roundToInt())
+                        if (maxStepsShowsInherit) {
+                            append(" · ")
+                            append(stringResource(R.string.subagent_profile_inherit))
+                        }
+                    },
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_max_tool_calls)) },
+                description = { Text(stringResource(R.string.subagent_profile_max_tool_calls_desc)) },
+            ) {
+                val resolvedMaxToolCalls = resolved.maxToolCalls ?: resolved.maxSteps ?: 32
+                var localMaxToolCalls by remember(profileName, resolvedMaxToolCalls) {
+                    mutableStateOf(resolvedMaxToolCalls.toFloat())
+                }
+                Slider(
+                    value = localMaxToolCalls,
+                    onValueChange = { localMaxToolCalls = it },
+                    onValueChangeFinished = {
+                        persist { it.copy(maxToolCalls = localMaxToolCalls.roundToInt().coerceIn(1, 256)) }
+                    },
+                    valueRange = 1f..256f,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = buildString {
+                        append(localMaxToolCalls.roundToInt())
+                        if (maxToolCallsShowsInherit) {
+                            append(" · ")
+                            append(stringResource(R.string.subagent_profile_inherit))
+                        }
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_disable_tool_budget_stop)) },
+                description = { Text(stringResource(R.string.subagent_profile_disable_tool_budget_stop_desc)) },
+                tail = {
+                    Switch(
+                        checked = resolved.disableToolBudgetStop,
+                        onCheckedChange = { v -> persist { it.copy(disableToolBudgetStop = v) } },
+                    )
+                },
+            )
+
                 }
             }
 

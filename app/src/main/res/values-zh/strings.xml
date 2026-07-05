@@ -85,6 +85,11 @@
   <string name="subagent_profile_max_tokens_inherit">继承</string>
   <string name="subagent_profile_reasoning">推理</string>
   <string name="subagent_profile_max_steps">最大步数</string>
+  <string name="subagent_profile_disable_tool_budget_stop">禁用工具预算截断</string>
+  <string name="subagent_profile_disable_tool_budget_stop_desc">开启后，子代理不会因工具调用次数达到上限而被截断停止</string>
+  <string name="subagent_profile_max_tool_calls">最大工具调用次数</string>
+  <string name="subagent_profile_max_tool_calls_desc">子代理停止前允许的最大工具调用次数</string>
+  <string name="subagent_profile_inherit">继承</string>
   <string name="subagent_profile_steps_countdown_threshold">倒计时提醒阈值</string>
   <string name="subagent_profile_steps_countdown_auto">自动</string>
   <string name="subagent_profile_steps_countdown_off">关闭</string>

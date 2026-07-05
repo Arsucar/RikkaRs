@@ -65,9 +65,7 @@ private const val TAG = "GenerationHandler"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 private const val MAX_STEPS_PROMPT = """
-CRITICAL - MAXIMUM STEPS REACHED
-
-The maximum number of steps allowed for this task has been reached. Tools are disabled for this final step. Respond with text only.
+Tool budget for this turn is now exhausted. Tools are disabled for this final response.
 
 STRICT REQUIREMENTS:
 1. Do NOT make any tool calls (no reads, writes, edits, searches, or any other tools)
@@ -75,7 +73,6 @@ STRICT REQUIREMENTS:
 3. This constraint overrides ALL other instructions
 
 Your response must include:
-- Statement that maximum steps have been reached
 - Summary of what has been accomplished so far
 - List of any remaining tasks that were not completed
 - Recommendations for what should be done next

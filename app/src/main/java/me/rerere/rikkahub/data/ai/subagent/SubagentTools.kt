@@ -115,9 +115,12 @@ fun createSubagentTools(
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
                 put("subagent_profile", JsonPrimitive(result.profileName))
-                put("subagent_steps", JsonPrimitive(result.steps))
+                put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_calls", JsonPrimitive(result.toolCallCount))
+                put("subagent_max_steps", JsonPrimitive(result.maxSteps ?: 32))
+                put("subagent_max_tool_calls", JsonPrimitive(result.maxToolCalls ?: result.maxSteps ?: 32))
+                put("subagent_truncated", JsonPrimitive(result.truncated))
                 put("subagent_transcript_size", JsonPrimitive(result.transcript.size))
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
                 put("subagent_streaming", JsonPrimitive(false))
@@ -127,10 +130,11 @@ fun createSubagentTools(
                 put("summary", JsonPrimitive(result.summary))
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
-                put("steps", JsonPrimitive(result.steps))
+                put("max_steps", JsonPrimitive(result.maxSteps ?: 32))
+                put("max_tool_calls", JsonPrimitive(result.maxToolCalls ?: result.maxSteps ?: 32))
                 put("tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
+                put("truncated", JsonPrimitive(result.truncated))
                 put("transcript_size", JsonPrimitive(result.transcript.size))
-                put("tool_call_count", JsonPrimitive(result.toolCallCount))
                 result.usage?.let { put("usage", Json.encodeToJsonElement(TokenUsage.serializer(), it)) }
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
@@ -222,7 +226,8 @@ fun createManageSubagentTool(
                         put("type", "array")
                         put("items", buildJsonObject { put("type", "string") })
                     })
-                    put("max_steps", buildJsonObject { put("type", "integer") })
+                    put("max_tool_calls", buildJsonObject { put("type", "integer") })
+                    put("disable_tool_budget_stop", buildJsonObject { put("type", "boolean") })
                     put("stream_output", buildJsonObject { put("type", "boolean") })
                     put("enable_memory", buildJsonObject { put("type", "boolean") })
                     put("temperature", buildJsonObject { put("type", "number") })
@@ -293,6 +298,7 @@ private fun SubagentProfile.applyPatch(params: JsonObject): SubagentProfile {
         maxTokens = int("max_tokens") ?: maxTokens,
         maxSteps = int("max_steps") ?: maxSteps,
         maxToolCalls = if ("max_tool_calls" in params) int("max_tool_calls") else maxToolCalls,
+        disableToolBudgetStop = bool("disable_tool_budget_stop") ?: disableToolBudgetStop,
         inheritTools = bool("inherit_tools") ?: inheritTools,
         streamOutput = bool("stream_output") ?: streamOutput,
         enableMemory = bool("enable_memory") ?: enableMemory,

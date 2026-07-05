@@ -86,6 +86,11 @@
   <string name="subagent_profile_max_tokens_inherit">Inherit</string>
   <string name="subagent_profile_reasoning">Reasoning</string>
   <string name="subagent_profile_max_steps">Max steps</string>
+  <string name="subagent_profile_disable_tool_budget_stop">Disable tool budget stop</string>
+  <string name="subagent_profile_disable_tool_budget_stop_desc">When enabled, the subagent will not be stopped by tool call budget limits</string>
+  <string name="subagent_profile_max_tool_calls">Max tool calls</string>
+  <string name="subagent_profile_max_tool_calls_desc">Maximum number of tool calls before the subagent is asked to stop</string>
+  <string name="subagent_profile_inherit">Inherit</string>
   <string name="subagent_profile_steps_countdown_threshold">Steps countdown threshold</string>
   <string name="subagent_profile_steps_countdown_auto">Auto</string>
   <string name="subagent_profile_steps_countdown_off">Off</string>

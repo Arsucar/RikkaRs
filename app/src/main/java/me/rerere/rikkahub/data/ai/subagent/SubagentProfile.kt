@@ -66,8 +66,9 @@ data class SubagentProfile(
     val topP: Float? = null,
     val maxTokens: Int? = null,
     val reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
-    val maxSteps: Int = 32,
+    val maxSteps: Int? = null,
     val maxToolCalls: Int? = null,
+    val disableToolBudgetStop: Boolean = false,
     val workspaceAccess: WorkspaceAccess = WorkspaceAccess.READ_ONLY,
     val workspaceApproval: WorkspaceApproval = WorkspaceApproval.INHERIT,
     val allowedPathPrefixes: List<String> = listOf("/workspace"),
@@ -110,6 +111,8 @@ data class SubagentResult(
     /// 实际工具循环步数（受 maxSteps 控制），每步 = 一次 LLM 调用 + 工具执行。
     @SerialName("tool_loop_steps") val toolLoopSteps: Int = 0,
     @SerialName("truncated") val truncated: Boolean = false,
+    @SerialName("max_steps") val maxSteps: Int? = null,
+    @SerialName("max_tool_calls") val maxToolCalls: Int? = null,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
 )
 
@@ -192,5 +195,7 @@ internal fun SubagentProfile.mergeInheritedFrom(base: SubagentProfile): Subagent
         displayName = displayName.takeIf { it.isNotBlank() && it != name } ?: base.displayName,
         description = description.ifBlank { base.description },
         systemPrompt = systemPrompt.ifBlank { base.systemPrompt },
+        maxSteps = maxSteps ?: base.maxSteps,
+        maxToolCalls = maxToolCalls ?: base.maxToolCalls,
     )
 }
