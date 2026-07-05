@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-07-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~708 | Active |
+| `journal-1.md` | ~743 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-07-06 | Quality gate stabilization | `1b866d3a`, `b28fd127` | `release/rikka-arsucar` |
 | 16 | 2026-07-06 | Complete backlog tasks and quality gate | `0fa044e6`, `8be84291`, `1b866d3a` | `release/rikka-arsucar` |
 | 15 | 2026-07-05 | Simplify subagent fields | `9c830767` | `release/rikka-arsucar` |
 | 14 | 2026-07-03 | feat: workspace external storage (#30) | `9608707d` | `release/rikka-arsucar` |
