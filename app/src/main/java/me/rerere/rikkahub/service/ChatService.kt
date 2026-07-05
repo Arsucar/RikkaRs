@@ -659,7 +659,7 @@ class ChatService(
                         it
                     }
                 },
-                assistant = assistant,
+                assistant = assistant.copy(parallelToolExecution = false),
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -1819,6 +1819,7 @@ class ChatService(
                 )
             },
             delegateOnly = delegateOnly && depth == 0,
+            parallelExecutionEnabled = false,
         )
         createManageSubagentTool(
             json = json,
@@ -1934,6 +1935,7 @@ class ChatService(
                             subagentHost.askBtw(q, live, parent, parentModel, workspaceCwd)
                         },
                         delegateOnly = false,
+                        parallelExecutionEnabled = assistant.parallelToolExecution,
                     ).first { it.name == "spawn_subagent" }
                 }
             } else {

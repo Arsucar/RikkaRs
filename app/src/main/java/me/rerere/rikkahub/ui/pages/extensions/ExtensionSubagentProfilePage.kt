@@ -52,29 +52,31 @@ fun ExtensionSubagentProfilePage(
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    var currentProfileName by remember(profileName) { mutableStateOf(profileName) }
     val globalProfiles = settings.globalSubagentProfiles
     val effectiveGlobals = SubagentRegistry.effectiveGlobalProfiles(globalProfiles)
-    val resolved = effectiveGlobals.firstOrNull { it.name == profileName }
-        ?: SubagentProfile(name = profileName)
+    val resolved = effectiveGlobals.firstOrNull { it.name == currentProfileName }
+        ?: SubagentProfile(name = currentProfileName)
 
-    var pathDraft by remember(profileName) { mutableStateOf("") }
+    var pathDraft by remember(currentProfileName) { mutableStateOf("") }
 
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
-        val base = globalProfiles.firstOrNull { it.name == profileName }
-            ?: effectiveGlobals.firstOrNull { it.name == profileName }
-            ?: SubagentProfile(name = profileName)
+        val base = globalProfiles.firstOrNull { it.name == currentProfileName }
+            ?: effectiveGlobals.firstOrNull { it.name == currentProfileName }
+            ?: SubagentProfile(name = currentProfileName)
         val updated = transform(base)
+        val oldName = currentProfileName
         val newProfiles = globalProfiles
-            .map { if (it.name == profileName) updated else it }
-            .let { if (profileName !in it.map { p -> p.name }) it + updated else it }
+            .filterNot { it.name == oldName || it.name == updated.name } + updated
         vm.updateSettings(settings.copy(globalSubagentProfiles = newProfiles))
+        currentProfileName = updated.name
     }
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text(resolved.displayName.ifBlank { profileName })
+                    Text(resolved.name)
                 },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
@@ -127,8 +129,10 @@ fun ExtensionSubagentProfilePage(
             ) { page ->
                 SubagentProfileForm(
                     resolved = resolved,
-                    profileName = profileName,
+                    profileName = currentProfileName,
                     createMode = createMode,
+                    takenProfileNames = (effectiveGlobals.map { it.name } - currentProfileName).toSet(),
+                    canEditName = currentProfileName !in SubagentRegistry.BUILTIN_PROFILES.map { it.name },
                     providers = settings.providers,
                     mcpServers = settings.mcpServers,
                     skills = skills,

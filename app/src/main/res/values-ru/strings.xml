@@ -1338,7 +1338,7 @@
   <string name="subagent_delete_profile_title">Удалить профиль</string>
   <string name="subagent_delete_profile_desc">Удалить этот пользовательский профиль из ассистента?</string>
   <string name="subagent_profile_name">Name</string>
-  <string name="subagent_profile_name_desc">Lowercase letters, digits, underscore; must start with a letter</string>
+  <string name="subagent_profile_name_desc">Letters, digits, underscore; must start with a letter</string>
   <string name="subagent_profile_display_name">Отображаемое имя</string>
   <string name="subagent_profile_description">Описание</string>
   <string name="subagent_profile_description_desc">Показывается основной модели при выборе профиля</string>

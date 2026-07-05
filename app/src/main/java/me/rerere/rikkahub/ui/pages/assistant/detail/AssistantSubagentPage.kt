@@ -207,7 +207,7 @@ private fun AssistantSubagentContent(
                         }
                     },
                     headlineContent = {
-                        Text(profile.displayName.ifBlank { profile.name })
+                        Text(profile.name)
                     },
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -271,7 +271,6 @@ private fun AssistantSubagentContent(
                                         )
                                         val clone = profile.copy(
                                             name = cloneName,
-                                            displayName = profile.displayName + " (copy)",
                                         )
                                         onUpdate(
                                             assistant.copy(

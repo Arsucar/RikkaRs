@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.ai.subagent
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -10,17 +9,13 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
-import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import kotlin.uuid.Uuid
 
 val SUBAGENT_TOOL_NAMES: Set<String> = setOf(
@@ -36,29 +31,42 @@ fun createSubagentTools(
     getProfiles: () -> List<SubagentProfile>,
     includeAskBtw: Boolean = true,
     delegateOnly: Boolean = false,
+    parallelExecutionEnabled: Boolean = false,
 ): List<Tool> {
     val spawnTool = Tool(
         name = "spawn_subagent",
-        description = """
-            Launch a subagent to handle a task autonomously. The subagent runs its own tool loop with a fresh context and reports back a summary.
+        description = buildString {
+            appendLine(
+                """
+                Launch a subagent to handle a task autonomously. The subagent runs its own tool loop with a fresh context and reports back a summary.
 
-            Writing the task prompt:
-            - The subagent starts with ZERO context — include the goal, known facts, paths, and specifics.
-            - Give the question, not step-by-step instructions when investigating.
+                Writing the task prompt:
+                - The subagent starts with ZERO context — include the goal, known facts, paths, and specifics.
+                - Give the question, not step-by-step instructions when investigating.
 
-            When to USE: research needing many reads/searches, multi-step scoped tasks, parallel independent work.
-            When to SKIP: a single known file read, one quick search, or answers you already have.
+                When to USE: research needing many reads/searches, multi-step scoped tasks, parallel independent work.
+                When to SKIP: a single known file read, one quick search, or answers you already have.
+                """.trimIndent(),
+            )
 
-            **Parallel execution:** Multiple `spawn_subagent` calls in the SAME response run concurrently when possible.
+            if (parallelExecutionEnabled) {
+                appendLine()
+                appendLine("**Parallel execution:** Multiple `spawn_subagent` calls in the SAME response run concurrently when possible.")
+            }
 
-            Available subagent profile names are listed in the system prompt under <available_subagent_profiles>.
-        """.trimIndent(),
+            appendLine()
+            append("Available subagent profile names are listed in the system prompt under <available_subagent_profiles>.")
+        },
         systemPrompt = { _, _ ->
             buildString {
                 appendLine()
                 if (delegateOnly) {
                     appendLine("**Delegation-Only Mode**")
-                    appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent` (you may emit multiple in one response). Synthesize subagent results; do not paste raw transcripts.")
+                    if (parallelExecutionEnabled) {
+                        appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent` (you may emit multiple in one response). Synthesize subagent results; do not paste raw transcripts.")
+                    } else {
+                        appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent`. Synthesize subagent results; do not paste raw transcripts.")
+                    }
                     appendLine()
                 }
                 appendLine("**Subagents — Delegation Guidance**")
@@ -118,8 +126,7 @@ fun createSubagentTools(
                 put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_calls", JsonPrimitive(result.toolCallCount))
-                put("subagent_max_steps", JsonPrimitive(result.maxSteps ?: 32))
-                put("subagent_max_tool_calls", JsonPrimitive(result.maxToolCalls ?: result.maxSteps ?: 32))
+                put("subagent_max_tool_calls", JsonPrimitive(result.maxToolCalls ?: 32))
                 put("subagent_truncated", JsonPrimitive(result.truncated))
                 put("subagent_transcript_size", JsonPrimitive(result.transcript.size))
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
@@ -130,12 +137,8 @@ fun createSubagentTools(
                 put("summary", JsonPrimitive(result.summary))
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
-                put("max_steps", JsonPrimitive(result.maxSteps ?: 32))
-                put("max_tool_calls", JsonPrimitive(result.maxToolCalls ?: result.maxSteps ?: 32))
-                put("tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
+                put("max_tool_calls", JsonPrimitive(result.maxToolCalls ?: 32))
                 put("truncated", JsonPrimitive(result.truncated))
-                put("transcript_size", JsonPrimitive(result.transcript.size))
-                result.usage?.let { put("usage", Json.encodeToJsonElement(TokenUsage.serializer(), it)) }
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },
@@ -205,34 +208,11 @@ fun createManageSubagentTool(
                         },
                     )
                     put("name", buildJsonObject { put("type", "string") })
-                    put("display_name", buildJsonObject { put("type", "string") })
                     put("description", buildJsonObject { put("type", "string") })
                     put("system_prompt", buildJsonObject { put("type", "string") })
                     put("model_id", buildJsonObject { put("type", "string") })
-                    put("inherit_tools", buildJsonObject { put("type", "boolean") })
-                    put("local_tools", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                    })
-                    put("enabled_skills", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                    })
-                    put("mcp_server_ids", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                    })
-                    put("excluded_tools", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                    })
                     put("max_tool_calls", buildJsonObject { put("type", "integer") })
                     put("disable_tool_budget_stop", buildJsonObject { put("type", "boolean") })
-                    put("stream_output", buildJsonObject { put("type", "boolean") })
-                    put("enable_memory", buildJsonObject { put("type", "boolean") })
-                    put("temperature", buildJsonObject { put("type", "number") })
-                    put("top_p", buildJsonObject { put("type", "number") })
-                    put("max_tokens", buildJsonObject { put("type", "integer") })
                 },
                 required = listOf("action"),
             )
@@ -251,7 +231,7 @@ fun createManageSubagentTool(
                 "create", "update" -> {
                     if (name.isBlank()) error("name is required for $action")
                     if (!name.matches(SubagentProfile.IdentifierRegex)) {
-                        error("name must be lowercase [a-z][a-z0-9_]*: $name")
+                        error("name must start with a letter and contain only letters/digits/underscore: $name")
                     }
                     val base = if (action == "update") {
                         resolveProfile(name)
@@ -272,50 +252,16 @@ private fun SubagentProfile.applyPatch(params: JsonObject): SubagentProfile {
     fun str(key: String): String? = params[key]?.jsonPrimitive?.contentOrNull
     fun bool(key: String): Boolean? = params[key]?.jsonPrimitive?.booleanOrNull
     fun int(key: String): Int? = params[key]?.jsonPrimitive?.intOrNull
-    fun flt(key: String): Float? = params[key]?.jsonPrimitive?.floatOrNull
-    fun strList(key: String): List<String> = (params[key] as? JsonArray)?.mapNotNull {
-        runCatching { it.jsonPrimitive.content }.getOrNull()
-    } ?: emptyList()
-
-    fun optStrSet(key: String): Set<String>? =
-        if (key in params) strList(key).toSet() else null
-    fun optUuidSet(key: String): Set<Uuid>? =
-        if (key in params) {
-            strList(key).mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }.toSet()
-        } else {
-            null
-        }
-    fun optLocalTools(key: String): List<LocalToolOption>? =
-        if (key in params) strList(key).mapNotNull { it.toLocalToolOption() } else null
 
     return copy(
-        displayName = str("display_name") ?: displayName,
         description = str("description") ?: description,
         systemPrompt = str("system_prompt") ?: systemPrompt,
         chatModelId = str("model_id")?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: chatModelId,
-        temperature = flt("temperature") ?: temperature,
-        topP = flt("top_p") ?: topP,
-        maxTokens = int("max_tokens") ?: maxTokens,
-        maxSteps = int("max_steps") ?: maxSteps,
-        maxToolCalls = if ("max_tool_calls" in params) int("max_tool_calls") else maxToolCalls,
+        maxToolCalls = if ("max_tool_calls" in params) {
+            int("max_tool_calls")?.coerceIn(1, 256) ?: maxToolCalls
+        } else {
+            maxToolCalls
+        },
         disableToolBudgetStop = bool("disable_tool_budget_stop") ?: disableToolBudgetStop,
-        inheritTools = bool("inherit_tools") ?: inheritTools,
-        streamOutput = bool("stream_output") ?: streamOutput,
-        enableMemory = bool("enable_memory") ?: enableMemory,
-        excludedTools = optStrSet("excluded_tools") ?: excludedTools,
-        enabledSkills = optStrSet("enabled_skills") ?: enabledSkills,
-        mcpServerIds = optUuidSet("mcp_server_ids") ?: mcpServerIds,
-        localTools = optLocalTools("local_tools") ?: localTools,
     )
-}
-
-private fun String.toLocalToolOption(): LocalToolOption? = when (this) {
-    "javascript_engine" -> LocalToolOption.JavascriptEngine
-    "time_info" -> LocalToolOption.TimeInfo
-    "clipboard" -> LocalToolOption.Clipboard
-    "tts" -> LocalToolOption.Tts
-    "ask_user" -> LocalToolOption.AskUser
-    "screen_time" -> LocalToolOption.ScreenTime
-    "logs" -> LocalToolOption.Logs
-    else -> null
 }

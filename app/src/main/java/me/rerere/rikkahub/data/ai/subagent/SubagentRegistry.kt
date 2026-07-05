@@ -7,7 +7,6 @@ object SubagentRegistry {
     val BUILTIN_PROFILES: List<SubagentProfile> = listOf(
         SubagentProfile(
             name = "explore",
-            displayName = "Explorer",
             description = "Explore and gather information autonomously. " +
                 "Use for research, reading files, searching, and producing a factual summary. " +
                 "Best when the parent needs to collect context before deciding.",
@@ -18,7 +17,7 @@ object SubagentRegistry {
                 Always end with a structured summary of your findings; do not leave the work unfinished.
                 When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
-            maxSteps = 48,
+            maxToolCalls = 48,
             workspaceAccess = WorkspaceAccess.READ_ONLY,
             workspaceApproval = WorkspaceApproval.INHERIT,
             canSpawn = false,
@@ -26,7 +25,6 @@ object SubagentRegistry {
         ),
         SubagentProfile(
             name = "coder",
-            displayName = "Coder",
             description = "Execute a well-scoped coding / editing task autonomously and report results. " +
                 "Use for writing or modifying files, running shell commands, and verifying outcomes.",
             systemPrompt = """
@@ -36,7 +34,7 @@ object SubagentRegistry {
                 Do not ask the user questions — proceed with reasonable defaults.
                 When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
-            maxSteps = 64,
+            maxToolCalls = 64,
             workspaceAccess = WorkspaceAccess.FULL,
             workspaceApproval = WorkspaceApproval.AUTO,
             canSpawn = true,
@@ -44,7 +42,6 @@ object SubagentRegistry {
         ),
         SubagentProfile(
             name = "reviewer",
-            displayName = "Reviewer",
             description = "Review / critique an artifact or plan and return structured feedback. " +
                 "Read-only oriented; does not make changes.",
             systemPrompt = """
@@ -53,7 +50,7 @@ object SubagentRegistry {
                 and concrete suggestions. Do not modify anything unless explicitly asked.
                 When the task is complete, write your final summary in the assistant message, then call `finish_work` to stop.
             """.trimIndent(),
-            maxSteps = 24,
+            maxToolCalls = 24,
             workspaceAccess = WorkspaceAccess.READ_ONLY,
             workspaceApproval = WorkspaceApproval.INHERIT,
             canSpawn = false,

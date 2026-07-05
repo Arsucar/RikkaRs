@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/app/index.md", "reason": "Quality check requirements for app subagent runtime changes."}
+{"file": ".trellis/spec/app/subagent-runtime.md", "reason": "Validation matrix for subagent budget and tool-loop behavior."}

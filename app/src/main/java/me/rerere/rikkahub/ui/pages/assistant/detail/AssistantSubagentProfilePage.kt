@@ -62,7 +62,6 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess
 import me.rerere.rikkahub.data.ai.subagent.WorkspaceApproval
 import me.rerere.rikkahub.data.ai.subagent.toggleSkill
-import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.withLocalToolOptions
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
@@ -98,8 +97,7 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
                         subagentListEntries(assistant, settings.globalSubagentProfiles)
                             .firstOrNull { it.profile.name == profileName }
                             ?.profile
-                            ?.displayName
-                            ?.ifBlank { profileName }
+                            ?.name
                             ?: profileName
                     )
                 },
@@ -138,32 +136,34 @@ internal fun AssistantSubagentProfileContent(
     onUpdate: (Assistant) -> Unit,
     readOnly: Boolean = false,
 ) {
+    var currentProfileName by remember(profileName) { mutableStateOf(profileName) }
     val effectiveGlobals = SubagentRegistry.effectiveGlobalProfiles(globalProfiles)
-    val resolved = SubagentRegistry.resolveProfile(profileName, assistant, globalProfiles)
-        ?: effectiveGlobals.firstOrNull { it.name == profileName }
-        ?: SubagentProfile(name = profileName)
+    val resolved = SubagentRegistry.resolveProfile(currentProfileName, assistant, globalProfiles)
+        ?: effectiveGlobals.firstOrNull { it.name == currentProfileName }
+        ?: SubagentProfile(name = currentProfileName)
 
-    val isGlobalOnly = profileName in effectiveGlobals.map { it.name } &&
-        profileName !in assistant.subagentProfiles.map { it.name }
+    val isGlobalOnly = currentProfileName in effectiveGlobals.map { it.name } &&
+        currentProfileName !in assistant.subagentProfiles.map { it.name }
 
     val latestAssistant = rememberUpdatedState(assistant)
-    var pathDraft by remember(profileName) { mutableStateOf("") }
+    var pathDraft by remember(currentProfileName) { mutableStateOf("") }
 
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
         if (readOnly || isGlobalOnly) return
-        val base = latestAssistant.value.subagentProfiles.firstOrNull { it.name == profileName }
-            ?: SubagentRegistry.resolveProfile(profileName, latestAssistant.value, globalProfiles)
-            ?: SubagentRegistry.effectiveGlobalProfiles(globalProfiles).firstOrNull { it.name == profileName }
-            ?: SubagentProfile(name = profileName)
+        val base = latestAssistant.value.subagentProfiles.firstOrNull { it.name == currentProfileName }
+            ?: SubagentRegistry.resolveProfile(currentProfileName, latestAssistant.value, globalProfiles)
+            ?: SubagentRegistry.effectiveGlobalProfiles(globalProfiles).firstOrNull { it.name == currentProfileName }
+            ?: SubagentProfile(name = currentProfileName)
         val updated = transform(base)
+        val oldName = currentProfileName
+        val nextProfiles = latestAssistant.value.subagentProfiles
+            .filterNot { it.name == oldName || it.name == updated.name } + updated
         onUpdate(
             latestAssistant.value.copy(
-                subagentProfiles = upsertSubagentProfile(
-                    latestAssistant.value.subagentProfiles,
-                    updated,
-                )
+                subagentProfiles = nextProfiles,
             )
         )
+        currentProfileName = updated.name
     }
 
     val scope = rememberCoroutineScope()
@@ -216,10 +216,13 @@ internal fun AssistantSubagentProfileContent(
         ) { page ->
             SubagentProfileForm(
                 resolved = resolved,
-                profileName = profileName,
+                profileName = currentProfileName,
                 createMode = createMode,
                 maxToolCallsShowsInherit = !isGlobalOnly &&
-                    assistant.subagentProfiles.firstOrNull { it.name == profileName }?.maxToolCalls == null,
+                    assistant.subagentProfiles.firstOrNull { it.name == currentProfileName }?.maxToolCalls == null,
+                takenProfileNames = (subagentListEntries(assistant, globalProfiles).map { it.profile.name } - currentProfileName).toSet(),
+                canEditName = !isGlobalOnly &&
+                    currentProfileName !in SubagentRegistry.BUILTIN_PROFILES.map { it.name },
                 globalProfiles = globalProfiles,
                 providers = providers,
                 mcpServers = mcpServers,
@@ -240,6 +243,8 @@ internal fun SubagentProfileForm(
     profileName: String,
     createMode: Boolean,
     maxToolCallsShowsInherit: Boolean = false,
+    takenProfileNames: Set<String> = emptySet(),
+    canEditName: Boolean = true,
     globalProfiles: List<SubagentProfile> = emptyList(),
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
@@ -266,12 +271,26 @@ internal fun SubagentProfileForm(
                 Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
                     FormItem(
                         modifier = Modifier.padding(8.dp),
-                        label = { Text(stringResource(R.string.subagent_profile_display_name)) },
+                        label = { Text(stringResource(R.string.subagent_profile_name)) },
+                        description = { Text(stringResource(R.string.subagent_profile_name_desc)) },
                     ) {
+                        var nameDraft by remember(profileName, resolved.name) {
+                            mutableStateOf(resolved.name)
+                        }
+                        val isValidName = nameDraft.matches(SubagentProfile.IdentifierRegex) &&
+                            (nameDraft == resolved.name || nameDraft !in takenProfileNames)
                         OutlinedTextField(
-                            value = resolved.displayName,
-                            onValueChange = { v -> persist { it.copy(displayName = v) } },
+                            value = nameDraft,
+                            onValueChange = { v ->
+                                nameDraft = v
+                                if (v != resolved.name && v.matches(SubagentProfile.IdentifierRegex) && v !in takenProfileNames) {
+                                    persist { it.copy(name = v) }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            enabled = !readOnly && canEditName,
+                            isError = nameDraft.isNotEmpty() && !isValidName,
                         )
                     }
 
@@ -456,7 +475,7 @@ internal fun SubagentProfileForm(
                 label = { Text(stringResource(R.string.subagent_profile_max_tool_calls)) },
                 description = { Text(stringResource(R.string.subagent_profile_max_tool_calls_desc)) },
             ) {
-                val resolvedMaxToolCalls = resolved.maxToolCalls ?: resolved.maxSteps ?: 32
+                val resolvedMaxToolCalls = resolved.maxToolCalls ?: 32
                 var localMaxToolCalls by remember(profileName, resolvedMaxToolCalls) {
                     mutableStateOf(resolvedMaxToolCalls.toFloat())
                 }

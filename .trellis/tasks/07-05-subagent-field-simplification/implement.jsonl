@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/app/index.md", "reason": "App-layer checklist for subagent field and runtime changes."}
+{"file": ".trellis/spec/app/subagent-runtime.md", "reason": "Contracts for subagent budget, parallel execution, and GenerationHandler wiring."}

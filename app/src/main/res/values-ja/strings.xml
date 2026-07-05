@@ -1338,7 +1338,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="subagent_delete_profile_title">プロファイルを削除</string>
   <string name="subagent_delete_profile_desc">このカスタムプロファイルをアシスタントから削除しますか？</string>
   <string name="subagent_profile_name">Name</string>
-  <string name="subagent_profile_name_desc">Lowercase letters, digits, underscore; must start with a letter</string>
+  <string name="subagent_profile_name_desc">Letters, digits, underscore; must start with a letter</string>
   <string name="subagent_profile_display_name">表示名</string>
   <string name="subagent_profile_description">説明</string>
   <string name="subagent_profile_description_desc">プロファイル選択時にメインモデルに表示</string>

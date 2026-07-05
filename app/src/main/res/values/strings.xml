@@ -51,7 +51,7 @@
   <string name="subagent_delete_profile_title">Delete profile</string>
   <string name="subagent_delete_profile_desc">Remove this custom profile from the assistant?</string>
   <string name="subagent_profile_name">Name</string>
-  <string name="subagent_profile_name_desc">Lowercase letters, digits, underscore; must start with a letter</string>
+  <string name="subagent_profile_name_desc">Letters, digits, underscore; must start with a letter</string>
   <string name="subagent_profile_tab_basic">Basic</string>
   <string name="subagent_profile_tab_model">Model</string>
   <string name="subagent_profile_tab_tools">Tools</string>

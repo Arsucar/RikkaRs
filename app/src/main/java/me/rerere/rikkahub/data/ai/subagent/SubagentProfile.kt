@@ -58,7 +58,6 @@ fun resolveSubagentWorkspaceApproval(
 @Serializable
 data class SubagentProfile(
     val name: String,
-    val displayName: String = name,
     val description: String = "",
     val systemPrompt: String = "",
     val chatModelId: Uuid? = null,
@@ -66,7 +65,6 @@ data class SubagentProfile(
     val topP: Float? = null,
     val maxTokens: Int? = null,
     val reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
-    val maxSteps: Int? = null,
     val maxToolCalls: Int? = null,
     val disableToolBudgetStop: Boolean = false,
     val workspaceAccess: WorkspaceAccess = WorkspaceAccess.READ_ONLY,
@@ -88,12 +86,12 @@ data class SubagentProfile(
     init {
         require(name.isNotBlank()) { "Subagent profile name must not be blank" }
         require(name.matches(IdentifierRegex)) {
-            "Subagent profile name must be lowercase letters/digits/underscore: $name"
+            "Subagent profile name must start with a letter and contain only letters/digits/underscore: $name"
         }
     }
 
     companion object {
-        val IdentifierRegex = Regex("^[a-z][a-z0-9_]*$")
+        val IdentifierRegex = Regex("^[\\p{L}][\\p{L}\\p{N}_]*$")
     }
 }
 
@@ -108,10 +106,9 @@ data class SubagentResult(
     @SerialName("steps") val steps: Int = 0,
     /// 子代理本轮调用的工具总数（便于父代理审计"它是否真干了活"，区别于 generation 轮次 steps）。
     @SerialName("tool_call_count") val toolCallCount: Int = 0,
-    /// 实际工具循环步数（受 maxSteps 控制），每步 = 一次 LLM 调用 + 工具执行。
+    /// 实际工具循环步数，每步 = 一次 LLM 调用 + 工具执行。
     @SerialName("tool_loop_steps") val toolLoopSteps: Int = 0,
     @SerialName("truncated") val truncated: Boolean = false,
-    @SerialName("max_steps") val maxSteps: Int? = null,
     @SerialName("max_tool_calls") val maxToolCalls: Int? = null,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
 )
@@ -192,10 +189,8 @@ fun SubagentProfile.withLocalToolOptions(
 internal fun SubagentProfile.mergeInheritedFrom(base: SubagentProfile): SubagentProfile {
     if (name != base.name) return this
     return copy(
-        displayName = displayName.takeIf { it.isNotBlank() && it != name } ?: base.displayName,
         description = description.ifBlank { base.description },
         systemPrompt = systemPrompt.ifBlank { base.systemPrompt },
-        maxSteps = maxSteps ?: base.maxSteps,
         maxToolCalls = maxToolCalls ?: base.maxToolCalls,
     )
 }

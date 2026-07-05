@@ -113,6 +113,8 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         stepsCountdownThreshold: Int? = null,
+        stepsCountdownTotal: Int? = null,
+        stepsCountdownLabel: String = "Steps",
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
@@ -129,14 +131,22 @@ class GenerationHandler(
         for (stepIndex in 0 until maxSteps) {
             val isLastStep = stepIndex >= maxSteps - 1
             val remaining = maxSteps - stepIndex
-            val inCountdown = countdownThreshold > 0 && !isLastStep && remaining <= countdownThreshold
+            val countdownTotal = stepsCountdownTotal ?: maxSteps
+            val countdownRemaining = resolveGenerationCountdownRemaining(
+                maxSteps = maxSteps,
+                stepIndex = stepIndex,
+                messages = messages,
+                stepsCountdownTotal = stepsCountdownTotal,
+            )
+            val inCountdown = countdownThreshold > 0 && !isLastStep && countdownRemaining <= countdownThreshold
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id}) isLastStep=$isLastStep remaining=$remaining")
 
             if (isLastStep) {
                 messages = messages + UIMessage.user(MAX_STEPS_PROMPT.trimIndent())
             } else if (inCountdown) {
                 messages = messages + UIMessage.user(
-                    "[Steps remaining: $remaining/$maxSteps] Focus on completing the core task. Avoid further exploration."
+                    "[$stepsCountdownLabel remaining: $countdownRemaining/$countdownTotal] " +
+                        "Focus on completing the core task. Avoid further exploration."
                 )
             }
 
@@ -289,8 +299,7 @@ class GenerationHandler(
             }
 
             val subagentCount = toolsToProcess.count { it.toolName == "spawn_subagent" }
-            val runInParallel =
-                (assistant.parallelToolExecution && toolsToProcess.size > 1) || subagentCount > 1
+            val runInParallel = assistant.parallelToolExecution && toolsToProcess.size > 1
             val executedTools: List<UIMessagePart.Tool> = if (runInParallel) {
                 Log.i(
                     TAG,
@@ -637,4 +646,23 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+}
+
+internal fun resolveGenerationCountdownRemaining(
+    maxSteps: Int,
+    stepIndex: Int,
+    messages: List<UIMessage>,
+    stepsCountdownTotal: Int?,
+): Int {
+    if (stepsCountdownTotal == null) {
+        return (maxSteps - stepIndex).coerceAtLeast(0)
+    }
+    val executedToolCalls = messages.sumOf { message ->
+        if (message.role == MessageRole.ASSISTANT) {
+            message.parts.count { it is UIMessagePart.Tool && it.isExecuted }
+        } else {
+            0
+        }
+    }
+    return (stepsCountdownTotal - executedToolCalls).coerceAtLeast(0)
 }

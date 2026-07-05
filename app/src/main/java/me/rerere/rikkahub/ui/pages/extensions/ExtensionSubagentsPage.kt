@@ -130,7 +130,7 @@ fun ExtensionSubagentsPage() {
                             navController.navigate(Screen.ExtensionSubagentProfile(profile.name, false))
                         },
                         leadingContent = { Icon(HugeIcons.Connect, null) },
-                        headlineContent = { Text(profile.displayName.ifBlank { profile.name }) },
+                        headlineContent = { Text(profile.name) },
                         supportingContent = {
                             Text(profile.description.take(80))
                         },

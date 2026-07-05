@@ -1340,7 +1340,7 @@
   <string name="subagent_delete_profile_title">刪除檔案</string>
   <string name="subagent_delete_profile_desc">从本助手中移除此自定义檔案？</string>
   <string name="subagent_profile_name">名称</string>
-  <string name="subagent_profile_name_desc">小写字母、数字、下划线，且以字母开头</string>
+  <string name="subagent_profile_name_desc">字母、數字、底線，且以字母開頭</string>
   <string name="subagent_profile_display_name">显示名称</string>
   <string name="subagent_profile_description">描述</string>
   <string name="subagent_profile_description_desc">供主模型选择檔案时阅读</string>

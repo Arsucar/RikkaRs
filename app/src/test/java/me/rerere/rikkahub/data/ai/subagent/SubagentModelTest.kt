@@ -25,7 +25,6 @@ class SubagentModelTest {
     fun subagentProfile_roundTrip() {
         val profile = SubagentProfile(
             name = "custom_agent",
-            displayName = "Custom",
             description = "desc",
             systemPrompt = "sys",
             reasoningLevel = ReasoningLevel.LOW,
@@ -36,6 +35,34 @@ class SubagentModelTest {
         )
         val decoded = json.decodeFromString(SubagentProfile.serializer(), json.encodeToString(SubagentProfile.serializer(), profile))
         assertEquals(profile, decoded)
+    }
+
+    @Test
+    fun subagentProfile_nameAllowsUnicodeLetters() {
+        val profile = SubagentProfile(name = "研究员_1")
+        assertEquals("研究员_1", profile.name)
+        assertTrue("研究员_1".matches(SubagentProfile.IdentifierRegex))
+        assertTrue("agent_1".matches(SubagentProfile.IdentifierRegex))
+        assertFalse("1_agent".matches(SubagentProfile.IdentifierRegex))
+        assertFalse("研究 员".matches(SubagentProfile.IdentifierRegex))
+        assertFalse("研究员/tool".matches(SubagentProfile.IdentifierRegex))
+    }
+
+    @Test
+    fun subagentProfile_legacyDisplayNameAndMaxSteps_areIgnored() {
+        val legacy = """
+            {
+              "name": "legacy_agent",
+              "displayName": "Legacy",
+              "description": "desc",
+              "maxSteps": 99,
+              "maxToolCalls": 12
+            }
+        """.trimIndent()
+        val decoded = json.decodeFromString(SubagentProfile.serializer(), legacy)
+        assertEquals("legacy_agent", decoded.name)
+        assertEquals("desc", decoded.description)
+        assertEquals(12, decoded.maxToolCalls)
     }
 
     @Test
@@ -173,7 +200,7 @@ class SubagentModelTest {
             enableSubagents = true,
             subagentMaxDepth = 3,
             subagentProfiles = listOf(
-                SubagentProfile(name = "my_bot", displayName = "My Bot"),
+                SubagentProfile(name = "my_bot"),
             ),
             disabledBuiltinSubagents = setOf("reviewer"),
         )
@@ -267,15 +294,14 @@ class SubagentModelTest {
         val exploreBuiltin = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }
         val custom = SubagentProfile(
             name = "explore",
-            displayName = "Custom Explorer",
-            maxSteps = 99,
+            maxToolCalls = 99,
         )
         val assistant = Assistant(subagentProfiles = listOf(custom))
         val resolved = SubagentRegistry.resolveProfile("explore", assistant, listOf(exploreBuiltin))
         assertNotNull(resolved)
-        assertEquals("Custom Explorer", resolved!!.displayName)
+        assertEquals("explore", resolved!!.name)
         assertEquals(exploreBuiltin.description, resolved.description)
-        assertEquals(99, resolved.maxSteps)
+        assertEquals(99, resolved.maxToolCalls)
     }
 
     @Test
@@ -290,19 +316,19 @@ class SubagentModelTest {
     @Test
     fun effectiveGlobalProfiles_partialGlobal_unionsMissingBuiltins() {
         val customExplore = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }.copy(
-            displayName = "My Explore",
+            description = "My Explore",
         )
         val effective = SubagentRegistry.effectiveGlobalProfiles(listOf(customExplore))
         val names = effective.map { it.name }.toSet()
         assertTrue(names.containsAll(setOf("explore", "coder", "reviewer")))
-        assertEquals("My Explore", effective.first { it.name == "explore" }.displayName)
+        assertEquals("My Explore", effective.first { it.name == "explore" }.description)
     }
 
     @Test
     fun effectiveGlobalProfiles_customOverridesBuiltinOnSameName() {
-        val customCoder = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "coder" }.copy(maxSteps = 7)
+        val customCoder = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "coder" }.copy(maxToolCalls = 7)
         val effective = SubagentRegistry.effectiveGlobalProfiles(listOf(customCoder))
-        assertEquals(7, effective.first { it.name == "coder" }.maxSteps)
+        assertEquals(7, effective.first { it.name == "coder" }.maxToolCalls)
         assertTrue(effective.any { it.name == "reviewer" })
     }
 
@@ -310,7 +336,7 @@ class SubagentModelTest {
     fun registry_allProfiles_includesGlobalAndCustom() {
         val global = SubagentRegistry.BUILTIN_PROFILES
         val assistant = Assistant(
-            subagentProfiles = listOf(SubagentProfile(name = "extra", displayName = "Extra")),
+            subagentProfiles = listOf(SubagentProfile(name = "extra")),
         )
         val names = SubagentRegistry.allProfiles(assistant, global).map { it.name }.toSet()
         assertTrue("explore" in names)
@@ -324,14 +350,14 @@ class SubagentModelTest {
         val explore = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "explore" }
         val coder = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "coder" }
         val reviewer = SubagentRegistry.BUILTIN_PROFILES.first { it.name == "reviewer" }
-        assertEquals(48, explore.maxSteps)
+        assertEquals(48, explore.maxToolCalls)
         assertFalse(explore.canSpawn)
         assertEquals(WorkspaceApproval.INHERIT, explore.workspaceApproval)
-        assertEquals(64, coder.maxSteps)
+        assertEquals(64, coder.maxToolCalls)
         assertTrue(coder.canSpawn)
         assertEquals(WorkspaceApproval.AUTO, coder.workspaceApproval)
         assertEquals(WorkspaceAccess.FULL, coder.workspaceAccess)
-        assertEquals(24, reviewer.maxSteps)
+        assertEquals(24, reviewer.maxToolCalls)
         assertFalse(reviewer.canSpawn)
         assertTrue(reviewer.excludedTools.contains("workspace_write_file"))
     }

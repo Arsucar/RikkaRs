@@ -54,7 +54,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 
@@ -114,7 +113,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
         val meta = parsed.meta
         if (meta != null) {
             val profileName = meta["subagent_profile"]?.jsonPrimitive?.contentOrNull ?: "subagent"
-            val displayName = resolveSubagentDisplayName(profileName)
+            val profileLabel = resolveSubagentLabel(profileName)
             val streaming = meta["subagent_streaming"]?.jsonPrimitive?.contentOrNull == "true"
             val loopSteps = meta["subagent_tool_loop_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
                 ?: meta["subagent_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
@@ -125,9 +124,9 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                 return if (cancelled) {
                     stringResource(R.string.subagent_tool_ui_cancelled)
                 } else if (toolCalls > 0) {
-                    "$displayName · $toolCalls"
+                    "$profileLabel · $toolCalls"
                 } else {
-                    displayName
+                    profileLabel
                 }
             }
         }
@@ -136,12 +135,17 @@ object SpawnSubagentToolUI : ToolUIRenderer {
             ?: meta?.get("subagent_profile")?.jsonPrimitive?.contentOrNull
             ?: context.arguments.getStringContent("profile_name")
             ?: "subagent"
-        val displayName = resolveSubagentDisplayName(profileName)
+        val profileLabel = resolveSubagentLabel(profileName)
         if (result == null) {
-            return displayName
+            return profileLabel
         }
-        val loopSteps = result.toolLoopSteps
-        val toolCalls = result.toolCallCount
+        val loopSteps = result.toolLoopSteps.takeIf { it > 0 }
+            ?: meta?.get("subagent_tool_loop_steps")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: meta?.get("subagent_steps")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: 0
+        val toolCalls = result.toolCallCount.takeIf { it > 0 }
+            ?: meta?.get("subagent_tool_calls")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+            ?: 0
         val usage = result.usage
         val totalTokens = usage?.let {
             when {
@@ -150,7 +154,7 @@ object SpawnSubagentToolUI : ToolUIRenderer {
             }
         } ?: 0
         return buildString {
-            append(displayName)
+            append(profileLabel)
             if (toolCalls > 0) {
                 append(" · ")
                 append(stringResource(R.string.subagent_tool_ui_tool_calls_count, toolCalls))
@@ -875,6 +879,22 @@ private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
     val raw = textPart?.text
     if (raw.isNullOrBlank()) return null
 
+    val metadataResult: (SubagentResult) -> SubagentResult = { result ->
+        val meta = textPart.metadata
+        result.copy(
+            steps = result.steps.takeIf { it > 0 }
+                ?: meta?.get("subagent_steps")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: result.steps,
+            toolLoopSteps = result.toolLoopSteps.takeIf { it > 0 }
+                ?: meta?.get("subagent_tool_loop_steps")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: meta?.get("subagent_steps")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: result.toolLoopSteps,
+            toolCallCount = result.toolCallCount.takeIf { it > 0 }
+                ?: meta?.get("subagent_tool_calls")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                ?: result.toolCallCount,
+        )
+    }
+
     return runCatching {
         JsonInstant.decodeFromString(SubagentResult.serializer(), raw)
     }.recoverCatching {
@@ -897,12 +917,11 @@ private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
                 ?: 0,
             transcript = transcript,
         )
-    }.getOrNull()
+    }.mapCatching(metadataResult).getOrNull()
 }
 
-private fun resolveSubagentDisplayName(profileName: String): String =
-    SubagentRegistry.BUILTIN_PROFILES.firstOrNull { it.name == profileName }?.displayName
-        ?: profileName
+private fun resolveSubagentLabel(profileName: String): String =
+    profileName
 
 private fun truncate(text: String): String {
     val t = text.trim()

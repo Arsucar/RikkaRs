@@ -2,14 +2,8 @@ package me.rerere.rikkahub.data.ai.subagent
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -30,12 +24,18 @@ import me.rerere.rikkahub.data.model.Assistant
 import kotlin.uuid.Uuid
 
 private const val TAG = "SubagentHost"
+private const val SUBAGENT_INTERNAL_GENERATION_LOOP_LIMIT = 257
+private const val SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT = 2
+private const val DEFAULT_SUBAGENT_COUNTDOWN_THRESHOLD = 4
 
 internal const val SUMMARY_CONTINUATION_PROMPT =
     "Your previous response was too brief. Please provide a more comprehensive summary of your findings and actions taken. " +
         "Include key details, file paths found, and specific conclusions."
 
-
+private const val TOOL_BUDGET_SUMMARY_PROMPT =
+    "The subagent tool-call budget has been reached. Do not call any more tools. " +
+        "Provide a concise final text summary of the work completed so far, including key findings, actions taken, " +
+        "and any limitations caused by the budget."
 
 private object ToolCallBudgetStop : Exception()
 
@@ -45,11 +45,16 @@ internal object SubagentSessionRegistry {
     private val cancelReasons = ConcurrentHashMap<Uuid, String>()
 
     fun register(conversationId: Uuid) {
-        activeSessions.merge(conversationId, AtomicInteger(1)) { existing, _ ->
-            existing.incrementAndGet()
-            existing
+        activeSessions.compute(conversationId) { _, existing ->
+            if (existing == null) {
+                cancelReasons.remove(conversationId)
+                cancelFlags[conversationId] = AtomicBoolean(false)
+                AtomicInteger(1)
+            } else {
+                existing.incrementAndGet()
+                existing
+            }
         }
-        cancelFlags.computeIfAbsent(conversationId) { AtomicBoolean(false) }
     }
 
     fun unregister(conversationId: Uuid) {
@@ -65,8 +70,17 @@ internal object SubagentSessionRegistry {
     }
 
     fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user") {
-        cancelReasons[conversationId] = reason
-        cancelFlags.computeIfAbsent(conversationId) { AtomicBoolean(false) }.set(true)
+        var applied = false
+        activeSessions.computeIfPresent(conversationId) { _, count ->
+            cancelReasons[conversationId] = reason
+            cancelFlags.computeIfAbsent(conversationId) { AtomicBoolean(false) }.set(true)
+            applied = true
+            count
+        }
+        if (!applied) {
+            cancelFlags.remove(conversationId)
+            cancelReasons.remove(conversationId)
+        }
     }
 
     fun isCancelRequested(conversationId: Uuid?): Boolean =
@@ -77,6 +91,15 @@ internal object SubagentSessionRegistry {
 }
 
 internal fun selectContinuationTools(childTools: List<Tool>): List<Tool> = emptyList()
+
+internal fun resolveSubagentCountdownThreshold(maxToolCalls: Int, configuredThreshold: Int?): Int? {
+    val threshold = when {
+        configuredThreshold == null -> DEFAULT_SUBAGENT_COUNTDOWN_THRESHOLD
+        configuredThreshold <= 0 -> return null
+        else -> configuredThreshold
+    }
+    return threshold.coerceAtMost(maxToolCalls.coerceIn(1, 256))
+}
 
 class SubagentHost(
     private val generationHandler: GenerationHandler,
@@ -169,7 +192,6 @@ class SubagentHost(
             Log.w(TAG, "spawn: buildChildTools failed: ${it.message}")
             emptyList()
         }
-        val effectiveMaxSteps = effectiveMaxSteps(profile)
         val effectiveMaxToolCalls = effectiveMaxToolCalls(profile)
 
         var totalUsage: TokenUsage? = null
@@ -180,7 +202,7 @@ class SubagentHost(
         return runCatching {
             Log.i(TAG, "spawn: subagent '${profile.name}' (depth=$depth) started")
 
-            var maxStepsReached = false
+            var generationLimitReached = false
             var messages = listOf(UIMessage.user(task))
 
             var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
@@ -196,7 +218,7 @@ class SubagentHost(
                 onProgress = onProgress,
             )
             steps += 1
-            maxStepsReached = run.maxStepsReached
+            generationLimitReached = run.generationLimitReached
             totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
             totalUsage = mergeUsage(totalUsage, run.usage)
             messages = run.messages
@@ -204,6 +226,30 @@ class SubagentHost(
 
             var summary = run.summary
             var truncated = run.truncated
+            if (run.truncated) {
+                preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
+                val budgetSummaryMessages = messages + UIMessage.user(TOOL_BUDGET_SUMMARY_PROMPT)
+                run = runToCompletion(
+                    profile = profile,
+                    settings = settings,
+                    model = childModel,
+                    assistant = childAssistant,
+                    tools = selectContinuationTools(childTools),
+                    initialMessages = budgetSummaryMessages,
+                    generationLoopLimit = SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT,
+                    workspaceCwd = workspaceCwd,
+                    conversationId = conversationId,
+                    onProgress = onProgress,
+                    enforceToolBudget = false,
+                )
+                steps += 1
+                totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
+                totalUsage = mergeUsage(totalUsage, run.usage)
+                messages = run.messages
+                lastMessages = messages
+                summary = run.summary
+                truncated = true
+            }
             var remainingContinuations = profile.summaryContinuationAttempts
             val minLength = profile.summaryMinLength
             while (remainingContinuations > 0 && minLength > 0 && summary.length < minLength) {
@@ -221,7 +267,6 @@ class SubagentHost(
                         steps = steps,
                         toolCallCount = countToolCalls(messages),
                         toolLoopSteps = totalToolLoopSteps,
-                        maxSteps = effectiveMaxSteps,
                         maxToolCalls = effectiveMaxToolCalls,
                         transcript = transcript,
                     )
@@ -230,15 +275,17 @@ class SubagentHost(
                 preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
                 val continuationMessages = messages + UIMessage.user(SUMMARY_CONTINUATION_PROMPT)
                 run = runToCompletion(
-                    profile = profile.copy(maxSteps = 1),
+                    profile = profile,
                     settings = settings,
                     model = childModel,
                     assistant = childAssistant,
                     tools = selectContinuationTools(childTools),
                     initialMessages = continuationMessages,
+                    generationLoopLimit = SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT,
                     workspaceCwd = workspaceCwd,
                     conversationId = conversationId,
                     onProgress = onProgress,
+                    enforceToolBudget = false,
                 )
                 steps += 1
                 totalToolLoopSteps += run.messages.count { it.role == MessageRole.ASSISTANT } - preAssistantCount
@@ -252,15 +299,14 @@ class SubagentHost(
             val transcript = buildTranscript(messages)
             val result = SubagentResult(
                 profileName = profile.name,
-                summary = summary.ifBlank { buildFallbackSummary(transcript, maxStepsReached) },
+                summary = summary.ifBlank { buildFallbackSummary(transcript, generationLimitReached) },
                 succeeded = true,
                 depth = depth,
                 usage = totalUsage,
                 steps = steps,
                 toolCallCount = countToolCalls(messages),
                 toolLoopSteps = totalToolLoopSteps,
-                truncated = truncated || maxStepsReached,
-                maxSteps = effectiveMaxSteps,
+                truncated = truncated || generationLimitReached,
                 maxToolCalls = effectiveMaxToolCalls,
                 transcript = transcript,
             )
@@ -287,7 +333,6 @@ class SubagentHost(
                     steps = steps,
                     toolCallCount = countToolCalls(lastMessages),
                     toolLoopSteps = totalToolLoopSteps,
-                    maxSteps = effectiveMaxSteps,
                     maxToolCalls = effectiveMaxToolCalls,
                     transcript = transcript,
                 )
@@ -303,7 +348,6 @@ class SubagentHost(
                 steps = steps,
                 toolCallCount = countToolCalls(lastMessages),
                 toolLoopSteps = totalToolLoopSteps,
-                maxSteps = effectiveMaxSteps,
                 maxToolCalls = effectiveMaxToolCalls,
             )
         }
@@ -344,12 +388,12 @@ class SubagentHost(
         assistant: Assistant,
         tools: List<Tool>,
         initialMessages: List<UIMessage>,
+        generationLoopLimit: Int = effectiveGenerationLoopLimit(profile),
         workspaceCwd: String?,
         conversationId: Uuid? = null,
         onProgress: ((List<UIMessage>) -> Unit)?,
+        enforceToolBudget: Boolean = true,
     ): RunCompletion {
-        val effectiveMaxSteps = effectiveMaxSteps(profile)
-        val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         var lastEmitTime = 0L
         var lastSignature = -1
         val minIntervalMs = 120L
@@ -362,12 +406,7 @@ class SubagentHost(
                 if (signature != lastSignature || now - lastEmitTime >= minIntervalMs) {
                     lastSignature = signature
                     lastEmitTime = now
-                    if (progressScope.coroutineContext.isActive) {
-                        progressScope.launch {
-                            if (!isActive) return@launch
-                            cb(messages)
-                        }
-                    }
+                    cb(messages)
                 }
             }
         }
@@ -381,8 +420,14 @@ class SubagentHost(
                 messages = initialMessages,
                 assistant = assistant,
                 tools = tools,
-                maxSteps = effectiveMaxSteps,
-                stepsCountdownThreshold = assistant.stepsCountdownThreshold,
+                maxSteps = generationLoopLimit,
+                stepsCountdownThreshold = if (enforceToolBudget) {
+                    subagentCountdownThreshold(profile, assistant)
+                } else {
+                    null
+                },
+                stepsCountdownTotal = effectiveMaxToolCalls(profile),
+                stepsCountdownLabel = "Tool calls",
                 memories = emptyList(),
                 workspaceCwd = workspaceCwd,
             ).onEach { chunk ->
@@ -395,27 +440,29 @@ class SubagentHost(
                                 ?: "Generation cancelled by user",
                         )
                     }
-                    if (!profile.disableToolBudgetStop && countToolCalls(finalMessages) >= maxToolCalls) {
+                    if (enforceToolBudget &&
+                        !profile.disableToolBudgetStop &&
+                        countExecutedToolCalls(finalMessages) >= maxToolCalls
+                    ) {
                         truncated = true
                         throw ToolCallBudgetStop
                     }
                 }
             }.collect { }
         } catch (_: ToolCallBudgetStop) {
-        } finally {
-            progressScope.cancel()
         }
+        onProgress?.invoke(finalMessages)
 
         val assistantDelta = finalMessages.count { it.role == MessageRole.ASSISTANT } -
             initialMessages.count { it.role == MessageRole.ASSISTANT }
-        val maxStepsReached = assistantDelta >= effectiveMaxSteps
+        val generationLimitReached = assistantDelta >= generationLoopLimit
 
         return RunCompletion(
             messages = finalMessages,
             summary = lastAssistantText(finalMessages),
             usage = accumulateUsage(finalMessages),
             truncated = truncated,
-            maxStepsReached = maxStepsReached,
+            generationLimitReached = generationLimitReached,
         )
     }
 
@@ -439,7 +486,7 @@ class SubagentHost(
 
         return parent.copy(
             id = Uuid.random(),
-            name = profile.displayName,
+            name = profile.name,
             systemPrompt = profile.systemPrompt,
             chatModelId = profile.chatModelId ?: parent.chatModelId,
             temperature = profile.temperature ?: parent.temperature,
@@ -459,6 +506,9 @@ class SubagentHost(
             workspaceId = parent.workspaceId,
             enableSubagents = childCanSpawn,
             subagentMaxDepth = maxDepth,
+            parallelToolExecution = parent.parallelToolExecution,
+            subagentMaxConcurrent = parent.subagentMaxConcurrent,
+            stepsCountdownThreshold = parent.stepsCountdownThreshold,
             localTools = localTools,
             mcpServers = if (profile.inheritTools) parent.mcpServers else profile.mcpServerIds,
             enabledSkills = if (profile.inheritTools) parent.enabledSkills else profile.enabledSkills,
@@ -488,6 +538,15 @@ class SubagentHost(
         for (message in messages) {
             if (message.role != MessageRole.ASSISTANT) continue
             n += message.parts.count { it is UIMessagePart.Tool }
+        }
+        return n
+    }
+
+    private fun countExecutedToolCalls(messages: List<UIMessage>): Int {
+        var n = 0
+        for (message in messages) {
+            if (message.role != MessageRole.ASSISTANT) continue
+            n += message.parts.count { it is UIMessagePart.Tool && it.isExecuted }
         }
         return n
     }
@@ -524,18 +583,25 @@ class SubagentHost(
         }
     }
 
-    private fun effectiveMaxSteps(profile: SubagentProfile): Int =
-        (profile.maxSteps ?: 32).coerceIn(1, 256)
-
     private fun effectiveMaxToolCalls(profile: SubagentProfile): Int =
-        (profile.maxToolCalls ?: effectiveMaxSteps(profile)).coerceIn(1, 256)
+        (profile.maxToolCalls ?: 32).coerceIn(1, 256)
+
+    private fun effectiveGenerationLoopLimit(profile: SubagentProfile): Int =
+        if (profile.disableToolBudgetStop) {
+            SUBAGENT_INTERNAL_GENERATION_LOOP_LIMIT
+        } else {
+            effectiveMaxToolCalls(profile) + 1
+        }
+
+    private fun subagentCountdownThreshold(profile: SubagentProfile, assistant: Assistant): Int? =
+        resolveSubagentCountdownThreshold(effectiveMaxToolCalls(profile), assistant.stepsCountdownThreshold)
 
     private data class RunCompletion(
         val messages: List<UIMessage>,
         val summary: String,
         val usage: TokenUsage?,
         val truncated: Boolean = false,
-        val maxStepsReached: Boolean = false,
+        val generationLimitReached: Boolean = false,
     )
 
     companion object {
@@ -598,18 +664,18 @@ class SubagentHost(
 
         fun buildFallbackSummary(
             transcript: List<SubagentTranscriptStep>,
-            maxStepsReached: Boolean = false,
+            generationLimitReached: Boolean = false,
         ): String {
             if (transcript.isEmpty()) {
-                return if (maxStepsReached) {
-                    "(subagent exhausted its tool budget with no output)"
+                return if (generationLimitReached) {
+                    "(subagent reached its internal generation limit with no output)"
                 } else {
                     "(subagent produced no output)"
                 }
             }
             val sb = StringBuilder()
-            if (maxStepsReached) {
-                sb.appendLine("(Subagent tool budget exhausted — auto-generated summary from transcript)")
+            if (generationLimitReached) {
+                sb.appendLine("(Subagent reached its internal generation limit — auto-generated summary from transcript)")
             } else {
                 sb.appendLine("(Subagent produced no text summary — auto-generated from transcript)")
             }

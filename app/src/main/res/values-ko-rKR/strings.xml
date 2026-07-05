@@ -1338,7 +1338,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="subagent_delete_profile_title">프로필 삭제</string>
   <string name="subagent_delete_profile_desc">이 사용자 프로필을 어시스턴트에서 제거할까요?</string>
   <string name="subagent_profile_name">Name</string>
-  <string name="subagent_profile_name_desc">Lowercase letters, digits, underscore; must start with a letter</string>
+  <string name="subagent_profile_name_desc">Letters, digits, underscore; must start with a letter</string>
   <string name="subagent_profile_display_name">표시 이름</string>
   <string name="subagent_profile_description">설명</string>
   <string name="subagent_profile_description_desc">프로필 선택 시 메인 모델에 표시</string>

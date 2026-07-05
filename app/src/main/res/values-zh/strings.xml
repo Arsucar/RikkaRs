@@ -50,7 +50,7 @@
   <string name="subagent_delete_profile_title">删除档案</string>
   <string name="subagent_delete_profile_desc">从本助手中移除此自定义档案？</string>
   <string name="subagent_profile_name">名称</string>
-  <string name="subagent_profile_name_desc">小写字母、数字、下划线，且以字母开头</string>
+  <string name="subagent_profile_name_desc">字母、数字、下划线，且以字母开头</string>
   <string name="subagent_profile_tab_basic">基础</string>
   <string name="subagent_profile_tab_model">模型</string>
   <string name="subagent_profile_tab_tools">工具</string>

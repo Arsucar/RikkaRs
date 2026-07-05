@@ -1,15 +1,21 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.resolveGenerationCountdownRemaining
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.time.Instant
+import kotlin.uuid.Uuid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,6 +57,32 @@ class SubagentRuntimeTest {
     }
 
     @Test
+    fun spawnSubagentTool_omitsParallelGuidanceWhenDisabled() {
+        val tools = createSubagentTools(
+            json = json,
+            spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
+            askBtw = { "a" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
+            parallelExecutionEnabled = false,
+        )
+        val spawn = tools.first { it.name == "spawn_subagent" }
+        assertFalse(spawn.description.contains("Multiple `spawn_subagent` calls in the SAME response"))
+    }
+
+    @Test
+    fun spawnSubagentTool_includesParallelGuidanceWhenEnabled() {
+        val tools = createSubagentTools(
+            json = json,
+            spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
+            askBtw = { "a" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
+            parallelExecutionEnabled = true,
+        )
+        val spawn = tools.first { it.name == "spawn_subagent" }
+        assertTrue(spawn.description.contains("Multiple `spawn_subagent` calls in the SAME response"))
+    }
+
+    @Test
     fun askBtwTool_hasExpectedName() {
         val tools = createSubagentTools(
             json = json,
@@ -86,9 +118,125 @@ class SubagentRuntimeTest {
     }
 
     @Test
+    fun manageSubagentProfileTool_ignoresFieldsOutsideAllowedPatch() = runBlocking {
+        var saved: SubagentProfile? = null
+        val tool = createManageSubagentTool(
+            json = json,
+            depth = 0,
+            resolveProfile = {
+                SubagentProfile(
+                    name = "agent",
+                    temperature = 0.2f,
+                    inheritTools = false,
+                    enableMemory = false,
+                )
+            },
+            manage = { _, _, profile ->
+                saved = profile
+                "ok"
+            },
+        )!!
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "update")
+                put("name", "agent")
+                put("description", "visible")
+                put("system_prompt", "prompt")
+                put("max_tool_calls", 12)
+                put("disable_tool_budget_stop", true)
+                put("temperature", 1.7)
+                put("max_tokens", 4096)
+                put("inherit_tools", true)
+                put("enable_memory", true)
+            }
+        )
+
+        val updated = saved!!
+        assertEquals("visible", updated.description)
+        assertEquals("prompt", updated.systemPrompt)
+        assertEquals(12, updated.maxToolCalls)
+        assertTrue(updated.disableToolBudgetStop)
+        assertEquals(0.2f, updated.temperature!!, 0.0001f)
+        assertNull(updated.maxTokens)
+        assertFalse(updated.inheritTools)
+        assertFalse(updated.enableMemory)
+    }
+
+    @Test
     fun summaryContinuationPrompt_isReasonable() {
         assertTrue(SUMMARY_CONTINUATION_PROMPT.length >= 50)
         assertFalse(SUMMARY_CONTINUATION_PROMPT.isBlank())
+    }
+
+    @Test
+    fun subagentCountdownThreshold_nullMeansAutoAndZeroMeansOff() {
+        assertEquals(4, resolveSubagentCountdownThreshold(maxToolCalls = 48, configuredThreshold = null))
+        assertEquals(null, resolveSubagentCountdownThreshold(maxToolCalls = 48, configuredThreshold = 0))
+        assertEquals(2, resolveSubagentCountdownThreshold(maxToolCalls = 2, configuredThreshold = null))
+        assertEquals(8, resolveSubagentCountdownThreshold(maxToolCalls = 48, configuredThreshold = 8))
+    }
+
+    @Test
+    fun countdownRemaining_usesExecutedToolCallsWhenTotalProvided() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "done",
+                        toolName = "workspace_read_file",
+                        input = "{}",
+                        output = listOf(UIMessagePart.Text("ok")),
+                    ),
+                    UIMessagePart.Tool(
+                        toolCallId = "pending",
+                        toolName = "workspace_read_file",
+                        input = "{}",
+                        output = emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            3,
+            resolveGenerationCountdownRemaining(
+                maxSteps = 10,
+                stepIndex = 8,
+                messages = messages,
+                stepsCountdownTotal = 4,
+            ),
+        )
+        assertEquals(
+            2,
+            resolveGenerationCountdownRemaining(
+                maxSteps = 10,
+                stepIndex = 8,
+                messages = messages,
+                stepsCountdownTotal = null,
+            ),
+        )
+    }
+
+    @Test
+    fun subagentSessionRegistry_requestCancelWithoutActiveSession_doesNotPoisonNextRun() {
+        val conversationId = Uuid.random()
+
+        SubagentSessionRegistry.requestCancel(conversationId)
+        assertFalse(SubagentSessionRegistry.isCancelRequested(conversationId))
+
+        SubagentSessionRegistry.register(conversationId)
+        try {
+            assertFalse(SubagentSessionRegistry.isCancelRequested(conversationId))
+            SubagentSessionRegistry.requestCancel(conversationId, "stop")
+            assertTrue(SubagentSessionRegistry.isCancelRequested(conversationId))
+            assertEquals("stop", SubagentSessionRegistry.cancelReason(conversationId))
+        } finally {
+            SubagentSessionRegistry.unregister(conversationId)
+        }
+
+        assertFalse(SubagentSessionRegistry.isCancelRequested(conversationId))
     }
 
     @Test
