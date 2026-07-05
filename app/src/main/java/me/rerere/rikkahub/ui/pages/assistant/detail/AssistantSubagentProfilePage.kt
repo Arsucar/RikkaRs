@@ -218,8 +218,6 @@ internal fun AssistantSubagentProfileContent(
                 resolved = resolved,
                 profileName = profileName,
                 createMode = createMode,
-                maxStepsShowsInherit = !isGlobalOnly &&
-                    assistant.subagentProfiles.firstOrNull { it.name == profileName }?.maxSteps == null,
                 maxToolCallsShowsInherit = !isGlobalOnly &&
                     assistant.subagentProfiles.firstOrNull { it.name == profileName }?.maxToolCalls == null,
                 globalProfiles = globalProfiles,
@@ -241,7 +239,6 @@ internal fun SubagentProfileForm(
     resolved: SubagentProfile,
     profileName: String,
     createMode: Boolean,
-    maxStepsShowsInherit: Boolean = false,
     maxToolCallsShowsInherit: Boolean = false,
     globalProfiles: List<SubagentProfile> = emptyList(),
     providers: List<me.rerere.ai.provider.ProviderSetting>,
@@ -449,37 +446,6 @@ internal fun SubagentProfileForm(
                 ReasoningButton(
                     reasoningLevel = resolved.reasoningLevel,
                     onUpdateReasoningLevel = { level -> persist { it.copy(reasoningLevel = level) } },
-                )
-            }
-
-            HorizontalDivider()
-
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = { Text(stringResource(R.string.subagent_profile_max_steps)) },
-            ) {
-                val resolvedMaxSteps = resolved.maxSteps ?: 32
-                var localMaxSteps by remember(profileName, resolvedMaxSteps) {
-                    mutableStateOf(resolvedMaxSteps.toFloat())
-                }
-                Slider(
-                    value = localMaxSteps,
-                    onValueChange = { localMaxSteps = it },
-                    onValueChangeFinished = {
-                        persist { it.copy(maxSteps = localMaxSteps.roundToInt().coerceIn(1, 256)) }
-                    },
-                    valueRange = 1f..256f,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = buildString {
-                        append(localMaxSteps.roundToInt())
-                        if (maxStepsShowsInherit) {
-                            append(" · ")
-                            append(stringResource(R.string.subagent_profile_inherit))
-                        }
-                    },
-                    style = MaterialTheme.typography.labelSmall,
                 )
             }
 
