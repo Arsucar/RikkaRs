@@ -67,16 +67,18 @@ class WorkspaceManager(
     fun readText(
         root: String,
         path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
         charset: Charset = StandardCharsets.UTF_8,
-    ): String = fileSystem.readText(filesDir(root), path, charset)
+    ): String = fileSystem.readText(areaDir(root, area), path, charset)
 
     fun writeText(
         root: String,
         path: String,
         text: String,
         overwrite: Boolean = true,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
         charset: Charset = StandardCharsets.UTF_8,
-    ): WorkspaceFileEntry = fileSystem.writeText(filesDir(root), path, text, overwrite, charset)
+    ): WorkspaceFileEntry = fileSystem.writeText(areaDir(root, area), path, text, overwrite, charset)
 
     fun importFile(
         root: String,

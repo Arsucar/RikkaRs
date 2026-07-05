@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -60,8 +61,11 @@ import androidx.compose.ui.util.fastForEachIndexed
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -88,6 +92,7 @@ import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
+import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -96,6 +101,8 @@ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
+import me.rerere.rikkahub.utils.isTextFileSizeAllowed
+import me.rerere.rikkahub.utils.isTextLikeFile
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
@@ -302,7 +309,53 @@ private fun MessagePartsBlock(
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
+    val scope = rememberCoroutineScope()
     val partsState by rememberUpdatedState(parts)
+    var documentTextDialogState by remember { mutableStateOf<DocumentTextDialogState?>(null) }
+
+    fun openDocumentExternal(part: UIMessagePart.Document) {
+        val intent = Intent(Intent.ACTION_VIEW)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.data = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            part.url.toUri().toFile()
+        )
+        val chooserIndent = Intent.createChooser(intent, null)
+        context.startActivity(chooserIndent)
+    }
+
+    fun openDocument(part: UIMessagePart.Document) {
+        if (!isTextLikeFile(part.fileName, part.mime)) {
+            openDocumentExternal(part)
+            return
+        }
+        val file = runCatching { part.url.toUri().toFile() }.getOrNull()
+        if (file == null || !file.isFile || !isTextFileSizeAllowed(file.length())) {
+            openDocumentExternal(part)
+            return
+        }
+        documentTextDialogState = DocumentTextDialogState(
+            title = part.fileName,
+            text = "",
+            busy = true,
+            error = null,
+        )
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    file.readText()
+                }
+            }.onSuccess { text ->
+                documentTextDialogState = documentTextDialogState?.copy(text = text, busy = false, error = null)
+            }.onFailure { error ->
+                documentTextDialogState = documentTextDialogState?.copy(
+                    busy = false,
+                    error = error.message ?: "Failed to read file",
+                )
+            }
+        }
+    }
 
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
@@ -540,17 +593,7 @@ private fun MessagePartsBlock(
                     is UIMessagePart.Document -> {
                         Surface(
                             tonalElevation = 2.dp,
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                intent.data = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.fileprovider",
-                                    part.url.toUri().toFile()
-                                )
-                                val chooserIndent = Intent.createChooser(intent, null)
-                                context.startActivity(chooserIndent)
-                            },
+                            onClick = { openDocument(part) },
                             modifier = Modifier,
                             shape = RoundedCornerShape(50),
                             color = MaterialTheme.colorScheme.tertiaryContainer
@@ -612,6 +655,17 @@ private fun MessagePartsBlock(
         }
     }
 
+    documentTextDialogState?.let { target ->
+        FullScreenTextEditor(
+            title = target.title,
+            text = target.text,
+            readOnly = true,
+            isSaving = target.busy,
+            errorMessage = target.error,
+            onDismiss = { if (!target.busy) documentTextDialogState = null },
+        )
+    }
+
     // Annotations (always rendered at the end)
     if (annotations.isNotEmpty()) {
         Column(
@@ -669,3 +723,10 @@ private fun MessagePartsBlock(
         }
     }
 }
+
+private data class DocumentTextDialogState(
+    val title: String,
+    val text: String,
+    val busy: Boolean,
+    val error: String?,
+)

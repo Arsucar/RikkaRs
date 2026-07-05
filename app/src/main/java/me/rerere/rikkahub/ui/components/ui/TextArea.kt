@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.dokar.sonner.ToastType
@@ -176,27 +178,35 @@ fun TextArea(
     // Fullscreen editor dialog
     if (isFullScreen) {
         FullScreenTextEditor(
-            state = state,
-            label = label,
+            title = label,
+            text = state.text.toString(),
+            readOnly = readOnly,
             placeholder = placeholder,
+            onSave = { text -> state.setTextAndPlaceCursorAtEnd(text) },
             onDismiss = { isFullScreen = false }
         )
     }
 }
 
 @Composable
-private fun FullScreenTextEditor(
-    state: TextFieldState,
-    label: String,
-    placeholder: String,
-    onDismiss: () -> Unit
+fun FullScreenTextEditor(
+    title: String,
+    text: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
+    placeholder: String = "",
+    isSaving: Boolean = false,
+    errorMessage: String? = null,
+    onSave: ((String) -> Unit)? = null,
 ) {
-    var editingText by remember(state.text.toString()) {
-        mutableStateOf(state.text.toString())
+    var editingText by remember(text) {
+        mutableStateOf(text)
     }
+    val canSave = !readOnly && onSave != null
 
     BasicAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false
         ),
@@ -207,6 +217,7 @@ private fun FullScreenTextEditor(
         ) {
             Surface(
                 modifier = Modifier
+                    .then(modifier)
                     .widthIn(max = 800.dp)
                     .fillMaxHeight(0.9f),
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
@@ -215,31 +226,56 @@ private fun FullScreenTextEditor(
                     modifier = Modifier
                         .padding(8.dp)
                         .fillMaxSize(),
-                    horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Row {
-                        TextButton(
-                            onClick = {
-                                state.setTextAndPlaceCursorAtEnd(editingText)
-                                onDismiss()
-                            }
-                        ) {
-                            Text(stringResource(R.string.text_area_save))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = title,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        TextButton(onClick = onDismiss, enabled = !isSaving) {
+                            Text(stringResource(if (canSave) R.string.common_cancel else R.string.common_confirm))
                         }
+                        if (canSave) {
+                            TextButton(
+                                onClick = { onSave?.invoke(editingText) },
+                                enabled = !isSaving,
+                            ) {
+                                Text(stringResource(R.string.common_save))
+                            }
+                        }
+                    }
+                    if (isSaving) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    errorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     TextField(
                         value = editingText,
-                        onValueChange = { editingText = it },
+                        onValueChange = { if (!readOnly) editingText = it },
                         modifier = Modifier
                             .imePadding()
                             .fillMaxSize(),
                         shape = RoundedCornerShape(16.dp),
                         placeholder = if (placeholder.isNotEmpty()) {
                             { Text(placeholder) }
-                        } else if (label.isNotEmpty()) {
-                            { Text(label) }
+                        } else if (title.isNotEmpty()) {
+                            { Text(title) }
                         } else null,
+                        readOnly = readOnly,
                         colors = TextFieldDefaults.colors().copy(
                             unfocusedIndicatorColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,

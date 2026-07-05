@@ -61,7 +61,9 @@ import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.FileView
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh01
@@ -70,12 +72,17 @@ import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.MAX_TEXT_FILE_VIEW_BYTES
+import me.rerere.rikkahub.utils.isTextFileSizeAllowed
+import me.rerere.rikkahub.utils.isTextLikeFileName
 import me.rerere.rikkahub.utils.plus
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
@@ -83,18 +90,22 @@ import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import java.util.Locale
 
 @Composable
 fun WorkspaceDetailPage(id: String) {
     val navController = LocalNavController.current
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
+    val workspaceRepository: WorkspaceRepository = koinInject()
     val state by vm.state.collectAsStateWithLifecycle()
     val installProgress by vm.installProgress.collectAsStateWithLifecycle()
     val installError by vm.installError.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    var textDialogState by remember { mutableStateOf<WorkspaceTextDialogState?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(
@@ -118,6 +129,60 @@ fun WorkspaceDetailPage(id: String) {
         if (uri == null) return@rememberLauncherForActivityResult
         val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
         vm.exportFile(entry, outputStream)
+    }
+
+    fun openTextFile(entry: WorkspaceFileEntry, area: WorkspaceStorageArea, readOnly: Boolean) {
+        textDialogState = WorkspaceTextDialogState(
+            title = entry.name,
+            path = entry.path,
+            area = area,
+            text = "",
+            readOnly = readOnly,
+            busy = true,
+            error = null,
+        )
+        scope.launch {
+            if (!isTextFileSizeAllowed(entry.sizeBytes)) {
+                textDialogState = textDialogState?.copy(
+                    busy = false,
+                    error = "File is too large to view: ${formatBytes(entry.sizeBytes)} / ${formatBytes(MAX_TEXT_FILE_VIEW_BYTES)}",
+                )
+                return@launch
+            }
+            runCatching {
+                workspaceRepository.readText(id = id, path = entry.path, area = area)
+            }.onSuccess { text ->
+                textDialogState = textDialogState?.copy(text = text, busy = false, error = null)
+            }.onFailure { error ->
+                textDialogState = textDialogState?.copy(
+                    busy = false,
+                    error = error.message ?: "Failed to read file",
+                )
+            }
+        }
+    }
+
+    fun saveTextFile(target: WorkspaceTextDialogState, text: String) {
+        textDialogState = target.copy(text = text, busy = true, error = null)
+        scope.launch {
+            runCatching {
+                workspaceRepository.writeText(
+                    id = id,
+                    path = target.path,
+                    text = text,
+                    overwrite = true,
+                    area = target.area,
+                )
+            }.onSuccess {
+                textDialogState = null
+                vm.refresh()
+            }.onFailure { error ->
+                textDialogState = textDialogState?.copy(
+                    busy = false,
+                    error = error.message ?: "Failed to save file",
+                )
+            }
+        }
     }
 
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
@@ -199,6 +264,8 @@ fun WorkspaceDetailPage(id: String) {
                         exportTarget = entry
                         exportLauncher.launch(entry.name)
                     },
+                    onViewText = { entry -> openTextFile(entry, state.area, readOnly = true) },
+                    onEditText = { entry -> openTextFile(entry, state.area, readOnly = false) },
                     onShare = { entry ->
                         vm.shareFile(entry, context.cacheDir) { file ->
                             val uri = FileProvider.getUriForFile(
@@ -217,6 +284,18 @@ fun WorkspaceDetailPage(id: String) {
                 )
             }
         }
+    }
+
+    textDialogState?.let { target ->
+        FullScreenTextEditor(
+            title = target.title,
+            text = target.text,
+            readOnly = target.readOnly,
+            isSaving = target.busy,
+            errorMessage = target.error,
+            onSave = if (target.readOnly) null else { text -> saveTextFile(target, text) },
+            onDismiss = { if (!target.busy) textDialogState = null },
+        )
     }
 
     state.workspace?.let { workspace ->
@@ -549,6 +628,8 @@ private fun WorkspaceFilesPage(
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
+    onViewText: (WorkspaceFileEntry) -> Unit,
+    onEditText: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
 ) {
     LazyColumn(
@@ -589,6 +670,8 @@ private fun WorkspaceFilesPage(
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
+                onViewText = { onViewText(entry) },
+                onEditText = { onEditText(entry) },
                 onShare = { onShare(entry) },
             )
         }
@@ -651,9 +734,12 @@ private fun WorkspaceFileCard(
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onExport: () -> Unit,
+    onViewText: () -> Unit,
+    onEditText: () -> Unit,
     onShare: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val isTextLikeFile = !entry.isDirectory && isTextLikeFileName(entry.name)
 
     Card(
         modifier = Modifier
@@ -706,6 +792,34 @@ private fun WorkspaceFileCard(
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     if (!entry.isDirectory) {
+                        if (isTextLikeFile) {
+                            DropdownMenuItem(
+                                text = { Text("View") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = HugeIcons.FileView,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onViewText()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.common_edit)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = HugeIcons.FileEdit,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onEditText()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.common_export)) },
                             leadingIcon = {
@@ -800,8 +914,18 @@ private fun formatBytes(bytes: Long): String {
         value /= 1024
         unitIndex++
     }
-    return "%.1f %s".format(value, units[unitIndex])
+    return String.format(Locale.ROOT, "%.1f %s", value, units[unitIndex])
 }
+
+private data class WorkspaceTextDialogState(
+    val title: String,
+    val path: String,
+    val area: WorkspaceStorageArea,
+    val text: String,
+    val readOnly: Boolean,
+    val busy: Boolean,
+    val error: String?,
+)
 
 @Composable
 internal fun String.toShellStatusLabel(): String = when (this) {

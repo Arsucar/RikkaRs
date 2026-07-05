@@ -153,10 +153,11 @@ class WorkspaceRepository(
     suspend fun readText(
         id: String,
         path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
     ): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.readText(workspace.root, path)
+        manager.readText(root = workspace.root, path = path, area = area)
     }
 
     suspend fun writeText(
@@ -164,10 +165,11 @@ class WorkspaceRepository(
         path: String,
         text: String,
         overwrite: Boolean,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
     ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.writeText(workspace.root, path, text, overwrite)
+        manager.writeText(root = workspace.root, path = path, text = text, overwrite = overwrite, area = area)
     }
 
     suspend fun importFile(
@@ -188,6 +190,7 @@ class WorkspaceRepository(
         path: String,
     ): Long = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
         manager.fileSize(workspace.root, path, area)
     }
 

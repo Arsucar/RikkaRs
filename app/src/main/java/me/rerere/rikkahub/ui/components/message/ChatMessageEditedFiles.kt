@@ -44,14 +44,21 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.FileView
 import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
+import me.rerere.rikkahub.utils.MAX_TEXT_FILE_VIEW_BYTES
+import me.rerere.rikkahub.utils.isTextFileSizeAllowed
+import me.rerere.rikkahub.utils.isTextLikeFileName
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.compose.koinInject
 import java.io.File
+import java.util.Locale
 
 private const val DEFAULT_VISIBLE_COUNT = 3
 private val WORKSPACE_FILE_TOOL_NAMES = setOf("workspace_write_file", "workspace_edit_file")
@@ -79,9 +86,63 @@ internal fun EditedFilesList(
     val workspaceRepository: WorkspaceRepository = koinInject()
 
     var selectedPath by remember { mutableStateOf<String?>(null) }
+    var textDialogState by remember { mutableStateOf<EditedFileTextDialogState?>(null) }
     var expanded by remember { mutableStateOf(false) }
     val visibleFiles = if (expanded) editedFiles else editedFiles.take(DEFAULT_VISIBLE_COUNT)
     val hasMore = editedFiles.size > DEFAULT_VISIBLE_COUNT
+
+    fun openTextFile(path: String, readOnly: Boolean) {
+        val fileName = path.substringAfterLast('/')
+        val (area, relativePath) = resolveWorkspacePath(path)
+        textDialogState = EditedFileTextDialogState(
+            title = fileName,
+            path = relativePath,
+            area = area,
+            text = "",
+            readOnly = readOnly,
+            busy = true,
+            error = null,
+        )
+        selectedPath = null
+        scope.launch {
+            runCatching {
+                val size = workspaceRepository.fileSize(workspaceId, area, relativePath)
+                require(isTextFileSizeAllowed(size)) {
+                    "File is too large to view: ${formatBytes(size)} / ${formatBytes(MAX_TEXT_FILE_VIEW_BYTES)}"
+                }
+                workspaceRepository.readText(workspaceId, relativePath, area)
+            }.onSuccess { text ->
+                textDialogState = textDialogState?.copy(text = text, busy = false, error = null)
+            }.onFailure { error ->
+                textDialogState = textDialogState?.copy(
+                    busy = false,
+                    error = error.message ?: "Failed to read file",
+                )
+            }
+        }
+    }
+
+    fun saveTextFile(target: EditedFileTextDialogState, text: String) {
+        textDialogState = target.copy(text = text, busy = true, error = null)
+        scope.launch {
+            runCatching {
+                workspaceRepository.writeText(
+                    id = workspaceId,
+                    path = target.path,
+                    text = text,
+                    overwrite = true,
+                    area = target.area,
+                )
+            }.onSuccess {
+                textDialogState = null
+            }.onFailure { error ->
+                textDialogState = textDialogState?.copy(
+                    busy = false,
+                    error = error.message ?: "Failed to save file",
+                )
+            }
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*"),
@@ -148,6 +209,7 @@ internal fun EditedFilesList(
     if (selectedPath != null) {
         val path = selectedPath!!
         val fileName = remember(path) { path.substringAfterLast('/') }
+        val isTextLikeFile = remember(fileName) { isTextLikeFileName(fileName) }
         ModalBottomSheet(
             onDismissRequest = { selectedPath = null },
             sheetState = rememberBottomSheetState(
@@ -167,6 +229,52 @@ internal fun EditedFilesList(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (isTextLikeFile) {
+                    Card(
+                        onClick = { openTextFile(path, readOnly = true) },
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.FileView,
+                                contentDescription = null,
+                                modifier = Modifier.padding(4.dp),
+                            )
+                            Text(
+                                text = "View",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                    Card(
+                        onClick = { openTextFile(path, readOnly = false) },
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.FileEdit,
+                                contentDescription = null,
+                                modifier = Modifier.padding(4.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.common_edit),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                }
                 Card(
                     onClick = {
                         val p = selectedPath ?: return@Card
@@ -241,6 +349,18 @@ internal fun EditedFilesList(
             }
         }
     }
+
+    textDialogState?.let { target ->
+        FullScreenTextEditor(
+            title = target.title,
+            text = target.text,
+            readOnly = target.readOnly,
+            isSaving = target.busy,
+            errorMessage = target.error,
+            onSave = if (target.readOnly) null else { text -> saveTextFile(target, text) },
+            onDismiss = { if (!target.busy) textDialogState = null },
+        )
+    }
 }
 
 private fun extractSubagentEditedPaths(parts: List<UIMessagePart>): List<String> {
@@ -271,4 +391,26 @@ private fun resolveWorkspacePath(path: String): Pair<WorkspaceStorageArea, Strin
     } else {
         WorkspaceStorageArea.LINUX to trimmed.trimStart('/')
     }
+}
+
+private data class EditedFileTextDialogState(
+    val title: String,
+    val path: String,
+    val area: WorkspaceStorageArea,
+    val text: String,
+    val readOnly: Boolean,
+    val busy: Boolean,
+    val error: String?,
+)
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var value = bytes / 1024.0
+    var unitIndex = 0
+    while (value >= 1024 && unitIndex < units.lastIndex) {
+        value /= 1024
+        unitIndex++
+    }
+    return String.format(Locale.ROOT, "%.1f %s", value, units[unitIndex])
 }
