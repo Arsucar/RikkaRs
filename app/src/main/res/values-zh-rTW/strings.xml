@@ -1529,4 +1529,5 @@
   <string name="chat_page_folder_add">新增</string>
   <string name="chat_page_delete_folder_confirm">刪除資料夾「%1$s」？資料夾內的對話不會被刪除，只會從資料夾中移除。</string>
   <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
+  <string name="workspace_storage_git_warning">應用程式外部儲存透過工作區 Shell 執行 Git pack 寫入並不可靠，git clone、fetch、pull 可能會失敗。Git 使用量較高的工作區請使用應用程式私有儲存。</string>
 </resources>

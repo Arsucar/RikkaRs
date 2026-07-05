@@ -1338,6 +1338,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_terminal_migration_in_progress">工作区存储迁移中，请稍候…</string>
   <string name="workspace_storage_setting">项目文件存储</string>
   <string name="workspace_storage_setting_desc">将工作区项目文件存储在应用专属外部存储目录，以便通过文件管理器/USB/PC直接编辑。</string>
+  <string name="workspace_storage_git_warning">应用外部存储通过工作区 Shell 执行 Git pack 写入不可靠，git clone、fetch、pull 可能失败。Git 密集型工作区请使用应用私有存储。</string>
   <string name="workspace_storage_private">应用私有（默认）</string>
   <string name="workspace_storage_external">应用外部存储</string>
   <string name="workspace_storage_current">当前：%1$s</string>

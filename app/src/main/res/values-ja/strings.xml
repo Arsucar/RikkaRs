@@ -1527,4 +1527,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_folder_add">新規</string>
   <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
+  <string name="workspace_storage_git_warning">アプリ外部ストレージでは、ワークスペース Shell 経由の Git pack 書き込みが安定しないため、git clone、fetch、pull が失敗する場合があります。Git を多用するワークスペースではアプリ内部ストレージを使用してください。</string>
 </resources>

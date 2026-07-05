@@ -1527,4 +1527,5 @@
   <string name="chat_page_folder_add">Новая</string>
   <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
+  <string name="workspace_storage_git_warning">Внешнее хранилище приложения ненадежно поддерживает запись Git pack через shell рабочей области, поэтому git clone, fetch и pull могут завершаться ошибкой. Для рабочих областей с активным использованием Git используйте внутреннее хранилище приложения.</string>
 </resources>

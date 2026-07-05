@@ -7,3 +7,6 @@ enum class WorkspaceFilesStorage {
     PRIVATE,
     EXTERNAL,
 }
+
+fun WorkspaceFilesStorage.supportsWorkspaceGitPackWrites(): Boolean =
+    this == WorkspaceFilesStorage.PRIVATE

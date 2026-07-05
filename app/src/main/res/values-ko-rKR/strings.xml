@@ -1527,4 +1527,5 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_folder_add">새로 만들기</string>
   <string name="chat_page_delete_folder_confirm">폴더 "%1$s"를 삭제하시겠습니까? 내부의 대화는 삭제되지 않고 폴더에서만 제거됩니다.</string>
   <string name="chat_page_delete_folder_generating">이 폴더의 일부 대화가 아직 생성 중입니다. 삭제하기 전에 중지해 주세요.</string>
+  <string name="workspace_storage_git_warning">앱 외부 저장소에서는 워크스페이스 Shell을 통한 Git pack 쓰기가 안정적으로 지원되지 않아 git clone, fetch, pull이 실패할 수 있습니다. Git 작업이 많은 워크스페이스는 앱 내부 저장소를 사용하세요.</string>
 </resources>

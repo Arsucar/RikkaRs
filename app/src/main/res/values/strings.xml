@@ -1363,6 +1363,7 @@
   <string name="workspace_terminal_migration_in_progress">Workspace storage migration in progress, please wait…</string>
   <string name="workspace_storage_setting">Project files storage</string>
   <string name="workspace_storage_setting_desc">Store workspace project files in app-specific external storage so they can be edited via file manager / USB / PC.</string>
+  <string name="workspace_storage_git_warning">Git clone, fetch, and pull may fail on app external storage because Android external storage does not reliably support Git pack writes through the workspace shell. Use App private storage for Git-heavy workspaces.</string>
   <string name="workspace_storage_private">App private (default)</string>
   <string name="workspace_storage_external">App external storage</string>
   <string name="workspace_storage_current">Current: %1$s</string>

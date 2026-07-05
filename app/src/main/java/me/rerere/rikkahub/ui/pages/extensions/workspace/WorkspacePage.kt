@@ -54,6 +54,7 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
+import me.rerere.rikkahub.data.model.supportsWorkspaceGitPackWrites
 import me.rerere.rikkahub.data.repository.MigrationResult
 import me.rerere.rikkahub.data.repository.WorkspaceStorageMigrator
 import androidx.compose.ui.res.stringResource
@@ -304,6 +305,13 @@ private fun WorkspaceStorageSettingCard(
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (!currentStorage.supportsWorkspaceGitPackWrites()) {
+                Text(
+                    text = stringResource(R.string.workspace_storage_git_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 }
@@ -339,6 +347,13 @@ private fun WorkspaceStoragePickerDialog(
                             )
                         }
                     }
+                }
+                if (!selected.supportsWorkspaceGitPackWrites()) {
+                    Text(
+                        text = stringResource(R.string.workspace_storage_git_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         },
