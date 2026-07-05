@@ -46,6 +46,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -811,8 +812,13 @@ fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {
     return null
 }
 
-fun Settings.getCurrentChatModel(): Model? {
-    return findModelById(this.getCurrentAssistant().chatModelId ?: this.chatModelId)
+fun Settings.resolveChatModelId(
+    conversation: Conversation? = null,
+    assistant: Assistant = conversation?.let { getAssistantById(it.assistantId) } ?: getCurrentAssistant(),
+): Uuid = conversation?.chatModelId ?: assistant.chatModelId ?: chatModelId
+
+fun Settings.getCurrentChatModel(conversation: Conversation? = null): Model? {
+    return findModelById(resolveChatModelId(conversation))
 }
 
 fun Settings.getCurrentAssistant(): Assistant {

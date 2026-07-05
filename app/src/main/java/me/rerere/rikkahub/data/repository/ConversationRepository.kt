@@ -318,6 +318,7 @@ class ConversationRepository(
             createAt = conversation.createAt.toEpochMilli(),
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
+            chatModelId = conversation.chatModelId?.toString() ?: "",
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned,
             isArchived = conversation.isArchived,
@@ -341,6 +342,7 @@ class ConversationRepository(
             createAt = Instant.ofEpochMilli(conversationEntity.createAt),
             updateAt = Instant.ofEpochMilli(conversationEntity.updateAt),
             assistantId = Uuid.parse(conversationEntity.assistantId),
+            chatModelId = conversationEntity.chatModelId.ifEmpty { null }?.let { Uuid.parse(it) },
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
             isArchived = conversationEntity.isArchived,
@@ -474,6 +476,7 @@ class ConversationRepository(
             createAt = Instant.ofEpochMilli(entity.createAt),
             updateAt = Instant.ofEpochMilli(entity.updateAt),
             messageNodes = emptyList(),
+            chatModelId = entity.chatModelId.ifEmpty { null }?.let { Uuid.parse(it) },
             folderId = entity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
         )
     }
@@ -578,6 +581,7 @@ data class LightConversationEntity(
     val isPinned: Boolean,
     val createAt: Long,
     val updateAt: Long,
+    val chatModelId: String = "",
     val folderId: String = "",
 )
 

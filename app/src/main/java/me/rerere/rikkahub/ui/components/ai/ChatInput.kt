@@ -93,8 +93,8 @@ import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
@@ -113,6 +113,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import org.koin.compose.koinInject
+import kotlin.uuid.Uuid
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -125,6 +126,7 @@ fun ChatInput(
     onToggleSearch: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     completionProviders: List<ChatCompletionProvider> = emptyList(),
+    chatModelId: Uuid,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
@@ -253,7 +255,7 @@ fun ChatInput(
                         ) {
                             // Model Picker
                             ModelSelector(
-                                modelId = assistant.chatModelId ?: settings.chatModelId,
+                                modelId = chatModelId,
                                 providers = settings.providers,
                                 onSelect = {
                                     onUpdateChatModel(it)
@@ -266,7 +268,7 @@ fun ChatInput(
                             // Search
                             val enableSearchMsg = stringResource(R.string.web_search_enabled)
                             val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                            val chatModel = settings.getCurrentChatModel()
+                            val chatModel = settings.findModelById(chatModelId)
                             SearchPickerButton(
                                 enableSearch = enableSearch,
                                 settings = settings,
@@ -287,7 +289,7 @@ fun ChatInput(
                             )
 
                             // Reasoning
-                            val model = settings.getCurrentChatModel()
+                            val model = settings.findModelById(chatModelId)
                             if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
                                 ReasoningButton(
                                     reasoningLevel = assistant.reasoningLevel,

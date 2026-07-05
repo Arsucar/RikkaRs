@@ -10,6 +10,8 @@ data class ConversationEntity(
     val id: String,
     @ColumnInfo("assistant_id", defaultValue = "0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
     val assistantId: String,
+    @ColumnInfo("chat_model_id", defaultValue = "")
+    val chatModelId: String = "",
     @ColumnInfo("title")
     val title: String,
     @ColumnInfo("nodes")

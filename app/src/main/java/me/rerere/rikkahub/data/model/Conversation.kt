@@ -16,6 +16,7 @@ import kotlin.uuid.Uuid
 data class Conversation(
     val id: Uuid = Uuid.random(),
     val assistantId: Uuid,
+    val chatModelId: Uuid? = null,
     val title: String = "",
     val messageNodes: List<MessageNode>,
     val chatSuggestions: List<String> = emptyList(),

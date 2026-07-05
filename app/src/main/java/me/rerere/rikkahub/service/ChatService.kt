@@ -617,7 +617,7 @@ class ChatService(
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val model = settings.getCurrentChatModel(initialConversation) ?: return
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -1065,7 +1065,7 @@ class ChatService(
     ): Result<Unit> = runCatching {
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
-            ?: settings.getCurrentChatModel()
+            ?: settings.getCurrentChatModel(conversation)
             ?: throw IllegalStateException("No model available for compression")
         val provider = model.findProvider(settings.providers)
             ?: throw IllegalStateException("Provider not found")
@@ -1439,7 +1439,12 @@ class ChatService(
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
         val exists = conversationRepo.existsConversationById(conversation.id)
-        if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
+        if (
+            !exists &&
+            conversation.title.isBlank() &&
+            conversation.messageNodes.isEmpty() &&
+            conversation.chatModelId == null
+        ) {
             return // 新会话且为空时不保存
         }
 
@@ -1583,6 +1588,7 @@ class ChatService(
         val forkConversation = Conversation(
             id = Uuid.random(),
             assistantId = currentConversation.assistantId,
+            chatModelId = currentConversation.chatModelId,
             messageNodes = copiedNodes,
             customSystemPrompt = currentConversation.customSystemPrompt,
             modeInjectionIds = currentConversation.modeInjectionIds,

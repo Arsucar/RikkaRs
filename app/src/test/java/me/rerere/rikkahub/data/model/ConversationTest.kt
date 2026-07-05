@@ -45,6 +45,13 @@ class ConversationTest {
     }
 
     @Test
+    fun newConversationHasNoModelOverride() {
+        val conv = conversation(emptyList())
+
+        assertEquals(null, conv.chatModelId)
+    }
+
+    @Test
     fun testUpdateWithLeadingHiddenNodes() {
         val hidden1Id = Uuid.random()
         val hidden2Id = Uuid.random()
