@@ -240,6 +240,32 @@ class SubagentRuntimeTest {
     }
 
     @Test
+    fun subagentSessionRegistry_defaultCancelReasonIsNotUserCancel() {
+        val conversationId = Uuid.random()
+
+        SubagentSessionRegistry.register(conversationId)
+        try {
+            SubagentSessionRegistry.requestCancel(conversationId)
+            assertEquals(SUBAGENT_STOPPED_REASON, SubagentSessionRegistry.cancelReason(conversationId))
+        } finally {
+            SubagentSessionRegistry.unregister(conversationId)
+        }
+    }
+
+    @Test
+    fun subagentSessionRegistry_userCancelReasonRequiresExplicitReason() {
+        val conversationId = Uuid.random()
+
+        SubagentSessionRegistry.register(conversationId)
+        try {
+            SubagentSessionRegistry.requestCancel(conversationId, SUBAGENT_USER_CANCEL_REASON)
+            assertEquals(SUBAGENT_USER_CANCEL_REASON, SubagentSessionRegistry.cancelReason(conversationId))
+        } finally {
+            SubagentSessionRegistry.unregister(conversationId)
+        }
+    }
+
+    @Test
     fun buildTranscript_extractsReasoningToolAndText() {
         val messages = listOf(
             UIMessage(

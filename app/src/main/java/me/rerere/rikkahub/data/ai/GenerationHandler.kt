@@ -155,7 +155,7 @@ class GenerationHandler(
                     Log.i(TAG, "streamText: last step reached, disabling all tools to force summary")
                 } else {
                     Log.i(TAG, "generateInternal: build tools($assistant)")
-                    if (assistant?.enableMemory == true) {
+                    if (assistant.enableMemory) {
                         val memoryAssistantId = if (assistant.useGlobalMemory) {
                             MemoryRepository.GLOBAL_MEMORY_ID
                         } else {
@@ -502,9 +502,24 @@ class GenerationHandler(
         is ToolApprovalState.Pending -> null
 
         else -> {
+            val toolDef = toolsInternal.find { it.name == tool.toolName }
+            if (toolDef == null) {
+                Log.w(TAG, "generateText: requested unavailable tool ${tool.toolName}")
+                return tool.copy(
+                    output = listOf(
+                        UIMessagePart.Text(
+                            json.encodeToString(
+                                buildJsonObject {
+                                    put("error", JsonPrimitive("Tool '${tool.toolName}' is not available in this assistant mode."))
+                                    put("tool", JsonPrimitive(tool.toolName))
+                                    put("available_tools", JsonPrimitive(toolsInternal.joinToString(", ") { it.name }))
+                                },
+                            ),
+                        ),
+                    ),
+                )
+            }
             runCatching {
-                val toolDef = toolsInternal.find { it.name == tool.toolName }
-                    ?: error("Tool ${tool.toolName} not found")
                 val args = runCatching {
                     json.parseToJsonElement(tool.input.ifBlank { "{}" })
                 }.getOrElse {

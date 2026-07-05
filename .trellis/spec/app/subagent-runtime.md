@@ -14,6 +14,8 @@
 - `Assistant.stepsCountdownThreshold: Int?`
 - `SubagentHost.spawn(parentAssistant: Assistant, ...)`
 - `GenerationHandler.generateText(assistant: Assistant, stepsCountdownThreshold: Int? = null, ...)`
+- `SubagentSessionRegistry.requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON)`
+- `SubagentHost.requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON)`
 
 ### 3. Contracts
 
@@ -26,6 +28,11 @@
 - When `GenerationHandler.generateText()` receives `stepsCountdownTotal`, countdown reminders are for the explicit budget total and must subtract executed `UIMessagePart.Tool` parts, not generation-loop step indexes.
 - `manage_subagent_profile` is an execution-time allowlist. The tool may only patch `description`, `system_prompt`, `model_id`, `max_tool_calls`, and `disable_tool_budget_stop`; schema-hidden advanced fields must be ignored even if present in hand-written JSON args.
 - When a subagent run is stopped by `maxToolCalls`, `SubagentHost` must request a no-tool final budget summary even if the budget-exhausting assistant message already contains text. Text emitted before or beside a tool call is not a final post-tool summary.
+- `finish_work` is a subagent loop terminator. Root `ChatService` must not add `createFinishWorkTool()` just because `Assistant.enableSubagents` is true; child tool lists must continue to receive it through `buildSubagentTools()`.
+- Main-agent prompts must not contain `FinishWorkTool.systemPrompt` unless a future explicit main-agent finish-work feature is added.
+- Delegation-only mode may expose read/context tools plus `spawn_subagent`, but its prompt must not claim write or shell execution tools are available when they are filtered out.
+- Missing tool calls must return a clear tool-unavailable result instead of a stack trace when the model calls a tool that is not registered in the current assistant mode.
+- Default subagent cancellation is a neutral stop (`SUBAGENT_STOPPED_REASON`). Only user stop paths such as `ChatService.stopGeneration()` may pass `SUBAGENT_USER_CANCEL_REASON`.
 
 ### 4. Validation & Error Matrix
 
@@ -37,12 +44,21 @@
 - Countdown total present with 1 executed tool and `stepIndex = 8` -> remaining is `total - 1`, not `total - 8`.
 - `manage_subagent_profile` args include hidden `temperature`, `max_tokens`, or `inherit_tools` -> persisted profile keeps existing advanced values.
 - Tool budget stop after an assistant message with text + tool call -> subagent still performs a no-tool summary pass before returning to the parent.
+- Main agent with `enableSubagents = true` -> tool list includes `spawn_subagent` and excludes `finish_work`.
+- Spawned subagent tool list -> includes exactly one `finish_work`, even if parent tools also contain it.
+- Delegation-only model calls filtered `workspace_shell` -> tool output says the tool is not available in this assistant mode and lists available tools.
+- Internal/parent stop without explicit user reason -> subagent summary is not "Task cancelled by user".
+- Explicit `ChatService.stopGeneration()` user stop -> reason remains `Generation cancelled by user`.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: root generation uses `assistant.copy(parallelToolExecution = false)`, while `SubagentHost` explicitly copies subagent control fields into child assistants.
 - Base: subagent profile with no custom threshold gets automatic reminders.
 - Bad: generic root generation reads `Assistant.parallelToolExecution` directly from the persisted assistant and parallelizes main-agent tools.
+- Good: `ChatService` exposes `spawn_subagent` but not `finish_work`; `buildSubagentTools()` appends `createFinishWorkTool()` for child loops.
+- Bad: root `enableSubagents` branch adds `createFinishWorkTool()`, which injects subagent-only finish instructions into ordinary chat.
+- Good: default subagent stop reason is neutral; user cancellation is opt-in at the user stop callsite.
+- Bad: every interrupted subagent run reports "Generation cancelled by user" regardless of the actual stop source.
 - Good: `applyPatch()` reads only fields exposed in `manage_subagent_profile.parameters()`.
 - Bad: `applyPatch()` keeps accepting removed advanced fields because models can still send schema-hidden JSON keys.
 
@@ -53,6 +69,9 @@
 - Unit test that countdown threshold `null` resolves to automatic and `0` resolves to disabled.
 - Unit test that countdown remaining uses executed tool calls when `stepsCountdownTotal` is present.
 - Unit test that `manage_subagent_profile` ignores schema-hidden advanced fields.
+- Unit or focused static test that root subagent enablement excludes `finish_work`, while `buildSubagentTools()` still injects it for child loops.
+- Unit test that default subagent cancellation reason is neutral and user-cancel wording requires `SUBAGENT_USER_CANCEL_REASON`.
+- Focused check that missing/unregistered tool calls return clear unavailable-tool output.
 - Compile check: `.\gradlew :app:compileDebugKotlin --no-daemon`.
 
 ### 7. Wrong vs Correct
@@ -105,3 +124,40 @@ return copy(
 ```
 
 The execution contract matches the public tool schema.
+
+#### Wrong
+
+```kotlin
+if (assistant.enableSubagents) {
+    add(createFinishWorkTool())
+    addAll(buildSubagentToolsForChat(...))
+}
+```
+
+This exposes a subagent loop terminator and its system prompt to the main agent.
+
+#### Correct
+
+```kotlin
+if (assistant.enableSubagents) {
+    addAll(buildSubagentToolsForChat(...))
+}
+```
+
+`buildSubagentTools()` appends `createFinishWorkTool()` only when constructing child subagent tool lists.
+
+#### Wrong
+
+```kotlin
+fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user")
+```
+
+This makes internal stops look like user cancellations.
+
+#### Correct
+
+```kotlin
+fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON)
+```
+
+User-facing stop callsites pass `SUBAGENT_USER_CANCEL_REASON` explicitly.

@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
+import me.rerere.rikkahub.data.ai.subagent.SUBAGENT_USER_CANCEL_REASON
 import me.rerere.rikkahub.data.ai.subagent.buildSubagentTools
 import me.rerere.rikkahub.data.ai.subagent.createManageSubagentTool
 import me.rerere.rikkahub.data.ai.subagent.createSubagentTools
@@ -86,7 +87,6 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
-import me.rerere.rikkahub.data.ai.tools.createFinishWorkTool
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -741,7 +741,6 @@ class ChatService(
                         }
                     }
                     if (assistant.enableSubagents) {
-                        add(createFinishWorkTool())
                         addAll(
                             buildSubagentToolsForChat(
                                 assistant = assistant,
@@ -2023,7 +2022,7 @@ class ChatService(
 
 
     suspend fun stopGeneration(conversationId: Uuid) {
-        subagentHost.requestCancel(conversationId)
+        subagentHost.requestCancel(conversationId, SUBAGENT_USER_CANCEL_REASON)
         val job = sessions[conversationId]?.getJob() ?: run {
             finishInterruptedPendingTools(conversationId)
             return

@@ -63,10 +63,11 @@ fun createSubagentTools(
                 if (delegateOnly) {
                     appendLine("**Delegation-Only Mode**")
                     if (parallelExecutionEnabled) {
-                        appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent` (you may emit multiple in one response). Synthesize subagent results; do not paste raw transcripts.")
+                        appendLine("You have no write or shell execution tools. You MUST decompose the task and delegate execution via `spawn_subagent` (you may emit multiple in one response). Synthesize subagent results; do not paste raw transcripts.")
                     } else {
-                        appendLine("You have NO execution tools. You MUST decompose the task and delegate via `spawn_subagent`. Synthesize subagent results; do not paste raw transcripts.")
+                        appendLine("You have no write or shell execution tools. You MUST decompose the task and delegate execution via `spawn_subagent`. Synthesize subagent results; do not paste raw transcripts.")
                     }
+                    appendLine("Use only the read-only or context tools that are actually listed as available for this turn.")
                     appendLine()
                 }
                 appendLine("**Subagents — Delegation Guidance**")

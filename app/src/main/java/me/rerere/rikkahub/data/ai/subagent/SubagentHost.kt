@@ -27,6 +27,8 @@ private const val TAG = "SubagentHost"
 private const val SUBAGENT_INTERNAL_GENERATION_LOOP_LIMIT = 257
 private const val SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT = 2
 private const val DEFAULT_SUBAGENT_COUNTDOWN_THRESHOLD = 4
+internal const val SUBAGENT_USER_CANCEL_REASON = "Generation cancelled by user"
+internal const val SUBAGENT_STOPPED_REASON = "Generation stopped before subagent completion"
 
 internal const val SUMMARY_CONTINUATION_PROMPT =
     "Your previous response was too brief. Please provide a more comprehensive summary of your findings and actions taken. " +
@@ -69,7 +71,7 @@ internal object SubagentSessionRegistry {
         }
     }
 
-    fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user") {
+    fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON) {
         var applied = false
         activeSessions.computeIfPresent(conversationId) { _, count ->
             cancelReasons[conversationId] = reason
@@ -104,7 +106,7 @@ internal fun resolveSubagentCountdownThreshold(maxToolCalls: Int, configuredThre
 class SubagentHost(
     private val generationHandler: GenerationHandler,
 ) {
-    fun requestCancel(conversationId: Uuid, reason: String = "Generation cancelled by user") {
+    fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON) {
         SubagentSessionRegistry.requestCancel(conversationId, reason)
     }
 
@@ -256,10 +258,10 @@ class SubagentHost(
                 if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
                     val transcript = buildTranscript(messages)
                     val reason = SubagentSessionRegistry.cancelReason(conversationId)
-                        ?: "Generation cancelled by user"
+                        ?: SUBAGENT_STOPPED_REASON
                     return@runCatching SubagentResult(
                         profileName = profile.name,
-                        summary = "Task cancelled by user",
+                        summary = cancellationSummary(reason),
                         succeeded = false,
                         error = reason,
                         depth = depth,
@@ -322,10 +324,10 @@ class SubagentHost(
             if (failure is CancellationException && SubagentSessionRegistry.isCancelRequested(conversationId)) {
                 val transcript = buildTranscript(lastMessages)
                 val reason = SubagentSessionRegistry.cancelReason(conversationId)
-                    ?: "Generation cancelled by user"
+                    ?: SUBAGENT_STOPPED_REASON
                 return SubagentResult(
                     profileName = profile.name,
-                    summary = "Task cancelled by user",
+                    summary = cancellationSummary(reason),
                     succeeded = false,
                     error = reason,
                     depth = depth,
@@ -437,7 +439,7 @@ class SubagentHost(
                     if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
                         throw CancellationException(
                             SubagentSessionRegistry.cancelReason(conversationId)
-                                ?: "Generation cancelled by user",
+                                ?: SUBAGENT_STOPPED_REASON,
                         )
                     }
                     if (enforceToolBudget &&
@@ -595,6 +597,13 @@ class SubagentHost(
 
     private fun subagentCountdownThreshold(profile: SubagentProfile, assistant: Assistant): Int? =
         resolveSubagentCountdownThreshold(effectiveMaxToolCalls(profile), assistant.stepsCountdownThreshold)
+
+    private fun cancellationSummary(reason: String): String =
+        if (reason == SUBAGENT_USER_CANCEL_REASON) {
+            "Task cancelled by user"
+        } else {
+            "Task stopped before completion"
+        }
 
     private data class RunCompletion(
         val messages: List<UIMessage>,
