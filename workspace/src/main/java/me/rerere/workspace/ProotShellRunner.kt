@@ -15,6 +15,9 @@ class ProotShellRunner(
     private val nativeLibraryDir: File,
     private val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     private val patcher: RootfsPatcher = RootfsPatcher(),
+    // Keep disabled for normal workspace shells: Git finalizes pack files with
+    // hard-link/rename flows that --link2symlink corrupts on bind-mounted /workspace.
+    private val emulateHardLinksWithSymlinks: Boolean = false,
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
         if (!context.linuxDir.hasUsableRootfs()) {
@@ -57,14 +60,13 @@ class ProotShellRunner(
         return process.readResult(context.timeoutMillis, context.stdin)
     }
 
-    private fun buildCommand(
+    internal fun buildCommand(
         context: WorkspaceShellContext,
         proot: File,
     ): List<String> {
         val command = mutableListOf(
             proot.absolutePath,
             "--root-id",
-            "--link2symlink",
             "--kill-on-exit",
             "-r",
             context.linuxDir.absolutePath,
@@ -73,6 +75,9 @@ class ProotShellRunner(
             "-b",
             "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
         )
+        if (emulateHardLinksWithSymlinks) {
+            command.add(2, "--link2symlink")
+        }
 
         extraBindMounts.forEach { mount ->
             if (mount.source.exists()) {

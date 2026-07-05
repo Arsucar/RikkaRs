@@ -9,6 +9,7 @@
 | Spec | Purpose |
 |------|---------|
 | [Shell Policy](./shell-policy.md) | Heuristic command validation patterns and conventions |
+| [Storage Policy](./storage-policy.md) | Workspace files storage contracts and Git pack-write support boundaries |
 
 ---
 

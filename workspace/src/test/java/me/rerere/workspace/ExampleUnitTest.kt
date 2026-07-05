@@ -2,6 +2,7 @@ package me.rerere.workspace
 
 import com.sun.net.httpserver.HttpServer
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -88,6 +89,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandRunsInsideWorkspaceFilesDirectory() {
+        assumeHostShellAvailable()
         val baseDir = Files.createTempDirectory("workspace-command-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
@@ -102,6 +104,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandReceivesStdin() {
+        assumeHostShellAvailable()
         val baseDir = Files.createTempDirectory("workspace-stdin-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
@@ -135,6 +138,7 @@ class ExampleUnitTest {
 
     @Test
     fun commandOutputIsTruncatedAtLimit() {
+        assumeHostShellAvailable()
         val baseDir = Files.createTempDirectory("workspace-truncate-test").toFile()
         val manager = WorkspaceManager(baseDir)
         val root = "test-workspace"
@@ -232,6 +236,10 @@ class ExampleUnitTest {
 
     private fun Int.paddingSize(): Int = (512 - (this % 512)).let {
         if (it == 512) 0 else it
+    }
+
+    private fun assumeHostShellAvailable() {
+        assumeTrue(File("/system/bin/sh").exists() || File("/bin/sh").exists())
     }
 
     private data class TarTestEntry(
