@@ -12,6 +12,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.17
+
+### 改进 / Improvements（本 Fork，v2.3.16 之后）
+
+- **子代理步数预算** — 统一子代理 `maxSteps` 与主会话步数扣减逻辑，避免预算不一致导致提前结束或超额执行。
+  **Subagent step budget** — Align subagent `maxSteps` with the main session step budget so runs stop and charge steps consistently.
+
+- **子代理档案字段精简** — 简化子代理档案配置与 `spawn_subagent` 展示字段，保留单一预算控制入口，设置页与扩展页同步调整。
+  **Subagent profile simplification** — Streamline subagent profile fields and spawn UI; single budget control; settings and extension pages updated.
+
+---
+
 ## v2.3.16
 
 ### 新功能 / Features（本 Fork，v2.3.15 之后）
