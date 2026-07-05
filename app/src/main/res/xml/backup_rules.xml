@@ -9,4 +9,7 @@
   <include
     domain="file"
     path="upload/" />
+  <include
+    domain="external"
+    path="workspaces/" />
 </full-backup-content>
