@@ -248,6 +248,14 @@
   <string name="assistant_page_memory_table_unsaved_text">Leave this page and discard unsaved edits?</string>
   <string name="assistant_page_memory_table_discard">Discard</string>
   <string name="assistant_page_memory_table_editor_new">New table document</string>
+  <string name="assistant_page_memory_table_add_column">Add column</string>
+  <string name="assistant_page_memory_table_column_name">Column name</string>
+  <string name="assistant_page_memory_table_column_name_empty">Column name cannot be empty</string>
+  <string name="assistant_page_memory_table_column_type">Column type</string>
+  <string name="assistant_page_memory_table_column_type_string">String</string>
+  <string name="assistant_page_memory_table_column_type_text">Text</string>
+  <string name="assistant_page_memory_table_delete_column">Delete column</string>
+  <string name="assistant_page_memory_table_delete_column_confirm">Delete column "%1$s"? This will also remove the column from the template schema and all rows.</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
   <string name="assistant_page_max_tokens_limit">Limit: %d tokens</string>

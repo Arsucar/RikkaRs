@@ -1,17 +1,14 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -21,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Switch
@@ -48,9 +46,12 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
@@ -59,6 +60,7 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -129,6 +131,7 @@ fun AssistantMemoryTableDocumentEditorPage(
         assistantId = assistantId,
         isNewDocument = documentId == null,
         onDraftChange = { draft = it },
+        onUpdateTemplate = { vm.upsertMemoryTableTemplate(it) },
         onSave = { saved ->
             vm.upsertMemoryTableDocument(saved)
             navController.popBackStack()
@@ -144,6 +147,7 @@ private fun MemoryTableDocumentEditorScaffold(
     assistantId: String,
     isNewDocument: Boolean,
     onDraftChange: (MemoryTableDocument) -> Unit,
+    onUpdateTemplate: (MemoryTableTemplate) -> Unit,
     onSave: (MemoryTableDocument) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -163,6 +167,9 @@ private fun MemoryTableDocumentEditorScaffold(
         mutableStateOf(editorFingerprint(document, document.payloadJson))
     }
     var showUnsavedDialog by remember { mutableStateOf(false) }
+    var showAddColumnDialog by remember { mutableStateOf(false) }
+    var addColumnTableIndex by remember { mutableIntStateOf(-1) }
+    var columnToDelete by remember { mutableStateOf<Pair<Int, MemoryTableSchemaColumn>?>(null) }
 
     fun currentFingerprint(): String = editorFingerprint(draft, payloadJson)
     val hasUnsavedChanges = currentFingerprint() != baselineFingerprint
@@ -177,6 +184,41 @@ private fun MemoryTableDocumentEditorScaffold(
             .onFailure {
                 editorError = it.message
             }
+    }
+
+    fun updateTemplateSchema(updatedTemplate: MemoryTableTemplate) {
+        onUpdateTemplate(updatedTemplate)
+    }
+
+    fun addColumn(tableIndex: Int, columnName: String, columnType: String) {
+        val targetTable = tableState.getOrNull(tableIndex) ?: return
+        if (columnName.isBlank()) {
+            editorError = "Column name cannot be empty"
+            return
+        }
+        if (targetTable.columns.any { it.name == columnName }) {
+            editorError = "Column '$columnName' already exists"
+            return
+        }
+        val newColumn = MemoryTableSchemaColumn(name = columnName, type = columnType)
+        val updatedTemplate = template.withColumnAdded(targetTable.name, newColumn)
+        updateTemplateSchema(updatedTemplate)
+        updateTables(
+            tableState.mapIndexed { index, table ->
+                if (index == tableIndex) table.addColumn(newColumn) else table
+            },
+        )
+    }
+
+    fun deleteColumn(tableIndex: Int, column: MemoryTableSchemaColumn) {
+        val targetTable = tableState.getOrNull(tableIndex) ?: return
+        val updatedTemplate = template.withColumnRemoved(targetTable.name, column.name)
+        updateTemplateSchema(updatedTemplate)
+        updateTables(
+            tableState.mapIndexed { index, table ->
+                if (index == tableIndex) table.deleteColumn(column.name) else table
+            },
+        )
     }
 
     fun switchToTableMode(): Boolean {
@@ -392,6 +434,13 @@ private fun MemoryTableDocumentEditorScaffold(
                                         },
                                     )
                                 },
+                                onAddColumn = {
+                                    addColumnTableIndex = tableIndex
+                                    showAddColumnDialog = true
+                                },
+                                onDeleteColumn = { column ->
+                                    columnToDelete = tableIndex to column
+                                },
                             )
                         }
                     }
@@ -412,36 +461,41 @@ private fun MemoryTableDocumentEditorScaffold(
         }
     }
 
-    if (showUnsavedDialog) {
+    if (showAddColumnDialog) {
+        AddColumnDialog(
+            onDismiss = { showAddColumnDialog = false },
+            onConfirm = { name, type ->
+                addColumn(addColumnTableIndex, name, type)
+                showAddColumnDialog = false
+            },
+        )
+    }
+
+    columnToDelete?.let { (tableIndex, column) ->
         AlertDialog(
-            onDismissRequest = { showUnsavedDialog = false },
-            title = { Text(stringResource(R.string.assistant_page_memory_table_unsaved_title)) },
-            text = { Text(stringResource(R.string.assistant_page_memory_table_unsaved_text)) },
+            onDismissRequest = { columnToDelete = null },
+            title = { Text(stringResource(R.string.assistant_page_memory_table_delete_column)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.assistant_page_memory_table_delete_column_confirm,
+                        column.name,
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showUnsavedDialog = false
-                        if (persistDraft()) {
-                            return@TextButton
-                        }
+                        deleteColumn(tableIndex, column)
+                        columnToDelete = null
                     },
                 ) {
-                    Text(stringResource(R.string.common_save))
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            showUnsavedDialog = false
-                            onNavigateBack()
-                        },
-                    ) {
-                        Text(stringResource(R.string.assistant_page_memory_table_discard))
-                    }
-                    TextButton(onClick = { showUnsavedDialog = false }) {
-                        Text(stringResource(R.string.common_cancel))
-                    }
+                TextButton(onClick = { columnToDelete = null }) {
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )
@@ -449,10 +503,160 @@ private fun MemoryTableDocumentEditorScaffold(
 }
 
 @Composable
+private fun AddColumnDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, type: String) -> Unit,
+) {
+    var columnName by remember { mutableStateOf("") }
+    var columnType by remember { mutableStateOf("string") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val columnNameEmptyError = stringResource(R.string.assistant_page_memory_table_column_name_empty)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.assistant_page_memory_table_add_column)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = columnName,
+                    onValueChange = {
+                        columnName = it
+                        error = null
+                    },
+                    label = { Text(stringResource(R.string.assistant_page_memory_table_column_name)) },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = error?.let { { Text(it) } },
+                )
+                Text(
+                    text = stringResource(R.string.assistant_page_memory_table_column_type),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = columnType == "string",
+                            onClick = { columnType = "string" },
+                        )
+                        Text(stringResource(R.string.assistant_page_memory_table_column_type_string))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = columnType == "text",
+                            onClick = { columnType = "text" },
+                        )
+                        Text(stringResource(R.string.assistant_page_memory_table_column_type_text))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (columnName.isBlank()) {
+                        error = columnNameEmptyError
+                        return@TextButton
+                    }
+                    onConfirm(columnName.trim(), columnType)
+                },
+            ) {
+                Text(stringResource(R.string.common_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
+}
+
+@Composable
 private fun MemoryTableEditableTable(
     table: MemoryTableEditorTable,
     onChange: (MemoryTableEditorTable) -> Unit,
+    onAddColumn: () -> Unit,
+    onDeleteColumn: (MemoryTableSchemaColumn) -> Unit,
 ) {
+    val columnMinWidths = table.columns.map { column ->
+        if (column.type == "text") 120.dp else 80.dp
+    } + 48.dp
+    val columnMaxWidths = table.columns.map { column ->
+        if (column.type == "text") 280.dp else 160.dp
+    } + 48.dp
+
+    val headers = buildList<@Composable () -> Unit> {
+        table.columns.forEach { column ->
+            add(@Composable {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = column.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { onDeleteColumn(column) },
+                        modifier = Modifier.padding(start = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Delete01,
+                            contentDescription = stringResource(R.string.assistant_page_memory_table_delete_column),
+                        )
+                    }
+                }
+            })
+        }
+        add(@Composable {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                IconButton(onClick = onAddColumn) {
+                    Icon(
+                        imageVector = HugeIcons.Add01,
+                        contentDescription = stringResource(R.string.assistant_page_memory_table_add_column),
+                    )
+                }
+            }
+        })
+    }
+
+    val rows = table.rows.mapIndexed { rowIndex, row ->
+        buildList<@Composable () -> Unit> {
+            table.columns.forEach { column ->
+                add(@Composable {
+                    OutlinedTextField(
+                        value = row[column.name].orEmpty(),
+                        onValueChange = { value ->
+                            onChange(table.updateCell(rowIndex, column.name, value))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = column.type != "text",
+                        minLines = if (column.type == "text") 3 else 1,
+                        maxLines = if (column.type == "text") 6 else 1,
+                    )
+                })
+            }
+            add(@Composable {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconButton(onClick = { onChange(table.deleteRow(rowIndex)) }) {
+                        Icon(
+                            imageVector = HugeIcons.Delete01,
+                            contentDescription = stringResource(R.string.assistant_page_delete),
+                        )
+                    }
+                }
+            })
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -461,53 +665,14 @@ private fun MemoryTableEditableTable(
             text = table.name,
             style = MaterialTheme.typography.titleSmall,
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                table.columns.forEach { column ->
-                    Text(
-                        text = column.name,
-                        modifier = Modifier.width(column.editorWidth()),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Box(modifier = Modifier.width(48.dp))
-            }
-            table.rows.forEachIndexed { rowIndex, _ ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    table.columns.forEach { column ->
-                        OutlinedTextField(
-                            value = table.rows[rowIndex][column.name].orEmpty(),
-                            onValueChange = { value ->
-                                onChange(table.updateCell(rowIndex, column.name, value))
-                            },
-                            modifier = Modifier
-                                .width(column.editorWidth())
-                                .heightIn(min = if (column.type == "text") 96.dp else 56.dp),
-                            minLines = if (column.type == "text") 3 else 1,
-                            maxLines = if (column.type == "text") 6 else 1,
-                        )
-                    }
-                    IconButton(
-                        onClick = { onChange(table.deleteRow(rowIndex)) },
-                        modifier = Modifier.width(48.dp),
-                    ) {
-                        Icon(
-                            HugeIcons.Delete01,
-                            contentDescription = stringResource(R.string.assistant_page_delete),
-                        )
-                    }
-                }
-            }
-        }
+        DataTable(
+            headers = headers,
+            rows = rows,
+            columnMinWidths = columnMinWidths,
+            columnMaxWidths = columnMaxWidths,
+            cellPadding = 8.dp,
+            stretchToFillWidth = true,
+        )
         TextButton(onClick = { onChange(table.addRow()) }) {
             Text(stringResource(R.string.assistant_page_memory_table_add_row))
         }
@@ -525,6 +690,70 @@ private fun scopeIdFor(scopeType: MemoryTableScopeType, assistantId: String): St
 private fun editorFingerprint(document: MemoryTableDocument, payloadJson: String): String {
     return "${document.scopeType}|${document.scopeId}|${payloadJson.trim()}"
 }
+
+private fun MemoryTableTemplate.withColumnAdded(
+    tableName: String,
+    column: MemoryTableSchemaColumn,
+): MemoryTableTemplate = copy(
+    schemaJson = runCatching {
+        val root = memoryTableEditorJson.parseToJsonElement(schemaJson) as? JsonObject
+            ?: error("Schema JSON must be an object")
+        val tables = root["tables"] as? JsonArray ?: error("Schema JSON must contain tables[]")
+        val updatedTables = JsonArray(
+            tables.map { tableElement ->
+                val tableObject = tableElement as? JsonObject ?: return@map tableElement
+                val currentName = tableObject["name"]?.jsonPrimitive?.contentOrNull
+                if (currentName != tableName) return@map tableElement
+                val columns = tableObject["columns"] as? JsonArray ?: JsonArray(emptyList())
+                val newColumn = buildJsonObject {
+                    put("name", column.name)
+                    put("type", column.type)
+                }
+                JsonObject(
+                    tableObject.toMutableMap().apply {
+                        put("columns", JsonArray(columns + newColumn))
+                    },
+                )
+            },
+        )
+        JsonObject(root.toMutableMap().apply { put("tables", updatedTables) }).let {
+            memoryTableEditorJson.encodeToString(JsonObject.serializer(), it)
+        }
+    }.getOrDefault(schemaJson),
+)
+
+private fun MemoryTableTemplate.withColumnRemoved(
+    tableName: String,
+    columnName: String,
+): MemoryTableTemplate = copy(
+    schemaJson = runCatching {
+        val root = memoryTableEditorJson.parseToJsonElement(schemaJson) as? JsonObject
+            ?: error("Schema JSON must be an object")
+        val tables = root["tables"] as? JsonArray ?: error("Schema JSON must contain tables[]")
+        val updatedTables = JsonArray(
+            tables.map { tableElement ->
+                val tableObject = tableElement as? JsonObject ?: return@map tableElement
+                val currentName = tableObject["name"]?.jsonPrimitive?.contentOrNull
+                if (currentName != tableName) return@map tableElement
+                val columns = tableObject["columns"] as? JsonArray ?: JsonArray(emptyList())
+                val updatedColumns = JsonArray(
+                    columns.filter { columnElement ->
+                        val columnObject = columnElement as? JsonObject ?: return@filter true
+                        columnObject["name"]?.jsonPrimitive?.contentOrNull != columnName
+                    },
+                )
+                JsonObject(
+                    tableObject.toMutableMap().apply {
+                        put("columns", updatedColumns)
+                    },
+                )
+            },
+        )
+        JsonObject(root.toMutableMap().apply { put("tables", updatedTables) }).let {
+            memoryTableEditorJson.encodeToString(JsonObject.serializer(), it)
+        }
+    }.getOrDefault(schemaJson),
+)
 
 private data class MemoryTableSchemaTable(
     val name: String,
@@ -549,6 +778,20 @@ private data class MemoryTableEditorTable(
 
     fun deleteRow(index: Int): MemoryTableEditorTable {
         return copy(rows = rows.filterIndexed { rowIndex, _ -> rowIndex != index })
+    }
+
+    fun addColumn(column: MemoryTableSchemaColumn): MemoryTableEditorTable {
+        return copy(
+            schema = schema.copy(columns = columns + column),
+            rows = rows.map { it.toMutableMap().apply { put(column.name, "") } },
+        )
+    }
+
+    fun deleteColumn(columnName: String): MemoryTableEditorTable {
+        return copy(
+            schema = schema.copy(columns = columns.filter { it.name != columnName }),
+            rows = rows.map { it.toMutableMap().apply { remove(columnName) } },
+        )
     }
 
     fun updateCell(rowIndex: Int, columnName: String, value: String): MemoryTableEditorTable {
@@ -651,5 +894,3 @@ private fun jsonElementToCellText(element: JsonElement?): String {
         else -> element.toString()
     }
 }
-
-private fun MemoryTableSchemaColumn.editorWidth() = if (type == "text") 260.dp else 160.dp

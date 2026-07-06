@@ -245,6 +245,14 @@
   <string name="assistant_page_memory_table_unsaved_text">离开此页面将丢失未保存的修改。</string>
   <string name="assistant_page_memory_table_discard">放弃</string>
   <string name="assistant_page_memory_table_editor_new">新建表格文档</string>
+  <string name="assistant_page_memory_table_add_column">新增列</string>
+  <string name="assistant_page_memory_table_column_name">列名</string>
+  <string name="assistant_page_memory_table_column_name_empty">列名不能为空</string>
+  <string name="assistant_page_memory_table_column_type">列类型</string>
+  <string name="assistant_page_memory_table_column_type_string">字符串</string>
+  <string name="assistant_page_memory_table_column_type_text">文本</string>
+  <string name="assistant_page_memory_table_delete_column">删除列</string>
+  <string name="assistant_page_memory_table_delete_column_confirm">删除列 "%1$s"？这会同时从模板 schema 和所有行中移除该列。</string>
   <string name="assistant_page_max_tokens">最大Token数</string>
   <string name="assistant_page_max_tokens_desc">最大生成Token数量。留空表示无限制。</string>
   <string name="assistant_page_max_tokens_limit">限制：%d 个Token</string>
