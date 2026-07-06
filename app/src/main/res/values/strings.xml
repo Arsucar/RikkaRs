@@ -616,7 +616,7 @@
   <string name="mermaid_export_success">Export successful</string>
   <string name="model_list_favorite">Favorites</string>
   <string name="model_list_no_providers">No available AI providers, please add in settings</string>
-  <string name="model_list_search_placeholder">Enter model name to search</string>
+  <string name="model_list_search_placeholder">Enter model or provider name to search</string>
   <string name="model_list_select_model">Select Model</string>
   <string name="model_list_expand_all">Expand all model groups</string>
   <string name="model_list_collapse_all">Collapse all model groups</string>
@@ -1182,6 +1182,10 @@
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
   <string name="setting_provider_page_recommend">Recommended providers</string>
+  <string name="setting_provider_page_manage_tags">Manage</string>
+  <string name="setting_provider_page_provider_tags">Provider tags</string>
+  <string name="setting_provider_page_rename_tag">Rename</string>
+  <string name="setting_provider_page_new_tag_name">New tag name</string>
   <string name="setting_provider_page_select_all">Select All (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">Select from Gallery</string>
   <string name="setting_provider_page_paste_from_clipboard">Paste from Clipboard</string>

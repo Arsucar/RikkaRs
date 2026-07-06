@@ -145,6 +145,7 @@ class WorkspaceManager(
         cwd: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
         stdin: ByteArray? = null,
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     ): WorkspaceCommandResult {
         if (globalLock?.isLocked() == true) {
             return WorkspaceCommandResult(
@@ -184,6 +185,7 @@ class WorkspaceManager(
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
+                extraBindMounts = extraBindMounts,
             )
         )
     }

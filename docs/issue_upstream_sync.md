@@ -22,6 +22,10 @@
 - **无 Firebase**（Analytics / Crashlytics / Remote Config）；不需要 `google-services.json`。
 - **Release `applicationId`**：`me.arsucar.rikka`（Debug：`me.arsucar.rikka.debug`）；显示名 **Rikka-arsucar**。
 - **正式发版仅** `.github/workflows/release-apk.yml`（**Release APK (arm64)**）；勿恢复上游已删除的 Release Build workflow。
+- **压缩上下文对话框保留 fork 交互**：若合并上游 commit `0edcd81bccbf3287ebd59b5baf7822f457a6e835`
+  （`refactor(ui): 压缩上下文对话框保留消息数改为手动输入`）涉及
+  `app/src/main/java/me/rerere/rikkahub/ui/components/ai/CompressContextDialog.kt` 冲突，
+  **以本 fork 为准**，保留 `CustomNumberSelector` 的 `0/16/32/64 + 自定义` 分段选数，不接受上游纯手动输入替换。
 - **勿将 Trellis / 本地 Agent 专用改动推向上游**；Trellis 文件可在 **Arsucar/rikkahub** 公开，但不属于上游合并目标。
 
 ### 使用场景 | Usage Scenario
@@ -30,6 +34,8 @@
 2. **发版前对齐**：在路径 A（`v*` tag）或路径 B（`workflow_dispatch`）发版前，先完成或评估一次上游合并，减少长期 behind 导致的巨型冲突（当前 behind **2574** 说明需尽快规划分批合并策略）。
 3. **新协作者 / 新 AI 窗口**：阅读 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md` §12 与本文档化流程后，可按检查清单执行 merge，而不重复争论 Firebase、applicationId、CI 入口等已决事项。
 4. **冲突高发区**：`app/build.gradle.kts`、`gradle/libs.versions.toml`（Firebase catalog）、`web/build.gradle.kts`（pnpm 跨平台）、以及上游重新引入的 Firebase Kotlin/DI — 合并时按 §12 保持「无 Firebase」策略。
+5. **已知冲突锚点**：`CompressContextDialog.kt` 遇到上游 `0edcd81bccbf3287ebd59b5baf7822f457a6e835`
+   时用 `checkout --ours` 或手工保留 fork 版本；合并后回归目标 token、保留条数分段、自定义数字、确认/取消和加载态。
 
 ### 替代方案 | Alternatives Considered
 
@@ -37,7 +43,5 @@
 2. **长期不合并、完全分叉**：维护成本低短期看似可行，但安全修复、AI/搜索等新能力无法延续，与「独立下游但共享核心代码」目标不符。
 3. **向上游提 PR 合并 fork 定制**：与产品决策（独立应用、不同 `applicationId`、无 Firebase、专用签名与 CI）冲突；且 `AGENTS.md` 已规定勿将 Trellis 等文件纳入上游 PR。
 4. **自动化 GitHub Action 定时 merge**：可减少人工遗忘，但冲突与策略判断（Firebase、workflow 文件）仍需人工审查；可作为流程建立后的二期增强，而非替代文档化检查清单。
-
-**建议采纳**：以文档化、可重复的 **手动/半自动 merge `upstream/master` → `release/rikka-arsucar`** 为主流程，配合 `CHANGELOG` 记录与发版前验证；必要时在 issue/PR 模板中增加「上游合并」勾选项。替代文档化检查清单。
 
 **建议采纳**：以文档化、可重复的 **手动/半自动 merge `upstream/master` → `release/rikka-arsucar`** 为主流程，配合 `CHANGELOG` 记录与发版前验证；必要时在 issue/PR 模板中增加「上游合并」勾选项。

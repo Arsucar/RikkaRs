@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.ai.tools.createFinishWorkTool
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceBindMount
 
 val WorkspaceToolNames: Set<String> = setOf(
     "workspace_read_file",
@@ -103,11 +104,12 @@ suspend fun createSubagentWorkspaceTools(
     workspaceId: String,
     workspaceCwd: String? = null,
     knownMounts: List<WorkspaceKnownMount> = emptyList(),
+    extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): List<Tool> {
     if (access == WorkspaceAccess.NONE || workspaceId.isBlank()) return emptyList()
     val workspaceOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
     return filterWorkspaceToolsByAccess(
-        createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd, knownMounts),
+        createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd, knownMounts, extraBindMounts),
         access,
     )
         .map { applySubagentWorkspaceApproval(it, profile, workspaceOverrides) }

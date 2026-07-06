@@ -2,7 +2,10 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.DragDropHorizontal
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Clipboard
@@ -64,6 +67,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,6 +80,10 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
+import me.rerere.rikkahub.data.datastore.deleteProviderTag
+import me.rerere.rikkahub.data.datastore.effectiveProviderTags
+import me.rerere.rikkahub.data.datastore.renameProviderTag
+import me.rerere.rikkahub.data.datastore.reorderProviderTags
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -103,6 +111,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterTag by remember { mutableStateOf<String?>(null) }
+    var showTagManager by remember { mutableStateOf(false) }
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         val newProviders = settings.providers.toMutableList().apply {
@@ -186,30 +195,62 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 shape = CircleShape,
             )
 
-            val allTags = remember(settings.providers) {
-                settings.providers.flatMap { it.tags }.distinct()
+            val suggestedProviderTags = stringArrayResource(R.array.provider_suggested_tags).toList()
+            val allTags = remember(
+                settings.providers,
+                settings.providerTagOrder,
+                settings.hiddenProviderTags,
+                suggestedProviderTags,
+            ) {
+                settings.effectiveProviderTags(suggestedProviderTags)
             }
             if (allTags.isNotEmpty()) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    item {
-                        FilterChip(
-                            selected = selectedFilterTag == null,
-                            onClick = { selectedFilterTag = null },
-                            label = { Text(stringResource(R.string.filter_all)) }
-                        )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedFilterTag == null,
+                                onClick = { selectedFilterTag = null },
+                                label = { Text(stringResource(R.string.filter_all)) }
+                            )
+                        }
+                        items(allTags) { tag ->
+                            FilterChip(
+                                selected = selectedFilterTag == tag,
+                                onClick = { selectedFilterTag = if (selectedFilterTag == tag) null else tag },
+                                label = { Text(tag) }
+                            )
+                        }
                     }
-                    items(allTags) { tag ->
-                        FilterChip(
-                            selected = selectedFilterTag == tag,
-                            onClick = { selectedFilterTag = if (selectedFilterTag == tag) null else tag },
-                            label = { Text(tag) }
-                        )
+                    TextButton(onClick = { showTagManager = true }) {
+                        Text(stringResource(R.string.setting_provider_page_manage_tags))
                     }
                 }
+            }
+            if (showTagManager) {
+                ProviderTagManagerSheet(
+                    tags = allTags,
+                    onDismiss = { showTagManager = false },
+                    onRename = { oldTag, newTag ->
+                        if (selectedFilterTag == oldTag) selectedFilterTag = newTag.trim()
+                        vm.updateSettings(settings.renameProviderTag(oldTag, newTag, suggestedProviderTags))
+                    },
+                    onDelete = { tag ->
+                        if (selectedFilterTag == tag) selectedFilterTag = null
+                        vm.updateSettings(settings.deleteProviderTag(tag))
+                    },
+                    onReorder = { reorderedTags ->
+                        vm.updateSettings(settings.reorderProviderTags(reorderedTags))
+                    },
+                )
             }
 
             LazyColumn(
@@ -260,6 +301,133 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProviderTagManagerSheet(
+    tags: List<String>,
+    onDismiss: () -> Unit,
+    onRename: (oldTag: String, newTag: String) -> Unit,
+    onDelete: (String) -> Unit,
+    onReorder: (List<String>) -> Unit,
+) {
+    var editingTag by remember { mutableStateOf<String?>(null) }
+    var editingText by remember { mutableStateOf("") }
+    var deletingTag by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.setting_provider_page_provider_tags),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            tags.forEachIndexed { index, tag ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = tag,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    IconButton(
+                        onClick = { onReorder(tags.moveTag(index, index - 1)) },
+                        enabled = index > 0,
+                    ) {
+                        Icon(HugeIcons.ArrowUp01, contentDescription = null)
+                    }
+                    IconButton(
+                        onClick = { onReorder(tags.moveTag(index, index + 1)) },
+                        enabled = index < tags.lastIndex,
+                    ) {
+                        Icon(HugeIcons.ArrowDown01, contentDescription = null)
+                    }
+                    TextButton(
+                        onClick = {
+                            editingTag = tag
+                            editingText = tag
+                        }
+                    ) {
+                        Text(stringResource(R.string.setting_provider_page_rename_tag))
+                    }
+                    IconButton(onClick = { deletingTag = tag }) {
+                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete))
+                    }
+                }
+            }
+        }
+    }
+
+    editingTag?.let { tag ->
+        AlertDialog(
+            onDismissRequest = { editingTag = null },
+            title = { Text(stringResource(R.string.setting_provider_page_rename_tag)) },
+            text = {
+                OutlinedTextField(
+                    value = editingText,
+                    onValueChange = { editingText = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.setting_provider_page_new_tag_name)) },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editingText.isNotBlank(),
+                    onClick = {
+                        onRename(tag, editingText)
+                        editingTag = null
+                    },
+                ) {
+                    Text(stringResource(R.string.setting_provider_page_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingTag = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    deletingTag?.let { tag ->
+        AlertDialog(
+            onDismissRequest = { deletingTag = null },
+            title = { Text(stringResource(R.string.confirm_delete)) },
+            text = { Text(tag) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(tag)
+                        deletingTag = null
+                    },
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingTag = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+private fun List<String>.moveTag(from: Int, to: Int): List<String> {
+    if (from !in indices || to !in indices || from == to) return this
+    return toMutableList().apply {
+        add(to, removeAt(from))
     }
 }
 

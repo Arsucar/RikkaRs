@@ -610,7 +610,7 @@
   <string name="mermaid_export_success">导出成功</string>
   <string name="model_list_favorite">收藏</string>
   <string name="model_list_no_providers">没有可用AI提供商, 请在设置添加</string>
-  <string name="model_list_search_placeholder">输入模型名称搜索</string>
+  <string name="model_list_search_placeholder">输入模型或提供商名称搜索</string>
   <string name="model_list_select_model">选择模型</string>
   <string name="more_options">更多选项</string>
   <string name="no_text_content_to_copy">暂无可复制的文本内容</string>
@@ -1145,6 +1145,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_scan_qr_code">扫描二维码</string>
   <string name="setting_provider_page_search_providers">搜索提供商</string>
   <string name="setting_provider_page_recommend">推荐提供商</string>
+  <string name="setting_provider_page_manage_tags">管理</string>
+  <string name="setting_provider_page_provider_tags">提供商标签</string>
+  <string name="setting_provider_page_rename_tag">重命名</string>
+  <string name="setting_provider_page_new_tag_name">新标签名</string>
   <string name="setting_provider_page_select_all">全选（%1$d）</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>

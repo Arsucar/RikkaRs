@@ -333,7 +333,15 @@ class SkillManager(
         return resolveSkillFile(metadata, relativePath)
     }
 
-    fun resolveMountedSkillFile(rootfsPath: String): File? {
+    fun resolveMountedSkillFile(rootfsPath: String, assistantId: Uuid? = null): File? {
+        if (assistantId != null && rootfsPath.replace('\\', '/').trimEnd('/').startsWith("/skills_private/")) {
+            return SkillPaths.resolveMountedSkillFile(
+                skillsRoot = getAssistantSkillsDir(assistantId),
+                rootfsPath = rootfsPath,
+                allowedSymlinkRoots = listOf(getSkillSharedDir()),
+                mountTarget = "/skills_private",
+            )
+        }
         return SkillPaths.resolveMountedSkillFile(
             skillsRoot = getSkillsDir(),
             rootfsPath = rootfsPath,

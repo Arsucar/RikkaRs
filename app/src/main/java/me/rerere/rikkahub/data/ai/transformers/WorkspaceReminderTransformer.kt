@@ -49,7 +49,8 @@ private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null
     appendLine("  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files.")
     appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
     appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
-    appendLine("- Global skills are mounted read-only for inspection at `/skills/<skill-name>/`. Assistant-private skills are not mounted there; use `use_skill` when that tool lists a skill as available.")
+    appendLine("- Global skills are mounted for inspection at `/skills/<skill-name>/`; assistant-private skills for this assistant are mounted at `/skills_private/<skill-name>/`.")
+    appendLine("- You may run scripts from `/skills_private` and iterate on private skill files there. Writes outside `/workspace` and `/tmp`, including skill files, may require user approval.")
     appendLine("- Files the user uploaded are mounted at `/upload`. Treat `/upload` as READ-ONLY: read uploaded files from `/upload/<file-name>`, but never modify, overwrite, or delete anything there. If you need to change an uploaded file, copy it into `/workspace` first and edit the copy.")
     if (!cwd.isNullOrBlank()) {
         appendLine("- Current working directory: `$cwd`. Use this as the default context for file operations and shell commands.")

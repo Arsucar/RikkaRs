@@ -15,9 +15,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,19 +42,54 @@ import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 
+@Stable
+class JsonTreeState internal constructor(
+    initialExpandedPaths: Map<String, Boolean> = emptyMap(),
+) {
+    private val expandedPaths = mutableStateMapOf<String, Boolean>().apply {
+        putAll(initialExpandedPaths)
+    }
+
+    fun expanded(path: String, defaultValue: Boolean): Boolean = expandedPaths[path] ?: defaultValue
+
+    fun setExpanded(path: String, expanded: Boolean) {
+        expandedPaths[path] = expanded
+    }
+
+    internal fun snapshot(): Map<String, Boolean> = expandedPaths.toMap()
+
+    companion object {
+        val Saver: Saver<JsonTreeState, Map<String, Boolean>> = Saver(
+            save = { it.snapshot() },
+            restore = { JsonTreeState(it) },
+        )
+    }
+}
+
+@Composable
+fun rememberJsonTreeState(vararg inputs: Any?): JsonTreeState = rememberSaveable(
+    *inputs,
+    saver = JsonTreeState.Saver,
+) {
+    JsonTreeState()
+}
+
 @Composable
 fun JsonTree(
     json: JsonElement,
     modifier: Modifier = Modifier,
     initialExpandLevel: Int = 1,
+    state: JsonTreeState = rememberJsonTreeState(),
     onStringClick: ((String) -> Unit)? = null
 ) {
     Column(modifier = modifier.horizontalScroll(rememberScrollState())) {
         JsonNode(
             element = json,
             key = null,
+            path = "",
             depth = 0,
             initialExpandLevel = initialExpandLevel,
+            state = state,
             onStringClick = onStringClick ?: {}
         )
     }
@@ -61,13 +99,15 @@ fun JsonTree(
 private fun JsonNode(
     element: JsonElement,
     key: String?,
+    path: String,
     depth: Int,
     initialExpandLevel: Int,
+    state: JsonTreeState,
     onStringClick: (String) -> Unit
 ) {
     when (element) {
-        is JsonObject -> JsonObjectNode(element, key, depth, initialExpandLevel, onStringClick)
-        is JsonArray -> JsonArrayNode(element, key, depth, initialExpandLevel, onStringClick)
+        is JsonObject -> JsonObjectNode(element, key, path, depth, initialExpandLevel, state, onStringClick)
+        is JsonArray -> JsonArrayNode(element, key, path, depth, initialExpandLevel, state, onStringClick)
         is JsonPrimitive -> JsonPrimitiveNode(element, key, depth, onStringClick)
         is JsonNull -> JsonNullNode(key, depth)
     }
@@ -77,17 +117,24 @@ private fun JsonNode(
 private fun JsonObjectNode(
     obj: JsonObject,
     key: String?,
+    path: String,
     depth: Int,
     initialExpandLevel: Int,
+    state: JsonTreeState,
     onStringClick: (String) -> Unit
 ) {
-    var expanded by rememberSaveable { mutableStateOf(depth < initialExpandLevel) }
+    var expanded by remember(path, state) {
+        mutableStateOf(state.expanded(path, depth < initialExpandLevel))
+    }
     val entries = remember(obj) { obj.entries.toList() }
 
     Column {
         Row(
             modifier = Modifier
-                .clickable { expanded = !expanded }
+                .clickable {
+                    expanded = !expanded
+                    state.setExpanded(path, expanded)
+                }
                 .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -120,8 +167,10 @@ private fun JsonObjectNode(
                     JsonNode(
                         element = childElement,
                         key = childKey,
+                        path = "$path/${childKey.toJsonPointerSegment()}",
                         depth = depth + 1,
                         initialExpandLevel = initialExpandLevel,
+                        state = state,
                         onStringClick = onStringClick
                     )
                 }
@@ -141,16 +190,23 @@ private fun JsonObjectNode(
 private fun JsonArrayNode(
     array: JsonArray,
     key: String?,
+    path: String,
     depth: Int,
     initialExpandLevel: Int,
+    state: JsonTreeState,
     onStringClick: (String) -> Unit
 ) {
-    var expanded by rememberSaveable { mutableStateOf(depth < initialExpandLevel) }
+    var expanded by remember(path, state) {
+        mutableStateOf(state.expanded(path, depth < initialExpandLevel))
+    }
 
     Column {
         Row(
             modifier = Modifier
-                .clickable { expanded = !expanded }
+                .clickable {
+                    expanded = !expanded
+                    state.setExpanded(path, expanded)
+                }
                 .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -183,8 +239,10 @@ private fun JsonArrayNode(
                     JsonNode(
                         element = childElement,
                         key = index.toString(),
+                        path = "$path/$index",
                         depth = depth + 1,
                         initialExpandLevel = initialExpandLevel,
+                        state = state,
                         onStringClick = onStringClick
                     )
                 }
@@ -287,3 +345,6 @@ private fun ValueText(primitive: JsonPrimitive, onClick: (() -> Unit)? = null) {
         modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
     )
 }
+
+private fun String.toJsonPointerSegment(): String =
+    replace("~", "~0").replace("/", "~1")

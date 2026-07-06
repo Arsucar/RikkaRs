@@ -45,12 +45,15 @@ internal object SkillPaths {
         skillsRoot: File,
         rootfsPath: String,
         allowedSymlinkRoots: List<File> = emptyList(),
+        mountTarget: String = "/skills",
     ): File? {
         val normalized = rootfsPath.replace('\\', '/').trimEnd('/')
-        if (normalized == "/skills") return null
-        if (!normalized.startsWith("/skills/")) return null
+        val normalizedMountTarget = mountTarget.replace('\\', '/').trimEnd('/')
+        if (!normalizedMountTarget.startsWith("/")) return null
+        if (normalized == normalizedMountTarget) return null
+        if (!normalized.startsWith("$normalizedMountTarget/")) return null
 
-        val relative = normalized.removePrefix("/skills/")
+        val relative = normalized.removePrefix("$normalizedMountTarget/")
         val skillName = relative.substringBefore('/')
         val skillRelativePath = relative.substringAfter('/', missingDelimiterValue = "")
         if (skillRelativePath.isBlank()) return null

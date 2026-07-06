@@ -127,6 +127,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
@@ -134,6 +135,11 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+
+private data class AssistantSkillMounts(
+    val knownMounts: List<WorkspaceKnownMount>,
+    val bindMounts: List<WorkspaceBindMount>,
+)
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -744,8 +750,9 @@ class ChatService(
                     )
                     addAll(
                         createWorkspaceToolsIfReady(
-                            assistant.workspaceId?.toString(),
-                            effectiveWorkspaceCwd,
+                            workspaceId = assistant.workspaceId?.toString(),
+                            assistantId = assistant.id,
+                            cwd = effectiveWorkspaceCwd,
                             readOnly = delegateOnly,
                         )
                     )
@@ -867,6 +874,7 @@ class ChatService(
 
     private suspend fun createWorkspaceToolsIfReady(
         workspaceId: String?,
+        assistantId: Uuid,
         cwd: String? = null,
         readOnly: Boolean = false,
     ): List<Tool> {
@@ -879,6 +887,7 @@ class ChatService(
             )
             return emptyList()
         }
+        val privateSkillMounts = assistantPrivateSkillMounts(assistantId)
         val all = createWorkspaceTools(
             workspaceId = workspaceId,
             workspaceRepository = workspaceRepository,
@@ -889,9 +898,30 @@ class ChatService(
                     source = skillManager.getSkillsDir(),
                     allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
                 )
-            ),
+            ) + privateSkillMounts.knownMounts,
+            extraBindMounts = privateSkillMounts.bindMounts,
         )
         return if (readOnly) all.filter { it.name == "workspace_read_file" } else all
+    }
+
+    private fun assistantPrivateSkillMounts(assistantId: Uuid): AssistantSkillMounts {
+        val assistantSkillsDir = skillManager.getAssistantSkillsDir(assistantId)
+        val skillSharedDir = skillManager.getSkillSharedDir()
+        return AssistantSkillMounts(
+            knownMounts = listOf(
+                WorkspaceKnownMount(
+                    target = "/skills_private",
+                    source = assistantSkillsDir,
+                    allowedSymlinkRoots = listOf(skillSharedDir),
+                )
+            ),
+            bindMounts = listOf(
+                WorkspaceBindMount(
+                    source = assistantSkillsDir,
+                    target = "/skills_private",
+                )
+            ),
+        )
     }
 
     // ---- 检查无效消息 ----
@@ -1914,6 +1944,7 @@ class ChatService(
     ): List<Tool> {
         val workspaceToolsFactory: (me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess) -> List<Tool> = { access ->
             kotlinx.coroutines.runBlocking {
+                val privateSkillMounts = assistantPrivateSkillMounts(assistant.id)
                 createSubagentWorkspaceTools(
                     access = access,
                     profile = profile,
@@ -1926,7 +1957,8 @@ class ChatService(
                             source = skillManager.getSkillsDir(),
                             allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
                         )
-                    ),
+                    ) + privateSkillMounts.knownMounts,
+                    extraBindMounts = privateSkillMounts.bindMounts,
                 )
             }
         }

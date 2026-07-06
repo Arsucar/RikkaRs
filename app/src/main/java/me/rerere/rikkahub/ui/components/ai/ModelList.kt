@@ -34,6 +34,8 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -64,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -96,6 +99,7 @@ import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.effectiveProviderTags
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -186,12 +190,29 @@ fun ModelSelector(
     allowClear: Boolean = false,
     onSelect: (Model) -> Unit
 ) {
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val state = rememberModelListState(
         modelId = modelId,
         providers = providers,
         type = type,
     )
     val model = state.currentModel
+    val recentChatModels = remember(settings.recentChatModels, providers, type) {
+        if (type != ModelType.CHAT) {
+            emptyList()
+        } else {
+            settings.recentChatModels.mapNotNull { modelId ->
+                val recentModel = providers.findModelById(modelId) ?: return@mapNotNull null
+                val provider = recentModel.findProvider(providers = providers, checkOverwrite = false)
+                    ?: return@mapNotNull null
+                if (!provider.enabled || recentModel.type != ModelType.CHAT) return@mapNotNull null
+                recentModel
+            }
+        }
+    }
+    var recentMenuExpanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     if (!onlyIcon) {
         Row(
@@ -235,23 +256,66 @@ fun ModelSelector(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = {
-                    state.open()
-                },
-            ) {
-                if (model != null) {
-                    AutoAIIcon(
-                        modifier = Modifier.size(36.dp),
-                        name = model.modelId,
-                        color = Color.Transparent
-                    )
-                } else {
-                    Icon(
-                        imageVector = HugeIcons.Brain02,
-                        contentDescription = stringResource(R.string.setting_model_page_chat_model),
-                        modifier = Modifier.size(20.dp)
-                    )
+            Box {
+                Box(
+                    modifier = modifier
+                        .size(48.dp)
+                        .combinedClickable(
+                            onClick = { state.open() },
+                            onLongClick = {
+                                if (recentChatModels.isNotEmpty()) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    recentMenuExpanded = true
+                                }
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (model != null) {
+                        AutoAIIcon(
+                            modifier = Modifier.size(36.dp),
+                            name = model.modelId,
+                            color = Color.Transparent
+                        )
+                    } else {
+                        Icon(
+                            imageVector = HugeIcons.Brain02,
+                            contentDescription = stringResource(R.string.setting_model_page_chat_model),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = recentMenuExpanded,
+                    onDismissRequest = { recentMenuExpanded = false },
+                ) {
+                    recentChatModels.forEach { recentModel ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = recentModel.displayName,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (recentModel.id == modelId) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Unspecified
+                                    },
+                                )
+                            },
+                            leadingIcon = {
+                                AutoAIIcon(
+                                    modifier = Modifier.size(24.dp),
+                                    name = recentModel.modelId,
+                                    color = Color.Transparent,
+                                )
+                            },
+                            onClick = {
+                                recentMenuExpanded = false
+                                onSelect(recentModel)
+                            },
+                        )
+                    }
                 }
             }
             if (allowClear && model != null) {
@@ -352,6 +416,7 @@ private fun ColumnScope.ModelList(
         providers,
         modelType,
         selectedModelListTag,
+        searchKeywords,
     ) {
         settings.value.favoriteModels.mapNotNull { modelId ->
             val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
@@ -361,6 +426,7 @@ private fun ColumnScope.ModelList(
                     ?: return@mapNotNull null
             val tag = selectedModelListTag
             if (tag != null && !provider.tags.contains(tag)) return@mapNotNull null
+            if (!modelMatchesSearch(model, provider, searchKeywords)) return@mapNotNull null
             model to provider
         }
     }
@@ -379,14 +445,16 @@ private fun ColumnScope.ModelList(
 
     val searchFilteredModelsByProvider = remember(tagFilteredProviders, modelType, searchKeywords) {
         tagFilteredProviders.associate { provider ->
-            provider.id to provider.models.fastFilter {
-                it.type == modelType && it.displayName.contains(searchKeywords, true)
+            val providerMatches = provider.name.contains(searchKeywords.trim(), ignoreCase = true)
+            provider.id to provider.models.fastFilter { model ->
+                model.type == modelType &&
+                    (providerMatches || modelMatchesSearch(model, provider, searchKeywords))
             }
         }
     }
 
     // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, tagFilteredProviders, typeFilteredModelsByProvider) {
+    val selectedModelPosition = remember(currentModel, favoriteModels, tagFilteredProviders, searchFilteredModelsByProvider) {
         if (currentModel == null) return@remember 0
 
         var position = 0
@@ -414,7 +482,7 @@ private fun ColumnScope.ModelList(
 
         // 在providers中查找
         for (provider in tagFilteredProviders) {
-            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
+            val models = searchFilteredModelsByProvider[provider.id].orEmpty()
             val modelIndex = models.indexOfFirst { it.id == currentModel }
             val isExpanded = providerGroupExpanded[provider.id] != false
             position += 1
@@ -464,8 +532,13 @@ private fun ColumnScope.ModelList(
         if (fromIndex >= 0 && toIndex >= 0 &&
             fromIndex < favoriteModels.size && toIndex < favoriteModels.size
         ) {
+            val fromModelId = favoriteModels[fromIndex].first.id
+            val toModelId = favoriteModels[toIndex].first.id
             val newFavoriteModels = settings.value.favoriteModels.toMutableList().apply {
-                add(toIndex, removeAt(fromIndex))
+                val fromFullIndex = indexOf(fromModelId)
+                val toFullIndex = indexOf(toModelId)
+                if (fromFullIndex < 0 || toFullIndex < 0) return@apply
+                add(toFullIndex.coerceIn(0, size - 1), removeAt(fromFullIndex))
             }
             coroutineScope.launch {
                 settingsStore.update { oldSettings ->
@@ -574,8 +647,14 @@ private fun ColumnScope.ModelList(
         }
     }
 
-    val allTags = remember(providers) {
-        providers.flatMap { it.tags }.distinct()
+    val suggestedProviderTags = stringArrayResource(R.array.provider_suggested_tags).toList()
+    val allTags = remember(
+        settings.value.providers,
+        settings.value.providerTagOrder,
+        settings.value.hiddenProviderTags,
+        suggestedProviderTags,
+    ) {
+        settings.value.effectiveProviderTags(suggestedProviderTags)
     }
     if (allTags.isNotEmpty()) {
         val filterAllDescription = stringResource(R.string.filter_all)
@@ -1097,4 +1176,15 @@ fun ModelAbilityTag(model: Model) {
             }
         }
     }
+}
+
+private fun modelMatchesSearch(
+    model: Model,
+    provider: ProviderSetting,
+    searchKeywords: String,
+): Boolean {
+    val keyword = searchKeywords.trim()
+    return keyword.isBlank() ||
+        model.displayName.contains(keyword, ignoreCase = true) ||
+        provider.name.contains(keyword, ignoreCase = true)
 }

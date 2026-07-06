@@ -66,6 +66,7 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+const val RECENT_CHAT_MODELS_LIMIT = 8
 const val IMAGE_GALLERY_MIN_COLUMNS = 1
 const val IMAGE_GALLERY_MAX_COLUMNS = 6
 
@@ -100,6 +101,7 @@ class SettingsStore(
         // 模型选择
         val ENABLE_WEB_SEARCH = booleanPreferencesKey("enable_web_search")
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
+        val RECENT_CHAT_MODELS = stringPreferencesKey("recent_chat_models")
         val SELECT_MODEL = stringPreferencesKey("chat_model")
         val FAST_MODEL = stringPreferencesKey("fast_model")
         val TITLE_MODEL = stringPreferencesKey("title_model")
@@ -118,6 +120,8 @@ class SettingsStore(
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
+        val PROVIDER_TAG_ORDER = stringPreferencesKey("provider_tag_order")
+        val HIDDEN_PROVIDER_TAGS = stringPreferencesKey("hidden_provider_tags")
 
         // 助手
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
@@ -193,6 +197,9 @@ class SettingsStore(
                 favoriteModels = preferences[FAVORITE_MODELS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                recentChatModels = preferences[RECENT_CHAT_MODELS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
                 chatModelId = preferences[SELECT_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
                 fastModelId = preferences[FAST_MODEL]?.let { Uuid.parse(it) }
@@ -219,6 +226,12 @@ class SettingsStore(
                 enableMemoryTable = preferences[ENABLE_MEMORY_TABLE] == true,
                 memoryTableAutoSyncEnabled = false,
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
+                providerTagOrder = preferences[PROVIDER_TAG_ORDER]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                hiddenProviderTags = preferences[HIDDEN_PROVIDER_TAGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
@@ -379,6 +392,15 @@ class SettingsStore(
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 },
+                recentChatModels = settings.recentChatModels.filter { uuid ->
+                    settings.providers.flatMap { it.models }.any { it.id == uuid }
+                }.distinct().take(RECENT_CHAT_MODELS_LIMIT),
+                providerTagOrder = settings.providerTagOrder.map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct(),
+                hiddenProviderTags = settings.hiddenProviderTags.map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct(),
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
@@ -440,6 +462,7 @@ class SettingsStore(
 
             preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
+            preferences[RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
             preferences[SELECT_MODEL] = settings.chatModelId.toString()
             preferences[FAST_MODEL] = settings.fastModelId.toString()
             settings.titleModelId?.let {
@@ -461,6 +484,8 @@ class SettingsStore(
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[PROVIDER_TAG_ORDER] = JsonInstant.encodeToString(settings.providerTagOrder)
+            preferences[HIDDEN_PROVIDER_TAGS] = JsonInstant.encodeToString(settings.hiddenProviderTags)
 
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
@@ -592,6 +617,7 @@ data class Settings(
     val displaySetting: DisplaySetting = DisplaySetting(),
     val enableWebSearch: Boolean = false,
     val favoriteModels: List<Uuid> = emptyList(),
+    val recentChatModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
     val fastModelId: Uuid = Uuid.random(),
     val titleModelId: Uuid? = null,
@@ -609,6 +635,8 @@ data class Settings(
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
+    val providerTagOrder: List<String> = emptyList(),
+    val hiddenProviderTags: List<String> = emptyList(),
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
     val enableMemoryTable: Boolean = false,
@@ -647,6 +675,59 @@ data class Settings(
         fun dummy() = Settings(init = true)
     }
 }
+
+fun Settings.withRecentChatModel(modelId: Uuid): Settings = copy(
+    recentChatModels = (listOf(modelId) + recentChatModels.filter { it != modelId })
+        .take(RECENT_CHAT_MODELS_LIMIT)
+)
+
+fun Settings.effectiveProviderTags(suggestedTags: List<String>): List<String> {
+    val usedTags = providers.flatMap { it.tags }.mapNotNull { it.normalizedProviderTagOrNull() }
+    val hiddenTags = hiddenProviderTags.mapNotNull { it.normalizedProviderTagOrNull() }.toSet()
+    return (providerTagOrder + suggestedTags + usedTags)
+        .mapNotNull { it.normalizedProviderTagOrNull() }
+        .filter { tag -> tag in usedTags || tag !in hiddenTags }
+        .distinct()
+}
+
+fun Settings.renameProviderTag(oldTag: String, newTag: String, suggestedTags: List<String>): Settings {
+    val old = oldTag.normalizedProviderTagOrNull() ?: return this
+    val new = newTag.normalizedProviderTagOrNull() ?: return this
+    if (old == new) return this
+    val renamedProviders = providers.map { provider ->
+        provider.copyProvider(
+            tags = provider.tags.map { tag ->
+                if (tag.normalizedProviderTagOrNull() == old) new else tag
+            }.mapNotNull { it.normalizedProviderTagOrNull() }.distinct()
+        )
+    }
+    val currentTags = copy(providers = renamedProviders).effectiveProviderTags(suggestedTags)
+    return copy(
+        providers = renamedProviders,
+        providerTagOrder = currentTags.map { if (it == old) new else it }.distinct(),
+        hiddenProviderTags = (hiddenProviderTags + old).filter { it != new }.distinct(),
+    )
+}
+
+fun Settings.deleteProviderTag(tag: String): Settings {
+    val normalized = tag.normalizedProviderTagOrNull() ?: return this
+    return copy(
+        providers = providers.map { provider ->
+            provider.copyProvider(
+                tags = provider.tags.filter { it.normalizedProviderTagOrNull() != normalized }
+            )
+        },
+        providerTagOrder = providerTagOrder.filter { it.normalizedProviderTagOrNull() != normalized },
+        hiddenProviderTags = (hiddenProviderTags + normalized).distinct(),
+    )
+}
+
+fun Settings.reorderProviderTags(tags: List<String>): Settings = copy(
+    providerTagOrder = tags.mapNotNull { it.normalizedProviderTagOrNull() }.distinct()
+)
+
+private fun String.normalizedProviderTagOrNull(): String? =
+    trim().takeIf { it.isNotBlank() }
 
 internal fun migrateSubagentBuiltinsIfNeeded(settings: Settings): Settings {
     if (settings.init || settings.subagentBuiltinMigrated) {

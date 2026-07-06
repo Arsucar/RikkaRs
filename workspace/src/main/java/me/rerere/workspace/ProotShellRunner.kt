@@ -69,7 +69,7 @@ class ProotShellRunner(
             rootfsDir = context.linuxDir,
             workingDirectory = context.prootCwd(),
             workspaceFilesDir = context.filesDir,
-            bindMounts = extraBindMounts,
+            bindMounts = extraBindMounts + context.extraBindMounts,
         )
 
         command += listOf(

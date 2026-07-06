@@ -28,6 +28,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.withRecentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
@@ -146,9 +147,11 @@ class ChatVM(
     // 设置聊天模型
     fun setChatModel(model: Model) {
         viewModelScope.launch {
-            chatService.saveConversation(_conversationId, conversation.value.copy(chatModelId = model.id.takeIf {
-                settings.value.findModelById(it) != null
-            }))
+            val modelId = model.id.takeIf { settings.value.findModelById(it) != null }
+            chatService.saveConversation(_conversationId, conversation.value.copy(chatModelId = modelId))
+            if (modelId != null) {
+                settingsStore.update { it.withRecentChatModel(modelId) }
+            }
         }
     }
 

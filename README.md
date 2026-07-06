@@ -1,14 +1,12 @@
 <div align="center">
-  <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub</h1>
+  <img src="docs/icon.png" alt="RikkaRs App Icon" width="100" />
+  <h1>RikkaRs</h1>
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
 [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
 
-A native Android LLM chat client that supports switching between different providers for
-conversations 🤖💬
-
-Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
+A native Android LLM chat client forked from RikkaHub, tuned for agent workflows,
+local workspaces, and multi-provider conversations.
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
@@ -21,24 +19,44 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 ## About This Fork
 
 This repository is a downstream fork of [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
-It tracks upstream while shipping a more agent-oriented Android build named **RikkaRs**.
+It tracks upstream while publishing an independent Android build named **RikkaRs** from
+[Arsucar/rikkahub](https://github.com/Arsucar/rikkahub).
 
-User-visible differences from upstream include:
+RikkaRs is not the official upstream build. Use upstream RikkaHub if you need upstream release
+channels, package identity, or support.
 
-- **Separate app identity**: the installed app is shown as RikkaRs with fork-specific icons and releases.
-- **Agent-first workflows**: richer subagent/delegation flows, slash skill completion, per-assistant working directories, and clearer tool-call transcripts.
-- **Workspace access improvements**: workspace project files can be stored in Android app-specific external storage so they are easier to edit from file managers, USB, or a PC.
-- **Local diagnostic tools**: request/text logs can be viewed, exported with sensitive data redacted, and shared with AI tools when enabled.
-- **More device-aware tools**: optional screen-time and calendar tools let assistants use local device context after the required Android permissions are granted.
-- **Provider import conveniences**: supports importing NewAPI channel JSON and keeps QR-based provider import/export.
-- **Safer defaults for remote access**: the embedded web server defaults to localhost-only, with clearer warnings before exposing it on LAN without JWT.
+## RikkaHub vs RikkaRs
 
-This fork is not the official upstream build. For upstream behavior and support, use
-[rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
+| Area | Upstream RikkaHub (`rikkahub/rikkahub`) | This fork RikkaRs (`Arsucar/rikkahub`) |
+|------|-----------------------------------------|----------------------------------------|
+| Release package | `me.rerere.rikkahub` | `me.arsucar.rikka`; debug uses `me.arsucar.rikka.debug` |
+| Kotlin namespace | `me.rerere.rikkahub` | Keeps `me.rerere.rikkahub` to reduce upstream merge friction |
+| App name | RikkaHub | RikkaRs |
+| Release channel | Website and Google Play | GitHub Releases from this fork |
+| Firebase | Upstream may use Firebase services | Firebase removed; no `google-services.json` needed |
+| CI and releases | Upstream workflow | `Release APK (arm64)` only; arm64 APK, no Firebase, pnpm-backed web build |
+| Subagents | Upstream agent/tool behavior | Parallel, queued, delegated subagents with depth/concurrency controls, transcript cards, cancellation, and `finish_work` for subagents |
+| Skills | Global skill support | Global and assistant-private Skills, private copy management, safer file scope, slash completion, and richer directory cards |
+| Memory | ChatGPT-like memory | Assistant/global memory scopes plus disabled-by-default memory tables with templates, documents, and scope control |
+| Workspace | Proot-based workspace | External app-specific workspace storage, full-screen text editing, Markdown read-only preview, dotfile/config detection, and `/tmp` write convenience |
+| NewAPI import | Provider QR/import flow | NewAPI `newapi_channel_conn` JSON import alongside QR/provider share payloads |
+| Logs and `get_logs` | App logging UI | Logs page export, long-press selective export, AI `get_logs` tool, truncation, and tool-friendly summaries |
+| Redacted export | Not a fork focus | Authorization, API keys, cookies, URL secrets, and request-body secrets are redacted for export and `get_logs` |
+| Conversation archive | Upstream-supported after merge | Archive support retained with archive-aware search/list behavior |
+| Conversation folders | Upstream-supported after merge | Per-assistant folders retained for grouping conversations in the drawer |
+| Web access | Embedded web service | Defaults to localhost-only and warns before LAN exposure without JWT |
+| Screen time and calendar | Not a core upstream fork focus | Optional local tools for screen usage stats and querying/creating calendar events after permission grants |
+| Provider tags | Basic provider settings | `provider.tags` plus provider-setting tag filtering |
+| Model picker | Standard model selection | Provider-group collapse, favorite section collapse, expand/collapse all, provider tag filtering, and favorite model grouping |
+| Hidden context | Delete/compact behavior | Hide messages as soft deletion; hidden nodes stay visible as excluded context, and compression hides instead of hard-deleting old messages |
+| Conversation model override | Assistant model defaults | Per-conversation model override with one-tap clear; new conversations do not inherit old overrides |
+| Favorites | Message/favorite foundation | Model favorites, image-generation favorites, favorite collections, and grouped/collapsible favorite views |
+| Web localhost + JWT | Configurable web auth | Localhost default plus explicit JWT safety prompts for remote access |
+| Engineering notes | Upstream conventions | See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md) for fork package, CI, release, and Firebase decisions |
 
 ## 🚀 Download
 
-🔗 [Download this fork from GitHub Releases](https://github.com/Arsucar/rikkahub/releases) (RikkaRs)
+🔗 [Download RikkaRs from GitHub Releases](https://github.com/Arsucar/rikkahub/releases)
 
 🔗 Upstream official downloads: [Website](https://rikka-ai.com/download) / [Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
@@ -51,22 +69,25 @@ This fork is not the official upstream build. For upstream behavior and support,
 
 ## ✨ Features
 
-- 🎨 Material You Design and 🌙 Dark mode
-- 📦 Workspace: a proot-based Linux agent environment
-- 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
-- 🖼️ Multimodal input support (Image, Text Documentation, PDF, Docx)
-- 🖥️ Web access for multi-platform use
-- 🛠️ MCP support
-- 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
-- 🪾 Message Branching
-- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, etc.)
-- 🧩 Prompt variables (model name, time, etc.)
-- 🤳 QR code export and import for providers
-- 🤖 Agent customization
-- 🧠 ChatGPT-like memory feature
-- 📝 AI Translation
-- 🌐 Custom HTTP request headers and request bodies
-- 💌 Silly Tavern character card import
+This list is aligned with this fork's CHANGELOG through **v2.3.19**.
+
+- 🎨 Material You design, predictive back, and dark mode
+- 🔄 Multiple provider support with custom API hosts, URLs, headers, request bodies, and model lists
+- 🧩 Provider tags, provider tag filtering, NewAPI channel JSON import, and QR provider import/export
+- ⭐ Collapsible model picker with provider groups, favorite models, favorite section, expand/collapse all, and tag filters
+- 🖼️ Multimodal chat input for images, documents, PDF, DOCX, and common text files
+- 📝 Markdown rendering with code highlighting, LaTeX formulas, tables, Mermaid, bold fixes, and rendered read-only Markdown workspace preview
+- 🪾 Message branching, message hiding, hidden-context compression, archive, folders, and per-conversation model override
+- 📦 Proot workspace with shell/file tools, external workspace storage, full-screen text editor, safer shell policy, and clearer shell transcripts
+- 🤖 Agent customization plus subagents with delegation, parallel/queued execution, limits, transcript preview, cancellation, and `finish_work`
+- 🛠️ MCP support including OAuth 2.1, token refresh, and reconnect behavior
+- 🧠 Memory with assistant/global scopes and disabled-by-default memory tables
+- 🧠 Skills library with slash completion, global/private copies, safer file access, and improved Skills directory cards
+- 🔍 Search capabilities with Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, and search-result images
+- 🖥️ Embedded web access with localhost-only default and JWT warnings for LAN exposure
+- 📊 Local diagnostics: Logs page, selective redacted export, and AI-readable `get_logs`
+- 📱 Optional local tools for screen time and calendar events after Android permissions are granted
+- 📝 AI translation, prompt variables, SillyTavern character card import, assistant avatar crop, and image-generation favorites/collections
 
 ## ✨ Contributing
 
@@ -88,9 +109,9 @@ Technology stack documentation:
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
 
 > [!TIP]
-> **Rikka-arsucar fork:** Firebase has been removed; you do **not** need `google-services.json`. See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md).
+> **RikkaRs fork:** Firebase has been removed; you do **not** need `google-services.json`. See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md).
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > The following PRs will be rejected:
 > 1. Translation related changes, such as adding new languages or updating existing translations
 > 2. Adding new features, this project is opinionated and will not accept pull requests for new features
@@ -103,9 +124,9 @@ Technology stack documentation:
 
 ## ⭐ Star History
 
-If you like this project, please give it a star ⭐
+If you like RikkaRs, please give this fork a star ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?repos=re-ovo/rikkahub&type=Date)](https://star-history.com/#re-ovo/rikkahub&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Arsucar/rikkahub&type=Date)](https://star-history.com/#Arsucar/rikkahub&Date)
 
 ## 📄 License
 

@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
@@ -46,6 +47,7 @@ suspend fun createWorkspaceTools(
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
     knownMounts: List<WorkspaceKnownMount> = emptyList(),
+    extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -55,9 +57,9 @@ suspend fun createWorkspaceTools(
 
     return listOf(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts),
-        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository, extraBindMounts),
+        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts, extraBindMounts),
+        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd, extraBindMounts),
     )
 }
 
@@ -75,7 +77,7 @@ private fun createReadFileTool(
     name = "workspace_read_file",
     description = """
         Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
-        Use /workspace for the workspace files area. Use /skills for global skill files.
+        Use /workspace for the workspace files area. Use /skills for global skill files and /skills_private for this assistant's private skill files.
         Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp).
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -109,6 +111,7 @@ private fun createWriteFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    extraBindMounts: List<WorkspaceBindMount>,
 ) = Tool(
     name = "workspace_write_file",
     description = """
@@ -137,7 +140,7 @@ private fun createWriteFileTool(
         val path = params.absolutePath("path")
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
-        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite)
+        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite, extraBindMounts)
         listOf(UIMessagePart.Text(entry.toJson().toString()))
     },
 )
@@ -146,6 +149,8 @@ private fun createEditFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    knownMounts: List<WorkspaceKnownMount>,
+    extraBindMounts: List<WorkspaceBindMount>,
 ) = Tool(
     name = "workspace_edit_file",
     description = """
@@ -183,14 +188,20 @@ private fun createEditFileTool(
         val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
         require(oldText.isNotEmpty()) { "old_text must not be empty" }
 
-        val original = workspaceRepository.readTextInRootfs(workspaceId, path)
+        val original = workspaceRepository.readTextInRootfs(workspaceId, path, knownMounts)
         // 逐级尝试 exact -> line_trimmed -> block_anchor 替换器, 见 TextReplacers.kt
         val result = try {
             replaceText(original, oldText, newText, replaceAll)
         } catch (e: IllegalArgumentException) {
             error("${e.message} (path: $path)")
         }
-        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, result.updated, overwrite = true)
+        val entry = workspaceRepository.writeTextInRootfs(
+            workspaceId = workspaceId,
+            path = path,
+            text = result.updated,
+            overwrite = true,
+            extraBindMounts = extraBindMounts,
+        )
         val diff = generateUnifiedDiff(original, result.updated, entry.path)
         listOf(
             UIMessagePart.Text(
@@ -213,10 +224,12 @@ private fun createShellTool(
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     defaultCwd: String? = null,
+    extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ) = Tool(
     name = "workspace_shell",
     description = buildString {
         append("Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace. ")
+        append("Global skills are mounted at /skills and this assistant's private skills at /skills_private. ")
         append("Use cwd for a path relative to the workspace files root. ")
         if (!defaultCwd.isNullOrBlank()) {
             append("Defaults to '$defaultCwd'. ")
@@ -262,7 +275,13 @@ private fun createShellTool(
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+        val result = workspaceRepository.executeCommand(
+            id = workspaceId,
+            command = command,
+            cwd = cwd,
+            timeoutMillis = timeoutMillis,
+            extraBindMounts = extraBindMounts,
+        )
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
@@ -390,6 +409,7 @@ private suspend fun WorkspaceRepository.writeTextInRootfs(
     path: String,
     text: String,
     overwrite: Boolean,
+    extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): WorkspaceFileEntry {
     val pathArg = path.shellQuote()
     val result = runRootfsCommand(
@@ -410,6 +430,7 @@ private suspend fun WorkspaceRepository.writeTextInRootfs(
             ${statEntryCommand(path)}
         """.trimIndent(),
         stdin = text.toByteArray(Charsets.UTF_8),
+        extraBindMounts = extraBindMounts,
     )
     return result.stdout.parseRootfsEntry()
 }
@@ -419,12 +440,14 @@ private suspend fun WorkspaceRepository.runRootfsCommand(
     action: String,
     command: String,
     stdin: ByteArray? = null,
+    extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): WorkspaceCommandResult {
     val result = executeCommand(
         id = workspaceId,
         command = command,
         timeoutMillis = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
         stdin = stdin,
+        extraBindMounts = extraBindMounts,
     )
     if (result.timedOut) {
         error("$action timed out")
@@ -507,9 +530,9 @@ private fun JsonObjectBuilder.putPathProperty(required: Boolean) {
         put(
             "description",
             if (required) {
-                "Absolute path inside Rootfs. Use /workspace for the workspace files area."
+                "Absolute path inside Rootfs. Use /workspace for the workspace files area, /skills for global skills, and /skills_private for assistant-private skills."
             } else {
-                "Optional absolute path inside Rootfs. Use /workspace for the workspace files area."
+                "Optional absolute path inside Rootfs. Use /workspace for the workspace files area, /skills for global skills, and /skills_private for assistant-private skills."
             }
         )
     })

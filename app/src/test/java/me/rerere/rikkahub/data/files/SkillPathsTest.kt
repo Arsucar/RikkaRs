@@ -117,6 +117,37 @@ class SkillPathsTest {
     }
 
     @Test
+    fun `resolve mounted skill file maps assistant private skills path`() {
+        val root = Files.createTempDirectory("assistant-skills-root").toFile()
+        val skillDir = File(root, "foo").apply { mkdirs() }
+        val skillFile = File(skillDir, "SKILL.md").apply { writeText("body") }
+
+        try {
+            val resolved = SkillPaths.resolveMountedSkillFile(
+                skillsRoot = root,
+                rootfsPath = "/skills_private/foo/SKILL.md",
+                mountTarget = "/skills_private",
+            )
+            val globalPath = SkillPaths.resolveMountedSkillFile(
+                skillsRoot = root,
+                rootfsPath = "/skills/foo/SKILL.md",
+                mountTarget = "/skills_private",
+            )
+            val traversal = SkillPaths.resolveMountedSkillFile(
+                skillsRoot = root,
+                rootfsPath = "/skills_private/foo/../bar/SKILL.md",
+                mountTarget = "/skills_private",
+            )
+
+            assertEquals(skillFile.canonicalFile, resolved)
+            assertNull(globalPath)
+            assertNull(traversal)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `skill visibility allows global and owner only`() {
         val owner = Uuid.random()
         val other = Uuid.random()

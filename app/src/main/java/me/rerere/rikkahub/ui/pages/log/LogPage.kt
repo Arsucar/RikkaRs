@@ -83,9 +83,11 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import org.koin.compose.koinInject
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.JsonTreeState
 import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.Tooltip
+import me.rerere.rikkahub.ui.components.ui.rememberJsonTreeState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
@@ -331,6 +333,7 @@ private fun UnifiedLogList(
 
     selectedLog?.let { log ->
         val detailListState = rememberLazyListState()
+        val requestBodyJsonTreeState = rememberJsonTreeState(log.id)
         val sheetSnackbarHostState = remember { SnackbarHostState() }
         ModalBottomSheet(
             onDismissRequest = {
@@ -349,6 +352,7 @@ private fun UnifiedLogList(
                     RequestLogSheetInner.Detail -> RequestLogDetail(
                         log = log,
                         listState = detailListState,
+                        requestBodyJsonTreeState = requestBodyJsonTreeState,
                         onStringClick = { value ->
                             sheetInner = RequestLogSheetInner.Copy(value)
                         },
@@ -547,6 +551,7 @@ private fun RequestLogCard(
 private fun RequestLogDetail(
     log: LogEntry.RequestLog,
     listState: LazyListState,
+    requestBodyJsonTreeState: JsonTreeState,
     onStringClick: (String) -> Unit = {},
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
@@ -631,6 +636,7 @@ private fun RequestLogDetail(
                             json = jsonElement,
                             modifier = Modifier.padding(top = 4.dp),
                             initialExpandLevel = 2,
+                            state = requestBodyJsonTreeState,
                             onStringClick = onStringClick,
                         )
                     } else {

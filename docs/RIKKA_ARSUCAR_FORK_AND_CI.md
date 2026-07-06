@@ -517,6 +517,10 @@ jobs:
 
 - 仅改 **applicationId** 时，合并 `upstream/master` 仍以应用代码为主；注意勿把上游重新引入的 Firebase 插件/依赖 blindly 合并回来，需保持本 fork「无 Firebase」策略。
 - `gradle/libs.versions.toml` 中 Firebase / google-services catalog 条目**已在 fork 删除**；merge 上游时勿盲目恢复，除非明确要重新接入 Firebase（本 fork 不需要）。
+- 已知冲突锚点：上游 commit `0edcd81bccbf3287ebd59b5baf7822f457a6e835`
+  将 `CompressContextDialog.kt` 的保留消息数改为纯手动输入；本 fork 合并时 **以 fork 为准**，
+  保留 `CustomNumberSelector` 的 `0/16/32/64 + 自定义` 分段选数。冲突可 `checkout --ours`
+  或手工保留 fork 版本，合并后回归压缩上下文对话框的目标 token、保留条数、确认/取消与加载态。
 - Trellis 文件在 fork 公开无妨，但 **upstream PR diff 不要包含** `.trellis/`、`.codex/` 等（见 `AGENTS.md`）。
 - Deep link `rikkahub://` scheme 与上游相同**不阻止共存**（按包名区分应用）；若日后要做品牌隔离可再改 scheme。
 
