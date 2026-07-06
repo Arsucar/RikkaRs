@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -13,19 +15,25 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.pruneExtensionIds
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillFileImportReader
 import kotlin.uuid.Uuid
 
 private const val TAG = "AssistantDetailVM"
@@ -34,6 +42,7 @@ class AssistantDetailVM(
     private val id: String,
     private val settingsStore: SettingsStore,
     private val memoryRepository: MemoryRepository,
+    private val memoryTableRepository: MemoryTableRepository,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
@@ -43,10 +52,11 @@ class AssistantDetailVM(
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
 
+    private val _assistantPrivateSkills = MutableStateFlow<List<SkillMetadata>>(emptyList())
+    val assistantPrivateSkills = _assistantPrivateSkills.asStateFlow()
+
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            _skills.value = skillManager.listSkills()
-        }
+        reloadSkills()
     }
 
     val settings: StateFlow<Settings> =
@@ -68,13 +78,21 @@ class AssistantDetailVM(
         )
 
     val memories = assistant
-        .flatMapLatest { currentAssistant ->
-            if (currentAssistant.useGlobalMemory) {
-                memoryRepository.getGlobalMemoriesFlow()
-            } else {
-                memoryRepository.getMemoriesOfAssistantFlow(assistantId.toString())
-            }
+        .flatMapLatest {
+            memoryRepository.getEffectiveMemoriesFlow(assistantId.toString())
         }
+        .stateIn(
+            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+        )
+
+    val memoryTableTemplates = memoryTableRepository
+        .getTemplatesFlow()
+        .stateIn(
+            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+        )
+
+    val memoryTableDocuments = memoryTableRepository
+        .getEffectiveDocumentsFlow(assistantId.toString())
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
@@ -180,29 +198,121 @@ class AssistantDetailVM(
         }
     }
 
+    fun reloadSkills() {
+        viewModelScope.launch(Dispatchers.IO) {
+            loadSkillsNow()
+        }
+    }
+
+    private fun loadSkillsNow() {
+        _skills.value = skillManager.listSkillsForAssistant(assistantId)
+        _assistantPrivateSkills.value = skillManager.listAssistantSkills(assistantId)
+    }
+
+    fun saveAssistantSkill(name: String, content: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = skillManager.saveAssistantSkill(assistantId, name, content)
+            loadSkillsNow()
+            withContext(Dispatchers.Main) {
+                onResult(result != null)
+            }
+        }
+    }
+
+    fun importAssistantSkillFromFile(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val fileName = FileUtils.getFileNameFromUri(appContext, uri).orEmpty()
+                val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: run {
+                        withContext(Dispatchers.Main) { onResult(false, "无法读取文件") }
+                        return@launch
+                    }
+
+                val importedNames = SkillFileImportReader.read(fileName, bytes).map { bundle ->
+                    val saved = skillManager.saveAssistantSkillFileBytesAtomically(
+                        assistantId = assistantId,
+                        skillName = bundle.name,
+                        files = bundle.files,
+                    )
+                    if (!saved) {
+                        error("保存失败：${bundle.name}")
+                    }
+                    bundle.name
+                }.distinct()
+
+                loadSkillsNow()
+                withContext(Dispatchers.Main) {
+                    onResult(true, importedNames.joinToString())
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
+            }
+        }
+    }
+
+    fun deleteAssistantSkill(name: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            skillManager.deleteAssistantSkill(assistantId, name)
+            loadSkillsNow()
+        }
+    }
+
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            val memoryAssistantId = if (assistant.value.useGlobalMemory) {
-                MemoryRepository.GLOBAL_MEMORY_ID
-            } else {
-                assistantId.toString()
-            }
             memoryRepository.addMemory(
-                assistantId = memoryAssistantId,
-                content = memory.content
+                assistantId = assistantId.toString(),
+                content = memory.content,
+                scope = memory.scope,
             )
         }
     }
 
     fun updateMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            memoryRepository.updateContent(id = memory.id, content = memory.content)
+            memoryRepository.updateMemory(
+                id = memory.id,
+                content = memory.content,
+                scope = memory.scope,
+                assistantId = assistantId.toString(),
+            )
         }
     }
 
     fun deleteMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             memoryRepository.deleteMemory(id = memory.id)
+        }
+    }
+
+    fun updateSettings(settings: Settings) {
+        viewModelScope.launch {
+            settingsStore.update(settings)
+        }
+    }
+
+    fun upsertMemoryTableTemplate(template: MemoryTableTemplate) {
+        viewModelScope.launch {
+            memoryTableRepository.upsertTemplate(template)
+        }
+    }
+
+    fun deleteMemoryTableTemplate(template: MemoryTableTemplate) {
+        viewModelScope.launch {
+            memoryTableRepository.deleteTemplate(template.id)
+        }
+    }
+
+    fun upsertMemoryTableDocument(document: MemoryTableDocument) {
+        viewModelScope.launch {
+            memoryTableRepository.upsertDocument(document)
+        }
+    }
+
+    fun deleteMemoryTableDocument(document: MemoryTableDocument) {
+        viewModelScope.launch {
+            memoryTableRepository.deleteDocument(document.id)
         }
     }
 

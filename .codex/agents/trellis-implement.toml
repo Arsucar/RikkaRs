@@ -69,6 +69,7 @@ Rules:
 - Keep changes focused on the requested scope.
 - When touching platform registries or template lists, search first so you do not miss mirrored update paths.
 - If you modify `.trellis/scripts/`, keep `packages/cli/src/templates/trellis/scripts/` in sync.
+- Do not run Gradle compile/test/lint. The only exception is when the main session explicitly designates you as the final check agent, which should be rare; then every Gradle command must include `--no-daemon`.
 - Do not make destructive git changes unless explicitly asked.
 
 Before finishing, summarize:

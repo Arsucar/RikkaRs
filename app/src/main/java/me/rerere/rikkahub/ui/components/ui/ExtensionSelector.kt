@@ -50,10 +50,11 @@ fun ExtensionSelector(
     val skillManager: SkillManager = koinInject()
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(assistant.id) {
         // 打开扩展面板时清理运行时被删除的技能（残留的 enabledSkills 引用），
-        // prune 顺带返回现存技能列表，避免重复读盘
-        skills = skillManager.pruneOrphanedEnabledSkills()
+        // 展示列表必须包含当前助手的私有技能，和 use_skill / slash completion 保持一致。
+        skillManager.pruneOrphanedEnabledSkills()
+        skills = skillManager.listSkillsForAssistant(assistant.id)
     }
 
     val useConversationInjections =

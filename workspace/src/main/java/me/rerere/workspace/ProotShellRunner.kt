@@ -15,8 +15,6 @@ class ProotShellRunner(
     private val nativeLibraryDir: File,
     private val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     private val patcher: RootfsPatcher = RootfsPatcher(),
-    // Keep disabled for normal workspace shells: Git finalizes pack files with
-    // hard-link/rename flows that --link2symlink corrupts on bind-mounted /workspace.
     private val emulateHardLinksWithSymlinks: Boolean = false,
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
@@ -64,34 +62,15 @@ class ProotShellRunner(
         context: WorkspaceShellContext,
         proot: File,
     ): List<String> {
-        val command = mutableListOf(
-            proot.absolutePath,
-            "--root-id",
-            "--kill-on-exit",
-            "-r",
-            context.linuxDir.absolutePath,
-            "-w",
-            context.prootCwd(),
-            "-b",
-            "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
+        val command = mutableListOf(proot.absolutePath)
+        command += WorkspaceProotCommandBuilder(
+            emulateHardLinksWithSymlinks = emulateHardLinksWithSymlinks,
+        ).buildArgs(
+            rootfsDir = context.linuxDir,
+            workingDirectory = context.prootCwd(),
+            workspaceFilesDir = context.filesDir,
+            bindMounts = extraBindMounts,
         )
-        if (emulateHardLinksWithSymlinks) {
-            command.add(2, "--link2symlink")
-        }
-
-        extraBindMounts.forEach { mount ->
-            if (mount.source.exists()) {
-                command += "-b"
-                command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
-            }
-        }
-
-        listOf("/dev", "/proc", "/sys").forEach { path ->
-            if (File(path).exists()) {
-                command += "-b"
-                command += path
-            }
-        }
 
         command += listOf(
             "/usr/bin/env",
@@ -128,6 +107,6 @@ class ProotShellRunner(
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
-        private const val WORKSPACE_DIR = "/workspace"
+        private val WORKSPACE_DIR = WorkspaceProotCommandBuilder.WORKSPACE_DIR
     }
 }

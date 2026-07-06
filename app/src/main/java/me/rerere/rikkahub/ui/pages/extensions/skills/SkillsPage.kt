@@ -367,7 +367,7 @@ private fun SkillImportSheetItem(
 }
 
 @Composable
-private fun AddSkillDialog(
+internal fun AddSkillDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, content: String) -> Unit,
 ) {

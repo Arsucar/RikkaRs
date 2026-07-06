@@ -78,7 +78,7 @@
   <string name="assistant_page_delete_header">刪除 Header</string>
   <string name="assistant_page_enter_image_url">輸入圖片URL</string>
   <string name="assistant_page_global_memory">全域記憶體</string>
-  <string name="assistant_page_global_memory_desc">使用全域共享記憶體，而非助理隔離記憶體。啟用後，所有助理將共用同一份記憶體儲存空間</string>
+  <string name="assistant_page_global_memory_desc">新建記憶預設設為全域；既有記憶可逐條切換作用域</string>
   <string name="assistant_page_header_name">Header 名稱</string>
   <string name="assistant_page_header_value">Header 值</string>
   <string name="assistant_page_image_url">圖片URL</string>
@@ -1530,4 +1530,27 @@
   <string name="chat_page_delete_folder_confirm">刪除資料夾「%1$s」？資料夾內的對話不會被刪除，只會從資料夾中移除。</string>
   <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
   <string name="workspace_storage_git_warning">應用程式外部儲存透過工作區 Shell 執行 Git pack 寫入並不可靠，git clone、fetch、pull 可能會失敗。Git 使用量較高的工作區請使用應用程式私有儲存。</string>
+  <string name="common_view">檢視</string>
+  <string name="assistant_page_memory_table_auto_sync_desc">目前階段版本未啟用背景自動同步。啟用記憶表格後，可使用手動編輯或聊天工具更新表格文件。</string>
+  <string name="assistant_page_memory_table_conversation_scope_note">會話範圍的表格文件由聊天工具在目前會話內建立，無法直接在此助手頁面管理。</string>
+  <string name="file_error_too_large_to_view">檔案過大，無法檢視：%1$s / %2$s</string>
+  <string name="file_error_read_failed">讀取檔案失敗</string>
+  <string name="file_error_save_failed">儲存檔案失敗</string>
+  <string name="assistant_skills_available_section">可用 Skills</string>
+  <string name="assistant_skills_available_section_desc">全域 Skills 加上目前助手的私有 Skills；同名時私有 Skill 優先。</string>
+  <string name="skill_detail_page_global_skill_title">全域 Skill</string>
+  <string name="skill_detail_page_global_skill_desc">此 Skill 儲存在全域位置。在此編輯檔案會修改共用副本，啟用它的助手都會看到。</string>
+  <string name="skill_detail_page_private_copy_desc">選擇一個助手，為其建立或管理帶有不同指令或支援檔案的助手私有副本。</string>
+  <string name="skill_detail_page_no_assistants">沒有可用的助手</string>
+  <string name="skill_detail_page_private_copy_exists">此助手已擁有此 Skill 的私有副本。</string>
+  <string name="skill_detail_page_private_copy_not_created">此助手尚無私有副本。</string>
+  <string name="skill_detail_page_manage_assistant_skills">管理助手 Skills</string>
+  <string name="skill_detail_page_copy_to_assistant">複製到助手</string>
+  <string name="skill_detail_page_private_copy_success">已為 %s 複製私有 Skill</string>
+  <string name="skill_detail_page_private_copy_failed">複製失敗</string>
+  <string name="skill_detail_page_assistant_private_section">助手私有副本</string>
+  <string name="skill_detail_page_assistant_private_desc">為某個助手建立私有副本。同名私有 Skill 會在該助手中覆蓋全域 Skill。</string>
+  <string name="skill_detail_page_select_assistant">選擇助手</string>
+  <string name="skill_detail_page_copy_success">已建立並啟用私有副本</string>
+  <string name="skill_detail_page_copy_failed">建立私有副本失敗</string>
 </resources>

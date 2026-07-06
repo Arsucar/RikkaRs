@@ -55,6 +55,7 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.model.MemoryScope
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
@@ -156,18 +157,24 @@ class GenerationHandler(
                 } else {
                     Log.i(TAG, "generateInternal: build tools($assistant)")
                     if (assistant.enableMemory) {
-                        val memoryAssistantId = if (assistant.useGlobalMemory) {
-                            MemoryRepository.GLOBAL_MEMORY_ID
-                        } else {
-                            assistant.id.toString()
-                        }
+                        val defaultMemoryScope = if (assistant.useGlobalMemory) MemoryScope.GLOBAL else MemoryScope.ASSISTANT
                         buildMemoryTools(
                             json = json,
-                            onCreation = { content ->
-                                memoryRepo.addMemory(memoryAssistantId, content)
+                            defaultScope = defaultMemoryScope,
+                            onCreation = { content, scope ->
+                                memoryRepo.addMemory(
+                                    assistantId = assistant.id.toString(),
+                                    content = content,
+                                    scope = scope,
+                                )
                             },
-                            onUpdate = { id, content ->
-                                memoryRepo.updateContent(id, content)
+                            onUpdate = { id, content, scope ->
+                                memoryRepo.updateMemory(
+                                    id = id,
+                                    content = content,
+                                    scope = scope,
+                                    assistantId = assistant.id.toString(),
+                                )
                             },
                             onDelete = { id ->
                                 memoryRepo.deleteMemory(id)

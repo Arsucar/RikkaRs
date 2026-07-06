@@ -58,6 +58,7 @@ val appModule = module {
             settingsStore = get(),
             conversationRepo = get(),
             memoryRepository = get(),
+            memoryTableRepository = get(),
             generationHandler = get(),
             subagentHost = get(),
             json = get(),

@@ -88,6 +88,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
+import me.rerere.rikkahub.data.ai.tools.buildMemoryTableToolsIfEnabled
 import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -95,6 +96,7 @@ import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.SlashSkillInputTransformer
+import me.rerere.rikkahub.data.ai.transformers.MemoryTableInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -111,12 +113,14 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.shouldEnableMemoryTable
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
@@ -250,6 +254,7 @@ class ChatService(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
+    private val memoryTableRepository: MemoryTableRepository,
     private val generationHandler: GenerationHandler,
     private val subagentHost: SubagentHost,
     private val json: Json,
@@ -646,6 +651,23 @@ class ChatService(
             val conversation = getConversationFlow(conversationId).value
             // 有效 CWD：会话级 > 助手默认 > /workspace，统一规范化
             val effectiveWorkspaceCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
+            val memoryTableEnabled = shouldEnableMemoryTable(
+                settingsEnabled = settings.enableMemoryTable,
+                assistantEnabled = assistant.enableMemoryTable,
+            )
+            val memoryTableTemplates = if (memoryTableEnabled) {
+                memoryTableRepository.getTemplates()
+            } else {
+                emptyList()
+            }
+            val memoryTableDocuments = if (memoryTableEnabled) {
+                memoryTableRepository.getEffectiveDocuments(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversation.id.toString(),
+                )
+            } else {
+                emptyList()
+            }
 
             // start generating
             val session = getOrCreateSession(conversationId)
@@ -665,13 +687,17 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = effectiveWorkspaceCwd,
-                memories = if (assistant.useGlobalMemory) {
-                    memoryRepository.getGlobalMemories()
-                } else {
-                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
-                },
+                memories = memoryRepository.getEffectiveMemories(assistant.id.toString()),
                 inputTransformers = buildList {
                     addAll(inputTransformers)
+                    if (memoryTableEnabled) {
+                        add(
+                            MemoryTableInjectionTransformer(
+                                templates = memoryTableTemplates,
+                                documents = memoryTableDocuments,
+                            )
+                        )
+                    }
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
                 },
@@ -693,6 +719,29 @@ class ChatService(
                     if (assistant.enableRecentChatsReference) {
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
+                    addAll(
+                        buildMemoryTableToolsIfEnabled(
+                            enabled = memoryTableEnabled,
+                            json = json,
+                            assistantId = assistant.id.toString(),
+                            conversationId = conversation.id.toString(),
+                            readDocuments = {
+                                memoryTableRepository.getEffectiveDocuments(
+                                    assistantId = assistant.id.toString(),
+                                    conversationId = conversation.id.toString(),
+                                )
+                            },
+                            getDocument = { documentId ->
+                                memoryTableRepository.getDocument(documentId)
+                            },
+                            upsertDocument = { document ->
+                                memoryTableRepository.upsertDocument(document)
+                            },
+                            deleteDocument = { documentId ->
+                                memoryTableRepository.deleteDocument(documentId)
+                            },
+                        )
+                    )
                     addAll(
                         createWorkspaceToolsIfReady(
                             assistant.workspaceId?.toString(),

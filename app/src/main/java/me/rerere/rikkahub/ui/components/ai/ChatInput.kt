@@ -262,6 +262,7 @@ fun ChatInput(
                                 },
                                 type = ModelType.CHAT,
                                 onlyIcon = true,
+                                allowClear = true,
                                 modifier = Modifier,
                             )
 

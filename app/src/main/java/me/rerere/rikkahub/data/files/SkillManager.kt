@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.files
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.util.LinkedHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -69,7 +70,7 @@ class SkillManager(
         return listSkillsInDir(skillsDir, ownerAssistantId = null)
     }
 
-    private fun listAssistantSkills(assistantId: Uuid): List<SkillMetadata> {
+    fun listAssistantSkills(assistantId: Uuid): List<SkillMetadata> {
         val skillsDir = getAssistantSkillsDir(assistantId)
         return listSkillsInDir(skillsDir, ownerAssistantId = assistantId)
     }
@@ -110,16 +111,34 @@ class SkillManager(
     }
 
     fun saveAssistantSkill(assistantId: Uuid, name: String, content: String): SkillMetadata? {
-        if (!saveSkillFilesAtomically(
-                skillsDir = getAssistantSkillsDir(assistantId),
-                skillName = name,
-                files = mapOf("SKILL.md" to content),
-            )
-        ) {
+        if (!saveAssistantSkillFilesAtomically(assistantId, name, mapOf("SKILL.md" to content))) {
             return null
         }
         val skillDir = resolveAssistantSkillDir(assistantId, name) ?: return null
         return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir, ownerAssistantId = assistantId)
+    }
+
+    fun copyGlobalSkillToAssistant(skillName: String, assistantId: Uuid): Boolean {
+        val skill = findGlobalSkillMetadata(skillName) ?: return false
+        val files = SkillCopyFiles.collect(skill)
+        if (!files.containsKey("SKILL.md")) return false
+        return saveAssistantSkillFileBytesAtomically(
+            assistantId = assistantId,
+            skillName = skill.name,
+            files = files,
+        )
+    }
+
+    fun saveAssistantSkillFilesAtomically(
+        assistantId: Uuid,
+        skillName: String,
+        files: Map<String, String>,
+    ): Boolean {
+        return saveSkillFilesAtomically(
+            skillsDir = getAssistantSkillsDir(assistantId),
+            skillName = skillName,
+            files = files,
+        )
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
@@ -131,6 +150,25 @@ class SkillManager(
                 settings.copy(
                     assistants = settings.assistants.map { assistant ->
                         if (assistant.enabledSkills.contains(name)) {
+                            assistant.copy(enabledSkills = assistant.enabledSkills - name)
+                        } else {
+                            assistant
+                        }
+                    }
+                )
+            }
+        }
+        deleted
+    }
+
+    suspend fun deleteAssistantSkill(assistantId: Uuid, name: String): Boolean = withContext(Dispatchers.IO) {
+        val skillDir = resolveAssistantSkillDir(assistantId, name) ?: return@withContext false
+        val deleted = skillDir.deleteRecursively()
+        if (deleted) {
+            settingsStore.update { settings ->
+                settings.copy(
+                    assistants = settings.assistants.map { assistant ->
+                        if (assistant.id == assistantId && assistant.enabledSkills.contains(name)) {
                             assistant.copy(enabledSkills = assistant.enabledSkills - name)
                         } else {
                             assistant
@@ -182,6 +220,19 @@ class SkillManager(
         return true
     }
 
+    fun saveAssistantSkillFile(
+        assistantId: Uuid,
+        skillName: String,
+        relativePath: String,
+        content: String,
+    ): Boolean {
+        val skillDir = resolveAssistantSkillDir(assistantId, skillName) ?: return false
+        val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
+        target.parentFile?.mkdirs()
+        target.writeText(content)
+        return true
+    }
+
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
         return saveSkillFilesAtomically(
             skillsDir = getSkillsDir(),
@@ -204,6 +255,14 @@ class SkillManager(
 
     fun saveSkillFileBytesAtomically(skillName: String, files: Map<String, ByteArray>): Boolean {
         return saveSkillFileBytesAtomically(getSkillsDir(), skillName, files)
+    }
+
+    fun saveAssistantSkillFileBytesAtomically(
+        assistantId: Uuid,
+        skillName: String,
+        files: Map<String, ByteArray>,
+    ): Boolean {
+        return saveSkillFileBytesAtomically(getAssistantSkillsDir(assistantId), skillName, files)
     }
 
     private fun saveSkillFileBytesAtomically(
@@ -261,6 +320,12 @@ class SkillManager(
         val deleted = target.delete()
         if (deleted) invalidateListCache()
         return deleted
+    }
+
+    fun deleteAssistantSkillFile(assistantId: Uuid, skillName: String, relativePath: String): Boolean {
+        val skillDir = resolveAssistantSkillDir(assistantId, skillName) ?: return false
+        val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
+        return target.delete()
     }
 
     fun resolveSkillFile(skillName: String, relativePath: String, assistantId: Uuid? = null): File? {
@@ -334,6 +399,24 @@ class SkillManager(
             Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)
             null
         }
+    }
+}
+
+internal object SkillCopyFiles {
+    fun collect(skill: SkillMetadata): Map<String, ByteArray> {
+        val files = LinkedHashMap<String, ByteArray>()
+        skill.skillDir.walkTopDown()
+            .filter { it.isFile }
+            .forEach { file ->
+                val relativePath = file.relativeTo(skill.skillDir).path.replace(File.separatorChar, '/')
+                val resolved = SkillPaths.resolveSkillFile(
+                    skillDir = skill.skillDir,
+                    relativePath = relativePath,
+                    allowedSymlinkRoots = skill.allowedSymlinkRoots,
+                ) ?: return@forEach
+                files[relativePath] = resolved.readBytes()
+            }
+        return files
     }
 }
 

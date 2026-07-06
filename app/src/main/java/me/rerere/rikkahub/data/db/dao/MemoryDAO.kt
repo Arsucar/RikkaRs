@@ -9,11 +9,37 @@ import me.rerere.rikkahub.data.db.entity.MemoryEntity
 
 @Dao
 interface MemoryDAO {
-    @Query("SELECT * FROM memoryentity WHERE assistant_id = :assistantId")
+    @Query("SELECT * FROM memoryentity WHERE assistant_id = :assistantId AND scope = 'ASSISTANT' ORDER BY id ASC")
     fun getMemoriesOfAssistantFlow(assistantId: String): Flow<List<MemoryEntity>>
 
-    @Query("SELECT * FROM memoryentity WHERE assistant_id = :assistantId")
+    @Query("SELECT * FROM memoryentity WHERE assistant_id = :assistantId AND scope = 'ASSISTANT' ORDER BY id ASC")
     suspend fun getMemoriesOfAssistant(assistantId: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM memoryentity WHERE scope = 'GLOBAL' ORDER BY id ASC")
+    fun getGlobalMemoriesFlow(): Flow<List<MemoryEntity>>
+
+    @Query("SELECT * FROM memoryentity WHERE scope = 'GLOBAL' ORDER BY id ASC")
+    suspend fun getGlobalMemories(): List<MemoryEntity>
+
+    @Query(
+        """
+        SELECT * FROM memoryentity
+        WHERE scope = 'GLOBAL'
+           OR (assistant_id = :assistantId AND scope = 'ASSISTANT')
+        ORDER BY CASE scope WHEN 'GLOBAL' THEN 0 ELSE 1 END, id ASC
+        """
+    )
+    fun getEffectiveMemoriesFlow(assistantId: String): Flow<List<MemoryEntity>>
+
+    @Query(
+        """
+        SELECT * FROM memoryentity
+        WHERE scope = 'GLOBAL'
+           OR (assistant_id = :assistantId AND scope = 'ASSISTANT')
+        ORDER BY CASE scope WHEN 'GLOBAL' THEN 0 ELSE 1 END, id ASC
+        """
+    )
+    suspend fun getEffectiveMemories(assistantId: String): List<MemoryEntity>
 
     @Query("SELECT * FROM memoryentity")
     fun getAllMemoriesFlow(): Flow<List<MemoryEntity>>

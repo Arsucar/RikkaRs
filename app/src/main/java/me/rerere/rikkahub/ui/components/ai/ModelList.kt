@@ -232,23 +232,40 @@ fun ModelSelector(
             }
         }
     } else {
-        IconButton(
-            onClick = {
-                state.open()
-            },
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (model != null) {
-                AutoAIIcon(
-                    modifier = Modifier.size(36.dp),
-                    name = model.modelId,
-                    color = Color.Transparent
-                )
-            } else {
-                Icon(
-                    imageVector = HugeIcons.Brain02,
-                    contentDescription = stringResource(R.string.setting_model_page_chat_model),
-                    modifier = Modifier.size(20.dp)
-                )
+            IconButton(
+                onClick = {
+                    state.open()
+                },
+            ) {
+                if (model != null) {
+                    AutoAIIcon(
+                        modifier = Modifier.size(36.dp),
+                        name = model.modelId,
+                        color = Color.Transparent
+                    )
+                } else {
+                    Icon(
+                        imageVector = HugeIcons.Brain02,
+                        contentDescription = stringResource(R.string.setting_model_page_chat_model),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            if (allowClear && model != null) {
+                IconButton(
+                    onClick = {
+                        onSelect(Model())
+                    },
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = stringResource(R.string.common_clear),
+                    )
+                }
             }
         }
     }

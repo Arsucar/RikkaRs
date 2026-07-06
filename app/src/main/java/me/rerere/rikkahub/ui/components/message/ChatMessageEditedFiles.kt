@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,6 +83,7 @@ internal fun EditedFilesList(
     if (editedFiles.isEmpty()) return
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val workspaceRepository: WorkspaceRepository = koinInject()
 
@@ -108,7 +110,11 @@ internal fun EditedFilesList(
             runCatching {
                 val size = workspaceRepository.fileSize(workspaceId, area, relativePath)
                 require(isTextFileSizeAllowed(size)) {
-                    "File is too large to view: ${formatBytes(size)} / ${formatBytes(MAX_TEXT_FILE_VIEW_BYTES)}"
+                    resources.getString(
+                        R.string.file_error_too_large_to_view,
+                        formatBytes(size),
+                        formatBytes(MAX_TEXT_FILE_VIEW_BYTES),
+                    )
                 }
                 workspaceRepository.readText(workspaceId, relativePath, area)
             }.onSuccess { text ->
@@ -116,7 +122,7 @@ internal fun EditedFilesList(
             }.onFailure { error ->
                 textDialogState = textDialogState?.copy(
                     busy = false,
-                    error = error.message ?: "Failed to read file",
+                    error = error.message ?: resources.getString(R.string.file_error_read_failed),
                 )
             }
         }
@@ -138,7 +144,7 @@ internal fun EditedFilesList(
             }.onFailure { error ->
                 textDialogState = textDialogState?.copy(
                     busy = false,
-                    error = error.message ?: "Failed to save file",
+                    error = error.message ?: resources.getString(R.string.file_error_save_failed),
                 )
             }
         }
@@ -247,7 +253,7 @@ internal fun EditedFilesList(
                                 modifier = Modifier.padding(4.dp),
                             )
                             Text(
-                                text = "View",
+                                text = stringResource(R.string.common_view),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                         }

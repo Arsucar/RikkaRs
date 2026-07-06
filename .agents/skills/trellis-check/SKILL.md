@@ -40,6 +40,16 @@ Read the specific guideline files referenced — the index is a pointer, not the
 
 Run the project's lint, type-check, and test commands. Fix any failures before proceeding.
 
+For Gradle commands, always include `--no-daemon` to avoid blocked or lingering daemon processes, for example:
+
+```bash
+./gradlew --no-daemon lint
+./gradlew --no-daemon test
+./gradlew --no-daemon :app:compileDebugKotlin
+```
+
+When multiple sub-agents are running in parallel, only the final `trellis-check` sub-agent may run Gradle compile/test/lint commands. Other parallel implementation or review agents should limit themselves to code changes, code search, and static review to avoid exhausting host memory.
+
 ## Step 4: Review Against Checklist
 
 ### Code Quality

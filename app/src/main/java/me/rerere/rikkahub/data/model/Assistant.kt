@@ -26,6 +26,7 @@ data class Assistant(
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
+    val enableMemoryTable: Boolean = false,
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
@@ -70,7 +71,20 @@ data class QuickMessage(
 data class AssistantMemory(
     val id: Int,
     val content: String = "",
+    val scope: MemoryScope = MemoryScope.ASSISTANT,
 )
+
+@Serializable
+enum class MemoryScope {
+    ASSISTANT,
+    GLOBAL;
+
+    companion object {
+        fun fromStorage(value: String?): MemoryScope {
+            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: ASSISTANT
+        }
+    }
+}
 
 @Serializable
 enum class AssistantAffectScope {

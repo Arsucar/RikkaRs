@@ -225,8 +225,10 @@ Sub-agent dispatch protocol applies to all platforms and all sub-agents, includi
 [workflow-state:in_progress]
 Tools: `trellis-implement` / `trellis-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `trellis-update-spec` is a skill. `trellis-check` exists as both; prefer the Agent form when verifying after code changes.
 Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
-Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
+Main-session default: evaluate whether the task can be split and dispatch implement/check sub-agents; direct code search, file location, and impact analysis to sub-agents. For multi-step work that can run in parallel, split and dispatch parallel sub-agents. Do not carry non-trivial work alone in the main session.
+Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
+Compile scheduling: when multiple sub-agents are used, only the final check sub-agent may run Gradle compile/test/lint commands, and every Gradle command must include `--no-daemon`; other parallel agents only edit, search, or perform static review. If the main session performs the final step and that step includes source-code modification, it must finish with the install-to-device flow.
 [/workflow-state:in_progress]
 
 <!-- Per-turn breadcrumb: shown while status='in_progress' when
@@ -236,7 +238,8 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
 
 [workflow-state:in_progress-inline]
 Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
-Do not dispatch implement/check sub-agents in inline mode.
+Inline mode is a fallback for truly minimal work or platforms/tasks that cannot dispatch sub-agents; if dispatch is available, prefer sub-agents for code edits, code search, file location, impact analysis, and parallelizable multi-step work.
+When inline mode runs Gradle compile/test/lint/install commands, include `--no-daemon`. If the main session performs the final step and that step includes source-code modification, it must finish with the install-to-device flow.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
 [/workflow-state:in_progress-inline]
 
@@ -272,6 +275,8 @@ Code committed. Run `/trellis:finish-work`; if dirty, return to Phase 3.4 first.
 
 When a user request matches one of these intents inside an active task, route first, then load the detailed phase step if needed.
 
+Before doing task work, the main session must evaluate whether the request can be split and dispatched. Code editing, code search, file location, impact analysis, and parallelizable multi-step work should go to sub-agents first; inline execution is reserved for truly minimal work or cases where dispatch is unavailable.
+
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 
 - Planning or unclear requirements -> `trellis-brainstorm`.
@@ -283,7 +288,7 @@ When a user request matches one of these intents inside an active task, route fi
 [codex-inline, Kilo, Antigravity, Devin]
 
 - Planning or unclear requirements -> `trellis-brainstorm`.
-- Before editing -> `trellis-before-dev`; after editing -> `trellis-check`.
+- Before editing -> `trellis-before-dev`; after editing -> `trellis-check`. Use this inline route only for truly minimal work or when sub-agent dispatch is unavailable.
 - Repeated debugging -> `trellis-break-loop`; spec updates -> `trellis-update-spec`.
 
 [/codex-inline, Kilo, Antigravity, Devin]
@@ -470,6 +475,8 @@ If `task.py start` errors with a session-identity message (no context key from h
 
 Goal: turn reviewed planning artifacts into code that passes quality checks.
 
+Before implementing, the main session should split and dispatch work whenever possible. Use sub-agents for code edits, code search, file location, impact analysis, and independent work chunks; only keep implementation inline for truly minimal changes or when dispatch is unavailable.
+
 #### 2.1 Implement `[required · repeatable]`
 
 [Claude Code, Cursor, OpenCode, CodeBuddy, Droid, Pi]
@@ -477,7 +484,7 @@ Goal: turn reviewed planning artifacts into code that passes quality checks.
 Spawn the implement sub-agent:
 
 - **Agent type**: `trellis-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
+- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; do not run Gradle compile/test/lint unless this is the explicitly designated final check agent
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
 
 The platform hook/plugin auto-handles:
@@ -491,7 +498,7 @@ The platform hook/plugin auto-handles:
 Spawn the implement sub-agent:
 
 - **Agent type**: `trellis-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
+- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; do not run Gradle compile/test/lint unless this is the explicitly designated final check agent
 - **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `trellis-implement` and must implement directly without spawning another `trellis-implement` / `trellis-check`.
 
 The pull-based sub-agent definition auto-handles the context load requirement:
@@ -505,7 +512,7 @@ The pull-based sub-agent definition auto-handles the context load requirement:
 Spawn the implement sub-agent:
 
 - **Agent type**: `trellis-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
+- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; do not run Gradle compile/test/lint unless this is the explicitly designated final check agent
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
 
 The platform prelude auto-handles the context load requirement:
@@ -520,7 +527,7 @@ The platform prelude auto-handles the context load requirement:
 2. Read `{TASK_DIR}/prd.md`, then `design.md` if present, then `implement.md` if present
 3. Consult materials under `{TASK_DIR}/research/`
 4. Implement the code per reviewed artifacts
-5. Run project lint and type-check
+5. For source-code changes, validate with Gradle commands that include `--no-daemon`; when the final main-session step includes source-code modification, finish with the install-to-device flow
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
@@ -531,14 +538,14 @@ The platform prelude auto-handles the context load requirement:
 Spawn the check sub-agent:
 
 - **Agent type**: `trellis-check`
-- **Task description**: Review all code changes against specs and task artifacts; fix any findings directly; ensure lint and type-check pass
+- **Task description**: Review all code changes against specs and task artifacts; fix any findings directly. Only the final check sub-agent may run Gradle compile/test/lint, and every Gradle command must include `--no-daemon`; earlier parallel check agents must perform code/static review only.
 - **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-check` sub-agent and must review/fix directly, not spawn another `trellis-check` / `trellis-implement`.
 
 The check agent's job:
 - Review code changes against specs
 - Review code changes against `prd.md`, `design.md` if present, and `implement.md` if present
 - Auto-fix issues it finds
-- Run lint and typecheck to verify
+- Run lint and typecheck to verify only when it is the final check agent; use `--no-daemon` on all Gradle commands
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 
@@ -546,7 +553,7 @@ The check agent's job:
 
 Load the `trellis-check` skill and verify the code per its guidance:
 - Spec compliance
-- lint / type-check / tests
+- lint / type-check / tests using Gradle commands with `--no-daemon`
 - Cross-layer consistency (when changes span layers)
 
 If issues are found → fix → re-check, until green.

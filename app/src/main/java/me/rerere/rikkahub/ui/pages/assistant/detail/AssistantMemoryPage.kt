@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -44,6 +43,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.model.MemoryScope
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -61,7 +66,10 @@ fun AssistantMemoryPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val memories by vm.memories.collectAsStateWithLifecycle()
+    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
+    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -82,12 +90,20 @@ fun AssistantMemoryPage(id: String) {
     ) { innerPadding ->
         AssistantMemoryContent(
             modifier = Modifier.padding(innerPadding),
+            settings = settings,
             assistant = assistant,
             memories = memories,
+            memoryTableTemplates = memoryTableTemplates,
+            memoryTableDocuments = memoryTableDocuments,
+            onUpdateSettings = { vm.updateSettings(it) },
             onUpdateAssistant = { vm.update(it) },
             onDeleteMemory = { vm.deleteMemory(it) },
             onAddMemory = { vm.addMemory(it) },
-            onUpdateMemory = { vm.updateMemory(it) }
+            onUpdateMemory = { vm.updateMemory(it) },
+            onUpsertMemoryTableTemplate = { vm.upsertMemoryTableTemplate(it) },
+            onDeleteMemoryTableTemplate = { vm.deleteMemoryTableTemplate(it) },
+            onUpsertMemoryTableDocument = { vm.upsertMemoryTableDocument(it) },
+            onDeleteMemoryTableDocument = { vm.deleteMemoryTableDocument(it) },
         )
     }
 }
@@ -95,12 +111,20 @@ fun AssistantMemoryPage(id: String) {
 @Composable
 private fun AssistantMemoryContent(
     modifier: Modifier = Modifier,
+    settings: Settings,
     assistant: Assistant,
     memories: List<AssistantMemory>,
+    memoryTableTemplates: List<MemoryTableTemplate>,
+    memoryTableDocuments: List<MemoryTableDocument>,
+    onUpdateSettings: (Settings) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     onAddMemory: (AssistantMemory) -> Unit,
     onUpdateMemory: (AssistantMemory) -> Unit,
     onDeleteMemory: (AssistantMemory) -> Unit,
+    onUpsertMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
+    onDeleteMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
+    onUpsertMemoryTableDocument: (MemoryTableDocument) -> Unit,
+    onDeleteMemoryTableDocument: (MemoryTableDocument) -> Unit,
 ) {
     val memoryDialogState = useEditState<AssistantMemory> {
         if (it.id == 0) {
@@ -109,7 +133,16 @@ private fun AssistantMemoryContent(
             onUpdateMemory(it)
         }
     }
+    val memoryTableTemplateDialogState = useEditState<MemoryTableTemplate> {
+        onUpsertMemoryTableTemplate(it)
+    }
+    val memoryTableDocumentDialogState = useEditState<MemoryTableDocument> {
+        onUpsertMemoryTableDocument(it)
+    }
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
+    var pendingDeleteMemoryTableTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
+    var pendingDeleteMemoryTableDocument by remember { mutableStateOf<MemoryTableDocument?>(null) }
+    val defaultMemoryTableTemplateName = stringResource(R.string.assistant_page_memory_table_default_template)
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -121,17 +154,46 @@ private fun AssistantMemoryContent(
                 Text(stringResource(R.string.assistant_page_manage_memory_title))
             },
             text = {
-                TextField(
-                    value = memory.content,
-                    onValueChange = {
-                        update(memory.copy(content = it))
-                    },
-                    label = {
-                        Text(stringResource(R.string.assistant_page_manage_memory_title))
-                    },
-                    minLines = 2,
-                    maxLines = 8
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextField(
+                        value = memory.content,
+                        onValueChange = {
+                            update(memory.copy(content = it))
+                        },
+                        label = {
+                            Text(stringResource(R.string.assistant_page_manage_memory_title))
+                        },
+                        minLines = 2,
+                        maxLines = 8
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_scope_global),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_scope_global_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = memory.scope == MemoryScope.GLOBAL,
+                            onCheckedChange = { enabled ->
+                                update(
+                                    memory.copy(
+                                        scope = if (enabled) MemoryScope.GLOBAL else MemoryScope.ASSISTANT,
+                                    )
+                                )
+                            },
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
@@ -151,6 +213,119 @@ private fun AssistantMemoryContent(
                     Text(stringResource(R.string.assistant_page_cancel))
                 }
             }
+        )
+    }
+
+    memoryTableTemplateDialogState.EditStateContent { template, update ->
+        AlertDialog(
+            onDismissRequest = { memoryTableTemplateDialogState.dismiss() },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_template))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextField(
+                        value = template.name,
+                        onValueChange = { update(template.copy(name = it)) },
+                        label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = template.schemaJson,
+                        onValueChange = { update(template.copy(schemaJson = it)) },
+                        label = { Text(stringResource(R.string.assistant_page_memory_table_schema_json)) },
+                        minLines = 6,
+                        maxLines = 12,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { memoryTableTemplateDialogState.confirm() }) {
+                    Text(stringResource(R.string.assistant_page_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { memoryTableTemplateDialogState.dismiss() }) {
+                    Text(stringResource(R.string.assistant_page_cancel))
+                }
+            },
+        )
+    }
+
+    memoryTableDocumentDialogState.EditStateContent { document, update ->
+        AlertDialog(
+            onDismissRequest = { memoryTableDocumentDialogState.dismiss() },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_document))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_memory_table_template_ref, document.templateId),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextField(
+                        value = document.payloadJson,
+                        onValueChange = { update(document.copy(payloadJson = it)) },
+                        label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
+                        minLines = 6,
+                        maxLines = 12,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_scope_global),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_scope_global_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = document.scopeType == MemoryTableScopeType.GLOBAL,
+                            onCheckedChange = { enabled ->
+                                update(
+                                    document.copy(
+                                        scopeType = if (enabled) {
+                                            MemoryTableScopeType.GLOBAL
+                                        } else {
+                                            MemoryTableScopeType.ASSISTANT
+                                        },
+                                        scopeId = if (enabled) {
+                                            MemoryRepository.GLOBAL_MEMORY_ID
+                                        } else {
+                                            assistant.id.toString()
+                                        },
+                                    )
+                                )
+                            },
+                            enabled = document.scopeType != MemoryTableScopeType.CONVERSATION,
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.assistant_page_memory_table_conversation_scope_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { memoryTableDocumentDialogState.confirm() }) {
+                    Text(stringResource(R.string.assistant_page_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { memoryTableDocumentDialogState.dismiss() }) {
+                    Text(stringResource(R.string.assistant_page_cancel))
+                }
+            },
         )
     }
 
@@ -180,6 +355,57 @@ private fun AssistantMemoryContent(
                                 )
                             )
                         }
+                    )
+                }
+            )
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_global)) },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_memory_table_global_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.enableMemoryTable,
+                        onCheckedChange = {
+                            onUpdateSettings(
+                                settings.copy(
+                                    enableMemoryTable = it,
+                                    memoryTableAutoSyncEnabled = false,
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_assistant)) },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_memory_table_assistant_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.enableMemoryTable,
+                        onCheckedChange = {
+                            onUpdateAssistant(
+                                assistant.copy(
+                                    enableMemoryTable = it
+                                )
+                            )
+                        },
+                        enabled = settings.enableMemoryTable,
+                    )
+                }
+            )
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_auto_sync)) },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_memory_table_auto_sync_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = false,
+                        onCheckedChange = {},
+                        enabled = false,
                     )
                 }
             )
@@ -246,6 +472,31 @@ private fun AssistantMemoryContent(
             )
         }
 
+        MemoryTableSection(
+            settings = settings,
+            assistant = assistant,
+            templates = memoryTableTemplates,
+            documents = memoryTableDocuments,
+            onAddTemplate = {
+                memoryTableTemplateDialogState.open(
+                    MemoryTableTemplate(name = defaultMemoryTableTemplateName)
+                )
+            },
+            onEditTemplate = { memoryTableTemplateDialogState.open(it) },
+            onDeleteTemplate = { pendingDeleteMemoryTableTemplate = it },
+            onAddDocument = { template ->
+                memoryTableDocumentDialogState.open(
+                    MemoryTableDocument(
+                        templateId = template.id,
+                        scopeType = MemoryTableScopeType.ASSISTANT,
+                        scopeId = assistant.id.toString(),
+                    )
+                )
+            },
+            onEditDocument = { memoryTableDocumentDialogState.open(it) },
+            onDeleteDocument = { pendingDeleteMemoryTableDocument = it },
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -261,7 +512,13 @@ private fun AssistantMemoryContent(
 
             IconButton(
                 onClick = {
-                    memoryDialogState.open(AssistantMemory(0, ""))
+                    memoryDialogState.open(
+                        AssistantMemory(
+                            id = 0,
+                            content = "",
+                            scope = if (assistant.useGlobalMemory) MemoryScope.GLOBAL else MemoryScope.ASSISTANT,
+                        )
+                    )
                 },
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
@@ -305,6 +562,195 @@ private fun AssistantMemoryContent(
             )
         }
     )
+
+    RikkaConfirmDialog(
+        show = pendingDeleteMemoryTableTemplate != null,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            pendingDeleteMemoryTableTemplate?.let(onDeleteMemoryTableTemplate)
+            pendingDeleteMemoryTableTemplate = null
+        },
+        onDismiss = { pendingDeleteMemoryTableTemplate = null },
+        text = {
+            Text(pendingDeleteMemoryTableTemplate?.name.orEmpty())
+        }
+    )
+
+    RikkaConfirmDialog(
+        show = pendingDeleteMemoryTableDocument != null,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            pendingDeleteMemoryTableDocument?.let(onDeleteMemoryTableDocument)
+            pendingDeleteMemoryTableDocument = null
+        },
+        onDismiss = { pendingDeleteMemoryTableDocument = null },
+        text = {
+            Text(
+                text = pendingDeleteMemoryTableDocument?.payloadJson.orEmpty(),
+                maxLines = 8,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    )
+}
+
+@Composable
+private fun MemoryTableSection(
+    settings: Settings,
+    assistant: Assistant,
+    templates: List<MemoryTableTemplate>,
+    documents: List<MemoryTableDocument>,
+    onAddTemplate: () -> Unit,
+    onEditTemplate: (MemoryTableTemplate) -> Unit,
+    onDeleteTemplate: (MemoryTableTemplate) -> Unit,
+    onAddDocument: (MemoryTableTemplate) -> Unit,
+    onEditDocument: (MemoryTableDocument) -> Unit,
+    onDeleteDocument: (MemoryTableDocument) -> Unit,
+) {
+    val enabled = settings.enableMemoryTable && assistant.enableMemoryTable
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.assistant_page_memory_table_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier
+                .padding(bottom = 8.dp)
+                .align(Alignment.CenterStart)
+        )
+        IconButton(
+            onClick = onAddTemplate,
+            enabled = settings.enableMemoryTable,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Icon(HugeIcons.Add01, null)
+        }
+    }
+
+    templates.fastForEach { template ->
+        key(template.id) {
+            MemoryTableTemplateItem(
+                template = template,
+                enabled = settings.enableMemoryTable,
+                onEdit = { onEditTemplate(template) },
+                onDelete = { onDeleteTemplate(template) },
+                onAddDocument = { onAddDocument(template) },
+            )
+        }
+    }
+
+    documents.fastForEach { document ->
+        key(document.id) {
+            MemoryTableDocumentItem(
+                document = document,
+                enabled = enabled,
+                onEdit = { onEditDocument(document) },
+                onDelete = { onDeleteDocument(document) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemoryTableTemplateItem(
+    template: MemoryTableTemplate,
+    enabled: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onAddDocument: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = template.name,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = template.schemaJson,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onAddDocument, enabled = enabled) {
+                Icon(HugeIcons.Add01, null)
+            }
+            IconButton(onClick = onEdit, enabled = enabled) {
+                Icon(HugeIcons.PencilEdit01, null)
+            }
+            IconButton(onClick = onDelete, enabled = enabled) {
+                Icon(HugeIcons.Delete01, null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryTableDocumentItem(
+    document: MemoryTableDocument,
+    enabled: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.assistant_page_memory_table_document_meta,
+                        document.scopeType.name,
+                        document.revision,
+                    ),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                )
+                Text(
+                    text = document.payloadJson,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onEdit, enabled = enabled) {
+                Icon(HugeIcons.PencilEdit01, null)
+            }
+            IconButton(onClick = onDelete, enabled = enabled) {
+                Icon(HugeIcons.Delete01, null)
+            }
+        }
+    }
 }
 
 @Composable
@@ -329,7 +775,15 @@ private fun MemoryItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "#${memory.id}",
+                    text = "#${memory.id} · ${
+                        stringResource(
+                            if (memory.scope == MemoryScope.GLOBAL) {
+                                R.string.assistant_page_memory_scope_global
+                            } else {
+                                R.string.assistant_page_memory_scope_assistant
+                            }
+                        )
+                    }",
                     style = MaterialTheme.typography.titleMediumEmphasized,
                 )
                 Text(

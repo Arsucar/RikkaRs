@@ -67,11 +67,13 @@ class SkillsVM(
                         return@launch
                     }
 
-                val importedNames = if (isZipFile(fileName, bytes)) {
-                    importSkillsFromZip(bytes)
-                } else {
-                    importSkillMarkdown(bytes)
-                }
+                val importedNames = SkillFileImportReader.read(fileName, bytes).map { bundle ->
+                    val saved = skillManager.saveSkillFileBytesAtomically(bundle.name, bundle.files)
+                    if (!saved) {
+                        error("保存失败：${bundle.name}")
+                    }
+                    bundle.name
+                }.distinct()
 
                 _skills.value = skillManager.listSkills()
                 withContext(Dispatchers.Main) {

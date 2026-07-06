@@ -1,0 +1,33 @@
+{
+  "id": "issue-backlog-parallelization",
+  "name": "issue-backlog-parallelization",
+  "title": "Issue backlog parallelization plan",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app/workspace",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-06",
+  "completedAt": "2026-07-06",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-06-skills-access-scope",
+    "07-06-memory-scope-table-roadmap",
+    "07-06-subagent-tool-policy",
+    "07-06-workspace-git-pack",
+    "07-06-file-fullscreen-editor",
+    "07-06-conversation-model-override"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

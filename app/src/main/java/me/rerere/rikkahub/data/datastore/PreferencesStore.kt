@@ -123,6 +123,8 @@ class SettingsStore(
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
         val ASSISTANTS = stringPreferencesKey("assistants")
         val ASSISTANT_TAGS = stringPreferencesKey("assistant_tags")
+        val ENABLE_MEMORY_TABLE = booleanPreferencesKey("enable_memory_table")
+        val MEMORY_TABLE_AUTO_SYNC_ENABLED = booleanPreferencesKey("memory_table_auto_sync_enabled")
 
         // 搜索
         val SEARCH_SERVICES = stringPreferencesKey("search_services")
@@ -214,6 +216,8 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                enableMemoryTable = preferences[ENABLE_MEMORY_TABLE] == true,
+                memoryTableAutoSyncEnabled = false,
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
@@ -461,6 +465,8 @@ class SettingsStore(
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
             preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
+            preferences[ENABLE_MEMORY_TABLE] = settings.enableMemoryTable
+            preferences[MEMORY_TABLE_AUTO_SYNC_ENABLED] = false
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
@@ -605,6 +611,8 @@ data class Settings(
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
+    val enableMemoryTable: Boolean = false,
+    val memoryTableAutoSyncEnabled: Boolean = false,
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,

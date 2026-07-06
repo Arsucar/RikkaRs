@@ -7,24 +7,41 @@
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
-./gradlew assembleDebug          # 构建 Debug APK
-./gradlew :app:installDebug      # 构建并安装 Debug 到已连接设备/模拟器（见下文「本地验证与装到设备」）
-./gradlew test                   # 运行所有模块的 JVM 单元测试
-./gradlew connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试（用户未要求时不要默认跑）
-./gradlew lint                   # 运行 Android Lint
+./gradlew --no-daemon assembleDebug          # 构建 Debug APK
+./gradlew --no-daemon :app:installDebug      # 构建并安装 Debug 到已连接设备/模拟器（见下文「本地验证与装到设备」）
+./gradlew --no-daemon test                   # 运行所有模块的 JVM 单元测试
+./gradlew --no-daemon connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试（用户未要求时不要默认跑）
+./gradlew --no-daemon lint                   # 运行 Android Lint
 ```
 
 Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）。
 `web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，需要本地可用 `pnpm`。
+
+## AI 命令约束
+
+- Trellis skill 文件优先读仓库内 `.agents/skills/<skill>/SKILL.md`，不要尝试全局路径 `C:/Users/Administrator/.codex/skills/.system/trellis-*`。
+- 查看任务用 `python ./.trellis/scripts/get_context.py`；列任务用 `Get-ChildItem .trellis/tasks -Directory | Where-Object { $_.Name -ne 'archive' }`。
+- Windows 下若 `rg` 不存在，改用 `Get-ChildItem -Recurse -File` / `Select-String`；排除 archive 用 `-notlike '*\archive\*'`，不要用易刷屏的正则 `-notmatch '\archive\'`。
+- PowerShell 字符串里变量后紧跟冒号时写 `$($name):` 或 `${name}:`，不要写 `$name:`，避免触发变量作用域解析错误。
+- PowerShell 多路径递归用 `Get-ChildItem -Path @('path1','path2') -Recurse -File`，不要写 `Get-ChildItem path1 path2 -Recurse`。
+
+### 子代理与编译调度
+
+- 处理任务时先评估是否可拆分派发；代码编辑问题绝对优先使用子代理解决，非极简任务不得由主代理独自硬扛。
+- 代码检索、文件定位、影响面分析等任务直接调用子代理；多步骤且可并行的任务应拆分后并行调用多个子代理。
+- 主代理只在极简修改、无法派发或最终整合收尾时直接操作；若主代理执行最后一步且包含源代码修改，最后必须执行「本地验证与装到设备」流程。
+- 多个子代理并行时，只有最后一个检查子代理允许运行 Gradle 编译、测试或 lint；其他实现/审查子代理只做代码修改、检索或静态审查，避免主机内存耗尽。
+- 所有 Gradle 编译、测试、lint、安装命令必须带 `--no-daemon`，避免守护进程堵塞或残留。
 
 ## 本地验证与装到设备
 
 用户说「装到手机/设备」「真机验证」「改完安装」，或完成 **app 模块**功能改动且未明确只要编译时，助手应执行安装验收（Windows 下同样用 `.\gradlew`）：
 
 1. 确认设备：`adb devices`（至少一台状态为 `device`；无设备则说明情况并只做编译）。
-2. 默认：`.\gradlew :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
-3. 用户只要快速编译、不要装包：`.\gradlew :app:compileDebugKotlin`。
-4. 安装失败：汇报 Gradle/adb 末尾错误；常见为无设备、签名冲突、需先卸载旧包。
+2. 默认：`.\gradlew --no-daemon :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
+3. 用户只要快速编译、不要装包：`.\gradlew --no-daemon :app:compileDebugKotlin`。
+4. 安装失败时先执行 `adb connect 100.99.129.110:5555` 重新连接固定端口，再重试 `.\gradlew --no-daemon :app:installDebug` 一次。
+5. 重试仍失败：汇报 Gradle/adb 末尾错误；常见为无设备、签名冲突、需先卸载旧包。
 
 不要默认跑 `connectedDebugAndroidTest`。
 

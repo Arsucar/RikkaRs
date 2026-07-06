@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -304,6 +305,7 @@ private fun MessagePartsBlock(
     onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
     // 消息输出HapticFeedback
@@ -351,7 +353,7 @@ private fun MessagePartsBlock(
             }.onFailure { error ->
                 documentTextDialogState = documentTextDialogState?.copy(
                     busy = false,
-                    error = error.message ?: "Failed to read file",
+                    error = error.message ?: resources.getString(R.string.file_error_read_failed),
                 )
             }
         }

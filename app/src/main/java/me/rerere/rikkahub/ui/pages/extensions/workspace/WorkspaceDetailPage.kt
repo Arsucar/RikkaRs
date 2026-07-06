@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -108,6 +109,7 @@ fun WorkspaceDetailPage(id: String) {
     var textDialogState by remember { mutableStateOf<WorkspaceTextDialogState?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -145,7 +147,11 @@ fun WorkspaceDetailPage(id: String) {
             if (!isTextFileSizeAllowed(entry.sizeBytes)) {
                 textDialogState = textDialogState?.copy(
                     busy = false,
-                    error = "File is too large to view: ${formatBytes(entry.sizeBytes)} / ${formatBytes(MAX_TEXT_FILE_VIEW_BYTES)}",
+                    error = resources.getString(
+                        R.string.file_error_too_large_to_view,
+                        formatBytes(entry.sizeBytes),
+                        formatBytes(MAX_TEXT_FILE_VIEW_BYTES),
+                    ),
                 )
                 return@launch
             }
@@ -156,7 +162,7 @@ fun WorkspaceDetailPage(id: String) {
             }.onFailure { error ->
                 textDialogState = textDialogState?.copy(
                     busy = false,
-                    error = error.message ?: "Failed to read file",
+                    error = error.message ?: resources.getString(R.string.file_error_read_failed),
                 )
             }
         }
@@ -179,7 +185,7 @@ fun WorkspaceDetailPage(id: String) {
             }.onFailure { error ->
                 textDialogState = textDialogState?.copy(
                     busy = false,
-                    error = error.message ?: "Failed to save file",
+                    error = error.message ?: resources.getString(R.string.file_error_save_failed),
                 )
             }
         }
@@ -794,7 +800,7 @@ private fun WorkspaceFileCard(
                     if (!entry.isDirectory) {
                         if (isTextLikeFile) {
                             DropdownMenuItem(
-                                text = { Text("View") },
+                                text = { Text(stringResource(R.string.common_view)) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = HugeIcons.FileView,

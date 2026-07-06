@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.WorkspaceStorageMigrator
@@ -33,6 +34,10 @@ val repositoryModule = module {
 
     single {
         MemoryRepository(get())
+    }
+
+    single {
+        MemoryTableRepository(get())
     }
 
     single {

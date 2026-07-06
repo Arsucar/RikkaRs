@@ -389,7 +389,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.AssistantInjections> { key ->
-                                AssistantExtensionsPage(key.id)
+                                AssistantExtensionsPage(key.id, initialPage = key.initialPage)
                             }
 
                             entry<Screen.AssistantSubagent> { key ->
@@ -535,7 +535,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.SkillDetail> { key ->
-                                SkillDetailPage(skillName = key.skillName)
+                                SkillDetailPage(skillName = key.skillName, assistantId = key.assistantId)
                             }
 
                             entry<Screen.MessageSearch> {
@@ -641,7 +641,7 @@ sealed interface Screen : NavKey {
     data class AssistantLocalTool(val id: String) : Screen
 
     @Serializable
-    data class AssistantInjections(val id: String) : Screen
+    data class AssistantInjections(val id: String, val initialPage: Int = 0) : Screen
 
     @Serializable
     data class AssistantSubagent(val id: String) : Screen
@@ -756,7 +756,7 @@ sealed interface Screen : NavKey {
     data class WorkspaceTerminal(val id: String) : Screen
 
     @Serializable
-    data class SkillDetail(val skillName: String) : Screen
+    data class SkillDetail(val skillName: String, val assistantId: String? = null) : Screen
 
     @Serializable
     data object MessageSearch : Screen
