@@ -843,3 +843,37 @@ Resolved memory table patch row merging, added full-screen memory table document
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Memory table editor follow-up
+
+**Date**: 2026-07-07
+**Task**: Memory table editor follow-up
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Added memory table template descriptions, moved template settings into the document JSON editor, improved list actions, fixed default document duplication, discard behavior, and review-reported persistence/reachability regressions.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c1e6a4e0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
