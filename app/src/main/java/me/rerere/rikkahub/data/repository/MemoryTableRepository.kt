@@ -71,6 +71,7 @@ class MemoryTableRepository(
         val normalized = template.copy(
             id = template.id.ifBlank { Uuid.random().toString() },
             name = template.name.ifBlank { "Default memory table" },
+            description = template.description.trim(),
             schemaJson = template.schemaJson.ifBlank { DEFAULT_MEMORY_TABLE_SCHEMA_JSON.trimIndent() },
             createdAt = template.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
@@ -116,6 +117,7 @@ class MemoryTableRepository(
         MemoryTableTemplate(
             id = id,
             name = name,
+            description = description,
             schemaJson = schemaJson,
             createdAt = createdAt,
             updatedAt = updatedAt,
@@ -125,6 +127,7 @@ class MemoryTableRepository(
         MemoryTableTemplateEntity(
             id = id,
             name = name,
+            description = description,
             schemaJson = schemaJson,
             createdAt = createdAt,
             updatedAt = updatedAt,

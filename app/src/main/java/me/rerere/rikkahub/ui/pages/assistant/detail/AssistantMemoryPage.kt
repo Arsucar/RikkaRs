@@ -228,11 +228,11 @@ private fun AssistantMemoryContent(
                         singleLine = true,
                     )
                     TextField(
-                        value = template.schemaJson,
-                        onValueChange = { update(template.copy(schemaJson = it)) },
-                        label = { Text(stringResource(R.string.assistant_page_memory_table_schema_json)) },
-                        minLines = 6,
-                        maxLines = 12,
+                        value = template.description,
+                        onValueChange = { update(template.copy(description = it)) },
+                        label = { Text(stringResource(R.string.assistant_page_memory_table_template_description)) },
+                        minLines = 2,
+                        maxLines = 4,
                     )
                 }
             },
@@ -402,7 +402,6 @@ private fun AssistantMemoryContent(
                     MemoryTableTemplate(name = defaultMemoryTableTemplateName)
                 )
             },
-            onEditTemplate = { memoryTableTemplateDialogState.open(it) },
             onDeleteTemplate = { pendingDeleteMemoryTableTemplate = it },
             onAddDocument = { template ->
                 navController.navigate(
@@ -535,13 +534,28 @@ private fun MemoryTableSection(
     templates: List<MemoryTableTemplate>,
     documents: List<MemoryTableDocument>,
     onAddTemplate: () -> Unit,
-    onEditTemplate: (MemoryTableTemplate) -> Unit,
     onDeleteTemplate: (MemoryTableTemplate) -> Unit,
     onAddDocument: (MemoryTableTemplate) -> Unit,
     onEditDocument: (MemoryTableDocument) -> Unit,
     onDeleteDocument: (MemoryTableDocument) -> Unit,
 ) {
     val enabled = settings.enableMemoryTable && assistant.enableMemoryTable
+    val documentsByTemplate = documents.groupBy { it.templateId }
+    val primaryDocumentsByTemplate = templates.associate { template ->
+        val document = documentsByTemplate[template.id]
+            ?.firstOrNull {
+                it.scopeType == MemoryTableScopeType.ASSISTANT &&
+                    it.scopeId == assistant.id.toString()
+            }
+            ?: documentsByTemplate[template.id]
+                ?.firstOrNull { it.scopeType == MemoryTableScopeType.GLOBAL }
+            ?: documentsByTemplate[template.id]?.firstOrNull()
+        template.id to document
+    }
+    val primaryDocumentIds = primaryDocumentsByTemplate.values
+        .filterNotNull()
+        .map { it.id }
+        .toSet()
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -564,18 +578,31 @@ private fun MemoryTableSection(
     }
 
     templates.fastForEach { template ->
+        val document = primaryDocumentsByTemplate[template.id]
         key(template.id) {
             MemoryTableTemplateItem(
                 template = template,
+                document = document,
                 enabled = settings.enableMemoryTable,
-                onEdit = { onEditTemplate(template) },
-                onDelete = { onDeleteTemplate(template) },
-                onAddDocument = { onAddDocument(template) },
+                onDelete = {
+                    if (document != null) {
+                        onDeleteDocument(document)
+                    } else {
+                        onDeleteTemplate(template)
+                    }
+                },
+                onOpenDocument = {
+                    if (document != null) {
+                        onEditDocument(document)
+                    } else {
+                        onAddDocument(template)
+                    }
+                },
             )
         }
     }
 
-    documents.fastForEach { document ->
+    documents.filter { it.id !in primaryDocumentIds }.fastForEach { document ->
         key(document.id) {
             MemoryTableDocumentItem(
                 document = document,
@@ -590,10 +617,10 @@ private fun MemoryTableSection(
 @Composable
 private fun MemoryTableTemplateItem(
     template: MemoryTableTemplate,
+    document: MemoryTableDocument?,
     enabled: Boolean,
-    onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onAddDocument: () -> Unit,
+    onOpenDocument: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -617,20 +644,37 @@ private fun MemoryTableTemplateItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = template.schemaJson,
+                    text = template.description.ifBlank {
+                        stringResource(R.string.assistant_page_memory_table_no_description)
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
+                document?.let {
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_memory_table_document_meta,
+                            it.scopeType.name,
+                            it.revision,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            IconButton(onClick = onAddDocument, enabled = enabled) {
-                Icon(HugeIcons.Add01, null)
-            }
-            IconButton(onClick = onEdit, enabled = enabled) {
-                Icon(HugeIcons.PencilEdit01, null)
-            }
-            IconButton(onClick = onDelete, enabled = enabled) {
-                Icon(HugeIcons.Delete01, null)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                IconButton(onClick = onOpenDocument, enabled = enabled) {
+                    Icon(if (document == null) HugeIcons.Add01 else HugeIcons.PencilEdit01, null)
+                }
+                IconButton(onClick = onDelete, enabled = enabled) {
+                    Icon(HugeIcons.Delete01, null)
+                }
             }
         }
     }
@@ -673,11 +717,16 @@ private fun MemoryTableDocumentItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = onEdit, enabled = enabled) {
-                Icon(HugeIcons.PencilEdit01, null)
-            }
-            IconButton(onClick = onDelete, enabled = enabled) {
-                Icon(HugeIcons.Delete01, null)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                IconButton(onClick = onEdit, enabled = enabled) {
+                    Icon(HugeIcons.PencilEdit01, null)
+                }
+                IconButton(onClick = onDelete, enabled = enabled) {
+                    Icon(HugeIcons.Delete01, null)
+                }
             }
         }
     }
@@ -724,18 +773,23 @@ private fun MemoryItem(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            IconButton(
-                onClick = { onEditMemory(memory) }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(HugeIcons.PencilEdit01, null)
-            }
-            IconButton(
-                onClick = { onDeleteMemory(memory) }
-            ) {
-                Icon(
-                    HugeIcons.Delete01,
-                    stringResource(R.string.assistant_page_delete)
-                )
+                IconButton(
+                    onClick = { onEditMemory(memory) }
+                ) {
+                    Icon(HugeIcons.PencilEdit01, null)
+                }
+                IconButton(
+                    onClick = { onDeleteMemory(memory) }
+                ) {
+                    Icon(
+                        HugeIcons.Delete01,
+                        stringResource(R.string.assistant_page_delete)
+                    )
+                }
             }
         }
     }

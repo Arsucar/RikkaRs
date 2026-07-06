@@ -234,6 +234,9 @@
   <string name="assistant_page_memory_table_template">Memory Table Template</string>
   <string name="assistant_page_memory_table_document">Memory Table Document</string>
   <string name="assistant_page_memory_table_template_name">Template Name</string>
+  <string name="assistant_page_memory_table_template_description">Description</string>
+  <string name="assistant_page_memory_table_template_settings">Template Settings</string>
+  <string name="assistant_page_memory_table_no_description">No description yet</string>
   <string name="assistant_page_memory_table_schema_json">Schema JSON</string>
   <string name="assistant_page_memory_table_payload_json">Payload JSON</string>
   <string name="assistant_page_memory_table_template_ref">Template: %1$s</string>

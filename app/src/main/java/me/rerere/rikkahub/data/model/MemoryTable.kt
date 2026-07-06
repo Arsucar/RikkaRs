@@ -7,6 +7,7 @@ import kotlin.uuid.Uuid
 data class MemoryTableTemplate(
     val id: String = Uuid.random().toString(),
     val name: String = "",
+    val description: String = DEFAULT_MEMORY_TABLE_DESCRIPTION,
     val schemaJson: String = DEFAULT_MEMORY_TABLE_SCHEMA_JSON,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
@@ -41,6 +42,8 @@ fun shouldEnableMemoryTable(settingsEnabled: Boolean, assistantEnabled: Boolean)
     return settingsEnabled && assistantEnabled
 }
 
+const val DEFAULT_MEMORY_TABLE_DESCRIPTION = "General key-value facts for assistant memory lookup."
+
 const val DEFAULT_MEMORY_TABLE_SCHEMA_JSON = """
 {
   "tables": [
@@ -48,7 +51,7 @@ const val DEFAULT_MEMORY_TABLE_SCHEMA_JSON = """
       "name": "facts",
       "columns": [
         { "name": "key", "type": "string" },
-        { "name": "value", "type": "text" }
+        { "name": "value", "type": "string" }
       ],
       "injectPolicy": { "enabled": true },
       "updatePolicy": { "enabled": true }

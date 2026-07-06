@@ -232,6 +232,9 @@
   <string name="assistant_page_memory_table_template">记忆表格模板</string>
   <string name="assistant_page_memory_table_document">记忆表格文档</string>
   <string name="assistant_page_memory_table_template_name">模板名称</string>
+  <string name="assistant_page_memory_table_template_description">描述</string>
+  <string name="assistant_page_memory_table_template_settings">模板设置</string>
+  <string name="assistant_page_memory_table_no_description">暂无描述</string>
   <string name="assistant_page_memory_table_schema_json">Schema JSON</string>
   <string name="assistant_page_memory_table_payload_json">Payload JSON</string>
   <string name="assistant_page_memory_table_template_ref">模板：%1$s</string>

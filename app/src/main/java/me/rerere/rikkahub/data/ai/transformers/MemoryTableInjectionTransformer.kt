@@ -81,6 +81,9 @@ internal fun buildMemoryTablePrompt(
             val template = templatesById[document.templateId]
             appendLine()
             appendLine("## ${template?.name ?: document.templateId}")
+            template?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                appendLine("description=${description.trim()}")
+            }
             appendLine("scope=${document.scopeType.name.lowercase()} revision=${document.revision}")
             appendLine("schema:")
             appendLine((template?.schemaJson ?: "{}").trim())

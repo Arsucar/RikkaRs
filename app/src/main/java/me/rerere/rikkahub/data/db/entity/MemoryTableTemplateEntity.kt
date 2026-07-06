@@ -16,6 +16,8 @@ data class MemoryTableTemplateEntity(
     val id: String,
     @ColumnInfo("name")
     val name: String,
+    @ColumnInfo("description")
+    val description: String,
     @ColumnInfo("schema_json")
     val schemaJson: String,
     @ColumnInfo("created_at")

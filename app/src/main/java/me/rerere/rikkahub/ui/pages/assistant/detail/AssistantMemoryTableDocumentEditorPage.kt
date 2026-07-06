@@ -1,15 +1,19 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalIconButton
@@ -18,7 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Switch
@@ -38,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,6 +81,21 @@ fun AssistantMemoryTableDocumentEditorPage(
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
     val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    var savedDocumentId by remember(documentId, templateId, assistantId, initialScopeType) {
+        mutableStateOf(documentId)
+    }
+    val matchingDocument = remember(memoryTableDocuments, documentId, templateId, assistantId, initialScopeType) {
+        if (documentId != null) {
+            null
+        } else {
+            memoryTableDocuments.firstOrNull {
+                it.templateId == templateId &&
+                    it.scopeType == initialScopeType &&
+                    it.scopeId == scopeIdFor(initialScopeType, assistantId)
+            }
+        }
+    }
+    val effectiveDocumentId = savedDocumentId ?: documentId ?: matchingDocument?.id
 
     val resolvedTemplate = remember(memoryTableTemplates, templateId) {
         memoryTableTemplates.firstOrNull { it.id == templateId }
@@ -87,9 +106,9 @@ fun AssistantMemoryTableDocumentEditorPage(
             )
     }
 
-    var draft by remember(documentId, templateId, assistantId, initialScopeType) {
+    var draft by remember(templateId, assistantId, initialScopeType) {
         mutableStateOf<MemoryTableDocument?>(
-            if (documentId == null) {
+            if (effectiveDocumentId == null) {
                 MemoryTableDocument(
                     templateId = templateId,
                     scopeType = initialScopeType,
@@ -101,16 +120,16 @@ fun AssistantMemoryTableDocumentEditorPage(
         )
     }
 
-    LaunchedEffect(documentId, memoryTableDocuments) {
-        if (documentId == null) return@LaunchedEffect
-        memoryTableDocuments.firstOrNull { it.id == documentId }?.let { loaded ->
-            if (draft == null || draft?.id == loaded.id && draft?.updatedAt != loaded.updatedAt) {
+    LaunchedEffect(effectiveDocumentId, memoryTableDocuments) {
+        if (effectiveDocumentId == null) return@LaunchedEffect
+        memoryTableDocuments.firstOrNull { it.id == effectiveDocumentId }?.let { loaded ->
+            if (draft == null || draft?.id != loaded.id || draft?.updatedAt != loaded.updatedAt) {
                 draft = loaded
             }
         } ?: run {
             if (draft == null) {
                 draft = MemoryTableDocument(
-                    id = documentId,
+                    id = effectiveDocumentId,
                     templateId = templateId,
                     scopeType = initialScopeType,
                     scopeId = scopeIdFor(initialScopeType, assistantId),
@@ -129,10 +148,12 @@ fun AssistantMemoryTableDocumentEditorPage(
         document = document,
         template = resolvedTemplate,
         assistantId = assistantId,
-        isNewDocument = documentId == null,
+        isNewDocument = effectiveDocumentId == null,
         onDraftChange = { draft = it },
         onUpdateTemplate = { vm.upsertMemoryTableTemplate(it) },
         onSave = { saved ->
+            savedDocumentId = saved.id
+            draft = saved
             vm.upsertMemoryTableDocument(saved)
             navController.popBackStack()
         },
@@ -153,25 +174,30 @@ private fun MemoryTableDocumentEditorScaffold(
 ) {
     var draft by remember(document.id, document.templateId) { mutableStateOf(document) }
     var selectedTab by remember(document.id) { mutableIntStateOf(0) }
-    var payloadJson by remember(document.id, document.payloadJson) { mutableStateOf(document.payloadJson) }
-    val initialTables = remember(document.id, template.schemaJson, document.payloadJson) {
-        parseMemoryTableEditorTables(template.schemaJson, document.payloadJson)
+    var templateDraft by remember(template.id, template.updatedAt) { mutableStateOf(template) }
+    val initialTables = remember(document.id, templateDraft.schemaJson, document.payloadJson) {
+        parseMemoryTableEditorTables(templateDraft.schemaJson, document.payloadJson)
     }
-    var tableState by remember(document.id, template.schemaJson, document.payloadJson) {
+    val initialPayloadJson = remember(document.id, document.payloadJson, initialTables) {
+        normalizedMemoryTablePayload(document.payloadJson, initialTables)
+    }
+    var tableState by remember(document.id, templateDraft.schemaJson, document.payloadJson) {
         mutableStateOf(initialTables.getOrNull().orEmpty())
     }
-    var editorError by remember(document.id, template.schemaJson, document.payloadJson) {
+    var editorError by remember(document.id, templateDraft.schemaJson, document.payloadJson) {
         mutableStateOf(initialTables.exceptionOrNull()?.message)
     }
-    var baselineFingerprint by remember(document.id) {
-        mutableStateOf(editorFingerprint(document, document.payloadJson))
+    var baselineFingerprint by remember(document.id, initialPayloadJson, template.id, template.updatedAt) {
+        mutableStateOf(editorFingerprint(document, initialPayloadJson, template))
     }
+    var payloadJson by remember(document.id, initialPayloadJson) { mutableStateOf(initialPayloadJson) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showAddColumnDialog by remember { mutableStateOf(false) }
     var addColumnTableIndex by remember { mutableIntStateOf(-1) }
+    var columnActionTarget by remember { mutableStateOf<Pair<Int, MemoryTableSchemaColumn>?>(null) }
     var columnToDelete by remember { mutableStateOf<Pair<Int, MemoryTableSchemaColumn>?>(null) }
 
-    fun currentFingerprint(): String = editorFingerprint(draft, payloadJson)
+    fun currentFingerprint(): String = editorFingerprint(draft, payloadJson, templateDraft)
     val hasUnsavedChanges = currentFingerprint() != baselineFingerprint
 
     fun updateTables(tables: List<MemoryTableEditorTable>) {
@@ -187,32 +213,33 @@ private fun MemoryTableDocumentEditorScaffold(
     }
 
     fun updateTemplateSchema(updatedTemplate: MemoryTableTemplate) {
-        onUpdateTemplate(updatedTemplate)
+        templateDraft = updatedTemplate
     }
 
-    fun addColumn(tableIndex: Int, columnName: String, columnType: String) {
-        val targetTable = tableState.getOrNull(tableIndex) ?: return
+    fun addColumn(tableIndex: Int, columnName: String): Boolean {
+        val targetTable = tableState.getOrNull(tableIndex) ?: return false
         if (columnName.isBlank()) {
             editorError = "Column name cannot be empty"
-            return
+            return false
         }
         if (targetTable.columns.any { it.name == columnName }) {
             editorError = "Column '$columnName' already exists"
-            return
+            return false
         }
-        val newColumn = MemoryTableSchemaColumn(name = columnName, type = columnType)
-        val updatedTemplate = template.withColumnAdded(targetTable.name, newColumn)
+        val newColumn = MemoryTableSchemaColumn(name = columnName, type = MEMORY_TABLE_COLUMN_TYPE)
+        val updatedTemplate = templateDraft.withColumnAdded(targetTable.name, newColumn)
         updateTemplateSchema(updatedTemplate)
         updateTables(
             tableState.mapIndexed { index, table ->
                 if (index == tableIndex) table.addColumn(newColumn) else table
             },
         )
+        return true
     }
 
     fun deleteColumn(tableIndex: Int, column: MemoryTableSchemaColumn) {
         val targetTable = tableState.getOrNull(tableIndex) ?: return
-        val updatedTemplate = template.withColumnRemoved(targetTable.name, column.name)
+        val updatedTemplate = templateDraft.withColumnRemoved(targetTable.name, column.name)
         updateTemplateSchema(updatedTemplate)
         updateTables(
             tableState.mapIndexed { index, table ->
@@ -221,8 +248,30 @@ private fun MemoryTableDocumentEditorScaffold(
         )
     }
 
+    fun renameColumn(tableIndex: Int, column: MemoryTableSchemaColumn, newName: String): Boolean {
+        val targetTable = tableState.getOrNull(tableIndex) ?: return false
+        val trimmedName = newName.trim()
+        if (trimmedName.isBlank()) {
+            editorError = "Column name cannot be empty"
+            return false
+        }
+        if (trimmedName == column.name) return true
+        if (targetTable.columns.any { it.name == trimmedName }) {
+            editorError = "Column '$trimmedName' already exists"
+            return false
+        }
+        val updatedTemplate = templateDraft.withColumnRenamed(targetTable.name, column.name, trimmedName)
+        updateTemplateSchema(updatedTemplate)
+        updateTables(
+            tableState.mapIndexed { index, table ->
+                if (index == tableIndex) table.renameColumn(column.name, trimmedName) else table
+            },
+        )
+        return true
+    }
+
     fun switchToTableMode(): Boolean {
-        return parseMemoryTableEditorTables(template.schemaJson, payloadJson)
+        return parseMemoryTableEditorTables(templateDraft.schemaJson, payloadJson)
             .onSuccess {
                 tableState = it
                 editorError = null
@@ -235,6 +284,11 @@ private fun MemoryTableDocumentEditorScaffold(
     }
 
     fun persistDraft(): Boolean {
+        validateMemoryTableSchemaJson(templateDraft.schemaJson)
+            .onFailure {
+                editorError = it.message
+                return false
+            }
         val payloadResult = if (selectedTab == 1) {
             validateMemoryTablePayloadJson(payloadJson).map { payloadJson.trim() }
         } else {
@@ -242,7 +296,12 @@ private fun MemoryTableDocumentEditorScaffold(
         }
         return payloadResult
             .onSuccess { payload ->
-                onSave(draft.copy(payloadJson = payload))
+                val saved = draft.copy(payloadJson = payload)
+                draft = saved
+                onDraftChange(saved)
+                onUpdateTemplate(templateDraft)
+                baselineFingerprint = editorFingerprint(saved, payload, templateDraft)
+                onSave(saved)
             }
             .onFailure { editorError = it.message }
             .isSuccess
@@ -281,7 +340,7 @@ private fun MemoryTableDocumentEditorScaffold(
                         Text(
                             text = stringResource(
                                 R.string.assistant_page_memory_table_template_ref,
-                                template.name.ifBlank { template.id },
+                                templateDraft.name.ifBlank { templateDraft.id },
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -438,24 +497,66 @@ private fun MemoryTableDocumentEditorScaffold(
                                     addColumnTableIndex = tableIndex
                                     showAddColumnDialog = true
                                 },
-                                onDeleteColumn = { column ->
-                                    columnToDelete = tableIndex to column
+                                onColumnAction = { column ->
+                                    columnActionTarget = tableIndex to column
                                 },
                             )
                         }
                     }
                 } else {
-                    TextField(
-                        value = payloadJson,
-                        onValueChange = { value ->
-                            payloadJson = value
-                            editorError = validateMemoryTablePayloadJson(value).exceptionOrNull()?.message
-                        },
-                        label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
-                    )
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.assistant_page_memory_table_template_settings),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        TextField(
+                            value = templateDraft.name,
+                            onValueChange = { value ->
+                                templateDraft = templateDraft.copy(name = value)
+                            },
+                            label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        TextField(
+                            value = templateDraft.description,
+                            onValueChange = { value ->
+                                templateDraft = templateDraft.copy(description = value)
+                            },
+                            label = { Text(stringResource(R.string.assistant_page_memory_table_template_description)) },
+                            minLines = 2,
+                            maxLines = 5,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        TextField(
+                            value = templateDraft.schemaJson,
+                            onValueChange = { value ->
+                                templateDraft = templateDraft.copy(schemaJson = value)
+                                editorError = validateMemoryTableSchemaJson(value).exceptionOrNull()?.message
+                            },
+                            label = { Text(stringResource(R.string.assistant_page_memory_table_schema_json)) },
+                            minLines = 6,
+                            maxLines = 14,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        TextField(
+                            value = payloadJson,
+                            onValueChange = { value ->
+                                payloadJson = value
+                                editorError = validateMemoryTablePayloadJson(value).exceptionOrNull()?.message
+                            },
+                            label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
+                            minLines = 6,
+                            maxLines = 14,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
@@ -464,9 +565,49 @@ private fun MemoryTableDocumentEditorScaffold(
     if (showAddColumnDialog) {
         AddColumnDialog(
             onDismiss = { showAddColumnDialog = false },
-            onConfirm = { name, type ->
-                addColumn(addColumnTableIndex, name, type)
-                showAddColumnDialog = false
+            onConfirm = { name ->
+                if (addColumn(addColumnTableIndex, name)) {
+                    showAddColumnDialog = false
+                }
+            },
+        )
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_memory_table_unsaved_title)) },
+            text = { Text(stringResource(R.string.assistant_page_memory_table_unsaved_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        onNavigateBack()
+                    },
+                ) {
+                    Text(stringResource(R.string.assistant_page_memory_table_discard))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+
+    columnActionTarget?.let { target ->
+        ColumnActionDialog(
+            column = target.second,
+            onDismiss = { columnActionTarget = null },
+            onRename = { name ->
+                if (renameColumn(target.first, target.second, name)) {
+                    columnActionTarget = null
+                }
+            },
+            onDelete = {
+                columnActionTarget = null
+                columnToDelete = target
             },
         )
     }
@@ -495,7 +636,7 @@ private fun MemoryTableDocumentEditorScaffold(
             },
             dismissButton = {
                 TextButton(onClick = { columnToDelete = null }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -503,12 +644,64 @@ private fun MemoryTableDocumentEditorScaffold(
 }
 
 @Composable
+private fun ColumnActionDialog(
+    column: MemoryTableSchemaColumn,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var columnName by remember(column.name) { mutableStateOf(column.name) }
+    var error by remember(column.name) { mutableStateOf<String?>(null) }
+    val columnNameEmptyError = stringResource(R.string.assistant_page_memory_table_column_name_empty)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(column.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = columnName,
+                    onValueChange = {
+                        columnName = it
+                        error = null
+                    },
+                    label = { Text(stringResource(R.string.assistant_page_memory_table_column_name)) },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = error?.let { { Text(it) } },
+                )
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.assistant_page_memory_table_delete_column))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (columnName.isBlank()) {
+                        error = columnNameEmptyError
+                        return@TextButton
+                    }
+                    onRename(columnName)
+                },
+            ) {
+                Text(stringResource(R.string.common_rename))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
+}
+
+@Composable
 private fun AddColumnDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, type: String) -> Unit,
+    onConfirm: (name: String) -> Unit,
 ) {
     var columnName by remember { mutableStateOf("") }
-    var columnType by remember { mutableStateOf("string") }
     var error by remember { mutableStateOf<String?>(null) }
     val columnNameEmptyError = stringResource(R.string.assistant_page_memory_table_column_name_empty)
 
@@ -528,26 +721,6 @@ private fun AddColumnDialog(
                     isError = error != null,
                     supportingText = error?.let { { Text(it) } },
                 )
-                Text(
-                    text = stringResource(R.string.assistant_page_memory_table_column_type),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = columnType == "string",
-                            onClick = { columnType = "string" },
-                        )
-                        Text(stringResource(R.string.assistant_page_memory_table_column_type_string))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = columnType == "text",
-                            onClick = { columnType = "text" },
-                        )
-                        Text(stringResource(R.string.assistant_page_memory_table_column_type_text))
-                    }
-                }
             }
         },
         confirmButton = {
@@ -557,7 +730,7 @@ private fun AddColumnDialog(
                         error = columnNameEmptyError
                         return@TextButton
                     }
-                    onConfirm(columnName.trim(), columnType)
+                    onConfirm(columnName.trim())
                 },
             ) {
                 Text(stringResource(R.string.common_save))
@@ -576,45 +749,34 @@ private fun MemoryTableEditableTable(
     table: MemoryTableEditorTable,
     onChange: (MemoryTableEditorTable) -> Unit,
     onAddColumn: () -> Unit,
-    onDeleteColumn: (MemoryTableSchemaColumn) -> Unit,
+    onColumnAction: (MemoryTableSchemaColumn) -> Unit,
 ) {
-    val columnMinWidths = table.columns.map { column ->
-        if (column.type == "text") 120.dp else 80.dp
-    } + 48.dp
-    val columnMaxWidths = table.columns.map { column ->
-        if (column.type == "text") 280.dp else 160.dp
-    } + 48.dp
+    val columnMinWidths = List(table.columns.size) { 88.dp } + 48.dp
+    val columnMaxWidths = List(table.columns.size) { 280.dp } + 48.dp
 
     val headers = buildList<@Composable () -> Unit> {
         table.columns.forEach { column ->
             add(@Composable {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .clickable { onColumnAction(column) },
+                    contentAlignment = Alignment.CenterStart,
                 ) {
                     Text(
                         text = column.name,
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    IconButton(
-                        onClick = { onDeleteColumn(column) },
-                        modifier = Modifier.padding(start = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Delete01,
-                            contentDescription = stringResource(R.string.assistant_page_memory_table_delete_column),
-                        )
-                    }
                 }
             })
         }
         add(@Composable {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                 IconButton(onClick = onAddColumn) {
                     Icon(
                         imageVector = HugeIcons.Add01,
@@ -629,21 +791,17 @@ private fun MemoryTableEditableTable(
         buildList<@Composable () -> Unit> {
             table.columns.forEach { column ->
                 add(@Composable {
-                    OutlinedTextField(
+                    TableCellTextField(
                         value = row[column.name].orEmpty(),
                         onValueChange = { value ->
                             onChange(table.updateCell(rowIndex, column.name, value))
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = column.type != "text",
-                        minLines = if (column.type == "text") 3 else 1,
-                        maxLines = if (column.type == "text") 6 else 1,
                     )
                 })
             }
             add(@Composable {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.padding(horizontal = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     IconButton(onClick = { onChange(table.deleteRow(rowIndex)) }) {
@@ -670,13 +828,33 @@ private fun MemoryTableEditableTable(
             rows = rows,
             columnMinWidths = columnMinWidths,
             columnMaxWidths = columnMaxWidths,
-            cellPadding = 8.dp,
-            stretchToFillWidth = true,
+            cellPadding = 0.dp,
+            stretchToFillWidth = false,
         )
         TextButton(onClick = { onChange(table.addRow()) }) {
             Text(stringResource(R.string.assistant_page_memory_table_add_row))
         }
     }
+}
+
+@Composable
+private fun TableCellTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = MaterialTheme.colorScheme.onSurface,
+    ),
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        textStyle = textStyle,
+        modifier = modifier
+            .heightIn(min = 40.dp)
+            .widthIn(min = 72.dp, max = 280.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
 }
 
 private fun scopeIdFor(scopeType: MemoryTableScopeType, assistantId: String): String {
@@ -687,8 +865,19 @@ private fun scopeIdFor(scopeType: MemoryTableScopeType, assistantId: String): St
     }
 }
 
-private fun editorFingerprint(document: MemoryTableDocument, payloadJson: String): String {
-    return "${document.scopeType}|${document.scopeId}|${payloadJson.trim()}"
+private fun editorFingerprint(
+    document: MemoryTableDocument,
+    payloadJson: String,
+    template: MemoryTableTemplate,
+): String {
+    return listOf(
+        document.scopeType.name,
+        document.scopeId,
+        payloadJson.trim(),
+        template.name.trim(),
+        template.description.trim(),
+        template.schemaJson.trim(),
+    ).joinToString("|")
 }
 
 private fun MemoryTableTemplate.withColumnAdded(
@@ -755,6 +944,46 @@ private fun MemoryTableTemplate.withColumnRemoved(
     }.getOrDefault(schemaJson),
 )
 
+private fun MemoryTableTemplate.withColumnRenamed(
+    tableName: String,
+    oldColumnName: String,
+    newColumnName: String,
+): MemoryTableTemplate = copy(
+    schemaJson = runCatching {
+        val root = memoryTableEditorJson.parseToJsonElement(schemaJson) as? JsonObject
+            ?: error("Schema JSON must be an object")
+        val tables = root["tables"] as? JsonArray ?: error("Schema JSON must contain tables[]")
+        val updatedTables = JsonArray(
+            tables.map { tableElement ->
+                val tableObject = tableElement as? JsonObject ?: return@map tableElement
+                val currentName = tableObject["name"]?.jsonPrimitive?.contentOrNull
+                if (currentName != tableName) return@map tableElement
+                val columns = tableObject["columns"] as? JsonArray ?: JsonArray(emptyList())
+                val updatedColumns = JsonArray(
+                    columns.map { columnElement ->
+                        val columnObject = columnElement as? JsonObject ?: return@map columnElement
+                        val columnName = columnObject["name"]?.jsonPrimitive?.contentOrNull
+                        if (columnName != oldColumnName) return@map columnElement
+                        JsonObject(
+                            columnObject.toMutableMap().apply {
+                                put("name", JsonPrimitive(newColumnName))
+                            },
+                        )
+                    },
+                )
+                JsonObject(
+                    tableObject.toMutableMap().apply {
+                        put("columns", updatedColumns)
+                    },
+                )
+            },
+        )
+        JsonObject(root.toMutableMap().apply { put("tables", updatedTables) }).let {
+            memoryTableEditorJson.encodeToString(JsonObject.serializer(), it)
+        }
+    }.getOrDefault(schemaJson),
+)
+
 private data class MemoryTableSchemaTable(
     val name: String,
     val columns: List<MemoryTableSchemaColumn>,
@@ -794,6 +1023,21 @@ private data class MemoryTableEditorTable(
         )
     }
 
+    fun renameColumn(oldColumnName: String, newColumnName: String): MemoryTableEditorTable {
+        return copy(
+            schema = schema.copy(
+                columns = columns.map { column ->
+                    if (column.name == oldColumnName) column.copy(name = newColumnName) else column
+                },
+            ),
+            rows = rows.map { row ->
+                row.toMutableMap().apply {
+                    put(newColumnName, remove(oldColumnName).orEmpty())
+                }
+            },
+        )
+    }
+
     fun updateCell(rowIndex: Int, columnName: String, value: String): MemoryTableEditorTable {
         return copy(
             rows = rows.mapIndexed { index, row ->
@@ -812,6 +1056,8 @@ private val memoryTableEditorJson = Json {
     ignoreUnknownKeys = true
     isLenient = true
 }
+
+private const val MEMORY_TABLE_COLUMN_TYPE = "string"
 
 private fun parseMemoryTableEditorTables(
     schemaJson: String,
@@ -882,9 +1128,22 @@ private fun serializeMemoryTablePayload(
     memoryTableEditorJson.encodeToString(JsonObject.serializer(), JsonObject(root))
 }
 
+private fun normalizedMemoryTablePayload(
+    payloadJson: String,
+    tables: Result<List<MemoryTableEditorTable>>,
+): String {
+    return tables.getOrNull()
+        ?.let { serializeMemoryTablePayload(payloadJson, it).getOrDefault(payloadJson) }
+        ?: payloadJson
+}
+
 private fun validateMemoryTablePayloadJson(payloadJson: String): Result<Unit> = runCatching {
     val payload = memoryTableEditorJson.parseToJsonElement(payloadJson)
     require(payload is JsonObject) { "Payload JSON must be an object" }
+}
+
+private fun validateMemoryTableSchemaJson(schemaJson: String): Result<Unit> = runCatching {
+    parseMemoryTableSchema(schemaJson)
 }
 
 private fun jsonElementToCellText(element: JsonElement?): String {
