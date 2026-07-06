@@ -809,3 +809,37 @@ Resolved and closed GitHub issues #43-#48: chat/skills UI cleanup, workspace tex
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Resolve issues 49-51
+
+**Date**: 2026-07-06
+**Task**: Resolve issues 49-51
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Resolved memory table patch row merging, added full-screen memory table document editing, shared Markdown preview for message/workspace chips, validated tests/compile/install, and confirmed GitHub open issues are empty.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e860756f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
