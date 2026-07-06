@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/app/index.md", "reason": "App module quality gate and runtime/UI review context."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review thinking guide index."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check for duplicated markdown/table helper logic."}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "Review Compose state handling and remembered dependencies."}

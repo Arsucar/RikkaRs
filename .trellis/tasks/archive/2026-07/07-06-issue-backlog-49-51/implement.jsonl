@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/app/index.md", "reason": "App module runtime and UI quality guidance for memory table and message chip changes."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared pre-development thinking guide index."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicating Markdown preview and JSON table parsing behavior."}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "Compose state and remember key guidance for full-screen editor UI."}
