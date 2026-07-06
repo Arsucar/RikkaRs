@@ -30,3 +30,12 @@
 # Python cache
 **/__pycache__/
 **/*.pyc
+
+# Workspace-generated artifacts
+workspace/*/gradle-home/
+workspace/*/*.log
+workspace/*/*.png
+workspace/*/*.sqlite
+workspace/*/*.sqlite-shm
+workspace/*/*.sqlite-wal
+workspace/*/*.sh
