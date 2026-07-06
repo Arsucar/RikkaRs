@@ -12,6 +12,38 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.18
+
+### 新功能 / Features（本 Fork，v2.3.17 之后）
+
+- **会话模型覆盖** — 聊天页可为单个会话选择模型，并可一键清回助手默认；新会话不会继承旧会话覆盖。（#31）
+  **Conversation model override** — Chat can override the model per conversation and clear back to the assistant default; new conversations do not inherit old overrides. (#31)
+
+- **工作区全屏文本编辑器** — 工作区文件支持对 `.md`、`.json`、`.kt`、`.log` 等文本文件进行全屏查看和编辑，二进制文件不暴露文本编辑入口。（#40）
+  **Workspace fullscreen text editor** — Workspace files can open `.md`, `.json`, `.kt`, `.log`, and other text files in fullscreen view/edit mode; binary files do not expose text editing. (#40)
+
+- **记忆作用域与记忆表** — 记忆支持助手私有/全局作用域切换；新增默认关闭的记忆表管理能力，支持模板、文档、作用域控制和零侵入禁用状态。（#39 #41）
+  **Memory scopes and memory tables** — Memories can switch between assistant-private and global scopes; added disabled-by-default memory table management with templates, documents, scope controls, and zero-intrusion disabled behavior. (#39 #41)
+
+- **助手私有 Skill 管理** — 全局 Skill 与助手私有 Skill 的可见性和复制路径更清晰，助手扩展页支持管理私有副本。（#36）
+  **Assistant-private Skill management** — Global and assistant-private Skills have clearer visibility and copy paths; assistant extension pages can manage private copies. (#36)
+
+### 修复 / Fixes（本 Fork，v2.3.17 之后）
+
+- **工作区 Git pack 可靠性** — 工作区终端和 AI shell 不再对 git pack 文件启用 `link2symlink`，并在风险存储模式下显示提示，减少 git clone/pull 损坏。（#33 #35）
+  **Workspace git pack reliability** — Workspace terminal and AI shell no longer use `link2symlink` for git pack files, and risky storage modes show warnings to reduce git clone/pull corruption. (#33 #35)
+
+- **Skill 文件访问作用域** — Skill 读取路径限制到启用 Skill 及其允许的子文件/安全符号链接，避免越权读取。（#34 #37 #38）
+  **Skill file access scope** — Skill file reads are limited to enabled Skills and approved subfiles/safe symlinks, preventing unauthorized path access. (#34 #37 #38)
+
+- **子代理工具策略** — `finish_work` 仅提供给子代理，主会话不再暴露该工具，工具权限与运行时身份保持一致。（#42）
+  **Subagent tool policy** — `finish_work` is now only available to subagents; the main session no longer exposes it, keeping tool permissions aligned with runtime identity. (#42)
+
+- **备份与聊天生成细节** — 备份规则包含外部工作区文件；后台生成和时间提醒转换器行为与前台聊天保持一致。
+  **Backup and chat generation details** — Backup rules now include external workspace files; background generation and time reminder behavior align with foreground chat.
+
+---
+
 ## v2.3.17
 
 ### 改进 / Improvements（本 Fork，v2.3.16 之后）
