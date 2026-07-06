@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.MemoryScope
@@ -48,8 +49,8 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -102,7 +103,6 @@ fun AssistantMemoryPage(id: String) {
             onUpdateMemory = { vm.updateMemory(it) },
             onUpsertMemoryTableTemplate = { vm.upsertMemoryTableTemplate(it) },
             onDeleteMemoryTableTemplate = { vm.deleteMemoryTableTemplate(it) },
-            onUpsertMemoryTableDocument = { vm.upsertMemoryTableDocument(it) },
             onDeleteMemoryTableDocument = { vm.deleteMemoryTableDocument(it) },
         )
     }
@@ -123,9 +123,9 @@ private fun AssistantMemoryContent(
     onDeleteMemory: (AssistantMemory) -> Unit,
     onUpsertMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
     onDeleteMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
-    onUpsertMemoryTableDocument: (MemoryTableDocument) -> Unit,
     onDeleteMemoryTableDocument: (MemoryTableDocument) -> Unit,
 ) {
+    val navController = LocalNavController.current
     val memoryDialogState = useEditState<AssistantMemory> {
         if (it.id == 0) {
             onAddMemory(it)
@@ -135,9 +135,6 @@ private fun AssistantMemoryContent(
     }
     val memoryTableTemplateDialogState = useEditState<MemoryTableTemplate> {
         onUpsertMemoryTableTemplate(it)
-    }
-    val memoryTableDocumentDialogState = useEditState<MemoryTableDocument> {
-        onUpsertMemoryTableDocument(it)
     }
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
     var pendingDeleteMemoryTableTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
@@ -246,83 +243,6 @@ private fun AssistantMemoryContent(
             },
             dismissButton = {
                 TextButton(onClick = { memoryTableTemplateDialogState.dismiss() }) {
-                    Text(stringResource(R.string.assistant_page_cancel))
-                }
-            },
-        )
-    }
-
-    memoryTableDocumentDialogState.EditStateContent { document, update ->
-        AlertDialog(
-            onDismissRequest = { memoryTableDocumentDialogState.dismiss() },
-            title = {
-                Text(stringResource(R.string.assistant_page_memory_table_document))
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_memory_table_template_ref, document.templateId),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextField(
-                        value = document.payloadJson,
-                        onValueChange = { update(document.copy(payloadJson = it)) },
-                        label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
-                        minLines = 6,
-                        maxLines = 12,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_memory_scope_global),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.assistant_page_memory_scope_global_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = document.scopeType == MemoryTableScopeType.GLOBAL,
-                            onCheckedChange = { enabled ->
-                                update(
-                                    document.copy(
-                                        scopeType = if (enabled) {
-                                            MemoryTableScopeType.GLOBAL
-                                        } else {
-                                            MemoryTableScopeType.ASSISTANT
-                                        },
-                                        scopeId = if (enabled) {
-                                            MemoryRepository.GLOBAL_MEMORY_ID
-                                        } else {
-                                            assistant.id.toString()
-                                        },
-                                    )
-                                )
-                            },
-                            enabled = document.scopeType != MemoryTableScopeType.CONVERSATION,
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.assistant_page_memory_table_conversation_scope_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { memoryTableDocumentDialogState.confirm() }) {
-                    Text(stringResource(R.string.assistant_page_save))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { memoryTableDocumentDialogState.dismiss() }) {
                     Text(stringResource(R.string.assistant_page_cancel))
                 }
             },
@@ -485,15 +405,25 @@ private fun AssistantMemoryContent(
             onEditTemplate = { memoryTableTemplateDialogState.open(it) },
             onDeleteTemplate = { pendingDeleteMemoryTableTemplate = it },
             onAddDocument = { template ->
-                memoryTableDocumentDialogState.open(
-                    MemoryTableDocument(
+                navController.navigate(
+                    Screen.AssistantMemoryTableDocumentEditor(
+                        documentId = null,
                         templateId = template.id,
+                        assistantId = assistant.id.toString(),
                         scopeType = MemoryTableScopeType.ASSISTANT,
-                        scopeId = assistant.id.toString(),
-                    )
+                    ),
                 )
             },
-            onEditDocument = { memoryTableDocumentDialogState.open(it) },
+            onEditDocument = { document ->
+                navController.navigate(
+                    Screen.AssistantMemoryTableDocumentEditor(
+                        documentId = document.id,
+                        templateId = document.templateId,
+                        assistantId = assistant.id.toString(),
+                        scopeType = document.scopeType,
+                    ),
+                )
+            },
             onDeleteDocument = { pendingDeleteMemoryTableDocument = it },
         )
 

@@ -86,7 +86,9 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableDocumentEditorPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantSubagentPage
@@ -376,6 +378,15 @@ class RouteActivity : ComponentActivity() {
                                 AssistantMemoryPage(key.id)
                             }
 
+                            entry<Screen.AssistantMemoryTableDocumentEditor> { key ->
+                                AssistantMemoryTableDocumentEditorPage(
+                                    documentId = key.documentId,
+                                    templateId = key.templateId,
+                                    assistantId = key.assistantId,
+                                    initialScopeType = key.scopeType,
+                                )
+                            }
+
                             entry<Screen.AssistantRequest> { key ->
                                 AssistantRequestPage(key.id)
                             }
@@ -630,6 +641,14 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AssistantMemory(val id: String) : Screen
+
+    @Serializable
+    data class AssistantMemoryTableDocumentEditor(
+        val documentId: String? = null,
+        val templateId: String,
+        val assistantId: String,
+        val scopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
+    ) : Screen
 
     @Serializable
     data class AssistantRequest(val id: String) : Screen

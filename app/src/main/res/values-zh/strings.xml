@@ -237,6 +237,14 @@
   <string name="assistant_page_memory_table_template_ref">模板：%1$s</string>
   <string name="assistant_page_memory_table_default_template">默认表格</string>
   <string name="assistant_page_memory_table_document_meta">%1$s · revision %2$d</string>
+  <string name="assistant_page_memory_table_mode_table">表格</string>
+  <string name="assistant_page_memory_table_mode_json">JSON</string>
+  <string name="assistant_page_memory_table_add_row">新增行</string>
+  <string name="assistant_page_memory_table_empty_schema">Schema 中未定义任何表。</string>
+  <string name="assistant_page_memory_table_unsaved_title">未保存的修改</string>
+  <string name="assistant_page_memory_table_unsaved_text">离开此页面将丢失未保存的修改。</string>
+  <string name="assistant_page_memory_table_discard">放弃</string>
+  <string name="assistant_page_memory_table_editor_new">新建表格文档</string>
   <string name="assistant_page_max_tokens">最大Token数</string>
   <string name="assistant_page_max_tokens_desc">最大生成Token数量。留空表示无限制。</string>
   <string name="assistant_page_max_tokens_limit">限制：%d 个Token</string>
