@@ -12,6 +12,40 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.20
+
+### 新功能 / Features（本 Fork，v2.3.19 之后）
+
+- **记忆表格文档全屏编辑** — 记忆表格文档支持全屏表格/JSON 双模式查看与编辑，并修复 `patch_rows` 合并语义，避免静默丢失已有行。（#49 #50）
+  **Fullscreen memory table documents** — Memory table documents now support fullscreen table/JSON viewing and editing, and `patch_rows` uses merge semantics to avoid silently dropping existing rows. (#49 #50)
+
+- **助手私有 Skill 工作区挂载** — 助手私有 Skills 会挂载到工作区工具、主会话与子代理运行环境，便于脚本执行和运行时迭代。（#52）
+  **Assistant-private Skill workspace mounts** — Assistant-private Skills are mounted into workspace tools, main chat, and subagent runtimes for script execution and runtime iteration. (#52)
+
+- **聊天模型快速切换** — 聊天页模型图标支持长按打开最近使用模型菜单，模型切换会记录有效的最近使用列表。（#54）
+  **Recent chat model switching** — Long-pressing the chat model icon opens a recent-model menu, and valid model switches are recorded in a recent list. (#54)
+
+- **模型搜索与提供商标签管理** — 模型选择搜索支持匹配提供商名与模型名，收藏分组过滤行为保持一致；提供商标签支持建议/已用标签统一聚合、重命名、删除和排序。（#55 #56）
+  **Model search and provider tag management** — Model search matches both provider and model names with consistent favorite filtering; provider tags now combine suggested/used tags and support rename, delete, and reorder. (#55 #56)
+
+- **上游功能同步** — 合入上游搜索 Ollama fetch、WebView/Web UI 化学公式渲染、Compose/Material/Navigation 依赖更新，以及文件选择、搜索面板和聊天滚动相关改进。
+  **Upstream feature sync** — Merged upstream Ollama fetch search, chemistry rendering in WebView/Web UI, Compose/Material/Navigation dependency updates, plus file picker, search panel, and chat scrolling improvements.
+
+### 修复 / Fixes（本 Fork，v2.3.19 之后）
+
+- **Markdown 与 JSON 查看状态** — 消息文件 chip 打开 `.md` 时使用 Markdown 渲染；日志页 JSON 树进入复制面板再返回后保留展开状态。（#51 #53）
+  **Markdown and JSON view state** — Message file chips render `.md` files as Markdown, and log-page JSON trees preserve expansion state after entering and returning from the copy panel. (#51 #53)
+
+- **上游修复同步** — 合入上游工具结果图片回传、`mhchem.mjs` 导入、残留内置搜索状态空白、搜索预览跳转与附件菜单对齐等修复。
+  **Upstream fix sync** — Merged upstream fixes for tool-result image inputs, `mhchem.mjs` imports, stale built-in search empty states, search preview jumps, and attachment menu alignment.
+
+### 文档 / Documentation
+
+- **README 与上游同步规则** — README 统一 RikkaRs 品牌、补充 fork 与上游差异说明，并记录合并上游时保留压缩上下文分段选数的冲突规则。（#58 #59）
+  **README and upstream sync rules** — README now uses RikkaRs branding, documents fork/upstream differences, and records the conflict rule for keeping the segmented keep-recent selector when merging upstream. (#58 #59)
+
+---
+
 ## v2.3.19
 
 ### 新功能 / Features（本 Fork，v2.3.18 之后）
