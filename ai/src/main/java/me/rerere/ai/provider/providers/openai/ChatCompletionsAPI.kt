@@ -16,7 +16,6 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -423,9 +422,7 @@ class ChatCompletionsAPI(
                                 put("description", tool.description)
                                 put(
                                     "parameters",
-                                    json.encodeToJsonElement(
-                                        tool.parameters()
-                                    )
+                                    tool.openAIParametersSchemaElement(json)
                                 )
                             })
                         })

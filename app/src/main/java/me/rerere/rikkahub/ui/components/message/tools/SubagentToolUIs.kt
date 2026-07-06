@@ -56,6 +56,8 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
+import me.rerere.rikkahub.data.ai.tools.WORKSPACE_SHELL_TOOL_NAME
+import me.rerere.rikkahub.data.ai.tools.workspaceShellTranscriptInput
 
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.utils.JsonInstant
@@ -448,12 +450,8 @@ private fun SubagentTranscriptToolCallCompactRow(
     cancelled: Boolean = false,
 ) {
     val renderer = remember(step.toolName) { ToolUIRegistry.resolve(step.toolName) }
-    val arguments = remember(step.input) {
-        runCatching { JsonInstant.parseToJsonElement(step.input) }.getOrElse {
-            kotlinx.serialization.json.buildJsonObject {
-                put("input", kotlinx.serialization.json.JsonPrimitive(step.input))
-            }
-        }
+    val arguments = remember(step.toolName, step.input) {
+        parseTranscriptToolArguments(step.toolName, step.input)
     }
     val content = remember(step.output) {
         if (step.output.isBlank()) {
@@ -591,6 +589,24 @@ private fun SubagentTranscriptStepRow(step: SubagentTranscriptStep) {
     }
 }
 
+private fun parseTranscriptToolArguments(toolName: String, input: String) =
+    if (toolName == WORKSPACE_SHELL_TOOL_NAME) {
+        runCatching {
+            JsonInstant.parseToJsonElement(workspaceShellTranscriptInput(input, TRUNCATE_LEN))
+        }.getOrElse {
+            fallbackTranscriptToolArguments(input)
+        }
+    } else {
+        runCatching { JsonInstant.parseToJsonElement(input) }.getOrElse {
+            fallbackTranscriptToolArguments(input)
+        }
+    }
+
+private fun fallbackTranscriptToolArguments(input: String) =
+    kotlinx.serialization.json.buildJsonObject {
+        put("input", kotlinx.serialization.json.JsonPrimitive(input))
+    }
+
 
 private fun parseSubagentMetadata(context: ToolUIContext): JsonObject? {
     val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
@@ -612,12 +628,8 @@ private fun ChainOfThoughtScope.SubagentTranscriptToolCallStep(
     cancelled: Boolean = false,
 ) {
     val renderer = remember(step.toolName) { ToolUIRegistry.resolve(step.toolName) }
-    val arguments = remember(step.input) {
-        runCatching { JsonInstant.parseToJsonElement(step.input) }.getOrElse {
-            kotlinx.serialization.json.buildJsonObject {
-                put("input", kotlinx.serialization.json.JsonPrimitive(step.input))
-            }
-        }
+    val arguments = remember(step.toolName, step.input) {
+        parseTranscriptToolArguments(step.toolName, step.input)
     }
     val content = remember(step.output) {
         if (step.output.isBlank()) {

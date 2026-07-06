@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -352,6 +353,35 @@ class ResponseAPIMessageTest {
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `tool with null parameters serializes empty object schema`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                    abilities = listOf(ModelAbility.TOOL),
+                ),
+                tools = listOf(
+                    Tool(
+                        name = "finish_work",
+                        description = "Finish work",
+                        execute = { emptyList() },
+                    )
+                ),
+            )
+        )
+
+        val parameters = requestBody["tools"]!!
+            .jsonArray[0]
+            .jsonObject["parameters"]!!
+            .jsonObject
+
+        assertEquals("object", parameters["type"]?.jsonPrimitive?.content)
+        assertTrue(parameters["properties"]?.jsonObject?.isEmpty() == true)
     }
 
     // ==================== Helper Functions ====================

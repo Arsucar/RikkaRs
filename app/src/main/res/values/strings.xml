@@ -1451,7 +1451,12 @@
   <string name="tool_ui_delete_failed">Failed to delete %s</string>
   <string name="tool_ui_move_file">Move file</string>
   <string name="tool_ui_shell">Shell: %s</string>
+  <string name="tool_ui_shell_continuation" translatable="false">Shell continuation: %s</string>
   <string name="tool_ui_shell_default">Shell</string>
+  <string name="tool_ui_shell_loading" translatable="false">loading command</string>
+  <string name="tool_ui_shell_unknown" translatable="false">unknown command</string>
+  <string name="tool_ui_shell_command_label" translatable="false">Command</string>
+  <string name="tool_ui_shell_continuation_label" translatable="false">Continuation read</string>
   <string name="tool_ui_shell_timeout">timeout</string>
   <string name="tool_ui_shell_exit">exit %s</string>
   <string name="tool_ui_speaking">Speaking: %s</string>

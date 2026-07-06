@@ -18,6 +18,8 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.WORKSPACE_SHELL_TOOL_NAME
+import me.rerere.rikkahub.data.ai.tools.workspaceShellTranscriptInput
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
@@ -651,7 +653,7 @@ class SubagentHost(
                             steps.add(
                                 SubagentTranscriptStep.ToolCall(
                                     toolName = part.toolName,
-                                    input = truncate(part.input, truncateChars),
+                                    input = compactTranscriptToolInput(part.toolName, part.input, truncateChars),
                                     output = output,
                                     executed = part.isExecuted,
                                 ),
@@ -716,6 +718,13 @@ class SubagentHost(
 
         // REVIEWED: no longer clears needsApproval; approval flows through SubagentPermissionBuilder
         fun sandboxToolsForSubagent(tools: List<Tool>): List<Tool> = tools
+
+        private fun compactTranscriptToolInput(toolName: String, input: String, maxChars: Int): String =
+            if (toolName == WORKSPACE_SHELL_TOOL_NAME) {
+                workspaceShellTranscriptInput(input, maxChars)
+            } else {
+                truncate(input, maxChars)
+            }
 
         private fun truncate(text: String, max: Int): String =
             if (max <= 0 || text.length <= max) text else text.take(max) + "…"

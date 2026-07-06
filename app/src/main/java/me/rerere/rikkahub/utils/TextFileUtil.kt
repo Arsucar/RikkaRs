@@ -32,8 +32,12 @@ private val TEXT_FILE_EXTENSIONS = setOf(
     "kts",
     "log",
     "lua",
+    "markdown",
     "md",
+    "mdown",
     "mjs",
+    "mkd",
+    "mkdn",
     "patch",
     "php",
     "properties",
@@ -51,6 +55,46 @@ private val TEXT_FILE_EXTENSIONS = setOf(
     "xml",
     "yaml",
     "yml",
+)
+
+private val TEXT_FILE_NAMES = setOf(
+    ".bash_profile",
+    ".bashrc",
+    ".dockerignore",
+    ".editorconfig",
+    ".env",
+    ".gitattributes",
+    ".gitignore",
+    ".gitkeep",
+    ".gitmodules",
+    ".npmrc",
+    ".profile",
+    ".prettierrc",
+    ".prettierignore",
+    ".yarnrc",
+    ".zprofile",
+    ".zshrc",
+    "authors",
+    "changelog",
+    "codeowners",
+    "contributors",
+    "copying",
+    "dockerfile",
+    "gemfile",
+    "license",
+    "makefile",
+    "notice",
+    "procfile",
+    "rakefile",
+    "readme",
+    "vagrantfile",
+)
+
+private val TEXT_FILE_NAME_PREFIXES = setOf(
+    ".env.",
+    ".eslintrc",
+    ".prettierrc",
+    ".stylelintrc",
 )
 
 private val TEXT_MIME_TYPES = setOf(
@@ -72,7 +116,17 @@ fun isTextLikeFileName(fileName: String): Boolean {
     val lowerName = normalized.lowercase(Locale.ROOT)
     val extension = normalized.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase(Locale.ROOT)
-    return extension in TEXT_FILE_EXTENSIONS || lowerName == "dockerfile" || lowerName == "makefile"
+    return extension in TEXT_FILE_EXTENSIONS ||
+        lowerName in TEXT_FILE_NAMES ||
+        TEXT_FILE_NAME_PREFIXES.any { lowerName.startsWith(it) }
+}
+
+fun isMarkdownFileName(fileName: String): Boolean {
+    val normalized = fileName.substringBefore('?').substringBefore('#')
+    val lowerName = normalized.lowercase(Locale.ROOT)
+    val extension = normalized.substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase(Locale.ROOT)
+    return extension in setOf("md", "markdown", "mdown", "mkd", "mkdn") || lowerName == "readme"
 }
 
 fun isTextLikeMime(mime: String?): Boolean {

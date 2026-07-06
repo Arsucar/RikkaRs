@@ -39,6 +39,10 @@ import me.rerere.hugeicons.stroke.FileAdd
 import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileView
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.tools.WORKSPACE_SHELL_TOOL_NAME
+import me.rerere.rikkahub.data.ai.tools.WorkspaceShellCommandInfo
+import me.rerere.rikkahub.data.ai.tools.commandPreview
+import me.rerere.rikkahub.data.ai.tools.workspaceShellCommandInfo
 import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffView
@@ -292,23 +296,37 @@ object ShellToolUI : ToolUIRenderer {
     private const val TITLE_MAX_CHARS = 40
     private const val SUMMARY_MAX_LINES = 8
 
-    override val toolName: String = "workspace_shell"
+    override val toolName: String = WORKSPACE_SHELL_TOOL_NAME
 
     override fun icon(context: ToolUIContext): ImageVector = HugeIcons.ComputerTerminal01
 
     @Composable
     override fun title(context: ToolUIContext): String {
-        val command = context.arguments.getStringContent("command") ?: return stringResource(R.string.tool_ui_shell_default)
-        val preview = command.replace("\n", " ").trim()
-        val truncated = if (preview.length > TITLE_MAX_CHARS) preview.take(TITLE_MAX_CHARS) + "…" else preview
-        return stringResource(R.string.tool_ui_shell, truncated)
+        val commandInfo = remember(context.arguments, context.tool.input) {
+            workspaceShellCommandInfo(context.arguments, context.tool.input)
+        }
+        val preview = commandInfo.commandPreview(TITLE_MAX_CHARS)
+        return when {
+            commandInfo.isContinuationRead && preview != null -> {
+                stringResource(R.string.tool_ui_shell_continuation, preview)
+            }
+            preview != null -> stringResource(R.string.tool_ui_shell, preview)
+            context.loading -> stringResource(R.string.tool_ui_shell, stringResource(R.string.tool_ui_shell_loading))
+            else -> stringResource(R.string.tool_ui_shell, stringResource(R.string.tool_ui_shell_unknown))
+        }
     }
 
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
+    override fun hasSummary(context: ToolUIContext): Boolean =
+        context.content != null ||
+            context.loading ||
+            workspaceShellCommandInfo(context.arguments, context.tool.input).hasCommand
 
     @Composable
     override fun Summary(context: ToolUIContext) {
-        val content = context.content ?: return
+        val content = context.content
+        val commandInfo = remember(context.arguments, context.tool.input) {
+            workspaceShellCommandInfo(context.arguments, context.tool.input)
+        }
         val combined = remember(content) {
             listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
                 .filterNot { it.isNullOrBlank() }
@@ -316,7 +334,10 @@ object ShellToolUI : ToolUIRenderer {
                 .trim()
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ShellExitStatus(content, MaterialTheme.typography.labelSmall)
+            ShellCommandSummary(info = commandInfo, loading = context.loading)
+            if (content != null) {
+                ShellExitStatus(content, MaterialTheme.typography.labelSmall)
+            }
             if (combined.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -346,8 +367,9 @@ object ShellToolUI : ToolUIRenderer {
             DefaultToolPreview(context = context)
             return
         }
-        val command = context.arguments.getStringContent("command").orEmpty()
-        val cwd = context.arguments.getStringContent("cwd")
+        val commandInfo = remember(context.arguments, context.tool.input) {
+            workspaceShellCommandInfo(context.arguments, context.tool.input)
+        }
         val stdout = content.getStringContent("stdout").orEmpty()
         val stderr = content.getStringContent("stderr").orEmpty()
         Column(
@@ -370,7 +392,7 @@ object ShellToolUI : ToolUIRenderer {
                 ShellExitStatus(content, MaterialTheme.typography.labelMedium)
             }
             HighlightCodeBlock(
-                code = if (cwd.isNullOrBlank()) command else "# cwd: $cwd\n$command",
+                code = shellCommandBlockText(info = commandInfo, loading = context.loading),
                 language = "bash",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -395,6 +417,58 @@ object ShellToolUI : ToolUIRenderer {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ShellCommandSummary(
+    info: WorkspaceShellCommandInfo,
+    loading: Boolean,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .shimmer(isLoading = loading),
+    ) {
+        Text(
+            text = shellCommandBlockText(info = info, loading = loading),
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun shellCommandBlockText(
+    info: WorkspaceShellCommandInfo,
+    loading: Boolean,
+): String {
+    val command = info.command?.trim()?.takeIf { it.isNotBlank() }
+    return when {
+        command != null -> buildString {
+            appendLine(
+                stringResource(
+                    if (info.isContinuationRead) {
+                        R.string.tool_ui_shell_continuation_label
+                    } else {
+                        R.string.tool_ui_shell_command_label
+                    },
+                ),
+            )
+            if (!info.cwd.isNullOrBlank()) {
+                appendLine("# cwd: ${info.cwd}")
+            }
+            append(command)
+        }
+        loading -> stringResource(R.string.tool_ui_shell_loading)
+        else -> stringResource(R.string.tool_ui_shell_unknown)
     }
 }
 

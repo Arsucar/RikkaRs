@@ -682,7 +682,7 @@ class ChatService(
                         it
                     }
                 },
-                assistant = assistant.copy(parallelToolExecution = false),
+                assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -1884,7 +1884,7 @@ class ChatService(
                 )
             },
             delegateOnly = delegateOnly && depth == 0,
-            parallelExecutionEnabled = false,
+            parallelExecutionEnabled = assistant.parallelToolExecution,
         )
         createManageSubagentTool(
             json = json,

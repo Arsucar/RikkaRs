@@ -1,11 +1,17 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -42,6 +48,23 @@ class ChatCompletionsAPIMessageTest {
         )
         method.isAccessible = true
         return method.invoke(api, messages, includeHistoryReasoning) as JsonArray
+    }
+
+    private fun invokeBuildChatCompletionRequest(
+        providerSetting: ProviderSetting.OpenAI,
+        params: TextGenerationParams,
+        stream: Boolean = false,
+    ): JsonObject {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        return method.invoke(api, listOf(UIMessage.user("hello")), params, providerSetting, stream)
+            as JsonObject
     }
 
     @Test
@@ -376,6 +399,36 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `tool with null parameters serializes empty object schema`() {
+        val requestBody = invokeBuildChatCompletionRequest(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                    abilities = listOf(ModelAbility.TOOL),
+                ),
+                tools = listOf(
+                    Tool(
+                        name = "finish_work",
+                        description = "Finish work",
+                        execute = { emptyList() },
+                    )
+                ),
+            )
+        )
+
+        val parameters = requestBody["tools"]!!
+            .jsonArray[0]
+            .jsonObject["function"]!!
+            .jsonObject["parameters"]!!
+            .jsonObject
+
+        assertEquals("object", parameters["type"]?.jsonPrimitive?.content)
+        assertTrue(parameters["properties"]?.jsonObject?.isEmpty() == true)
     }
 
     // ==================== Helper Functions ====================
