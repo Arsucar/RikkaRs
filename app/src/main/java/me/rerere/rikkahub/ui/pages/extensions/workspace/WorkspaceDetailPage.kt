@@ -5,26 +5,20 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -61,7 +55,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -86,7 +79,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -306,7 +299,7 @@ fun WorkspaceDetailPage(id: String) {
 
     textDialogState?.let { target ->
         if (target.readOnly && isMarkdownFileName(target.title)) {
-            WorkspaceMarkdownViewer(
+            FullScreenMarkdownViewer(
                 title = target.title,
                 markdown = target.text,
                 isLoading = target.busy,
@@ -365,79 +358,6 @@ fun WorkspaceDetailPage(id: String) {
             onDismiss = { deleteTarget = null },
         ) {
             Text(stringResource(R.string.workspace_detail_will_delete, entry.path))
-        }
-    }
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun WorkspaceMarkdownViewer(
-    title: String,
-    markdown: String,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onDismiss: () -> Unit,
-) {
-    BasicAlertDialog(
-        onDismissRequest = { if (!isLoading) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Bottom,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 800.dp)
-                    .fillMaxHeight(0.9f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = title,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        TextButton(onClick = onDismiss, enabled = !isLoading) {
-                            Text(stringResource(R.string.common_confirm))
-                        }
-                    }
-                    if (isLoading) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                    errorMessage?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    if (errorMessage == null) {
-                        MarkdownBlock(
-                            content = markdown,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-            }
         }
     }
 }

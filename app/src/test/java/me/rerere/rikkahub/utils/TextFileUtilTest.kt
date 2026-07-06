@@ -35,4 +35,11 @@ class TextFileUtilTest {
         assertTrue(isTextLikeFileName("guide.markdown"))
         assertFalse(isMarkdownFileName(".gitignore"))
     }
+
+    @Test
+    fun markdownLikeFileRecognizesMarkdownMime() {
+        assertTrue(isMarkdownLikeFile("attachment", "text/markdown"))
+        assertTrue(isMarkdownLikeFile("attachment", "application/markdown; charset=utf-8"))
+        assertFalse(isMarkdownLikeFile("attachment.txt", "text/plain"))
+    }
 }

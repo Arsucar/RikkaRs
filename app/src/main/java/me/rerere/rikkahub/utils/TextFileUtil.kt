@@ -111,6 +111,12 @@ private val TEXT_MIME_TYPES = setOf(
     "application/xml",
 )
 
+private val MARKDOWN_MIME_TYPES = setOf(
+    "application/markdown",
+    "text/markdown",
+    "text/x-markdown",
+)
+
 fun isTextLikeFileName(fileName: String): Boolean {
     val normalized = fileName.substringBefore('?').substringBefore('#')
     val lowerName = normalized.lowercase(Locale.ROOT)
@@ -127,6 +133,11 @@ fun isMarkdownFileName(fileName: String): Boolean {
     val extension = normalized.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase(Locale.ROOT)
     return extension in setOf("md", "markdown", "mdown", "mkd", "mkdn") || lowerName == "readme"
+}
+
+fun isMarkdownLikeFile(fileName: String, mime: String? = null): Boolean {
+    val normalizedMime = mime?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+    return isMarkdownFileName(fileName) || normalizedMime in MARKDOWN_MIME_TYPES
 }
 
 fun isTextLikeMime(mime: String?): Boolean {

@@ -52,8 +52,10 @@ import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
 import me.rerere.rikkahub.utils.MAX_TEXT_FILE_VIEW_BYTES
+import me.rerere.rikkahub.utils.isMarkdownFileName
 import me.rerere.rikkahub.utils.isTextFileSizeAllowed
 import me.rerere.rikkahub.utils.isTextLikeFileName
 import me.rerere.workspace.WorkspaceStorageArea
@@ -357,15 +359,25 @@ internal fun EditedFilesList(
     }
 
     textDialogState?.let { target ->
-        FullScreenTextEditor(
-            title = target.title,
-            text = target.text,
-            readOnly = target.readOnly,
-            isSaving = target.busy,
-            errorMessage = target.error,
-            onSave = if (target.readOnly) null else { text -> saveTextFile(target, text) },
-            onDismiss = { if (!target.busy) textDialogState = null },
-        )
+        if (target.readOnly && isMarkdownFileName(target.title)) {
+            FullScreenMarkdownViewer(
+                title = target.title,
+                markdown = target.text,
+                isLoading = target.busy,
+                errorMessage = target.error,
+                onDismiss = { if (!target.busy) textDialogState = null },
+            )
+        } else {
+            FullScreenTextEditor(
+                title = target.title,
+                text = target.text,
+                readOnly = target.readOnly,
+                isSaving = target.busy,
+                errorMessage = target.error,
+                onSave = if (target.readOnly) null else { text -> saveTextFile(target, text) },
+                onDismiss = { if (!target.busy) textDialogState = null },
+            )
+        }
     }
 }
 

@@ -240,6 +240,10 @@
   <string name="assistant_page_memory_table_conversation_scope_note">Conversation-scoped table documents are created by the chat tool inside an active conversation and are not directly managed from this assistant page.</string>
   <string name="assistant_page_memory_table_default_template">Default Table</string>
   <string name="assistant_page_memory_table_document_meta">%1$s · revision %2$d</string>
+  <string name="assistant_page_memory_table_mode_table">Table</string>
+  <string name="assistant_page_memory_table_mode_json">JSON</string>
+  <string name="assistant_page_memory_table_add_row">Add row</string>
+  <string name="assistant_page_memory_table_empty_schema">No editable tables are defined in this schema.</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
   <string name="assistant_page_max_tokens_limit">Limit: %d tokens</string>

@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -78,7 +76,6 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Video01
@@ -88,6 +85,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
@@ -102,6 +100,7 @@ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
+import me.rerere.rikkahub.utils.isMarkdownLikeFile
 import me.rerere.rikkahub.utils.isTextFileSizeAllowed
 import me.rerere.rikkahub.utils.isTextLikeFile
 import me.rerere.rikkahub.utils.openUrl
@@ -340,6 +339,7 @@ private fun MessagePartsBlock(
         documentTextDialogState = DocumentTextDialogState(
             title = part.fileName,
             text = "",
+            markdown = isMarkdownLikeFile(part.fileName, part.mime),
             busy = true,
             error = null,
         )
@@ -658,14 +658,24 @@ private fun MessagePartsBlock(
     }
 
     documentTextDialogState?.let { target ->
-        FullScreenTextEditor(
-            title = target.title,
-            text = target.text,
-            readOnly = true,
-            isSaving = target.busy,
-            errorMessage = target.error,
-            onDismiss = { if (!target.busy) documentTextDialogState = null },
-        )
+        if (target.markdown) {
+            FullScreenMarkdownViewer(
+                title = target.title,
+                markdown = target.text,
+                isLoading = target.busy,
+                errorMessage = target.error,
+                onDismiss = { if (!target.busy) documentTextDialogState = null },
+            )
+        } else {
+            FullScreenTextEditor(
+                title = target.title,
+                text = target.text,
+                readOnly = true,
+                isSaving = target.busy,
+                errorMessage = target.error,
+                onDismiss = { if (!target.busy) documentTextDialogState = null },
+            )
+        }
     }
 
     // Annotations (always rendered at the end)
@@ -729,6 +739,7 @@ private fun MessagePartsBlock(
 private data class DocumentTextDialogState(
     val title: String,
     val text: String,
+    val markdown: Boolean,
     val busy: Boolean,
     val error: String?,
 )

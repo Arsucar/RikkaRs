@@ -3,6 +3,9 @@ package me.rerere.rikkahub.data.ai.tools
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.MemoryTableDocument
@@ -169,6 +172,161 @@ class MemoryTableToolsTest {
     }
 
     @Test
+    fun patchRowsAddsNewFactRowWithoutDroppingExistingRows() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """
+                {"facts":[{"key":"name","value":"Ada"},{"key":"role","value":"engineer"}],"topic":"old"}
+            """.trimIndent(),
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[{"key":"acceptance","value":"testing merge"}],"topic":"new"}""")
+            }
+        )
+
+        val payload = json.parseToJsonElement(captured?.payloadJson.orEmpty()).jsonObject
+        val facts = payload.getValue("facts").jsonArray
+        assertEquals("new", payload.getValue("topic").jsonPrimitive.content)
+        assertEquals(3, facts.size)
+        assertEquals("name", facts[0].jsonObject.getValue("key").jsonPrimitive.content)
+        assertEquals("role", facts[1].jsonObject.getValue("key").jsonPrimitive.content)
+        assertEquals("acceptance", facts[2].jsonObject.getValue("key").jsonPrimitive.content)
+    }
+
+    @Test
+    fun patchRowsUpdatesExistingFactKeyWithoutDuplicating() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """
+                {"facts":[{"key":"name","value":"Ada"},{"key":"role","value":"engineer","source":"profile"}]}
+            """.trimIndent(),
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[{"key":"role","value":"reviewer"}]}""")
+            }
+        )
+
+        val facts = json.parseToJsonElement(captured?.payloadJson.orEmpty())
+            .jsonObject
+            .getValue("facts")
+            .jsonArray
+        assertEquals(2, facts.size)
+        assertEquals("name", facts[0].jsonObject.getValue("key").jsonPrimitive.content)
+        assertEquals("role", facts[1].jsonObject.getValue("key").jsonPrimitive.content)
+        assertEquals("reviewer", facts[1].jsonObject.getValue("value").jsonPrimitive.content)
+        assertEquals("profile", facts[1].jsonObject.getValue("source").jsonPrimitive.content)
+    }
+
+    @Test
+    fun patchRowsReplacesArrayWhenPatchRowsHaveNoKey() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"items":[{"value":"old"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"items":[{"value":"new"}]}""")
+            }
+        )
+
+        val items = json.parseToJsonElement(captured?.payloadJson.orEmpty())
+            .jsonObject
+            .getValue("items")
+            .jsonArray
+        assertEquals(1, items.size)
+        assertEquals("new", items[0].jsonObject.getValue("value").jsonPrimitive.content)
+    }
+
+    @Test
+    fun patchRowsCanClearArrayWithEmptyPatchArray() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[]}""")
+            }
+        )
+
+        val facts = json.parseToJsonElement(captured?.payloadJson.orEmpty())
+            .jsonObject
+            .getValue("facts")
+            .jsonArray
+        assertEquals(0, facts.size)
+    }
+
+    @Test
     fun conversationScopeRequiresConversationId() = runBlocking {
         val tool = buildMemoryTableTools(
             json = json,
@@ -197,11 +355,12 @@ class MemoryTableToolsTest {
         id: String,
         scopeType: MemoryTableScopeType,
         scopeId: String,
+        payloadJson: String = """{"id":"$id"}""",
     ) = MemoryTableDocument(
         id = id,
         templateId = "template",
         scopeType = scopeType,
         scopeId = scopeId,
-        payloadJson = """{"id":"$id"}""",
+        payloadJson = payloadJson,
     )
 }

@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -17,6 +19,8 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.repository.MemoryRepository
+
+private const val DEFAULT_ROW_BUSINESS_KEY = "key"
 
 fun buildMemoryTableToolsIfEnabled(
     enabled: Boolean,
@@ -189,6 +193,52 @@ private fun mergeTopLevelJsonObject(json: Json, original: String, patch: String)
     }
     return json.encodeToString(
         JsonObject.serializer(),
-        JsonObject(originalObject.toMutableMap().apply { putAll(patchObject) }),
+        JsonObject(
+            originalObject.toMutableMap().apply {
+                patchObject.forEach { (key, patchValue) ->
+                    val originalValue = originalObject[key]
+                    put(key, mergeTopLevelJsonValue(originalValue, patchValue))
+                }
+            },
+        ),
     )
+}
+
+private fun mergeTopLevelJsonValue(originalValue: JsonElement?, patchValue: JsonElement): JsonElement {
+    return if (originalValue is JsonArray && patchValue is JsonArray) {
+        mergeKeyedRows(originalValue, patchValue)
+    } else {
+        patchValue
+    }
+}
+
+private fun mergeKeyedRows(originalRows: JsonArray, patchRows: JsonArray): JsonElement {
+    if (patchRows.isEmpty() || patchRows.any { it.rowKey() == null }) {
+        return patchRows
+    }
+    val mergedRows = originalRows.toMutableList()
+    patchRows.forEach { patchRow ->
+        val patchKey = patchRow.rowKey()
+        val originalIndex = patchKey.let { key ->
+            mergedRows.indexOfFirst { row -> row.rowKey() == key }
+        }
+        if (originalIndex >= 0) {
+            mergedRows[originalIndex] = mergeJsonObjectsOrReplace(mergedRows[originalIndex], patchRow)
+        } else {
+            mergedRows += patchRow
+        }
+    }
+    return JsonArray(mergedRows)
+}
+
+private fun mergeJsonObjectsOrReplace(original: JsonElement, patch: JsonElement): JsonElement {
+    if (original !is JsonObject || patch !is JsonObject) return patch
+    return JsonObject(original.toMutableMap().apply { putAll(patch) })
+}
+
+private fun JsonElement.rowKey(): String? {
+    val row = this as? JsonObject ?: return null
+    return (row[DEFAULT_ROW_BUSINESS_KEY] as? JsonPrimitive)
+        ?.contentOrNull
+        ?.takeIf { it.isNotBlank() }
 }
