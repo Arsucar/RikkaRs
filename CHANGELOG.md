@@ -12,6 +12,29 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.19
+
+### 新功能 / Features（本 Fork，v2.3.18 之后）
+
+- **Skills 目录与聊天模型入口优化** — 聊天输入栏移除低频的模型清除按钮，Skills 目录卡片与空状态优化为更易扫读的层级与标签展示。（#43）
+  **Skills directory and chat model controls** — Removed the low-frequency model clear button from chat input and improved Skills directory cards/empty state with clearer hierarchy and metadata chips. (#43)
+
+- **工作区文本预览增强** — 工作区文件菜单支持常见 dotfile、配置文件与无后缀文本文件；只读 Markdown 查看改为渲染预览，编辑模式仍保留源码编辑器。（#44）
+  **Workspace text preview enhancements** — Workspace file actions now cover common dotfiles, config files, and extensionless text files; read-only Markdown opens as rendered preview while edit mode keeps source editing. (#44)
+
+### 修复 / Fixes（本 Fork，v2.3.18 之后）
+
+- **Shell 工具步骤可读性** — `workspace_shell` 内联摘要稳定展示命令输入，长输出截断后的 `/tool_outputs/...` 续读会标记为 continuation，子代理 transcript 不再像空 shell。（#45 #47）
+  **Shell tool step readability** — `workspace_shell` inline summaries now show command input, `/tool_outputs/...` follow-up reads are labeled as continuations, and subagent transcripts no longer look like empty shell steps. (#45 #47)
+
+- **子代理并行开关恢复** — 主会话重新尊重助手的「并行执行工具」设置，多个同轮 `spawn_subagent` 可按配置并行执行并在工具描述中提示。（#46）
+  **Subagent parallel setting restored** — Main chat now respects the assistant parallel tool execution setting, allowing same-response `spawn_subagent` calls to run concurrently when enabled and advertising that behavior in the tool description. (#46)
+
+- **OpenAI Responses 工具 schema** — OpenAI 兼容 Responses / Chat Completions 请求会将无参工具序列化为空 object schema，避免 `parameters: null` 触发 schema 校验失败。（#48）
+  **OpenAI Responses tool schema** — OpenAI-compatible Responses / Chat Completions requests serialize no-argument tools as an empty object schema instead of `parameters: null`, avoiding schema validation failures. (#48)
+
+---
+
 ## v2.3.18
 
 ### 新功能 / Features（本 Fork，v2.3.17 之后）
