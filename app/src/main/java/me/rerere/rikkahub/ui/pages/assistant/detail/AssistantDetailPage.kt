@@ -8,6 +8,7 @@ import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Puzzle
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Connect
 import androidx.compose.foundation.layout.Arrangement
@@ -134,6 +135,16 @@ fun AssistantDetailPage(id: String) {
                         leadingContent = { Icon(HugeIcons.Wrench01, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_mcp)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantTools(id)) },
+                        leadingContent = { Icon(HugeIcons.Tools, null) },
+                        supportingContent = {
+                            val (enabled, total) = empowermentToolStats(assistant)
+                            Text("$enabled/$total 已启用")
+                        },
+                        headlineContent = { Text("赋能工具") },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(

@@ -87,6 +87,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.buildSkillManagementTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTableToolsIfEnabled
 import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
@@ -746,6 +747,12 @@ class ChatService(
                             deleteDocument = { documentId ->
                                 memoryTableRepository.deleteDocument(documentId)
                             },
+                            readTemplates = {
+                                memoryTableRepository.getTemplates()
+                            },
+                            upsertTemplate = { template ->
+                                memoryTableRepository.upsertTemplate(template)
+                            },
                         )
                     )
                     addAll(
@@ -761,6 +768,28 @@ class ChatService(
                             createSkillTools(
                                 enabledSkills = assistant.enabledSkills,
                                 allSkills = skillManager.listSkillsForAssistant(assistant.id),
+                            )
+                        )
+                    }
+                    if (!delegateOnly) {
+                        addAll(
+                            buildSkillManagementTools(
+                                assistantId = assistant.id,
+                                skillManager = skillManager,
+                                autoEnable = true,
+                                onSkillEnabled = { skillName ->
+                                    settingsStore.update { settings ->
+                                        settings.copy(
+                                            assistants = settings.assistants.map { a ->
+                                                if (a.id == assistant.id) {
+                                                    a.copy(enabledSkills = a.enabledSkills + skillName)
+                                                } else {
+                                                    a
+                                                }
+                                            }
+                                        )
+                                    }
+                                },
                             )
                         )
                     }

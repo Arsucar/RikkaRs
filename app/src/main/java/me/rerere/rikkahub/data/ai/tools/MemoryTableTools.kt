@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
 
 private const val DEFAULT_ROW_BUSINESS_KEY = "key"
@@ -31,6 +32,8 @@ fun buildMemoryTableToolsIfEnabled(
     getDocument: suspend (String) -> MemoryTableDocument?,
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
     deleteDocument: suspend (String) -> Unit,
+    readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
+    upsertTemplate: suspend (MemoryTableTemplate) -> MemoryTableTemplate = { it },
 ): List<Tool> {
     if (!enabled) return emptyList()
     return buildMemoryTableTools(
@@ -41,6 +44,8 @@ fun buildMemoryTableToolsIfEnabled(
         getDocument = getDocument,
         upsertDocument = upsertDocument,
         deleteDocument = deleteDocument,
+        readTemplates = readTemplates,
+        upsertTemplate = upsertTemplate,
     )
 }
 
@@ -52,14 +57,19 @@ fun buildMemoryTableTools(
     getDocument: suspend (String) -> MemoryTableDocument?,
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
     deleteDocument: suspend (String) -> Unit,
+    readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
+    upsertTemplate: suspend (MemoryTableTemplate) -> MemoryTableTemplate = { it },
 ): List<Tool> = listOf(
     Tool(
         name = "memory_table_tool",
         description = """
-            Read or update structured memory table documents.
-            Use `read` to inspect active documents, `upsert_rows` to create or replace payload JSON,
+            Read or update structured memory table documents and their templates.
+            Use `list_templates` to inspect available templates (id/name/description/schema) before writing,
+            `create_template` to create a new template when no suitable one exists,
+            `read` to inspect active documents, `upsert_rows` to create or replace payload JSON,
             `patch_rows` to merge a JSON object into an existing document payload,
             and `delete_rows` to delete a document.
+            Recommended flow: `list_templates` → if none fits `create_template` → then `upsert_rows` with the returned template id.
             The schema is template-defined; do not invent table names outside the template.
             `scope` is optional for upsert: `conversation` stores only for this conversation,
             `assistant` stores for this assistant, and `global` shares across assistants.
@@ -70,6 +80,8 @@ fun buildMemoryTableTools(
                     put("action", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray {
+                            add("list_templates")
+                            add("create_template")
                             add("read")
                             add("patch_rows")
                             add("upsert_rows")
@@ -81,6 +93,18 @@ fun buildMemoryTableTools(
                     })
                     put("template_id", buildJsonObject {
                         put("type", "string")
+                    })
+                    put("name", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Template name, required for create_template.")
+                    })
+                    put("description", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Optional template description for create_template.")
+                    })
+                    put("schema_json", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Optional template schema JSON for create_template; defaults to a facts(key,value) table.")
                     })
                     put("scope", buildJsonObject {
                         put("type", "string")
@@ -101,6 +125,28 @@ fun buildMemoryTableTools(
             val params = it.jsonObject
             val action = params["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
             val payload = when (action) {
+                "list_templates" -> json.encodeToJsonElement(
+                    ListSerializer(MemoryTableTemplate.serializer()),
+                    readTemplates(),
+                )
+
+                "create_template" -> {
+                    val name = params["name"]?.jsonPrimitive?.contentOrNull?.takeIf { n -> n.isNotBlank() }
+                        ?: error("name is required for create_template")
+                    val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    val schemaJson = params["schema_json"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    json.encodeToJsonElement(
+                        MemoryTableTemplate.serializer(),
+                        upsertTemplate(
+                            MemoryTableTemplate(
+                                name = name,
+                                description = description,
+                                schemaJson = schemaJson,
+                            )
+                        ),
+                    )
+                }
+
                 "read" -> json.encodeToJsonElement(
                     ListSerializer(MemoryTableDocument.serializer()),
                     readDocuments(),

@@ -10,6 +10,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -349,6 +350,87 @@ class MemoryTableToolsTest {
         }.exceptionOrNull()
 
         assertTrue(failure?.message?.contains("conversation scope is unavailable") == true)
+    }
+
+    @Test
+    fun listTemplatesReturnsTemplates() = runBlocking {
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = {
+                listOf(
+                    MemoryTableTemplate(id = "tpl-1", name = "user_memories", description = "prefs"),
+                )
+            },
+            upsertTemplate = { error("unexpected upsert template") },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "list_templates")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertTrue(result.text.contains("tpl-1"))
+        assertTrue(result.text.contains("user_memories"))
+    }
+
+    @Test
+    fun createTemplatePersistsTemplateAndReturnsIt() = runBlocking {
+        var captured: MemoryTableTemplate? = null
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { error("unexpected read templates") },
+            upsertTemplate = {
+                val created = it.copy(id = "generated-id")
+                captured = created
+                created
+            },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "create_template")
+                put("name", "user_memories")
+                put("description", "prefs")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertEquals("user_memories", captured?.name)
+        assertTrue(result.text.contains("generated-id"))
+    }
+
+    @Test
+    fun createTemplateRequiresName() = runBlocking {
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { error("unexpected read templates") },
+            upsertTemplate = { error("unexpected upsert template") },
+        ).single()
+
+        val failure = runCatching {
+            tool.execute(
+                buildJsonObject {
+                    put("action", "create_template")
+                }
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure?.message?.contains("name is required") == true)
     }
 
     private fun document(
