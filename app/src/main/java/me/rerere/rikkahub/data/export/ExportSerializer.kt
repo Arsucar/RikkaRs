@@ -10,6 +10,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDateTime
@@ -94,6 +95,42 @@ object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection>
             if (exportData.type != type) return null
             ExportSerializer.DefaultJson
                 .decodeFromJsonElement<PromptInjection.ModeInjection>(exportData.data)
+                .copy(id = Uuid.random())
+        }.getOrNull()
+    }
+}
+
+object PresetSerializer : ExportSerializer<Preset> {
+    override val type = "preset"
+
+    override fun getExportFileName(data: Preset): String {
+        return "${data.name.ifEmpty { type }}.json"
+    }
+
+    override fun export(data: Preset): ExportData {
+        return ExportData(
+            type = type,
+            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
+        )
+    }
+
+    override fun import(context: Context, uri: Uri): Result<Preset> {
+        return runCatching {
+            val json = readUri(context, uri)
+            tryImportNative(json)
+                ?: throw IllegalArgumentException("Unsupported format")
+        }
+    }
+
+    private fun tryImportNative(json: String): Preset? {
+        return runCatching {
+            val exportData = ExportSerializer.DefaultJson.decodeFromString(
+                ExportData.serializer(),
+                json
+            )
+            if (exportData.type != type) return null
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<Preset>(exportData.data)
                 .copy(id = Uuid.random())
         }.getOrNull()
     }

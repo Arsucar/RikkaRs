@@ -181,6 +181,7 @@ internal fun FilesPicker(
             }
         val activeCount =
             assistant.quickMessageIds.size +
+                assistant.presetIds.size +
                 modeAndLorebookCount +
                 assistant.enabledSkills.size
         ListItem(

@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
 import kotlin.uuid.Uuid
@@ -28,6 +29,7 @@ object PromptInjectionTransformer : InputMessageTransformer {
             lorebooks = ctx.settings.lorebooks,
             conversationModeInjectionIds = ctx.conversationModeInjectionIds,
             conversationLorebookIds = ctx.conversationLorebookIds,
+            presets = ctx.settings.presets,
         )
     }
 }
@@ -42,6 +44,7 @@ internal fun transformMessages(
     lorebooks: List<Lorebook>,
     conversationModeInjectionIds: Set<Uuid> = emptySet(),
     conversationLorebookIds: Set<Uuid> = emptySet(),
+    presets: List<Preset> = emptyList(),
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
@@ -51,6 +54,7 @@ internal fun transformMessages(
         lorebooks = lorebooks,
         conversationModeInjectionIds = conversationModeInjectionIds,
         conversationLorebookIds = conversationLorebookIds,
+        presets = presets,
     )
 
     if (injections.isEmpty()) {
@@ -76,6 +80,7 @@ internal fun collectInjections(
     lorebooks: List<Lorebook>,
     conversationModeInjectionIds: Set<Uuid> = emptySet(),
     conversationLorebookIds: Set<Uuid> = emptySet(),
+    presets: List<Preset> = emptyList(),
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
     val effectiveModeInjectionIds = if (assistant.allowConversationPromptInjection) {
@@ -88,10 +93,17 @@ internal fun collectInjections(
     } else {
         assistant.lorebookIds
     }
+    // 展开助手关联预设内生效的注入 ID (预设内被单独禁用的条目会被排除, 见 issue #65)
+    val effectivePresetIds = assistant.presetIds
+    val presetInjectionIds = presets
+        .filter { it.id in effectivePresetIds }
+        .flatMap { it.effectiveInjectionIds() }
+        .toSet()
+    val allModeInjectionIds = effectiveModeInjectionIds + presetInjectionIds
 
-    // 1. 获取关联的 ModeInjection
+    // 1. 获取关联的 ModeInjection (含直接绑定与预设展开的条目)
     modeInjections
-        .filter { it.enabled && effectiveModeInjectionIds.contains(it.id) }
+        .filter { it.enabled && allModeInjectionIds.contains(it.id) }
         .forEach { injections.add(it) }
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection

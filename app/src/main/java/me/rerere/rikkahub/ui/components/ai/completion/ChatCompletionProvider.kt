@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ai.completion
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextRange
+import kotlin.uuid.Uuid
 
 data class ChatCompletionContext(
     val text: String,
@@ -24,6 +25,7 @@ data class ChatCompletionItem(
     val icon: ImageVector? = null,
     val sortScore: Int = 0,
     val skillName: String? = null,
+    val presetId: Uuid? = null,
 )
 
 interface ChatCompletionProvider {

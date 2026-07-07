@@ -7,7 +7,13 @@ import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
@@ -647,6 +653,8 @@ class SubagentHost(
                                 else -> 0
                             }
                             val output = when {
+                                part.toolName == WORKSPACE_SHELL_TOOL_NAME ->
+                                    truncateShellOutputJson(outputText, toolOutputLimit)
                                 toolOutputLimit > 0 -> truncate(outputText, toolOutputLimit)
                                 else -> outputText
                             }
@@ -725,6 +733,28 @@ class SubagentHost(
             } else {
                 truncate(input, maxChars)
             }
+
+        /**
+         * workspace_shell 的输出是含 stdout/stderr 的 JSON。若像普通文本那样按字符数硬截断,
+         * 会截在 JSON 中间产生非法 JSON, 使 UI 解析失败而彻底丢失 stdout (见 issue #66)。
+         * 改为解析后对 stdout/stderr 分字段各自截断再重新序列化, 保证结果始终是合法 JSON,
+         * 这样 ShellToolUI 仍能读取 stdout/stderr/exitCode 字段并正确展示。
+         */
+        private fun truncateShellOutputJson(outputText: String, limit: Int): String {
+            if (limit <= 0 || outputText.length <= limit) return outputText
+            val obj = runCatching { Json.parseToJsonElement(outputText).jsonObject }.getOrNull()
+                ?: return truncate(outputText, limit)
+            if (!obj.containsKey("stdout") && !obj.containsKey("stderr")) {
+                return truncate(outputText, limit)
+            }
+            return buildJsonObject {
+                obj["exitCode"]?.let { put("exitCode", it) }
+                obj["stdout"]?.jsonPrimitive?.contentOrNull?.let { put("stdout", truncate(it, limit)) }
+                obj["stderr"]?.jsonPrimitive?.contentOrNull?.let { put("stderr", truncate(it, limit)) }
+                obj["timedOut"]?.let { put("timedOut", it) }
+                obj["truncated"]?.let { put("truncated", it) }
+            }.toString()
+        }
 
         private fun truncate(text: String, max: Int): String =
             if (max <= 0 || text.length <= max) text else text.take(max) + "…"

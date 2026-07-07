@@ -691,10 +691,16 @@ private fun ChainOfThoughtScope.SubagentTranscriptToolCallStep(
         },
         onClick = { showPreview = true },
         content = {
-            SubagentTranscriptToolOutputInline(
-                outputText = step.output,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            // 优先用该工具专属的 Summary 渲染 (如 ShellToolUI 能正确分离 stdout/stderr/exit),
+            // 避免把原始 JSON blob 直接铺开导致 stdout 被淹没 (见 issue #66); 无 Summary 时回退到纯文本输出
+            if (renderer.hasSummary(context)) {
+                renderer.Summary(context)
+            } else {
+                SubagentTranscriptToolOutputInline(
+                    outputText = step.output,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         },
     )
     if (showPreview) {

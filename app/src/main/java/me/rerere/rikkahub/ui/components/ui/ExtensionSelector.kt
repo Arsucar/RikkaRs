@@ -29,7 +29,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
-import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
+import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
@@ -59,11 +59,6 @@ fun ExtensionSelector(
 
     val useConversationInjections =
         assistant.allowConversationPromptInjection && conversation != null && onUpdateConversation != null
-    val selectedModeInjectionIds = if (useConversationInjections) {
-        conversation.modeInjectionIds
-    } else {
-        assistant.modeInjectionIds
-    }
     val selectedLorebookIds = if (useConversationInjections) {
         conversation.lorebookIds
     } else {
@@ -87,14 +82,14 @@ fun ExtensionSelector(
                 onClick = {
                     scope.launch { pagerState.animateScrollToPage(0) }
                 },
-                text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
+                text = { Text(stringResource(R.string.extension_selector_tab_presets)) }
             )
             Tab(
                 selected = pagerState.currentPage == 1,
                 onClick = {
                     scope.launch { pagerState.animateScrollToPage(1) }
                 },
-                text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
+                text = { Text(stringResource(R.string.extension_selector_tab_skills)) }
             )
             Tab(
                 selected = pagerState.currentPage == 2,
@@ -108,7 +103,7 @@ fun ExtensionSelector(
                 onClick = {
                     scope.launch { pagerState.animateScrollToPage(3) }
                 },
-                text = { Text(stringResource(R.string.extension_selector_tab_skills)) }
+                text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
             )
         }
 
@@ -120,53 +115,49 @@ fun ExtensionSelector(
         ) { page ->
             when (page) {
                 0 -> {
-                    if (settings.quickMessages.isNotEmpty()) {
-                        QuickMessagesContent(
-                            quickMessages = settings.quickMessages,
-                            selectedIds = assistant.quickMessageIds,
+                    if (settings.presets.isNotEmpty()) {
+                        PresetsContent(
+                            presets = settings.presets,
+                            selectedIds = assistant.presetIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    assistant.quickMessageIds + id
+                                    assistant.presetIds + id
                                 } else {
-                                    assistant.quickMessageIds - id
+                                    assistant.presetIds - id
                                 }
-                                onUpdate(assistant.copy(quickMessageIds = newIds))
-                            },
-                            onManage = onNavigateToQuickMessages,
-                        )
-                    } else {
-                        ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_quick_messages_empty),
-                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
-                            onAction = onNavigateToQuickMessages,
-                        )
-                    }
-                }
-
-                1 -> {
-                    if (settings.modeInjections.isNotEmpty()) {
-                        ModeInjectionsContent(
-                            modeInjections = settings.modeInjections,
-                            selectedIds = selectedModeInjectionIds,
-                            onToggle = { id, checked ->
-                                val newIds = if (checked) {
-                                    selectedModeInjectionIds + id
-                                } else {
-                                    selectedModeInjectionIds - id
-                                }
-                                if (useConversationInjections) {
-                                    onUpdateConversation(conversation.copy(modeInjectionIds = newIds))
-                                } else {
-                                    onUpdate(assistant.copy(modeInjectionIds = newIds))
-                                }
+                                onUpdate(assistant.copy(presetIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_mode_injections_empty),
+                            message = stringResource(R.string.extension_selector_presets_empty),
                             buttonText = stringResource(R.string.extension_selector_go_to_extensions),
                             onAction = onNavigateToPrompts,
+                        )
+                    }
+                }
+
+                1 -> {
+                    if (skills.isNotEmpty()) {
+                        SkillsContent(
+                            skills = skills,
+                            enabledSkills = assistant.enabledSkills,
+                            onToggle = { name, checked ->
+                                val newSkills = if (checked) {
+                                    assistant.enabledSkills + name
+                                } else {
+                                    assistant.enabledSkills - name
+                                }
+                                onUpdate(assistant.copy(enabledSkills = newSkills))
+                            },
+                            onManage = onNavigateToSkills,
+                        )
+                    } else {
+                        ExtensionEmptyState(
+                            message = stringResource(R.string.extension_selector_skills_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_skills),
+                            onAction = onNavigateToSkills,
                         )
                     }
                 }
@@ -200,25 +191,25 @@ fun ExtensionSelector(
                 }
 
                 3 -> {
-                    if (skills.isNotEmpty()) {
-                        SkillsContent(
-                            skills = skills,
-                            enabledSkills = assistant.enabledSkills,
-                            onToggle = { name, checked ->
-                                val newSkills = if (checked) {
-                                    assistant.enabledSkills + name
+                    if (settings.quickMessages.isNotEmpty()) {
+                        QuickMessagesContent(
+                            quickMessages = settings.quickMessages,
+                            selectedIds = assistant.quickMessageIds,
+                            onToggle = { id, checked ->
+                                val newIds = if (checked) {
+                                    assistant.quickMessageIds + id
                                 } else {
-                                    assistant.enabledSkills - name
+                                    assistant.quickMessageIds - id
                                 }
-                                onUpdate(assistant.copy(enabledSkills = newSkills))
+                                onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
-                            onManage = onNavigateToSkills,
+                            onManage = onNavigateToQuickMessages,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_skills_empty),
-                            buttonText = stringResource(R.string.extension_selector_go_to_skills),
-                            onAction = onNavigateToSkills,
+                            message = stringResource(R.string.extension_selector_quick_messages_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToQuickMessages,
                         )
                     }
                 }

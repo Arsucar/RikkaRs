@@ -49,6 +49,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
@@ -163,6 +164,7 @@ class SettingsStore(
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
+        val PRESETS = stringPreferencesKey("presets")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val IMAGE_QUICK_MESSAGES = stringPreferencesKey("image_quick_messages")
@@ -273,6 +275,9 @@ class SettingsStore(
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                presets = preferences[PRESETS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -345,6 +350,7 @@ class SettingsStore(
             // 去重并清理无效引用
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
+            val validPresetIds = settings.presets.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
             val asrProviders = settings.asrProviders.distinctBy { it.id }
@@ -381,6 +387,10 @@ class SettingsStore(
                         // 过滤掉不存在的快捷消息 ID
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
+                        }.toSet(),
+                        // 过滤掉不存在的预设 ID
+                        presetIds = assistant.presetIds.filter { id ->
+                            id in validPresetIds
                         }.toSet()
                     )
                 },
@@ -402,6 +412,12 @@ class SettingsStore(
                     .filter { it.isNotBlank() }
                     .distinct(),
                 modeInjections = settings.modeInjections.distinctBy { it.id },
+                presets = settings.presets.map { preset ->
+                    preset.copy(
+                        modeInjectionIds = preset.modeInjectionIds.filter { it in validModeInjectionIds }.toSet(),
+                        disabledEntryIds = preset.disabledEntryIds.filter { it in validModeInjectionIds }.toSet(),
+                    )
+                }.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
                 imageQuickMessages = settings.imageQuickMessages.distinctBy { it.id },
@@ -511,6 +527,7 @@ class SettingsStore(
                 preferences[SELECTED_ASR_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_ASR_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
+            preferences[PRESETS] = JsonInstant.encodeToString(settings.presets)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
             preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
@@ -654,6 +671,7 @@ data class Settings(
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
+    val presets: List<Preset> = emptyList(),
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
     val imageQuickMessages: List<QuickMessage> = emptyList(),

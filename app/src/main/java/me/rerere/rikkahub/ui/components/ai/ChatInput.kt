@@ -237,6 +237,7 @@ fun ChatInput(
                     TextInputRow(
                         state = state,
                         completionProviders = completionProviders,
+                        onUpdateAssistant = onUpdateAssistant,
                         onSendMessage = { sendMessage() }
                     )
 
@@ -421,6 +422,7 @@ private fun ActionIconButton(
 private fun TextInputRow(
     state: ChatInputState,
     completionProviders: List<ChatCompletionProvider>,
+    onUpdateAssistant: (Assistant) -> Unit,
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
@@ -539,7 +541,12 @@ private fun TextInputRow(
             CompletionPopup(
                 completionList = list,
                 onItemClick = { item ->
-                    state.applyCompletion(list.replacementRange, item)
+                    state.applyCompletion(
+                        replacementRange = list.replacementRange,
+                        item = item,
+                        assistant = assistant,
+                        onUpdateAssistant = onUpdateAssistant,
+                    )
                     completionList = null
                 },
             )
@@ -668,12 +675,17 @@ private fun CompletionPopup(
 private fun ChatInputState.applyCompletion(
     replacementRange: TextRange,
     item: ChatCompletionItem,
+    assistant: Assistant,
+    onUpdateAssistant: (Assistant) -> Unit,
 ) {
     val textLength = textContent.text.length
     val start = replacementRange.min.coerceIn(0, textLength)
     val end = replacementRange.max.coerceIn(start, textLength)
     if (!item.skillName.isNullOrBlank()) {
         addPendingSlashSkill(item.skillName)
+    }
+    item.presetId?.let { presetId ->
+        onUpdateAssistant(assistant.copy(presetIds = setOf(presetId)))
     }
     textContent.edit {
         replace(start, end, item.insertText)

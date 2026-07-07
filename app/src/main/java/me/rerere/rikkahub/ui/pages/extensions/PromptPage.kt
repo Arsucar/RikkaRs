@@ -53,6 +53,8 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -78,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -90,10 +93,12 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
+import me.rerere.rikkahub.data.export.PresetSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
@@ -129,7 +134,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
             NavigationBar {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 0,
-                    label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
+                    label = { Text(stringResource(R.string.prompt_page_preset_tab)) },
                     icon = { Icon(HugeIcons.MagicWand01, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(0) }
@@ -155,9 +160,11 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 .fillMaxSize()
         ) { page ->
             when (page) {
-                0 -> ModeInjectionTab(
+                0 -> PresetTab(
+                    presets = settings.presets,
                     modeInjections = settings.modeInjections,
-                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
+                    onUpdatePresets = { vm.updateSettings(settings.copy(presets = it)) },
+                    onUpdateModeInjections = { vm.updateSettings(settings.copy(modeInjections = it)) }
                 )
 
                 1 -> LorebookTab(
@@ -166,6 +173,405 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PresetTab(
+    presets: List<Preset>,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    onUpdatePresets: (List<Preset>) -> Unit,
+    onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    val lazyListState = rememberLazyListState()
+    val toaster = LocalToaster.current
+    val currentPresets by rememberUpdatedState(presets)
+    val editState = useEditState<Preset> { edited ->
+        val index = presets.indexOfFirst { it.id == edited.id }
+        if (index >= 0) {
+            onUpdatePresets(presets.toMutableList().apply { set(index, edited) })
+        } else {
+            onUpdatePresets(presets + edited)
+        }
+    }
+    val importSuccessMsg = stringResource(R.string.export_import_success)
+    val importFailedMsg = stringResource(R.string.export_import_failed)
+    val importer = rememberImporter(PresetSerializer) { result ->
+        result.onSuccess { imported ->
+            onUpdatePresets(currentPresets + imported)
+            toaster.show(importSuccessMsg)
+        }.onFailure { error ->
+            toaster.show(importFailedMsg.format(error.message))
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .floatingToolbarVerticalNestedScroll(
+                    expanded = expanded,
+                    onExpand = { expanded = true },
+                    onCollapse = { expanded = false }
+                ),
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 128.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            state = lazyListState
+        ) {
+            if (presets.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillParentMaxHeight(0.8f)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.prompt_page_preset_empty),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(R.string.prompt_page_empty_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            } else {
+                items(presets, key = { it.id }) { preset ->
+                    PresetCard(
+                        preset = preset,
+                        modeInjections = modeInjections,
+                        onEdit = { editState.open(preset) },
+                        onDelete = { onUpdatePresets(presets - preset) }
+                    )
+                }
+            }
+        }
+
+        HorizontalFloatingToolbar(
+            expanded = expanded,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = -ScreenOffset),
+            leadingContent = {
+                IconButton(onClick = { importer.importFromFile() }) {
+                    Icon(HugeIcons.FileImport, null)
+                }
+            },
+        ) {
+            Button(onClick = { editState.open(Preset()) }) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(HugeIcons.Add01, null)
+                    AnimatedVisibility(expanded) {
+                        Row {
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(stringResource(R.string.prompt_page_add_preset))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (editState.isEditing) {
+        editState.currentState?.let { state ->
+            PresetEditSheet(
+                preset = state,
+                modeInjections = modeInjections,
+                onDismiss = { editState.dismiss() },
+                onConfirm = { editState.confirm() },
+                onEditPreset = { editState.currentState = it },
+                onUpdateModeInjections = onUpdateModeInjections,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PresetCard(
+    preset: Preset,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val swipeState = rememberSwipeToDismissBoxState()
+    val scope = rememberCoroutineScope()
+    var showExportDialog by remember { mutableStateOf(false) }
+    val exporter = rememberExporter(preset, PresetSerializer)
+    val includedNames = remember(preset, modeInjections) {
+        modeInjections
+            .filter { it.id in preset.effectiveInjectionIds() }
+            .map { it.name.ifBlank { "" } }
+            .filter { it.isNotBlank() }
+    }
+
+    SwipeToDismissBox(
+        state = swipeState,
+        backgroundContent = {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { scope.launch { swipeState.reset() } }) {
+                    Icon(HugeIcons.Cancel01, null)
+                }
+                FilledIconButton(onClick = {
+                    scope.launch {
+                        onDelete()
+                        swipeState.reset()
+                    }
+                }) {
+                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
+                }
+            }
+        },
+        enableDismissFromStartToEnd = false,
+    ) {
+        Card(
+            onClick = onEdit,
+            colors = CardDefaults.cardColors(
+                containerColor = CustomColors.listItemColors.containerColor
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = preset.name.ifEmpty { stringResource(R.string.prompt_page_unnamed_preset) },
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (preset.description.isNotBlank()) {
+                        Text(
+                            text = preset.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = if (includedNames.isEmpty()) {
+                            stringResource(R.string.prompt_page_preset_no_entries)
+                        } else {
+                            includedNames.joinToString(", ")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = stringResource(
+                            R.string.prompt_page_entries_count_format,
+                            preset.effectiveInjectionIds().size
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Row {
+                        IconButton(onClick = { exporter.exportToFile() }) {
+                            Icon(HugeIcons.Download01, stringResource(R.string.common_export))
+                        }
+                        IconButton(onClick = { showExportDialog = true }) {
+                            Icon(HugeIcons.Share03, stringResource(R.string.common_share))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showExportDialog) {
+        ExportDialog(
+            exporter = exporter,
+            onDismiss = { showExportDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun PresetEditSheet(
+    preset: Preset,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    onEditPreset: (Preset) -> Unit,
+    onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
+) {
+    var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberBottomSheetState(initialValue = SheetValue.Expanded),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(16.dp)
+                .imePadding()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (preset.name.isBlank()) {
+                        stringResource(R.string.prompt_page_add_preset)
+                    } else {
+                        stringResource(R.string.prompt_page_edit_preset)
+                    },
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Row {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.prompt_page_cancel))
+                    }
+                    TextButton(onClick = onConfirm) {
+                        Text(stringResource(R.string.prompt_page_confirm))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = preset.name,
+                onValueChange = { onEditPreset(preset.copy(name = it)) },
+                label = { Text(stringResource(R.string.prompt_page_name)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = preset.description,
+                onValueChange = { onEditPreset(preset.copy(description = it)) },
+                label = { Text(stringResource(R.string.prompt_page_description)) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_preset_entries),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                IconButton(onClick = { editingInjection = PromptInjection.ModeInjection() }) {
+                    Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_mode_injection))
+                }
+            }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (modeInjections.isEmpty()) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.prompt_page_mode_injection_empty),
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    items(modeInjections, key = { it.id }) { injection ->
+                        val enabledInPreset = injection.id in preset.effectiveInjectionIds()
+                        ListItem(
+                            headlineContent = {
+                                Text(injection.name.ifBlank { stringResource(R.string.prompt_page_unnamed) })
+                            },
+                            supportingContent = if (injection.content.isNotBlank()) {
+                                {
+                                    Text(
+                                        text = injection.content,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            } else null,
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { editingInjection = injection }) {
+                                        Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
+                                    }
+                                    Switch(
+                                        checked = enabledInPreset,
+                                        onCheckedChange = { checked ->
+                                            onEditPreset(
+                                                if (checked) {
+                                                    preset.copy(
+                                                        modeInjectionIds = preset.modeInjectionIds + injection.id,
+                                                        disabledEntryIds = preset.disabledEntryIds - injection.id,
+                                                    )
+                                                } else {
+                                                    preset.copy(
+                                                        modeInjectionIds = preset.modeInjectionIds + injection.id,
+                                                        disabledEntryIds = preset.disabledEntryIds + injection.id,
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    editingInjection?.let { injection ->
+        ModeInjectionEditSheet(
+            injection = injection,
+            onDismiss = { editingInjection = null },
+            onConfirm = {
+                val index = modeInjections.indexOfFirst { it.id == injection.id }
+                val edited = editingInjection
+                if (edited != null) {
+                    if (index >= 0) {
+                        onUpdateModeInjections(modeInjections.toMutableList().apply { set(index, edited) })
+                    } else {
+                        onUpdateModeInjections(modeInjections + edited)
+                        onEditPreset(
+                            preset.copy(
+                                modeInjectionIds = preset.modeInjectionIds + edited.id,
+                                disabledEntryIds = preset.disabledEntryIds - edited.id,
+                            )
+                        )
+                    }
+                }
+                editingInjection = null
+            },
+            onEdit = { editingInjection = it }
+        )
     }
 }
 

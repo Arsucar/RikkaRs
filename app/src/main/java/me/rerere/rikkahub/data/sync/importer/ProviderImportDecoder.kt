@@ -10,6 +10,7 @@ import me.rerere.rikkahub.utils.JsonInstant
 sealed class ProviderImportResult {
     data class Complete(val setting: ProviderSetting) : ProviderImportResult()
     data class NeedsName(val setting: ProviderSetting) : ProviderImportResult()
+    data class Multiple(val settings: List<ProviderSetting>) : ProviderImportResult()
 }
 
 fun decodeProviderSetting(value: String): ProviderSetting {
@@ -36,6 +37,12 @@ fun decodeProviderImportText(raw: String): ProviderImportResult {
     val type = obj["_type"]?.jsonPrimitive?.contentOrNull
     if (type == NewApiChannelImporter.TYPE) {
         return ProviderImportResult.NeedsName(NewApiChannelImporter.parseChannelConn(element))
+    }
+
+    if (OpenCodeProviderImporter.matches(obj)) {
+        val settings = OpenCodeProviderImporter.importProviders(obj)
+        if (settings.isEmpty()) throw IllegalArgumentException("Invalid import format")
+        return ProviderImportResult.Multiple(settings)
     }
 
     throw IllegalArgumentException("Invalid import format")

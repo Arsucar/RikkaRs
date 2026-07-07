@@ -29,14 +29,70 @@ import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
+import kotlin.uuid.Uuid
+
+@Composable
+fun PresetsContent(
+    presets: List<Preset>,
+    selectedIds: Set<Uuid>,
+    onToggle: (Uuid, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    onManage: (() -> Unit)? = null,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(presets, key = { it.id }) { preset ->
+            ListItem(
+                headlineContent = {
+                    Text(preset.name.ifBlank { stringResource(R.string.extension_content_unnamed_preset) })
+                },
+                supportingContent = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (preset.description.isNotBlank()) {
+                            Text(
+                                text = preset.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                maxLines = 2,
+                            )
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.extension_content_preset_entries_count,
+                                preset.effectiveInjectionIds().size,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                trailingContent = {
+                    Switch(
+                        checked = selectedIds.contains(preset.id),
+                        onCheckedChange = { checked -> onToggle(preset.id, checked) }
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
+        }
+        if (onManage != null) {
+            item {
+                ManageButton(onClick = onManage)
+            }
+        }
+    }
+}
 
 @Composable
 fun ModeInjectionsContent(
     modeInjections: List<PromptInjection.ModeInjection>,
-    selectedIds: Set<kotlin.uuid.Uuid>,
-    onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    selectedIds: Set<Uuid>,
+    onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
 ) {
@@ -69,8 +125,8 @@ fun ModeInjectionsContent(
 @Composable
 fun LorebooksContent(
     lorebooks: List<Lorebook>,
-    selectedIds: Set<kotlin.uuid.Uuid>,
-    onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    selectedIds: Set<Uuid>,
+    onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
 ) {
@@ -153,8 +209,8 @@ fun SkillsContent(
 @Composable
 fun QuickMessagesContent(
     quickMessages: List<QuickMessage>,
-    selectedIds: Set<kotlin.uuid.Uuid>,
-    onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    selectedIds: Set<Uuid>,
+    onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
 ) {

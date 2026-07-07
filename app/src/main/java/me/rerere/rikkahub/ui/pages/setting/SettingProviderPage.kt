@@ -797,6 +797,14 @@ private fun applyProviderImportResult(
         }
 
         is ProviderImportResult.NeedsName -> onNeedsName(result.setting)
+
+        is ProviderImportResult.Multiple -> {
+            result.settings.forEach { onAdd(it) }
+            toaster.show(
+                context.getString(R.string.setting_provider_page_import_success),
+                type = ToastType.Success,
+            )
+        }
     }
 }
 

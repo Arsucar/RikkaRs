@@ -80,6 +80,7 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
 import me.rerere.rikkahub.ui.components.ai.completion.SlashCompletionProvider
+import me.rerere.rikkahub.ui.components.ai.completion.PresetCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.useCropLauncher
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -295,6 +296,7 @@ private fun ChatPageContent(
         resolveEffectiveWorkspaceCwd(conversation, assistant),
         workspaceRepository,
         assistant.enabledSkills,
+        setting.presets,
         skillManager,
     ) {
         buildList {
@@ -317,6 +319,9 @@ private fun ChatPageContent(
                         skillManager = skillManager,
                     )
                 )
+            }
+            if (setting.presets.isNotEmpty()) {
+                add(PresetCompletionProvider(setting.presets))
             }
         }
     }

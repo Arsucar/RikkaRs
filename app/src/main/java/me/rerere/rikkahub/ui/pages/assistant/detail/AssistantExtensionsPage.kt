@@ -54,6 +54,7 @@ import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
+import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -122,7 +123,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                 Tab(
                     selected = pagerState.currentPage == 1,
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_mode_injections)) }
+                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_presets)) }
                 )
                 Tab(
                     selected = pagerState.currentPage == 2,
@@ -173,24 +174,44 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                     }
 
                     1 -> {
-                        if (settings.modeInjections.isEmpty()) {
+                        if (settings.presets.isEmpty() && settings.modeInjections.isEmpty()) {
                             ExtensionEmptyState(
-                                message = stringResource(R.string.assistant_extensions_page_empty_mode_injections),
+                                message = stringResource(R.string.assistant_extensions_page_empty_presets),
                                 buttonText = stringResource(R.string.assistant_extensions_page_goto_prompts),
                                 onAction = { navController.navigate(Screen.Prompts) },
                             )
                         } else {
                             Column {
-                                ModeInjectionsContent(
-                                    modifier = Modifier.weight(1f),
-                                    modeInjections = settings.modeInjections,
-                                    selectedIds = assistant.modeInjectionIds,
-                                    onToggle = { injId, checked ->
-                                        val newIds = if (checked) assistant.modeInjectionIds + injId
-                                        else assistant.modeInjectionIds - injId
-                                        vm.update(assistant.copy(modeInjectionIds = newIds))
-                                    },
-                                )
+                                if (settings.presets.isNotEmpty()) {
+                                    PresetsContent(
+                                        modifier = Modifier.weight(1f),
+                                        presets = settings.presets,
+                                        selectedIds = assistant.presetIds,
+                                        onToggle = { presetId, checked ->
+                                            val newIds = if (checked) assistant.presetIds + presetId
+                                            else assistant.presetIds - presetId
+                                            vm.update(assistant.copy(presetIds = newIds))
+                                        },
+                                    )
+                                }
+                                if (settings.modeInjections.isNotEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.assistant_extensions_page_independent_injections),
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    ModeInjectionsContent(
+                                        modifier = Modifier.weight(1f),
+                                        modeInjections = settings.modeInjections,
+                                        selectedIds = assistant.modeInjectionIds,
+                                        onToggle = { injId, checked ->
+                                            val newIds = if (checked) assistant.modeInjectionIds + injId
+                                            else assistant.modeInjectionIds - injId
+                                            vm.update(assistant.copy(modeInjectionIds = newIds))
+                                        },
+                                    )
+                                }
                                 TextButton(
                                     onClick = { navController.navigate(Screen.Prompts) },
                                     modifier = Modifier.fillMaxWidth(),

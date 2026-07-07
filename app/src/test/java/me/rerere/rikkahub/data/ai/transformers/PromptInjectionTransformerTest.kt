@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,10 +19,12 @@ class PromptInjectionTransformerTest {
     // region Helper functions
     private fun createAssistant(
         modeInjectionIds: Set<Uuid> = emptySet(),
+        presetIds: Set<Uuid> = emptySet(),
         lorebookIds: Set<Uuid> = emptySet(),
         allowConversationPromptInjection: Boolean = false
     ) = Assistant(
         modeInjectionIds = modeInjectionIds,
+        presetIds = presetIds,
         lorebookIds = lorebookIds,
         allowConversationPromptInjection = allowConversationPromptInjection
     )
@@ -183,6 +186,73 @@ class PromptInjectionTransformerTest {
         )
 
         assertEquals(messages, result)
+    }
+
+    @Test
+    fun `preset mode injections should be applied from assistant binding`() {
+        val presetId = Uuid.random()
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            content = "Preset content"
+        )
+        val preset = Preset(
+            id = presetId,
+            modeInjectionIds = setOf(injectionId),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(
+                presetIds = setOf(presetId),
+                allowConversationPromptInjection = true,
+            ),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        assertTrue(getMessageText(result.first()).contains("Preset content"))
+    }
+
+    @Test
+    fun `preset disabled entry should not be applied`() {
+        val presetId = Uuid.random()
+        val enabledId = Uuid.random()
+        val disabledId = Uuid.random()
+        val enabledInjection = createModeInjection(
+            id = enabledId,
+            content = "Enabled preset content"
+        )
+        val disabledInjection = createModeInjection(
+            id = disabledId,
+            content = "Disabled preset content"
+        )
+        val preset = Preset(
+            id = presetId,
+            modeInjectionIds = setOf(enabledId, disabledId),
+            disabledEntryIds = setOf(disabledId),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = listOf(enabledInjection, disabledInjection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+        val systemText = getMessageText(result.first())
+
+        assertTrue(systemText.contains("Enabled preset content"))
+        assertFalse(systemText.contains("Disabled preset content"))
     }
 
     @Test

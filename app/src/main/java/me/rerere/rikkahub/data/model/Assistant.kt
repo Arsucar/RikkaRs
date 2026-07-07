@@ -44,6 +44,7 @@ data class Assistant(
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
+    val presetIds: Set<Uuid> = emptySet(),             // 关联的预设 ID (见 issue #65)
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
@@ -217,6 +218,25 @@ data class Lorebook(
     val enabled: Boolean = true,
     val entries: List<PromptInjection.RegexInjection> = emptyList(),
 )
+
+/**
+ * Preset - 多个 ModeInjection 的聚合容器 (见 issue #65)
+ *
+ * 启用预设 = 一次性启用其绑定的全部 ModeInjection; 预设内的条目可通过
+ * [disabledEntryIds] 单独禁用 (对应"预设内 enabledInPreset=false")。
+ * 某条目在预设内生效 <=> id ∈ [modeInjectionIds] 且 id ∉ [disabledEntryIds]。
+ */
+@Serializable
+data class Preset(
+    val id: Uuid = Uuid.random(),
+    val name: String = "",
+    val description: String = "",
+    val modeInjectionIds: Set<Uuid> = emptySet(),   // 引用全局 Settings.modeInjections
+    val disabledEntryIds: Set<Uuid> = emptySet(),   // 预设内被单独禁用的条目
+) {
+    /** 该预设启用时实际生效的注入 ID 集合 */
+    fun effectiveInjectionIds(): Set<Uuid> = modeInjectionIds - disabledEntryIds
+}
 
 /**
  * 检查 RegexInjection 是否被触发

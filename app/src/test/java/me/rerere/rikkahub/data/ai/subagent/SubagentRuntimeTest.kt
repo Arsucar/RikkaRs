@@ -3,6 +3,9 @@ package me.rerere.rikkahub.data.ai.subagent
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
@@ -353,5 +356,37 @@ class SubagentRuntimeTest {
         val tool = steps.single() as SubagentTranscriptStep.ToolCall
         assertEquals(11, tool.output.length)
         assertEquals("x".repeat(10) + "\u2026", tool.output)
+    }
+
+    @Test
+    fun buildTranscript_truncatesWorkspaceShellOutputAsValidJson() {
+        val shellOutput = buildJsonObject {
+            put("exitCode", 0)
+            put("stdout", "o".repeat(50))
+            put("stderr", "e".repeat(50))
+            put("timedOut", false)
+        }.toString()
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "1",
+                        toolName = "workspace_shell",
+                        input = """{"command":"test"}""",
+                        output = listOf(UIMessagePart.Text(shellOutput)),
+                    ),
+                ),
+            ),
+        )
+
+        val steps = SubagentHost.buildTranscript(messages, truncateChars = 200, truncateToolOutput = 10)
+        val tool = steps.single() as SubagentTranscriptStep.ToolCall
+        val output = Json.parseToJsonElement(tool.output).jsonObject
+
+        assertEquals("o".repeat(10) + "\u2026", output.getValue("stdout").jsonPrimitive.contentOrNull)
+        assertEquals("e".repeat(10) + "\u2026", output.getValue("stderr").jsonPrimitive.contentOrNull)
+        assertEquals("0", output.getValue("exitCode").jsonPrimitive.contentOrNull)
+        assertEquals("false", output.getValue("timedOut").jsonPrimitive.contentOrNull)
     }
 }

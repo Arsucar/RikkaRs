@@ -29,6 +29,50 @@ class ProviderImportDecoderTest {
         assertEquals("https://gw.test/v1", setting.baseUrl)
     }
 
+    @Test
+    fun decodeProviderImportText_routesOpenCodeToMultipleProviders() {
+        val json = """
+            {
+              "${'$'}schema": "https://opencode.ai/config.json",
+              "provider": {
+                "anthropic": {
+                  "npm": "@ai-sdk/anthropic",
+                  "options": {
+                    "baseURL": "https://claude.gateway/v1",
+                    "apiKey": "sk-claude"
+                  }
+                },
+                "deepseek": {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "options": {
+                    "baseURL": "https://deepseek.gateway/v1",
+                    "apiKey": "sk-deepseek"
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val result = decodeProviderImportText(json)
+
+        assertTrue(result is ProviderImportResult.Multiple)
+        val settings = (result as ProviderImportResult.Multiple).settings
+        assertEquals(2, settings.size)
+        val claude = settings[0] as ProviderSetting.Claude
+        val openai = settings[1] as ProviderSetting.OpenAI
+        assertEquals("Anthropic", claude.name)
+        assertEquals("https://claude.gateway/v1", claude.baseUrl)
+        assertEquals("sk-claude", claude.apiKey)
+        assertEquals("Deepseek", openai.name)
+        assertEquals("https://deepseek.gateway/v1", openai.baseUrl)
+        assertEquals("sk-deepseek", openai.apiKey)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun decodeProviderImportText_rejectsOpenCodeWithNoImportableProviders() {
+        decodeProviderImportText("""{"provider":{"empty":{"options":{}}}}""")
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun decodeProviderImportText_rejectsGarbage() {
         decodeProviderImportText("not-json-not-v1")
