@@ -12,6 +12,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.21
+
+### 新功能 / Features（本 Fork，v2.3.20 之后）
+
+- **助手可管理记忆表模板** — 助手现在能查看已有记忆表模板并按需新建模板，长期记忆整理更省心。（#60）
+  **Assistant-managed memory table templates** — Assistants can now view existing memory table templates and create new ones on demand, making long-term memory easier to organize. (#60)
+
+- **助手可创建与更新技能** — 助手现在能在对话中直接创建或更新技能以扩展自身能力，操作执行前会先请求确认。（#61）
+  **Assistant-created skills** — Assistants can now create or update skills directly during a chat to extend their own capabilities, with confirmation before applying. (#61)
+
+- **赋能工具统一管理入口** — 助手设置新增「赋能工具」页面，集中展示各类能力的开关状态并支持一处启用/关闭。（#62）
+  **Unified tools management** — Assistant settings now include a "tools" page that shows the on/off state of every capability in one place for quick toggling. (#62)
+
 ## v2.3.20
 
 ### 新功能 / Features（本 Fork，v2.3.19 之后）
