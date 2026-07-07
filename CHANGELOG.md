@@ -12,6 +12,16 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.22
+
+### 新功能 / Features（本 Fork，v2.3.21 之后）
+
+- **提示词预设** — 新增「预设」提示词类型，可将多条提示词条目组合成预设，并作为独立注入挂载到助手，提示词管理和扩展选择器均支持查看与启用。
+  **Prompt presets** — Added a "preset" prompt type that groups multiple prompt entries into a preset and mounts it to assistants as an independent injection, viewable and toggleable from both prompt management and the extension selector.
+
+- **从 OpenCode 导入供应商** — 供应商设置支持从 OpenCode 配置导入供应商信息，快速迁移已有配置。
+  **Import providers from OpenCode** — Provider settings can now import provider information from an OpenCode configuration for quick migration of existing setups.
+
 ## v2.3.21
 
 ### 新功能 / Features（本 Fork，v2.3.20 之后）
