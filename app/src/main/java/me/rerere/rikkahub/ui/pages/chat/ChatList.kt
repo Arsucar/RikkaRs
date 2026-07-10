@@ -252,6 +252,7 @@ private fun ChatListNormal(
     // 聊天选择
     val selectedItems = remember { mutableStateListOf<Uuid>() }
     var selecting by remember { mutableStateOf(false) }
+    var selectionCollapsed by rememberSaveable { mutableStateOf(true) }
     var showExportSheet by remember { mutableStateOf(false) }
 
     // 自动跟随键盘滚动
@@ -373,6 +374,7 @@ private fun ChatListNormal(
                                 },
                                 onShare = {
                                     selecting = true  // 使用 CoroutineScope 延迟状态更新
+                                    selectionCollapsed = true
                                     selectedItems.clear()
                                     selectedItems.addAll(conversation.messageNodes.map { it.id }
                                         .subList(0, conversation.messageNodes.indexOf(node) + 1))
@@ -389,6 +391,7 @@ private fun ChatListNormal(
                                 onToolApproval = onToolApproval,
                                 onToolAnswer = onToolAnswer,
                                 lastMessage = index == lastMessageIndex,
+                                selectionCompact = selecting && selectionCollapsed,
                             )
                         }
                     }
@@ -477,6 +480,7 @@ private fun ChatListNormal(
                         IconButton(
                             onClick = {
                                 selecting = false
+                                selectionCollapsed = true
                                 selectedItems.clear()
                             }
                         ) {
@@ -498,6 +502,28 @@ private fun ChatListNormal(
                             }
                         ) {
                             Icon(HugeIcons.CursorPointer01, null)
+                        }
+                    }
+                    Tooltip(
+                        tooltip = {
+                            Text(
+                                if (selectionCollapsed) {
+                                    stringResource(R.string.chat_list_expand_selection_view)
+                                } else {
+                                    stringResource(R.string.chat_list_collapse_selection_view)
+                                }
+                            )
+                        }
+                    ) {
+                        IconButton(
+                            onClick = {
+                                selectionCollapsed = !selectionCollapsed
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (selectionCollapsed) HugeIcons.ArrowDown01 else HugeIcons.ArrowUp01,
+                                contentDescription = null,
+                            )
                         }
                     }
                     Tooltip(
@@ -525,6 +551,7 @@ private fun ChatListNormal(
                 visible = showExportSheet,
                 onDismissRequest = {
                     showExportSheet = false
+                    selectionCollapsed = true
                     selectedItems.clear()
                 },
                 conversation = conversation,

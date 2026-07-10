@@ -30,4 +30,10 @@ data class MemoryTableDocumentEntity(
     val createdAt: Long,
     @ColumnInfo("updated_at")
     val updatedAt: Long,
+    // #89: assistant-scoped source document id this row follows (null when standalone).
+    @ColumnInfo("source_document_id")
+    val sourceDocumentId: String? = null,
+    // #89: 1 = payload mirrors source document, 0 = detached for independent edits.
+    @ColumnInfo(name = "follow_source", defaultValue = "0")
+    val followSource: Boolean = false,
 )

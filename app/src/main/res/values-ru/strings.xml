@@ -431,7 +431,7 @@
   <string name="mermaid_export_success">Экспорт выполнен успешно</string>
   <string name="model_list_favorite">Избранное</string>
   <string name="model_list_no_providers">Нет доступных поставщиков ИИ, добавьте их в настройках</string>
-  <string name="model_list_search_placeholder">Введите название модели для поиска</string>
+  <string name="model_list_search_placeholder">Модель или провайдер</string>
   <string name="model_list_select_model">Выбрать модель</string>
   <string name="more_options">Дополнительные параметры</string>
   <string name="no_text_content_to_copy">Нет доступного текста для копирования</string>
@@ -1307,14 +1307,6 @@
   <string name="setting_provider_detail_tags">Теги</string>
   <string name="setting_provider_detail_add_tag">Добавить тег</string>
   <string name="filter_all">Все</string>
-  <string-array name="provider_suggested_tags">
-    <item>Часто используемые</item>
-    <item>Бюджетные</item>
-    <item>Длинный контекст</item>
-    <item>Высокое качество</item>
-    <item>Бесплатный тариф</item>
-    <item>Отечественные</item>
-  </string-array>
   <string name="assistant_detail_subagent_desc">Настройка профилей субагентов, глубины и делегирования</string>
   <string name="assistant_page_tab_subagent">Субагенты</string>
   <string name="subagent_enable_title">Включить субагентов</string>

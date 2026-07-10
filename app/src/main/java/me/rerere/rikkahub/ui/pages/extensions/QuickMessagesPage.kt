@@ -254,7 +254,7 @@ private fun QuickMessageCard(
 }
 
 @Composable
-private fun EditQuickMessageDialog(
+internal fun EditQuickMessageDialog(
     title: String,
     initialQuickMessage: QuickMessage?,
     onDismiss: () -> Unit,

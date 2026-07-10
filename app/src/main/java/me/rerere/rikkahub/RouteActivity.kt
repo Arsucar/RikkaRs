@@ -385,6 +385,7 @@ class RouteActivity : ComponentActivity() {
                                     templateId = key.templateId,
                                     assistantId = key.assistantId,
                                     initialScopeType = key.scopeType,
+                                    conversationId = key.conversationId,
                                 )
                             }
 
@@ -653,6 +654,7 @@ sealed interface Screen : NavKey {
         val templateId: String,
         val assistantId: String,
         val scopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
+        val conversationId: String? = null,
     ) : Screen
 
     @Serializable

@@ -512,6 +512,7 @@ class SubagentHost(
             allowConversationPromptInjection = false,
             enableTimeReminder = false,
             modeInjectionIds = emptySet(),
+            presetIds = profile.presetIds,
             lorebookIds = emptySet(),
             workspaceId = parent.workspaceId,
             enableSubagents = childCanSpawn,

@@ -38,4 +38,6 @@ data class ConversationEntity(
     val archivedAt: Long = 0,
     @ColumnInfo("folder_id", defaultValue = "")
     val folderId: String = "",
+    @ColumnInfo("memory_table_isolation", defaultValue = "0")
+    val memoryTableIsolation: Boolean = false,
 )

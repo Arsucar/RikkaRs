@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -412,7 +413,7 @@ private fun PresetCard(
 }
 
 @Composable
-private fun PresetEditSheet(
+internal fun PresetEditSheet(
     preset: Preset,
     modeInjections: List<PromptInjection.ModeInjection>,
     onDismiss: () -> Unit,
@@ -421,15 +422,22 @@ private fun PresetEditSheet(
     onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
 ) {
     var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
+    val presetModeInjections = remember(modeInjections, preset.modeInjectionIds) {
+        modeInjections.filter { it.id in preset.modeInjectionIds }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberBottomSheetState(initialValue = SheetValue.Expanded),
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Expanded,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+        contentWindowInsets = { WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.9f)
+                .fillMaxSize()
                 .padding(16.dp)
                 .imePadding()
         ) {
@@ -455,50 +463,51 @@ private fun PresetEditSheet(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = preset.name,
-                onValueChange = { onEditPreset(preset.copy(name = it)) },
-                label = { Text(stringResource(R.string.prompt_page_name)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = preset.description,
-                onValueChange = { onEditPreset(preset.copy(description = it)) },
-                label = { Text(stringResource(R.string.prompt_page_description)) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.prompt_page_preset_entries),
-                    style = MaterialTheme.typography.titleMedium,
+                OutlinedTextField(
+                    value = preset.name,
+                    onValueChange = { onEditPreset(preset.copy(name = it)) },
+                    label = { Text(stringResource(R.string.prompt_page_name)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                IconButton(onClick = { editingInjection = PromptInjection.ModeInjection() }) {
-                    Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_mode_injection))
-                }
-            }
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (modeInjections.isEmpty()) {
-                    item {
-                        Text(
-                            text = stringResource(R.string.prompt_page_mode_injection_empty),
-                            modifier = Modifier.padding(vertical = 16.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+
+                OutlinedTextField(
+                    value = preset.description,
+                    onValueChange = { onEditPreset(preset.copy(description = it)) },
+                    label = { Text(stringResource(R.string.prompt_page_description)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.prompt_page_preset_entries),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    IconButton(onClick = { editingInjection = PromptInjection.ModeInjection() }) {
+                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_mode_injection))
                     }
+                }
+
+                if (presetModeInjections.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.prompt_page_mode_injection_empty),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 } else {
-                    items(modeInjections, key = { it.id }) { injection ->
+                    presetModeInjections.forEach { injection ->
                         val enabledInPreset = injection.id in preset.effectiveInjectionIds()
                         ListItem(
                             headlineContent = {
@@ -802,7 +811,7 @@ private fun ModeInjectionCard(
 }
 
 @Composable
-private fun ModeInjectionEditSheet(
+internal fun ModeInjectionEditSheet(
     injection: PromptInjection.ModeInjection,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
@@ -1229,7 +1238,7 @@ private fun LorebookCard(
 }
 
 @Composable
-private fun LorebookEditFullscreen(
+internal fun LorebookEditFullscreen(
     book: Lorebook,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,

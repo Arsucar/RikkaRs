@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessagePart
 import kotlin.uuid.Uuid
 
@@ -119,11 +120,20 @@ fun createSubagentTools(
             val task = params["task"]?.jsonPrimitive?.contentOrNull
                 ?: error("task is required")
             val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val profileSnapshot = getProfiles().firstOrNull { it.name == profileName }
             val result = spawn(profileName, task, description)
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
                 put("subagent_profile", JsonPrimitive(result.profileName))
+                put("subagent_task", JsonPrimitive(task))
+                if (description.isNotBlank()) put("subagent_description", JsonPrimitive(description))
+                profileSnapshot?.systemPrompt?.takeIf { it.isNotBlank() }?.let {
+                    put("subagent_system_prompt", JsonPrimitive(it))
+                }
+                profileSnapshot?.workspaceAccess?.let {
+                    put("subagent_workspace_access", JsonPrimitive(it.name))
+                }
                 put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_calls", JsonPrimitive(result.toolCallCount))
@@ -138,6 +148,7 @@ fun createSubagentTools(
                 put("summary", JsonPrimitive(result.summary))
                 put("succeeded", JsonPrimitive(result.succeeded))
                 if (!result.error.isNullOrBlank()) put("error", JsonPrimitive(result.error))
+                result.usage?.let { put("usage", json.encodeToJsonElement(TokenUsage.serializer(), it)) }
                 put("max_tool_calls", JsonPrimitive(result.maxToolCalls ?: 32))
                 put("truncated", JsonPrimitive(result.truncated))
             }.toString()

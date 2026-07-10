@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -21,6 +22,7 @@ import java.time.LocalDate
 fun buildMemoryTools(
     json: Json,
     defaultScope: MemoryScope = MemoryScope.ASSISTANT,
+    onList: suspend () -> List<AssistantMemory>,
     onCreation: suspend (String, MemoryScope) -> AssistantMemory,
     onUpdate: suspend (Int, String, MemoryScope?) -> AssistantMemory,
     onDelete: suspend (Int) -> Unit
@@ -29,7 +31,8 @@ fun buildMemoryTools(
         name = "memory_tool",
         description = """
             The memory tool stores long-term information across conversations.
-            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
+            Use `action` to control the operation: `list` (inspect effective records), `create` (add), `edit` (update), `delete` (remove).
+            - Need to inspect existing records: `list`
             - No relevant record: `create` + `content`
             - Existing relevant record: `edit` + `id` + `content`
             - Outdated/irrelevant record: `delete` + `id`
@@ -43,6 +46,7 @@ fun buildMemoryTools(
             Similar memories should be merged; prefer updating existing records.
 
             Examples:
+            {"action":"list"}
             {"action":"create","content":"User prefers brief replies and is more active on weekends."}
             {"action":"create","scope":"global","content":"User prefers Chinese replies across assistants."}
             {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
@@ -57,12 +61,13 @@ fun buildMemoryTools(
                         put(
                             "enum",
                             buildJsonArray {
+                                add("list")
                                 add("create")
                                 add("edit")
                                 add("delete")
                             }
                         )
-                        put("description", "Operation to perform: create, edit, or delete")
+                        put("description", "Operation to perform: list, create, edit, or delete")
                     })
                     put("id", buildJsonObject {
                         put("type", "integer")
@@ -91,6 +96,10 @@ fun buildMemoryTools(
             val params = it.jsonObject
             val action = params["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
             val payload = when (action) {
+                "list" -> {
+                    json.encodeToJsonElement(ListSerializer(AssistantMemory.serializer()), onList())
+                }
+
                 "create" -> {
                     val content = params["content"]?.jsonPrimitive?.contentOrNull ?: error("content is required")
                     val scope = params["scope"].toMemoryScopeOrNull() ?: defaultScope
@@ -113,7 +122,7 @@ fun buildMemoryTools(
                     }
                 }
 
-                else -> error("unknown action: $action, must be one of [create, edit, delete]")
+                else -> error("unknown action: $action, must be one of [list, create, edit, delete]")
             }
             listOf(UIMessagePart.Text(payload.toString()))
         }

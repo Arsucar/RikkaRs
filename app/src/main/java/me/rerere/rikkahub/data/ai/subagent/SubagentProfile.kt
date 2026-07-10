@@ -77,6 +77,7 @@ data class SubagentProfile(
     val localTools: List<LocalToolOption> = emptyList(),
     val extraLocalTools: List<LocalToolOption> = emptyList(),
     val enabledSkills: Set<String> = emptySet(),
+    val presetIds: Set<Uuid> = emptySet(),
     val mcpServerIds: Set<Uuid> = emptySet(),
     val toolApprovalOverrides: Map<String, Boolean> = emptyMap(),
     val enableMemory: Boolean = false,
@@ -152,7 +153,14 @@ fun mergeSubagentProfiles(
     SubagentRegistry.effectiveGlobalProfiles(global)
         .filter { it.name !in disabledGlobal }
         .forEach { byName[it.name] = it }
-    custom.forEach { byName[it.name] = it }
+    custom.forEach { profile ->
+        val inherited = byName[profile.name]
+        byName[profile.name] = if (inherited != null) {
+            profile.mergeInheritedFrom(inherited)
+        } else {
+            profile
+        }
+    }
     return byName.values.toList()
 }
 
@@ -191,6 +199,7 @@ internal fun SubagentProfile.mergeInheritedFrom(base: SubagentProfile): Subagent
     return copy(
         description = description.ifBlank { base.description },
         systemPrompt = systemPrompt.ifBlank { base.systemPrompt },
+        presetIds = presetIds.ifEmpty { base.presetIds },
         maxToolCalls = maxToolCalls ?: base.maxToolCalls,
     )
 }

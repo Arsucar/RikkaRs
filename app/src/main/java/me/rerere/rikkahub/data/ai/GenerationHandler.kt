@@ -161,6 +161,9 @@ class GenerationHandler(
                         buildMemoryTools(
                             json = json,
                             defaultScope = defaultMemoryScope,
+                            onList = {
+                                memoryRepo.getEffectiveMemories(assistant.id.toString())
+                            },
                             onCreation = { content, scope ->
                                 memoryRepo.addMemory(
                                     assistantId = assistant.id.toString(),
@@ -437,6 +440,11 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
+        ProviderRateLimiter.await(
+            provider = provider,
+            messages = internalMessages,
+            params = params,
+        )
         if (stream) {
             providerImpl.streamText(
                 providerSetting = provider,
@@ -619,14 +627,16 @@ class GenerationHandler(
 
             var messages = listOf(UIMessage.user(prompt))
             var translatedText = ""
+            val params = TextGenerationParams(
+                model = model,
+                reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
+            )
 
+            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             providerHandler.streamText(
                 providerSetting = provider,
                 messages = messages,
-                params = TextGenerationParams(
-                    model = model,
-                    reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-                ),
+                params = params,
             ).collect { chunk ->
                 messages = messages.handleMessageChunk(chunk)
                 translatedText = messages.lastOrNull()?.toText() ?: ""
@@ -639,26 +649,28 @@ class GenerationHandler(
         } else {
             // Use Qwen MT model with special translation options
             val messages = listOf(UIMessage.user(sourceText))
+            val params = TextGenerationParams(
+                model = model,
+                temperature = 0.3f,
+                topP = 0.95f,
+                customBody = listOf(
+                    CustomBody(
+                        key = "translation_options",
+                        value = buildJsonObject {
+                            put("source_lang", JsonPrimitive("auto"))
+                            put(
+                                "target_lang",
+                                JsonPrimitive(targetLanguage.getDisplayLanguage(Locale.ENGLISH))
+                            )
+                        }
+                    )
+                )
+            )
+            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             val chunk = providerHandler.generateText(
                 providerSetting = provider,
                 messages = messages,
-                params = TextGenerationParams(
-                    model = model,
-                    temperature = 0.3f,
-                    topP = 0.95f,
-                    customBody = listOf(
-                        CustomBody(
-                            key = "translation_options",
-                            value = buildJsonObject {
-                                put("source_lang", JsonPrimitive("auto"))
-                                put(
-                                    "target_lang",
-                                    JsonPrimitive(targetLanguage.getDisplayLanguage(Locale.ENGLISH))
-                                )
-                            }
-                        )
-                    )
-                ),
+                params = params,
             )
             val translatedText = chunk.choices.firstOrNull()?.message?.toText() ?: ""
 
@@ -679,6 +691,7 @@ internal fun resolveGenerationCountdownRemaining(
     if (stepsCountdownTotal == null) {
         return (maxSteps - stepIndex).coerceAtLeast(0)
     }
+
     val executedToolCalls = messages.sumOf { message ->
         if (message.role == MessageRole.ASSISTANT) {
             message.parts.count { it is UIMessagePart.Tool && it.isExecuted }

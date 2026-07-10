@@ -67,6 +67,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.WorkspaceToolDefaultApprovals
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -116,6 +117,7 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
             providers = providers,
             mcpServers = mcpServerConfigs,
             skills = skills,
+            presets = settings.presets,
             profileName = profileName,
             createMode = createMode,
             onUpdate = { vm.update(it) },
@@ -131,6 +133,7 @@ internal fun AssistantSubagentProfileContent(
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
+    presets: List<Preset>,
     profileName: String,
     createMode: Boolean,
     onUpdate: (Assistant) -> Unit,
@@ -227,6 +230,7 @@ internal fun AssistantSubagentProfileContent(
                 providers = providers,
                 mcpServers = mcpServers,
                 skills = skills,
+                presets = presets,
                 readOnly = readOnly || isGlobalOnly,
                 pathDraft = pathDraft,
                 onPathDraftChange = { pathDraft = it },
@@ -249,6 +253,7 @@ internal fun SubagentProfileForm(
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
+    presets: List<Preset>,
     readOnly: Boolean,
     pathDraft: String,
     onPathDraftChange: (String) -> Unit,
@@ -339,6 +344,47 @@ internal fun SubagentProfileForm(
                             maxLines = 15,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+
+                    if (presets.isNotEmpty()) {
+                        HorizontalDivider()
+
+                        FormItem(
+                            modifier = Modifier.padding(8.dp),
+                            label = { Text(stringResource(R.string.subagent_profile_presets)) },
+                            description = { Text(stringResource(R.string.subagent_profile_presets_desc)) },
+                        ) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                presets.forEach { preset ->
+                                    val selected = preset.id in resolved.presetIds
+                                    FilterChip(
+                                        selected = selected,
+                                        enabled = !readOnly,
+                                        onClick = {
+                                            persist {
+                                                it.copy(
+                                                    presetIds = if (selected) {
+                                                        it.presetIds - preset.id
+                                                    } else {
+                                                        setOf(preset.id)
+                                                    }
+                                                )
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                preset.name.ifBlank {
+                                                    stringResource(R.string.extension_content_unnamed_preset)
+                                                }
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     HorizontalDivider()

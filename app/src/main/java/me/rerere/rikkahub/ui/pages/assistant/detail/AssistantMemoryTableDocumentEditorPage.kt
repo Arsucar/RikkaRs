@@ -63,6 +63,8 @@ import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_SCHEMA_JSON
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.readMemoryTableInjectionToggles
+import me.rerere.rikkahub.data.model.setMemoryTableInjectionEnabled
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -76,6 +78,7 @@ fun AssistantMemoryTableDocumentEditorPage(
     templateId: String,
     assistantId: String,
     initialScopeType: MemoryTableScopeType,
+    conversationId: String? = null,
 ) {
     val vm: AssistantDetailVM = koinViewModel(parameters = { parametersOf(assistantId) })
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
@@ -91,7 +94,7 @@ fun AssistantMemoryTableDocumentEditorPage(
             memoryTableDocuments.firstOrNull {
                 it.templateId == templateId &&
                     it.scopeType == initialScopeType &&
-                    it.scopeId == scopeIdFor(initialScopeType, assistantId)
+                    it.scopeId == scopeIdFor(initialScopeType, assistantId, conversationId)
             }
         }
     }
@@ -112,7 +115,7 @@ fun AssistantMemoryTableDocumentEditorPage(
                 MemoryTableDocument(
                     templateId = templateId,
                     scopeType = initialScopeType,
-                    scopeId = scopeIdFor(initialScopeType, assistantId),
+                    scopeId = scopeIdFor(initialScopeType, assistantId, conversationId),
                 )
             } else {
                 null
@@ -132,7 +135,7 @@ fun AssistantMemoryTableDocumentEditorPage(
                     id = effectiveDocumentId,
                     templateId = templateId,
                     scopeType = initialScopeType,
-                    scopeId = scopeIdFor(initialScopeType, assistantId),
+                    scopeId = scopeIdFor(initialScopeType, assistantId, conversationId),
                 )
             }
         }
@@ -214,6 +217,15 @@ private fun MemoryTableDocumentEditorScaffold(
 
     fun updateTemplateSchema(updatedTemplate: MemoryTableTemplate) {
         templateDraft = updatedTemplate
+    }
+
+    // #93: flip a single table's injectPolicy.enabled in the template schema JSON so the
+    // per-table injection gate can be toggled from the editor without hand-editing JSON.
+    fun setTableInjectionEnabled(tableName: String, enabled: Boolean) {
+        val updatedSchema = setMemoryTableInjectionEnabled(templateDraft.schemaJson, tableName, enabled)
+        if (updatedSchema != templateDraft.schemaJson) {
+            updateTemplateSchema(templateDraft.copy(schemaJson = updatedSchema))
+        }
     }
 
     fun addColumn(tableIndex: Int, columnName: String): Boolean {
@@ -483,9 +495,20 @@ private fun MemoryTableDocumentEditorScaffold(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        val injectionToggles = remember(templateDraft.schemaJson) {
+                            readMemoryTableInjectionToggles(templateDraft.schemaJson)
+                        }
                         tableState.forEachIndexed { tableIndex, table ->
+                            val injectEnabled = injectionToggles
+                                .firstOrNull { it.name == table.name }
+                                ?.injectEnabled
+                                ?: true
                             MemoryTableEditableTable(
                                 table = table,
+                                injectEnabled = injectEnabled,
+                                onInjectEnabledChange = { enabled ->
+                                    setTableInjectionEnabled(table.name, enabled)
+                                },
                                 onChange = { updated ->
                                     updateTables(
                                         tableState.mapIndexed { index, current ->
@@ -747,6 +770,8 @@ private fun AddColumnDialog(
 @Composable
 private fun MemoryTableEditableTable(
     table: MemoryTableEditorTable,
+    injectEnabled: Boolean,
+    onInjectEnabledChange: (Boolean) -> Unit,
     onChange: (MemoryTableEditorTable) -> Unit,
     onAddColumn: () -> Unit,
     onColumnAction: (MemoryTableSchemaColumn) -> Unit,
@@ -819,10 +844,31 @@ private fun MemoryTableEditableTable(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = table.name,
-            style = MaterialTheme.typography.titleSmall,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = table.name,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = if (injectEnabled) {
+                        "注入到提示词"
+                    } else {
+                        "不注入到提示词"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = injectEnabled,
+                onCheckedChange = onInjectEnabledChange,
+            )
+        }
         DataTable(
             headers = headers,
             rows = rows,
@@ -857,11 +903,15 @@ private fun TableCellTextField(
     )
 }
 
-private fun scopeIdFor(scopeType: MemoryTableScopeType, assistantId: String): String {
+private fun scopeIdFor(
+    scopeType: MemoryTableScopeType,
+    assistantId: String,
+    conversationId: String?,
+): String {
     return when (scopeType) {
         MemoryTableScopeType.GLOBAL -> MemoryRepository.GLOBAL_MEMORY_ID
         MemoryTableScopeType.ASSISTANT -> assistantId
-        MemoryTableScopeType.CONVERSATION -> assistantId
+        MemoryTableScopeType.CONVERSATION -> conversationId ?: assistantId
     }
 }
 

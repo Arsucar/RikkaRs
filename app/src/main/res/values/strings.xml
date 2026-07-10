@@ -61,6 +61,8 @@
   <string name="subagent_profile_description_desc">Shown to the main model when choosing a profile</string>
   <string name="subagent_profile_system_prompt">System prompt</string>
   <string name="subagent_profile_system_prompt_desc">Instructions for this subagent run</string>
+  <string name="subagent_profile_presets">Presets</string>
+  <string name="subagent_profile_presets_desc">Inject selected preset entries into this subagent prompt</string>
   <string name="subagent_profile_model">Chat model</string>
   <string name="subagent_profile_model_desc">Leave empty to inherit the assistant default</string>
   <string name="subagent_profile_workspace_access">Workspace access</string>
@@ -123,6 +125,13 @@
   <string name="subagent_tool_ui_token_count">%1$s tokens</string>
   <string name="subagent_tool_ui_expand_details">Expand details</string>
   <string name="subagent_tool_ui_collapse_details">Collapse details</string>
+  <string name="subagent_tool_ui_context_expand">Show transmitted context</string>
+  <string name="subagent_tool_ui_context_collapse">Hide transmitted context</string>
+  <string name="subagent_tool_ui_context_profile">Profile</string>
+  <string name="subagent_tool_ui_context_workspace">Workspace access</string>
+  <string name="subagent_tool_ui_context_task">Task</string>
+  <string name="subagent_tool_ui_context_description">Description</string>
+  <string name="subagent_tool_ui_context_system_prompt">System prompt</string>
   <string name="subagent_tool_ui_reasoning_label">Reasoning</string>
   <string name="subagent_tool_ui_tool_call">%1$s (%2$s → %3$s)</string>
   <string name="subagent_tool_ui_running">Subagent running…</string>
@@ -623,7 +632,7 @@
   <string name="mermaid_export_success">Export successful</string>
   <string name="model_list_favorite">Favorites</string>
   <string name="model_list_no_providers">No available AI providers, please add in settings</string>
-  <string name="model_list_search_placeholder">Enter model or provider name to search</string>
+  <string name="model_list_search_placeholder">Model or provider</string>
   <string name="model_list_select_model">Select Model</string>
   <string name="model_list_expand_all">Expand all model groups</string>
   <string name="model_list_collapse_all">Collapse all model groups</string>
@@ -1519,19 +1528,13 @@
   <string name="assistant_page_local_tools_logs_desc">Let the AI read app runtime logs (redacted) for debugging</string>
   <string name="setting_provider_detail_tags">Tags</string>
   <string name="setting_provider_detail_add_tag">Add tag</string>
+  <string name="provider_rate_limit_rpm">RPM limit</string>
+  <string name="provider_rate_limit_tpm">TPM limit</string>
   <string name="filter_all">All</string>
   <string name="subagent_step_thinking">Thinking</string>
   <string name="subagent_step_text">Text</string>
   <string name="subagent_step_tool">Tool call</string>
   <string name="extensions_subagents_open">Open subagent profile</string>
-  <string-array name="provider_suggested_tags">
-    <item>Frequently Used</item>
-    <item>Budget</item>
-    <item>Long Context</item>
-    <item>High Quality</item>
-    <item>Free Tier</item>
-    <item>Domestic</item>
-  </string-array>
   <string name="common_clear">Clear</string>
   <string name="common_copy">Copy</string>
   <string name="common_select_all">Select all</string>
@@ -1540,7 +1543,9 @@
   <string name="common_download">Download</string>
   <string name="common_refresh">Refresh</string>
   <string name="chat_list_clear_selection">Clear selection</string>
+  <string name="chat_list_collapse_selection_view">Collapse selection view</string>
   <string name="chat_list_confirm">Confirm</string>
+  <string name="chat_list_expand_selection_view">Expand selection view</string>
   <string name="chat_drawer_stats">Statistics</string>
   <string name="translator_page_paste">Paste text</string>
   <string name="translator_page_copy_result">Copy translation</string>

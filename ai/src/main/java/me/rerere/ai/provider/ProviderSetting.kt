@@ -14,6 +14,12 @@ data class BalanceOption(
 )
 
 @Serializable
+data class ProviderRateLimit(
+    val rpm: Int? = null,
+    val tpm: Int? = null,
+)
+
+@Serializable
 enum class ClaudePromptCacheTtl(val apiValue: String?) {
     @SerialName("5m")
     FIVE_MINUTES(null),
@@ -30,6 +36,7 @@ sealed class ProviderSetting {
     abstract val models: List<Model>
     abstract val balanceOption: BalanceOption
     abstract val tags: List<String>
+    abstract val rateLimit: ProviderRateLimit
 
     abstract val builtIn: Boolean
     abstract val description: @Composable() () -> Unit
@@ -46,6 +53,7 @@ sealed class ProviderSetting {
         models: List<Model> = this.models,
         balanceOption: BalanceOption = this.balanceOption,
         tags: List<String> = this.tags,
+        rateLimit: ProviderRateLimit = this.rateLimit,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
         shortDescription: @Composable (() -> Unit) = this.shortDescription,
@@ -60,6 +68,7 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val tags: List<String> = emptyList(),
+        override val rateLimit: ProviderRateLimit = ProviderRateLimit(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -98,6 +107,7 @@ sealed class ProviderSetting {
             models: List<Model>,
             balanceOption: BalanceOption,
             tags: List<String>,
+            rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
@@ -111,7 +121,8 @@ sealed class ProviderSetting {
                 description = description,
                 balanceOption = balanceOption,
                 shortDescription = shortDescription,
-                tags = tags
+                tags = tags,
+                rateLimit = rateLimit,
             )
         }
     }
@@ -125,6 +136,7 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val tags: List<String> = emptyList(),
+        override val rateLimit: ProviderRateLimit = ProviderRateLimit(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -166,6 +178,7 @@ sealed class ProviderSetting {
             models: List<Model>,
             balanceOption: BalanceOption,
             tags: List<String>,
+            rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
@@ -179,7 +192,8 @@ sealed class ProviderSetting {
                 description = description,
                 shortDescription = shortDescription,
                 balanceOption = balanceOption,
-                tags = tags
+                tags = tags,
+                rateLimit = rateLimit,
             )
         }
     }
@@ -193,6 +207,7 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val tags: List<String> = emptyList(),
+        override val rateLimit: ProviderRateLimit = ProviderRateLimit(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -230,6 +245,7 @@ sealed class ProviderSetting {
             models: List<Model>,
             balanceOption: BalanceOption,
             tags: List<String>,
+            rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
             shortDescription: @Composable (() -> Unit),
@@ -243,7 +259,8 @@ sealed class ProviderSetting {
                 builtIn = builtIn,
                 description = description,
                 shortDescription = shortDescription,
-                tags = tags
+                tags = tags,
+                rateLimit = rateLimit,
             )
         }
     }

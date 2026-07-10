@@ -431,7 +431,7 @@
   <string name="mermaid_export_success">匯出成功</string>
   <string name="model_list_favorite">收藏</string>
   <string name="model_list_no_providers">沒有可用AI提供商，請在設置添加</string>
-  <string name="model_list_search_placeholder">輸入模型或供應商名稱搜尋</string>
+  <string name="model_list_search_placeholder">模型或供應商</string>
   <string name="model_list_select_model">選擇模型</string>
   <string name="more_options">更多選項</string>
   <string name="no_text_content_to_copy">暫無可複製的文字內容</string>
@@ -1285,14 +1285,6 @@
   <string name="setting_provider_detail_tags">標籤</string>
   <string name="setting_provider_detail_add_tag">新增標籤</string>
   <string name="filter_all">全部</string>
-  <string-array name="provider_suggested_tags">
-    <item>常用</item>
-    <item>便宜</item>
-    <item>長上下文</item>
-    <item>高品質</item>
-    <item>免費額度</item>
-    <item>國產</item>
-  </string-array>
   <string name="common_clear">清除</string>
   <string name="common_copy">複製</string>
   <string name="common_select_all">全選</string>

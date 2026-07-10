@@ -259,7 +259,85 @@ object SpawnSubagentToolUI : ToolUIRenderer {
                 text = title(context),
                 style = MaterialTheme.typography.headlineSmall,
             )
+            SubagentTransferredContextSection(context)
             Summary(context)
+        }
+    }
+}
+
+@Composable
+private fun SubagentTransferredContextSection(context: ToolUIContext) {
+    val textPart = context.tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()
+    val meta = textPart?.metadata
+    val task = meta?.get("subagent_task")?.jsonPrimitive?.contentOrNull
+        ?: context.arguments.getStringContent("task")
+    val description = meta?.get("subagent_description")?.jsonPrimitive?.contentOrNull
+        ?: context.arguments.getStringContent("description")
+    val profileName = meta?.get("subagent_profile")?.jsonPrimitive?.contentOrNull
+        ?: context.arguments.getStringContent("profile_name")
+    val systemPrompt = meta?.get("subagent_system_prompt")?.jsonPrimitive?.contentOrNull
+    val workspaceAccess = meta?.get("subagent_workspace_access")?.jsonPrimitive?.contentOrNull
+
+    if (task.isNullOrBlank() &&
+        description.isNullOrBlank() &&
+        profileName.isNullOrBlank() &&
+        systemPrompt.isNullOrBlank() &&
+        workspaceAccess.isNullOrBlank()
+    ) {
+        return
+    }
+
+    var expanded by remember(context.tool.toolCallId) { mutableStateOf(false) }
+    Text(
+        text = if (expanded) {
+            stringResource(R.string.subagent_tool_ui_context_collapse)
+        } else {
+            stringResource(R.string.subagent_tool_ui_context_expand)
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.clickable { expanded = !expanded },
+    )
+    AnimatedVisibility(visible = expanded) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            profileName?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_profile), it)
+            }
+            workspaceAccess?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_workspace), it)
+            }
+            task?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_task), it)
+            }
+            description?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_description), it)
+            }
+            systemPrompt?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_system_prompt), it)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubagentContextField(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
@@ -928,6 +1006,11 @@ private fun parseSubagentResult(context: ToolUIContext): SubagentResult? {
             summary = obj["summary"]?.jsonPrimitive?.contentOrNull ?: "",
             succeeded = obj["succeeded"]?.jsonPrimitive?.contentOrNull == "true",
             error = obj["error"]?.jsonPrimitive?.contentOrNull,
+            usage = obj["usage"]?.let {
+                runCatching {
+                    JsonInstant.decodeFromJsonElement(TokenUsage.serializer(), it)
+                }.getOrNull()
+            },
             steps = obj["steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
             toolLoopSteps = obj["tool_loop_steps"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
             toolCallCount = obj["tool_call_count"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()

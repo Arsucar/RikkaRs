@@ -43,7 +43,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
@@ -84,7 +84,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -232,8 +231,14 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
         ) { page ->
             when (page) {
                 0 -> {
+                    val allUserTags = settings.providers
+                        .flatMap { it.tags }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
                     SettingProviderConfigPage(
                         provider = provider,
+                        allUserTags = allUserTags,
                         onEdit = {
                             onEdit(it)
                             toaster.show(
@@ -267,6 +272,7 @@ private fun ProviderSetting.withTags(tags: List<String>): ProviderSetting = when
 @Composable
 private fun SettingProviderConfigPage(
     provider: ProviderSetting,
+    allUserTags: List<String>,
     onEdit: (ProviderSetting) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -329,6 +335,29 @@ private fun SettingProviderConfigPage(
                 )
             }
         }
+        val suggestions = allUserTags.filter { it !in internalProvider.tags }
+        if (suggestions.isNotEmpty()) {
+            Text(
+                text = "点击添加已有标签",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                suggestions.forEach { tag ->
+                    SuggestionChip(
+                        onClick = {
+                            internalProvider = internalProvider.withTags(
+                                internalProvider.tags + tag
+                            )
+                        },
+                        label = { Text(tag) }
+                    )
+                }
+            }
+        }
         var newTagText by remember { mutableStateOf("") }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -356,25 +385,6 @@ private fun SettingProviderConfigPage(
                 Icon(HugeIcons.Add01, contentDescription = null)
             }
         }
-        val suggestedTags = stringArrayResource(R.array.provider_suggested_tags).toList()
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            suggestedTags.forEach { suggestion ->
-                if (suggestion !in internalProvider.tags) {
-                    AssistChip(
-                        onClick = {
-                            internalProvider = internalProvider.withTags(
-                                internalProvider.tags + suggestion
-                            )
-                        },
-                        label = { Text(suggestion) }
-                    )
-                }
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

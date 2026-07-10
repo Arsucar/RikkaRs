@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,7 @@ fun PresetsContent(
     onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
+    onEdit: ((Preset) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -48,6 +50,9 @@ fun PresetsContent(
     ) {
         items(presets, key = { it.id }) { preset ->
             ListItem(
+                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
+                    if (onEdit != null) onEdit(preset) else onManage?.invoke()
+                },
                 headlineContent = {
                     Text(preset.name.ifBlank { stringResource(R.string.extension_content_unnamed_preset) })
                 },
@@ -95,6 +100,7 @@ fun ModeInjectionsContent(
     onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
+    onEdit: ((PromptInjection.ModeInjection) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -102,6 +108,9 @@ fun ModeInjectionsContent(
     ) {
         items(modeInjections) { injection ->
             ListItem(
+                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
+                    if (onEdit != null) onEdit(injection) else onManage?.invoke()
+                },
                 headlineContent = {
                     Text(injection.name.ifBlank { stringResource(R.string.extension_content_unnamed) })
                 },
@@ -129,6 +138,7 @@ fun LorebooksContent(
     onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
+    onEdit: ((Lorebook) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -136,6 +146,9 @@ fun LorebooksContent(
     ) {
         items(lorebooks) { lorebook ->
             ListItem(
+                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
+                    if (onEdit != null) onEdit(lorebook) else onManage?.invoke()
+                },
                 headlineContent = {
                     Text(lorebook.name.ifBlank { stringResource(R.string.extension_content_unnamed_lorebook) })
                 },
@@ -172,6 +185,7 @@ fun SkillsContent(
     onToggle: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
+    onEdit: ((SkillMetadata) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -179,6 +193,9 @@ fun SkillsContent(
     ) {
         items(skills, key = { it.name }) { skill ->
             ListItem(
+                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
+                    if (onEdit != null) onEdit(skill) else onManage?.invoke()
+                },
                 headlineContent = { Text(skill.name) },
                 supportingContent = if (skill.description.isNotBlank()) {
                     {
@@ -213,6 +230,7 @@ fun QuickMessagesContent(
     onToggle: (Uuid, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
+    onEdit: ((QuickMessage) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -220,6 +238,9 @@ fun QuickMessagesContent(
     ) {
         items(quickMessages, key = { it.id }) { quickMessage ->
             ListItem(
+                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
+                    if (onEdit != null) onEdit(quickMessage) else onManage?.invoke()
+                },
                 headlineContent = {
                     Text(quickMessage.title.ifBlank { stringResource(R.string.extension_content_unnamed) })
                 },
@@ -241,6 +262,11 @@ fun QuickMessagesContent(
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             )
+        }
+        if (onManage != null) {
+            item {
+                ManageButton(onClick = onManage)
+            }
         }
     }
 }

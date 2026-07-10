@@ -43,6 +43,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.ProviderRateLimiter
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
@@ -119,21 +120,31 @@ fun ProviderConnectionTester(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (model == null) return@TextButton
+                        val selectedModel = model ?: return@TextButton
                         val provider = providerManager.getProviderByType(internalProvider)
                         resetStates()
                         scope.launch {
                             launch {
                                 runCatching {
                                     nonStreamingState = UiState.Loading
+                                    val messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("hello"),
+                                    )
+                                    val params = TextGenerationParams(
+                                        model = selectedModel,
+                                        customHeaders = selectedModel.customHeaders,
+                                        customBody = selectedModel.customBodies,
+                                    )
+                                    ProviderRateLimiter.await(
+                                        provider = internalProvider,
+                                        messages = messages,
+                                        params = params,
+                                    )
                                     val chunk = provider.generateText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("hello")),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies
-                                        )
+                                        messages = messages,
+                                        params = params,
                                     )
                                     val text = chunk.choices.firstOrNull()?.message?.parts
                                         ?.filterIsInstance<UIMessagePart.Text>()
@@ -144,14 +155,24 @@ fun ProviderConnectionTester(
                             launch {
                                 runCatching {
                                     streamingState = UiState.Loading
+                                    val messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("hello"),
+                                    )
+                                    val params = TextGenerationParams(
+                                        model = selectedModel,
+                                        customHeaders = selectedModel.customHeaders,
+                                        customBody = selectedModel.customBodies,
+                                    )
+                                    ProviderRateLimiter.await(
+                                        provider = internalProvider,
+                                        messages = messages,
+                                        params = params,
+                                    )
                                     val flow = provider.streamText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("hello")),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies
-                                        )
+                                        messages = messages,
+                                        params = params,
                                     )
                                     flow.collect { chunk ->
                                         chunk.choices.firstOrNull()?.delta?.parts
@@ -169,15 +190,25 @@ fun ProviderConnectionTester(
                                         description = "Get the current date and time.",
                                         execute = { emptyList() }
                                     )
+                                    val messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("Use the get_current_time tool."),
+                                    )
+                                    val params = TextGenerationParams(
+                                        model = selectedModel,
+                                        tools = listOf(testTool),
+                                        customHeaders = selectedModel.customHeaders,
+                                        customBody = selectedModel.customBodies,
+                                    )
+                                    ProviderRateLimiter.await(
+                                        provider = internalProvider,
+                                        messages = messages,
+                                        params = params,
+                                    )
                                     val chunk = provider.generateText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("Use the get_current_time tool.")),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            tools = listOf(testTool),
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies
-                                        )
+                                        messages = messages,
+                                        params = params,
                                     )
                                     val message = chunk.choices.firstOrNull()?.message
                                     val toolCall = message?.parts

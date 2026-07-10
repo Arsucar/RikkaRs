@@ -55,6 +55,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.ProviderRateLimiter
 import me.rerere.rikkahub.data.ai.currentToolCallId
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -116,6 +117,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.shouldEnableMemoryTable
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -671,7 +673,14 @@ class ChatService(
                 memoryTableRepository.getEffectiveDocuments(
                     assistantId = assistant.id.toString(),
                     conversationId = conversation.id.toString(),
-                )
+                ).let { docs ->
+                    // #89: 对话开启隔离时，仅注入对话级记忆表，屏蔽助手级/全局，避免重复注入。
+                    if (conversation.memoryTableIsolation) {
+                        docs.filter { it.scopeType == MemoryTableScopeType.CONVERSATION }
+                    } else {
+                        docs
+                    }
+                }
             } else {
                 emptyList()
             }
@@ -752,6 +761,9 @@ class ChatService(
                             },
                             upsertTemplate = { template ->
                                 memoryTableRepository.upsertTemplate(template)
+                            },
+                            deleteTemplate = { templateId ->
+                                memoryTableRepository.deleteTemplate(templateId)
                             },
                         )
                     )
@@ -1082,17 +1094,20 @@ class ChatService(
             val provider = model.findProvider(settings.providers) ?: return
 
             val providerHandler = providerManager.getProviderByType(provider)
+            val messages = listOf(
+                UIMessage.user(
+                    prompt = settings.titlePrompt.applyPlaceholders(
+                        "locale" to Locale.getDefault().displayName,
+                        "content" to conversation.currentMessages
+                            .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
+                ),
+            )
+            val params = backgroundTextGenerationParams(model)
+            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             val result = providerHandler.generateText(
                 providerSetting = provider,
-                messages = listOf(
-                    UIMessage.user(
-                        prompt = settings.titlePrompt.applyPlaceholders(
-                            "locale" to Locale.getDefault().displayName,
-                            "content" to conversation.currentMessages
-                                .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
-                    ),
-                ),
-                params = backgroundTextGenerationParams(model),
+                messages = messages,
+                params = params,
             )
 
             // 生成完，conversation可能不是最新了，因此需要重新获取
@@ -1130,17 +1145,20 @@ class ChatService(
             }
 
             val providerHandler = providerManager.getProviderByType(provider)
+            val messages = listOf(
+                UIMessage.user(
+                    settings.suggestionPrompt.applyPlaceholders(
+                        "locale" to Locale.getDefault().displayName,
+                        "content" to conversation.currentMessages
+                            .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
+                )
+            )
+            val params = backgroundTextGenerationParams(model)
+            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             val result = providerHandler.generateText(
                 providerSetting = provider,
-                messages = listOf(
-                    UIMessage.user(
-                        settings.suggestionPrompt.applyPlaceholders(
-                            "locale" to Locale.getDefault().displayName,
-                            "content" to conversation.currentMessages
-                                .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
-                    )
-                ),
-                params = backgroundTextGenerationParams(model),
+                messages = messages,
+                params = params,
             )
             val suggestions =
                 result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
@@ -1220,10 +1238,13 @@ class ChatService(
                 "locale" to Locale.getDefault().displayName
             )
 
+            val requestMessages = listOf(UIMessage.user(prompt))
+            val params = backgroundTextGenerationParams(model)
+            ProviderRateLimiter.await(provider = provider, messages = requestMessages, params = params)
             val result = providerHandler.generateText(
                 providerSetting = provider,
-                messages = listOf(UIMessage.user(prompt)),
-                params = backgroundTextGenerationParams(model),
+                messages = requestMessages,
+                params = params,
             )
 
             return result.choices[0].message?.toText()?.trim()
@@ -1512,6 +1533,37 @@ class ChatService(
     }
 
     /**
+     * #89: 把会话移动到另一个助手。除了改 assistantId 之外，
+     * 文件夹是助手内分组，切换助手后原文件夹在新助手下不可见，需清空 folderId 避免会话丢失。
+     * 同时把该会话中 followSource=true 的对话级记忆文档重绑到新助手的同模板文档；
+     * 重绑失败不阻断移动本身。
+     */
+    suspend fun moveConversationToAssistant(conversationId: Uuid, targetAssistantId: Uuid) {
+        val conversation = conversationRepo.getConversationById(conversationId) ?: return
+        val oldAssistantId = conversation.assistantId
+        val updated = conversation.copy(
+            assistantId = targetAssistantId,
+            folderId = null,
+        )
+
+        if (sessions.containsKey(conversationId)) {
+            saveConversation(conversationId, updated)
+        } else {
+            conversationRepo.updateConversation(updated)
+        }
+
+        runCatching {
+            memoryTableRepository.relinkFollowReferences(
+                conversationId = conversationId.toString(),
+                oldAssistantId = oldAssistantId.toString(),
+                newAssistantId = targetAssistantId.toString(),
+            )
+        }.onFailure {
+            Log.w(TAG, "moveConversationToAssistant: relink memory table references failed: ${it.message}")
+        }
+    }
+
+    /**
      * 文件夹内是否存在正在生成回复的会话。
      * 仅活跃 session 可能在生成；内存态 folderId 为权威（移动会先同步内存态）。
      */
@@ -1704,6 +1756,19 @@ class ChatService(
         )
 
         saveConversation(forkConversation.id, forkConversation)
+
+        // #89: fork 时把源会话的对话级记忆表文档复制到新会话，复制失败不影响 fork 本身。
+        runCatching {
+            memoryTableRepository.copyDocumentsToScope(
+                fromScopeType = MemoryTableScopeType.CONVERSATION,
+                fromScopeId = conversationId.toString(),
+                toScopeType = MemoryTableScopeType.CONVERSATION,
+                toScopeId = forkConversation.id.toString(),
+            )
+        }.onFailure {
+            Log.w(TAG, "forkConversationAtMessage: copy memory table documents failed: ${it.message}")
+        }
+
         return forkConversation
     }
 

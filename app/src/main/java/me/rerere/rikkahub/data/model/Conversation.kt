@@ -35,6 +35,8 @@ data class Conversation(
     val workspaceCwd: String? = null,
     // 所属文件夹（助手内分组），null 表示未归入任何文件夹
     val folderId: Uuid? = null,
+    // #89: 对话级记忆表隔离开关。true = 仅注入对话级记忆表，屏蔽助手级/全局，避免重复注入。
+    val memoryTableIsolation: Boolean = false,
     @Transient
     val newConversation: Boolean = false
 ) {

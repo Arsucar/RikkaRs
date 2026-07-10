@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.MemoryScope
 import org.junit.Assert.assertEquals
@@ -19,6 +21,7 @@ class MemoryToolsTest {
         val tool = buildMemoryTools(
             json = json,
             defaultScope = MemoryScope.GLOBAL,
+            onList = { error("unexpected list") },
             onCreation = { content, scope ->
                 capturedScope = scope
                 AssistantMemory(id = 1, content = content, scope = scope)
@@ -43,6 +46,7 @@ class MemoryToolsTest {
         val tool = buildMemoryTools(
             json = json,
             defaultScope = MemoryScope.GLOBAL,
+            onList = { error("unexpected list") },
             onCreation = { content, scope ->
                 capturedScope = scope
                 AssistantMemory(id = 1, content = content, scope = scope)
@@ -67,6 +71,7 @@ class MemoryToolsTest {
         var capturedScope: MemoryScope? = MemoryScope.GLOBAL
         val tool = buildMemoryTools(
             json = json,
+            onList = { error("unexpected list") },
             onCreation = { _, _ -> error("unexpected create") },
             onUpdate = { id, content, scope ->
                 assertEquals(12, id)
@@ -93,6 +98,7 @@ class MemoryToolsTest {
         var capturedScope: MemoryScope? = null
         val tool = buildMemoryTools(
             json = json,
+            onList = { error("unexpected list") },
             onCreation = { _, _ -> error("unexpected create") },
             onUpdate = { id, content, scope ->
                 capturedScope = scope
@@ -111,5 +117,31 @@ class MemoryToolsTest {
         )
 
         assertEquals(MemoryScope.GLOBAL, capturedScope)
+    }
+
+    @Test
+    fun listReturnsEffectiveMemories() = runBlocking {
+        val expected = listOf(
+            AssistantMemory(id = 1, content = "assistant memory", scope = MemoryScope.ASSISTANT),
+            AssistantMemory(id = 2, content = "global memory", scope = MemoryScope.GLOBAL),
+        )
+        val tool = buildMemoryTools(
+            json = json,
+            onList = { expected },
+            onCreation = { _, _ -> error("unexpected create") },
+            onUpdate = { _, _, _ -> error("unexpected update") },
+            onDelete = { error("unexpected delete") },
+        ).single()
+
+        val output = tool.execute(
+            buildJsonObject {
+                put("action", "list")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertEquals(
+            expected,
+            json.decodeFromString(ListSerializer(AssistantMemory.serializer()), output.text),
+        )
     }
 }

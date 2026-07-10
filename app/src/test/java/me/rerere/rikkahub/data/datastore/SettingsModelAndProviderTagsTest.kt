@@ -22,15 +22,29 @@ class SettingsModelAndProviderTagsTest {
     }
 
     @Test
-    fun providerTagsIncludeSuggestionsAndCanHideDeletedSuggestion() {
+    fun providerTagsUseOnlyUserOrderAndUsedTags() {
         val settings = Settings.dummy().copy(
             providers = listOf(provider(tags = listOf("custom"))),
+            providerTagOrder = listOf("manual"),
         )
 
-        val deleted = settings.deleteProviderTag("suggested")
+        val deleted = settings.deleteProviderTag("manual")
 
-        assertEquals(listOf("suggested", "custom"), settings.effectiveProviderTags(listOf("suggested")))
-        assertEquals(listOf("custom"), deleted.effectiveProviderTags(listOf("suggested")))
+        assertEquals(listOf("manual", "custom"), settings.effectiveProviderTags())
+        assertEquals(listOf("custom"), deleted.effectiveProviderTags())
+    }
+
+    @Test
+    fun providerTagOrderKeepsSettledTagAfterProviderDetachesIt() {
+        // 标签曾挂到 provider 后沉淀进 providerTagOrder；即使当前没有 provider 持有它，
+        // 只要不在 hiddenProviderTags 里，effectiveProviderTags 仍应返回它。
+        val settings = Settings.dummy().copy(
+            providers = listOf(provider(tags = emptyList())),
+            providerTagOrder = listOf("settled"),
+            hiddenProviderTags = emptyList(),
+        )
+
+        assertEquals(listOf("settled"), settings.effectiveProviderTags())
     }
 
     @Test
@@ -43,9 +57,9 @@ class SettingsModelAndProviderTagsTest {
             providerTagOrder = listOf("old", "keep"),
         )
 
-        val updated = settings.renameProviderTag("old", "new", suggestedTags = emptyList())
+        val updated = settings.renameProviderTag("old", "new")
 
-        assertEquals(listOf("new", "keep"), updated.effectiveProviderTags(emptyList()))
+        assertEquals(listOf("new", "keep"), updated.effectiveProviderTags())
         assertTrue(updated.providers.all { provider -> "new" in provider.tags })
         assertFalse(updated.providers.any { provider -> "old" in provider.tags })
     }

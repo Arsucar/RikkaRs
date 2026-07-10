@@ -275,6 +275,7 @@ class SettingsStore(
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                presetsStoreExists = preferences[PRESETS] != null,
                 presets = preferences[PRESETS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -349,8 +350,13 @@ class SettingsStore(
         .map { settings ->
             // 去重并清理无效引用
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
-            val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
-            val validPresetIds = settings.presets.map { it.id }.toSet()
+            val modeInjections = settings.modeInjections.distinctBy { it.id }
+            val validModeInjectionIds = modeInjections.map { it.id }.toSet()
+            val presets = settings.presets.withDefaultPreset(
+                modeInjections = modeInjections,
+                shouldCreateDefault = !settings.presetsStoreExists,
+            )
+            val validPresetIds = presets.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
             val asrProviders = settings.asrProviders.distinctBy { it.id }
@@ -405,14 +411,16 @@ class SettingsStore(
                 recentChatModels = settings.recentChatModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 }.distinct().take(RECENT_CHAT_MODELS_LIMIT),
-                providerTagOrder = settings.providerTagOrder.map { it.trim() }
+                providerTagOrder = (settings.providerTagOrder +
+                    settings.providers.flatMap { it.tags })
+                    .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct(),
                 hiddenProviderTags = settings.hiddenProviderTags.map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct(),
-                modeInjections = settings.modeInjections.distinctBy { it.id },
-                presets = settings.presets.map { preset ->
+                modeInjections = modeInjections,
+                presets = presets.map { preset ->
                     preset.copy(
                         modeInjectionIds = preset.modeInjectionIds.filter { it in validModeInjectionIds }.toSet(),
                         disabledEntryIds = preset.disabledEntryIds.filter { it in validModeInjectionIds }.toSet(),
@@ -671,6 +679,8 @@ data class Settings(
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
+    @Transient
+    val presetsStoreExists: Boolean = false,
     val presets: List<Preset> = emptyList(),
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
@@ -699,16 +709,16 @@ fun Settings.withRecentChatModel(modelId: Uuid): Settings = copy(
         .take(RECENT_CHAT_MODELS_LIMIT)
 )
 
-fun Settings.effectiveProviderTags(suggestedTags: List<String>): List<String> {
+fun Settings.effectiveProviderTags(): List<String> {
     val usedTags = providers.flatMap { it.tags }.mapNotNull { it.normalizedProviderTagOrNull() }
     val hiddenTags = hiddenProviderTags.mapNotNull { it.normalizedProviderTagOrNull() }.toSet()
-    return (providerTagOrder + suggestedTags + usedTags)
+    return (providerTagOrder + usedTags)
         .mapNotNull { it.normalizedProviderTagOrNull() }
         .filter { tag -> tag in usedTags || tag !in hiddenTags }
         .distinct()
 }
 
-fun Settings.renameProviderTag(oldTag: String, newTag: String, suggestedTags: List<String>): Settings {
+fun Settings.renameProviderTag(oldTag: String, newTag: String): Settings {
     val old = oldTag.normalizedProviderTagOrNull() ?: return this
     val new = newTag.normalizedProviderTagOrNull() ?: return this
     if (old == new) return this
@@ -719,7 +729,7 @@ fun Settings.renameProviderTag(oldTag: String, newTag: String, suggestedTags: Li
             }.mapNotNull { it.normalizedProviderTagOrNull() }.distinct()
         )
     }
-    val currentTags = copy(providers = renamedProviders).effectiveProviderTags(suggestedTags)
+    val currentTags = copy(providers = renamedProviders).effectiveProviderTags()
     return copy(
         providers = renamedProviders,
         providerTagOrder = currentTags.map { if (it == old) new else it }.distinct(),
@@ -1024,3 +1034,20 @@ val DEFAULT_MODE_INJECTIONS = listOf(
         name = "Learning Mode"
     )
 )
+
+private val DEFAULT_PRESET_ID = Uuid.parse("a9433f62-d8e9-4a38-8fb8-9c3f63f7f1b0")
+
+private fun List<Preset>.withDefaultPreset(
+    modeInjections: List<PromptInjection.ModeInjection>,
+    shouldCreateDefault: Boolean,
+): List<Preset> {
+    if (!shouldCreateDefault || modeInjections.isEmpty() || any { it.id == DEFAULT_PRESET_ID }) return this
+    return listOf(
+        Preset(
+            id = DEFAULT_PRESET_ID,
+            name = "Default Preset",
+            description = "Contains existing quick injections.",
+            modeInjectionIds = modeInjections.map { it.id }.toSet(),
+        )
+    ) + this
+}

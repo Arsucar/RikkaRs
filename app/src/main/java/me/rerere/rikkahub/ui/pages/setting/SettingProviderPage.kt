@@ -67,7 +67,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -195,22 +194,20 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 shape = CircleShape,
             )
 
-            val suggestedProviderTags = stringArrayResource(R.array.provider_suggested_tags).toList()
             val allTags = remember(
                 settings.providers,
                 settings.providerTagOrder,
                 settings.hiddenProviderTags,
-                suggestedProviderTags,
             ) {
-                settings.effectiveProviderTags(suggestedProviderTags)
+                settings.effectiveProviderTags()
             }
-            if (allTags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (allTags.isNotEmpty()) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f),
@@ -230,9 +227,11 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             )
                         }
                     }
-                    TextButton(onClick = { showTagManager = true }) {
-                        Text(stringResource(R.string.setting_provider_page_manage_tags))
-                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                TextButton(onClick = { showTagManager = true }) {
+                    Text(stringResource(R.string.setting_provider_page_manage_tags))
                 }
             }
             if (showTagManager) {
@@ -241,7 +240,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     onDismiss = { showTagManager = false },
                     onRename = { oldTag, newTag ->
                         if (selectedFilterTag == oldTag) selectedFilterTag = newTag.trim()
-                        vm.updateSettings(settings.renameProviderTag(oldTag, newTag, suggestedProviderTags))
+                        vm.updateSettings(settings.renameProviderTag(oldTag, newTag))
                     },
                     onDelete = { tag ->
                         if (selectedFilterTag == tag) selectedFilterTag = null

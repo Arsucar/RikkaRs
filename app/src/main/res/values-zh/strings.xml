@@ -60,6 +60,8 @@
   <string name="subagent_profile_description_desc">供主模型选择档案时阅读</string>
   <string name="subagent_profile_system_prompt">系统提示词</string>
   <string name="subagent_profile_system_prompt_desc">本子代理运行时的指令</string>
+  <string name="subagent_profile_presets">关联预设</string>
+  <string name="subagent_profile_presets_desc">将选中预设中的注入条目加入本子代理提示词</string>
   <string name="subagent_profile_model">对话模型</string>
   <string name="subagent_profile_model_desc">留空则继承助手默认模型</string>
   <string name="subagent_profile_workspace_access">工作区访问</string>
@@ -121,6 +123,13 @@
   <string name="subagent_tool_ui_token_count">%1$s tokens</string>
   <string name="subagent_tool_ui_expand_details">展开详情</string>
   <string name="subagent_tool_ui_collapse_details">收起详情</string>
+  <string name="subagent_tool_ui_context_expand">显示传输上下文</string>
+  <string name="subagent_tool_ui_context_collapse">隐藏传输上下文</string>
+  <string name="subagent_tool_ui_context_profile">Profile</string>
+  <string name="subagent_tool_ui_context_workspace">工作区访问</string>
+  <string name="subagent_tool_ui_context_task">任务</string>
+  <string name="subagent_tool_ui_context_description">描述</string>
+  <string name="subagent_tool_ui_context_system_prompt">系统提示词</string>
   <string name="subagent_tool_ui_reasoning_label">思维链</string>
   <string name="subagent_tool_ui_tool_call">%1$s (%2$s → %3$s)</string>
   <string name="subagent_tool_ui_running">子代理运行中…</string>
@@ -617,7 +626,7 @@
   <string name="mermaid_export_success">导出成功</string>
   <string name="model_list_favorite">收藏</string>
   <string name="model_list_no_providers">没有可用AI提供商, 请在设置添加</string>
-  <string name="model_list_search_placeholder">输入模型或提供商名称搜索</string>
+  <string name="model_list_search_placeholder">模型或提供商</string>
   <string name="model_list_select_model">选择模型</string>
   <string name="more_options">更多选项</string>
   <string name="no_text_content_to_copy">暂无可复制的文本内容</string>
@@ -1488,15 +1497,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_logs_desc">让AI读取应用运行日志（已脱敏）来排查问题</string>
   <string name="setting_provider_detail_tags">标签</string>
   <string name="setting_provider_detail_add_tag">添加标签</string>
+  <string name="provider_rate_limit_rpm">RPM 限制</string>
+  <string name="provider_rate_limit_tpm">TPM 限制</string>
   <string name="filter_all">全部</string>
-  <string-array name="provider_suggested_tags">
-    <item>常用</item>
-    <item>便宜</item>
-    <item>长上下文</item>
-    <item>高质量</item>
-    <item>免费额度</item>
-    <item>国产</item>
-  </string-array>
   <string name="common_clear">清除</string>
   <string name="common_copy">复制</string>
   <string name="common_select_all">全选</string>
@@ -1505,7 +1508,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="common_download">下载</string>
   <string name="common_refresh">刷新</string>
   <string name="chat_list_clear_selection">清除选择</string>
+  <string name="chat_list_collapse_selection_view">折叠选择视图</string>
   <string name="chat_list_confirm">确认</string>
+  <string name="chat_list_expand_selection_view">展开选择视图</string>
   <string name="chat_drawer_stats">统计数据</string>
   <string name="translator_page_paste">粘贴文本</string>
   <string name="translator_page_copy_result">复制翻译结果</string>

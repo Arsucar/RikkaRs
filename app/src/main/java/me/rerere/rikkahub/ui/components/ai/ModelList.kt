@@ -66,7 +66,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -647,14 +646,12 @@ private fun ColumnScope.ModelList(
         }
     }
 
-    val suggestedProviderTags = stringArrayResource(R.array.provider_suggested_tags).toList()
     val allTags = remember(
         settings.value.providers,
         settings.value.providerTagOrder,
         settings.value.hiddenProviderTags,
-        suggestedProviderTags,
     ) {
-        settings.value.effectiveProviderTags(suggestedProviderTags)
+        settings.value.effectiveProviderTags()
     }
     if (allTags.isNotEmpty()) {
         val filterAllDescription = stringResource(R.string.filter_all)

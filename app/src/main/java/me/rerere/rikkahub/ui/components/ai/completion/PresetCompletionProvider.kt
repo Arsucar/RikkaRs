@@ -83,9 +83,12 @@ class PresetCompletionProvider(
     private fun findPresetCommand(text: String, cursor: Int): PresetCommand? {
         if (cursor < 0 || cursor > text.length) return null
         val prefix = text.substring(0, cursor)
-        val start = prefix.lastIndexOf('~')
-        if (start < 0) return null
-        if (start > 0 && !text[start - 1].isPresetBoundary()) return null
+        val startHalf = prefix.lastIndexOf('~')
+        val startFull = prefix.lastIndexOf('～')
+        if (startHalf < 0 && startFull < 0) return null
+        val useFullWidth = startFull > startHalf
+        val start = if (useFullWidth) startFull else startHalf
+        if (start > 0 && !text[start - 1].isPresetBoundary(useFullWidth)) return null
 
         val query = prefix.substring(start + 1)
         if (query.any { it.isWhitespace() }) return null
@@ -95,8 +98,9 @@ class PresetCompletionProvider(
         )
     }
 
-    private fun Char.isPresetBoundary(): Boolean =
-        isWhitespace() || this in "([{<\"'"
+    private fun Char.isPresetBoundary(fullWidth: Boolean): Boolean =
+        if (fullWidth) true
+        else isWhitespace() || this in "([{<\"'"
 
     companion object {
         private const val MAX_COMPLETION_ITEMS = 8

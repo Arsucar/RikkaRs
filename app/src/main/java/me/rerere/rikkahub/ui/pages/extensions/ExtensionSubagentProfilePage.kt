@@ -136,6 +136,7 @@ fun ExtensionSubagentProfilePage(
                     providers = settings.providers,
                     mcpServers = settings.mcpServers,
                     skills = skills,
+                    presets = settings.presets,
                     readOnly = false,
                     pathDraft = pathDraft,
                     onPathDraftChange = { pathDraft = it },

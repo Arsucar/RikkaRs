@@ -11,11 +11,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -32,10 +34,14 @@ import me.rerere.rikkahub.data.datastore.withRecentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
@@ -56,6 +62,7 @@ class ChatVM(
     val updateChecker: UpdateChecker,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val memoryTableRepository: MemoryTableRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -110,6 +117,23 @@ class ChatVM(
     val currentChatModel = combine(settings, conversation) { settings, conversation ->
         settings.getCurrentChatModel(conversation)
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    // #89: 对话可见的记忆表模板（用于新建对话级文档时选择模板）
+    val memoryTableTemplates: StateFlow<List<MemoryTableTemplate>> = memoryTableRepository
+        .getTemplatesFlow()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // #89: 当前对话生效的记忆表文档（CONVERSATION + 继承的 ASSISTANT/GLOBAL），
+    // 随会话切换助手时自动跟随，供右侧抽屉查看与管理。
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val memoryTableDocuments: StateFlow<List<MemoryTableDocument>> = conversation
+        .flatMapLatest { conv ->
+            memoryTableRepository.getEffectiveDocumentsFlow(
+                assistantId = conv.assistantId.toString(),
+                conversationId = conv.id.toString(),
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
@@ -279,17 +303,10 @@ class ChatVM(
 
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
-            // 文件夹是助手内分组，切换助手后原文件夹在新助手下不可见，需清空归属避免会话丢失
-            val updatedConversation = conversationFull.copy(
-                assistantId = targetAssistantId,
-                folderId = null,
-            )
+            // #89: 下沉到 ChatService，内部改 assistantId+folderId 并重绑 followSource 的对话级记忆文档。
+            chatService.moveConversationToAssistant(conversation.id, targetAssistantId)
             if (conversation.id == _conversationId) {
-                chatService.saveConversation(_conversationId, updatedConversation)
                 settingsStore.updateAssistant(targetAssistantId)
-            } else {
-                conversationRepo.updateConversation(updatedConversation)
             }
         }
     }
@@ -321,6 +338,17 @@ class ChatVM(
         }
     }
 
+    // #89: 切换对话级记忆表隔离开关。先无条件更新内存状态，保证开关立即响应
+    // （空的新对话拨动也生效）；再尝试落库——非空对话直接持久化，空的新对话
+    // 由首条消息发送时的 saveConversation 一并写入，避免重启后丢失。
+    fun setMemoryTableIsolation(enabled: Boolean) {
+        val updated = conversation.value.copy(memoryTableIsolation = enabled)
+        chatService.updateConversationState(_conversationId) { updated }
+        viewModelScope.launch {
+            chatService.saveConversation(_conversationId, updated)
+        }
+    }
+
     fun toggleMessageFavorite(node: MessageNode) {
         viewModelScope.launch {
             val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)
@@ -348,6 +376,84 @@ class ChatVM(
                     }
                 )
             }
+        }
+    }
+
+    // #89: 保存（新建/更新）一个对话级记忆表文档。scopeType 强制为 CONVERSATION，
+    // scopeId 绑定到当前对话，从而让 conversation scope 真正可写、可查看。
+    fun upsertConversationMemoryTableDocument(
+        document: MemoryTableDocument,
+        onDone: (Result<MemoryTableDocument>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val result = runCatching {
+                memoryTableRepository.upsertDocument(
+                    document.copy(
+                        scopeType = MemoryTableScopeType.CONVERSATION,
+                        scopeId = _conversationId.toString(),
+                    )
+                )
+            }
+            onDone(result)
+        }
+    }
+
+    // #89: 将助手级/全局的记忆表文档同步（复制）到当前对话级。
+    // 若当前对话已存在同模板的对话级文档则覆盖其内容，否则新建，避免重复。
+    fun syncMemoryTableDocumentToConversation(
+        source: MemoryTableDocument,
+        onDone: (Result<MemoryTableDocument>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val result = runCatching {
+                val conversationScopeId = _conversationId.toString()
+                val existing = memoryTableRepository
+                    .getDocumentsForScope(MemoryTableScopeType.CONVERSATION, conversationScopeId)
+                    .firstOrNull { it.templateId == source.templateId }
+                val target = (existing ?: MemoryTableDocument(
+                    templateId = source.templateId,
+                    scopeType = MemoryTableScopeType.CONVERSATION,
+                    scopeId = conversationScopeId,
+                )).copy(
+                    templateId = source.templateId,
+                    scopeType = MemoryTableScopeType.CONVERSATION,
+                    scopeId = conversationScopeId,
+                    payloadJson = source.payloadJson,
+                    // #89: 记录来源助手级文档，默认跟随其更新；用户可在抽屉里断开独立编辑。
+                    sourceDocumentId = source.id,
+                    followSource = true,
+                )
+                memoryTableRepository.upsertDocument(target)
+            }
+            onDone(result)
+        }
+    }
+
+    // #89: 设置对话级记忆文档是否跟随来源助手级文档。follow=false 即"断开独立编辑"，
+    // 后续源文档更新不再覆盖该对话级文档。
+    fun setMemoryTableDocumentFollow(
+        documentId: String,
+        follow: Boolean,
+        onDone: (Result<MemoryTableDocument>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val result = runCatching {
+                val doc = memoryTableRepository.getDocument(documentId)
+                    ?: error("Memory table document not found: $documentId")
+                memoryTableRepository.upsertDocument(doc.copy(followSource = follow))
+            }
+            onDone(result)
+        }
+    }
+
+    // #89: 删除一个记忆表文档（抽屉内针对对话级文档的清理）。
+    fun deleteMemoryTableDocument(
+        documentId: String,
+        onDone: (Result<Unit>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val result = runCatching { memoryTableRepository.deleteDocument(documentId) }
+            onDone(result)
         }
     }
 

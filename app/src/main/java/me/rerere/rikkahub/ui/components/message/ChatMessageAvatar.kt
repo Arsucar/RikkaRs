@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.message
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,6 +58,7 @@ fun ChatMessageAssistantAvatar(
     model: Model?,
     assistant: Assistant?,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
@@ -65,7 +67,9 @@ fun ChatMessageAssistantAvatar(
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
+            modifier = modifier.clickable(enabled = onClick != null) {
+                onClick?.invoke()
+            }
         ) {
             if (useAssistantAvatar) {
                 if (showIcon) {

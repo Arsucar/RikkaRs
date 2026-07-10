@@ -51,6 +51,10 @@ import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
@@ -60,6 +64,11 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
+import me.rerere.rikkahub.ui.pages.extensions.ModeInjectionEditSheet
+import me.rerere.rikkahub.ui.pages.extensions.PresetEditSheet
+import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.skills.AddSkillDialog
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -81,6 +90,34 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
     val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, 3)) { 4 }
     var showAddPrivateSkillDialog by rememberSaveable { mutableStateOf(false) }
     var deletePrivateSkillTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+
+    // 点击单个扩展条目 -> 直接打开对应编辑弹窗（复用扩展管理页的编辑组件）
+    val presetEditState = useEditState<Preset> { edited ->
+        val newPresets = if (settings.presets.any { it.id == edited.id }) {
+            settings.presets.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.presets + edited
+        }
+        vm.updateSettings(settings.copy(presets = newPresets))
+    }
+    val modeInjectionEditState = useEditState<PromptInjection.ModeInjection> { edited ->
+        val newInjections = if (settings.modeInjections.any { it.id == edited.id }) {
+            settings.modeInjections.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.modeInjections + edited
+        }
+        vm.updateSettings(settings.copy(modeInjections = newInjections))
+    }
+    val lorebookEditState = useEditState<Lorebook> { edited ->
+        val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
+            settings.lorebooks.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.lorebooks + edited
+        }
+        vm.updateSettings(settings.copy(lorebooks = newLorebooks))
+    }
+    var editQuickMessageTarget by remember { mutableStateOf<QuickMessage?>(null) }
+
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -162,6 +199,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                         else assistant.quickMessageIds - quickMessageId
                                         vm.update(assistant.copy(quickMessageIds = newIds))
                                     },
+                                    onEdit = { editQuickMessageTarget = it },
                                 )
                                 TextButton(
                                     onClick = { navController.navigate(Screen.QuickMessages) },
@@ -188,10 +226,11 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                         presets = settings.presets,
                                         selectedIds = assistant.presetIds,
                                         onToggle = { presetId, checked ->
-                                            val newIds = if (checked) assistant.presetIds + presetId
+                                            val newIds = if (checked) setOf(presetId)
                                             else assistant.presetIds - presetId
                                             vm.update(assistant.copy(presetIds = newIds))
                                         },
+                                        onEdit = { presetEditState.open(it) },
                                     )
                                 }
                                 if (settings.modeInjections.isNotEmpty()) {
@@ -210,6 +249,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                             else assistant.modeInjectionIds - injId
                                             vm.update(assistant.copy(modeInjectionIds = newIds))
                                         },
+                                        onEdit = { modeInjectionEditState.open(it) },
                                     )
                                 }
                                 TextButton(
@@ -240,6 +280,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                         else assistant.lorebookIds - injId
                                         vm.update(assistant.copy(lorebookIds = newIds))
                                     },
+                                    onEdit = { lorebookEditState.open(it) },
                                 )
                                 TextButton(
                                     onClick = { navController.navigate(Screen.Prompts) },
@@ -270,6 +311,12 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                         "application/x-zip-compressed",
                                         "application/octet-stream",
                                     )
+                                )
+                            },
+                            onOpenSkill = { skill ->
+                                // 私有技能带 assistantId 打开，全局技能不带；保证私有技能可见且可编辑
+                                navController.navigate(
+                                    Screen.SkillDetail(skill.name, skill.ownerAssistantId?.toString())
                                 )
                             },
                             onOpenPrivateSkill = { skill ->
@@ -311,6 +358,60 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deletePrivateSkillTarget?.name ?: ""))
     }
+
+    if (presetEditState.isEditing) {
+        presetEditState.currentState?.let { state ->
+            PresetEditSheet(
+                preset = state,
+                modeInjections = settings.modeInjections,
+                onDismiss = { presetEditState.dismiss() },
+                onConfirm = { presetEditState.confirm() },
+                onEditPreset = { presetEditState.currentState = it },
+                onUpdateModeInjections = { vm.updateSettings(settings.copy(modeInjections = it)) },
+            )
+        }
+    }
+
+    if (modeInjectionEditState.isEditing) {
+        modeInjectionEditState.currentState?.let { state ->
+            ModeInjectionEditSheet(
+                injection = state,
+                onDismiss = { modeInjectionEditState.dismiss() },
+                onConfirm = { modeInjectionEditState.confirm() },
+                onEdit = { modeInjectionEditState.currentState = it },
+            )
+        }
+    }
+
+    if (lorebookEditState.isEditing) {
+        lorebookEditState.currentState?.let { state ->
+            LorebookEditFullscreen(
+                book = state,
+                onDismiss = { lorebookEditState.dismiss() },
+                onConfirm = { lorebookEditState.confirm() },
+                onEdit = { lorebookEditState.currentState = it },
+            )
+        }
+    }
+
+    editQuickMessageTarget?.let { quickMessage ->
+        EditQuickMessageDialog(
+            title = stringResource(R.string.quick_messages_page_edit_title),
+            initialQuickMessage = quickMessage,
+            onDismiss = { editQuickMessageTarget = null },
+            onConfirm = { title, content ->
+                val updated = quickMessage.copy(title = title, content = content)
+                vm.updateSettings(
+                    settings.copy(
+                        quickMessages = settings.quickMessages.map {
+                            if (it.id == updated.id) updated else it
+                        }
+                    )
+                )
+                editQuickMessageTarget = null
+            },
+        )
+    }
 }
 
 @Composable
@@ -321,6 +422,7 @@ private fun AssistantSkillsContent(
     onToggle: (String, Boolean) -> Unit,
     onCreatePrivateSkill: () -> Unit,
     onImportPrivateSkill: () -> Unit,
+    onOpenSkill: (SkillMetadata) -> Unit,
     onOpenPrivateSkill: (SkillMetadata) -> Unit,
     onDeletePrivateSkill: (SkillMetadata) -> Unit,
     onOpenGlobalSkills: () -> Unit,
@@ -350,6 +452,7 @@ private fun AssistantSkillsContent(
                     skill = skill,
                     enabled = enabledSkills.contains(skill.name),
                     onToggle = { checked -> onToggle(skill.name, checked) },
+                    onOpen = { onOpenSkill(skill) },
                 )
             }
         }
@@ -443,8 +546,10 @@ private fun SkillToggleItem(
     skill: SkillMetadata,
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
+    onOpen: () -> Unit,
 ) {
     ListItem(
+        modifier = Modifier.clickable(onClick = onOpen),
         leadingContent = { Icon(HugeIcons.Puzzle, contentDescription = null) },
         headlineContent = { Text(skill.name) },
         supportingContent = {

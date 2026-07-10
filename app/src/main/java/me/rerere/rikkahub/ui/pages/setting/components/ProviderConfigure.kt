@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
+import me.rerere.ai.provider.ProviderRateLimit
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
@@ -71,6 +72,11 @@ fun ProviderConfigure(
             }
         }
 
+        ProviderRateLimitEditor(
+            rateLimit = provider.rateLimit,
+            onChange = { onEdit(provider.copyProvider(rateLimit = it)) },
+        )
+
         when (provider) {
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
@@ -103,26 +109,56 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
     return when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, tags = this.tags,
+            balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, tags = this.tags,
+            balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, tags = this.tags,
+            balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
+    }
+}
+
+@Composable
+private fun ProviderRateLimitEditor(
+    rateLimit: ProviderRateLimit,
+    onChange: (ProviderRateLimit) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = rateLimit.rpm?.toString().orEmpty(),
+            onValueChange = { text ->
+                onChange(rateLimit.copy(rpm = text.toIntOrNull()?.takeIf { it > 0 }))
+            },
+            label = { Text(stringResource(R.string.provider_rate_limit_rpm)) },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedTextField(
+            value = rateLimit.tpm?.toString().orEmpty(),
+            onValueChange = { text ->
+                onChange(rateLimit.copy(tpm = text.toIntOrNull()?.takeIf { it > 0 }))
+            },
+            label = { Text(stringResource(R.string.provider_rate_limit_tpm)) },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

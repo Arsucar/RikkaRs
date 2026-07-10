@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MemoryTableDAO
+import me.rerere.rikkahub.data.db.dao.MemoryTableSnapshotDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
@@ -22,6 +23,7 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableDocumentEntity
+import me.rerere.rikkahub.data.db.entity.MemoryTableSnapshotEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableTemplateEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -45,8 +47,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         FolderEntity::class,
         MemoryTableTemplateEntity::class,
         MemoryTableDocumentEntity::class,
+        MemoryTableSnapshotEntity::class,
     ],
-    version = 31,
+    version = 34,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -87,6 +90,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
 
     abstract fun folderDao(): FolderDAO
+
+    abstract fun memoryTableSnapshotDao(): MemoryTableSnapshotDAO
 }
 
 object TokenUsageConverter {

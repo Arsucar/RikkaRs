@@ -5,9 +5,13 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -18,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
@@ -32,6 +37,7 @@ import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,10 +47,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -122,11 +134,25 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
+    val toaster = LocalToaster.current
+
+    // #89: 右侧对话级记忆表抽屉。Compose 无原生右侧抽屉，用 RTL 包裹 ModalNavigationDrawer 实现，
+    // drawerContent 与主内容都翻回 LTR 防止整页镜像。
+    val rightDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
+    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch {
             drawerState.close()
+        }
+    }
+
+    // #89: 右抽屉打开时 back 键先关右抽屉
+    BackHandler(enabled = rightDrawerState.isOpen) {
+        scope.launch {
+            rightDrawerState.close()
         }
     }
 
@@ -188,78 +214,214 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     chatListState.scrollToItem(index)
                 }
             } else {
-                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
             }
             vm.chatListInitialized = true
         }
     }
 
-    when {
-        isBigScreen -> {
-            PermanentNavigationDrawer(
-                drawerContent = {
-                    ChatDrawerContent(
-                        navController = navController,
-                        current = conversation,
-                        vm = vm,
-                        settings = setting
-                    )
+    // #89: 用 RTL 包裹的 ModalNavigationDrawer 承载右侧对话级记忆表抽屉。
+    // 两种屏（大屏/小屏）都由这个右抽屉包裹整体，保证都能开。
+    // 全宽方向分流手势层：内容区任意位置从右向左拖即打开右抽屉（与左抽屉全宽右滑对称），
+    // 彻底绕开国产 ROM 屏幕右缘的系统返回手势区。只接管“向左拖”，其余（向右拖/垂直滚动/点击）
+    // 一律不 consume，事件穿透给下层（左抽屉右滑打开、内容点击/滚动照常）。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(rightDrawerState, drawerState) {
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    // 用 Initial pass 读事件：父节点先于子节点拿到，才能在内层左抽屉/内容
+                    // 的拖拽检测之前拦截“向左拖”。Main pass 是子先父后，会被内层抢先消费，
+                    // 导致父层手势层完全收不到（表现为“完全没反应”）。
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var totalX = 0f
+                    var totalY = 0f
+                    var decided = false
+                    var claim = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUp()) break
+                        val pc = change.positionChange()
+                        totalX += pc.x
+                        totalY += pc.y
+                        if (!decided && (kotlin.math.abs(totalX) > slop || kotlin.math.abs(totalY) > slop)) {
+                            decided = true
+                            // 仅当：水平为主 且 向左拖 且 两个抽屉都关闭时，接管手势
+                            claim = kotlin.math.abs(totalX) > kotlin.math.abs(totalY) &&
+                                totalX < 0 &&
+                                !rightDrawerState.isOpen && !drawerState.isOpen
+                        }
+                        if (claim) {
+                            // 在 Initial pass 消费，子节点（左抽屉/内容）后续拿不到该事件
+                            change.consume()
+                        }
+                    }
+                    if (claim && totalX < -slop * 2) {
+                        scope.launch { rightDrawerState.open() }
+                    }
                 }
-            ) {
-                ChatPageContent(
-                    inputState = inputState,
-                    loadingJob = loadingJob,
-                    processingStatus = processingStatus,
-                    setting = setting,
-                    conversation = conversation,
-                    drawerState = drawerState,
-                    navController = navController,
-                    vm = vm,
-                    chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
-                    bigScreen = true,
-                    errors = errors,
-                    onDismissError = { vm.dismissError(it) },
-                    onClearAllErrors = { vm.clearAllErrors() },
-                )
             }
-        }
+    ) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        ModalNavigationDrawer(
+            drawerState = rightDrawerState,
+            // 打开后可滑动关闭；打开动作改用右缘手势条（见下方 Box），因为内层左抽屉会拦截关闭态的水平拖拽
+            gesturesEnabled = rightDrawerState.isOpen,
+            drawerContent = {
+                // 宽度与左侧抽屉一致（300dp），圆角沿用 ModalDrawerSheet 默认 shape
+                ModalDrawerSheet(
+                    modifier = Modifier.width(300.dp)
+                ) {
+                    // 内容翻回 LTR，避免整块镜像
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        ConversationDrawerContent(
+                            drawerOpen = rightDrawerState.isOpen,
+                            documents = memoryTableDocuments,
+                            templates = memoryTableTemplates,
+                            conversationId = conversation.id.toString(),
+                            assistantId = conversation.assistantId.toString(),
+                            isolationEnabled = conversation.memoryTableIsolation,
+                            onIsolationChange = { enabled ->
+                                vm.setMemoryTableIsolation(enabled)
+                            },
+                            onSyncToConversation = { document ->
+                                vm.syncMemoryTableDocumentToConversation(document) { result ->
+                                    result.onSuccess {
+                                        toaster.show("已同步到对话级", type = ToastType.Success)
+                                    }.onFailure {
+                                        toaster.show(it.message ?: "同步失败", type = ToastType.Error)
+                                    }
+                                }
+                            },
+                            onSaveConversationDocument = { document ->
+                                vm.upsertConversationMemoryTableDocument(document) { result ->
+                                    result.onSuccess {
+                                        toaster.show("已保存", type = ToastType.Success)
+                                    }.onFailure {
+                                        toaster.show(it.message ?: "保存失败", type = ToastType.Error)
+                                    }
+                                }
+                            },
+                            onCreateConversationDocument = { templateId ->
+                                vm.upsertConversationMemoryTableDocument(
+                                    me.rerere.rikkahub.data.model.MemoryTableDocument(
+                                        templateId = templateId,
+                                        scopeType = me.rerere.rikkahub.data.model.MemoryTableScopeType.CONVERSATION,
+                                        scopeId = conversation.id.toString(),
+                                    )
+                                ) { result ->
+                                    result.onSuccess {
+                                        toaster.show("已创建对话级记忆表", type = ToastType.Success)
+                                    }.onFailure {
+                                        toaster.show(it.message ?: "创建失败", type = ToastType.Error)
+                                    }
+                                }
+                            },
+                            onDeleteDocument = { documentId ->
+                                vm.deleteMemoryTableDocument(documentId) { result ->
+                                    result.onSuccess {
+                                        toaster.show("已删除", type = ToastType.Success)
+                                    }.onFailure {
+                                        toaster.show(it.message ?: "删除失败", type = ToastType.Error)
+                                    }
+                                }
+                            },
+                            onSetFollow = { documentId, follow ->
+                                vm.setMemoryTableDocumentFollow(documentId, follow) { result ->
+                                    result.onSuccess {
+                                        toaster.show(
+                                            if (follow) "已恢复跟随助手级" else "已断开跟随，可独立编辑",
+                                            type = ToastType.Success,
+                                        )
+                                    }.onFailure {
+                                        toaster.show(it.message ?: "操作失败", type = ToastType.Error)
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            },
+        ) {
+            // 主内容翻回 LTR
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                when {
+                    isBigScreen -> {
+                        PermanentNavigationDrawer(
+                            drawerContent = {
+                                ChatDrawerContent(
+                                    navController = navController,
+                                    current = conversation,
+                                    vm = vm,
+                                    settings = setting
+                                )
+                            }
+                        ) {
+                            ChatPageContent(
+                                inputState = inputState,
+                                loadingJob = loadingJob,
+                                processingStatus = processingStatus,
+                                setting = setting,
+                                conversation = conversation,
+                                drawerState = drawerState,
+                                navController = navController,
+                                vm = vm,
+                                chatListState = chatListState,
+                                enableWebSearch = enableWebSearch,
+                                currentChatModel = currentChatModel,
+                                bigScreen = true,
+                                errors = errors,
+                                onDismissError = { vm.dismissError(it) },
+                                onClearAllErrors = { vm.clearAllErrors() },
+                            )
+                        }
+                    }
 
-        else -> {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                drawerContent = {
-                    ChatDrawerContent(
-                        navController = navController,
-                        current = conversation,
-                        vm = vm,
-                        settings = setting
-                    )
+                    else -> {
+                        ModalNavigationDrawer(
+                            drawerState = drawerState,
+                            drawerContent = {
+                                ChatDrawerContent(
+                                    navController = navController,
+                                    current = conversation,
+                                    vm = vm,
+                                    settings = setting
+                                )
+                            }
+                        ) {
+                            ChatPageContent(
+                                inputState = inputState,
+                                loadingJob = loadingJob,
+                                processingStatus = processingStatus,
+                                setting = setting,
+                                conversation = conversation,
+                                drawerState = drawerState,
+                                navController = navController,
+                                vm = vm,
+                                chatListState = chatListState,
+                                enableWebSearch = enableWebSearch,
+                                currentChatModel = currentChatModel,
+                                bigScreen = false,
+                                errors = errors,
+                                onDismissError = { vm.dismissError(it) },
+                                onClearAllErrors = { vm.clearAllErrors() },
+                            )
+                        }
+                        BackHandler(drawerState.isOpen) {
+                            scope.launch { drawerState.close() }
+                        }
+                    }
                 }
-            ) {
-                ChatPageContent(
-                    inputState = inputState,
-                    loadingJob = loadingJob,
-                    processingStatus = processingStatus,
-                    setting = setting,
-                    conversation = conversation,
-                    drawerState = drawerState,
-                    navController = navController,
-                    vm = vm,
-                    chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
-                    currentChatModel = currentChatModel,
-                    bigScreen = false,
-                    errors = errors,
-                    onDismissError = { vm.dismissError(it) },
-                    onClearAllErrors = { vm.clearAllErrors() },
-                )
-            }
-            BackHandler(drawerState.isOpen) {
-                scope.launch { drawerState.close() }
+                // #89: 右抽屉打开时按返回先关右抽屉。放在主内容作用域内（深层、后注册），
+                // 与左抽屉的深层 BackHandler 对称，避免在嵌套抽屉结构中被盖过而漏到 Activity 退出。
+                BackHandler(enabled = rightDrawerState.isOpen) {
+                    scope.launch { rightDrawerState.close() }
+                }
             }
         }
+    }
     }
 }
 
@@ -380,7 +542,7 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(content = inputState.getContents())
                             scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                             }
                         }
                         inputState.clearInput()
@@ -394,7 +556,7 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(content = inputState.getContents(), answer = false)
                             scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                             }
                         }
                         inputState.clearInput()

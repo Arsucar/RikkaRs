@@ -22,16 +22,26 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
+import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
+import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
+import me.rerere.rikkahub.ui.pages.extensions.PresetEditSheet
 import org.koin.compose.koinInject
 
 
@@ -48,7 +58,29 @@ fun ExtensionSelector(
     onNavigateToSkills: () -> Unit = {},
 ) {
     val skillManager: SkillManager = koinInject()
+    val settingsStore: SettingsStore = koinInject()
+    val navController = LocalNavController.current
+    val scope = rememberCoroutineScope()
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
+
+    // 点击单个条目 -> 直接打开该条目的编辑弹窗（全局条目改动落到 SettingsStore）
+    val presetEditState = useEditState<Preset> { edited ->
+        val newPresets = if (settings.presets.any { it.id == edited.id }) {
+            settings.presets.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.presets + edited
+        }
+        scope.launch { settingsStore.update(settings.copy(presets = newPresets)) }
+    }
+    val lorebookEditState = useEditState<Lorebook> { edited ->
+        val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
+            settings.lorebooks.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.lorebooks + edited
+        }
+        scope.launch { settingsStore.update(settings.copy(lorebooks = newLorebooks)) }
+    }
+    var editQuickMessageTarget by remember { mutableStateOf<QuickMessage?>(null) }
 
     LaunchedEffect(assistant.id) {
         // 打开扩展面板时清理运行时被删除的技能（残留的 enabledSkills 引用），
@@ -66,7 +98,6 @@ fun ExtensionSelector(
     }
 
     val pagerState = rememberPagerState { 4 }
-    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -121,13 +152,14 @@ fun ExtensionSelector(
                             selectedIds = assistant.presetIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    assistant.presetIds + id
+                                    setOf(id)
                                 } else {
                                     assistant.presetIds - id
                                 }
                                 onUpdate(assistant.copy(presetIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
+                            onEdit = { presetEditState.open(it) },
                         )
                     } else {
                         ExtensionEmptyState(
@@ -152,6 +184,13 @@ fun ExtensionSelector(
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
                             onManage = onNavigateToSkills,
+                            onEdit = { skill ->
+                                // 私有技能带 assistantId 打开，全局技能不带；
+                                // 与列表 listSkillsForAssistant 一致地保留私有技能可见性
+                                navController.navigate(
+                                    Screen.SkillDetail(skill.name, skill.ownerAssistantId?.toString())
+                                )
+                            },
                         )
                     } else {
                         ExtensionEmptyState(
@@ -180,6 +219,7 @@ fun ExtensionSelector(
                                 }
                             },
                             onManage = onNavigateToPrompts,
+                            onEdit = { lorebookEditState.open(it) },
                         )
                     } else {
                         ExtensionEmptyState(
@@ -204,6 +244,7 @@ fun ExtensionSelector(
                                 onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
                             onManage = onNavigateToQuickMessages,
+                            onEdit = { editQuickMessageTarget = it },
                         )
                     } else {
                         ExtensionEmptyState(
@@ -215,5 +256,52 @@ fun ExtensionSelector(
                 }
             }
         }
+    }
+
+    if (presetEditState.isEditing) {
+        presetEditState.currentState?.let { state ->
+            PresetEditSheet(
+                preset = state,
+                modeInjections = settings.modeInjections,
+                onDismiss = { presetEditState.dismiss() },
+                onConfirm = { presetEditState.confirm() },
+                onEditPreset = { presetEditState.currentState = it },
+                onUpdateModeInjections = { updated ->
+                    scope.launch { settingsStore.update(settings.copy(modeInjections = updated)) }
+                },
+            )
+        }
+    }
+
+    if (lorebookEditState.isEditing) {
+        lorebookEditState.currentState?.let { state ->
+            LorebookEditFullscreen(
+                book = state,
+                onDismiss = { lorebookEditState.dismiss() },
+                onConfirm = { lorebookEditState.confirm() },
+                onEdit = { lorebookEditState.currentState = it },
+            )
+        }
+    }
+
+    editQuickMessageTarget?.let { quickMessage ->
+        EditQuickMessageDialog(
+            title = stringResource(R.string.quick_messages_page_edit_title),
+            initialQuickMessage = quickMessage,
+            onDismiss = { editQuickMessageTarget = null },
+            onConfirm = { title, content ->
+                val updated = quickMessage.copy(title = title, content = content)
+                scope.launch {
+                    settingsStore.update(
+                        settings.copy(
+                            quickMessages = settings.quickMessages.map {
+                                if (it.id == updated.id) updated else it
+                            }
+                        )
+                    )
+                }
+                editQuickMessageTarget = null
+            },
+        )
     }
 }

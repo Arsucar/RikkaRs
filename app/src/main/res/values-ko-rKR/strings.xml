@@ -431,7 +431,7 @@
   <string name="mermaid_export_success">내보내기 성공</string>
   <string name="model_list_favorite">즐겨찾기</string>
   <string name="model_list_no_providers">사용 가능한 AI 제공업체가 없습니다. 설정에서 추가하세요</string>
-  <string name="model_list_search_placeholder">모델 이름을 입력하여 검색</string>
+  <string name="model_list_search_placeholder">모델 또는 제공자</string>
   <string name="model_list_select_model">모델 선택</string>
   <string name="more_options">추가 옵션</string>
   <string name="no_text_content_to_copy">복사할 텍스트 콘텐츠가 없습니다</string>
@@ -1307,14 +1307,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_detail_tags">태그</string>
   <string name="setting_provider_detail_add_tag">태그 추가</string>
   <string name="filter_all">전체</string>
-  <string-array name="provider_suggested_tags">
-    <item>자주 사용</item>
-    <item>저렴함</item>
-    <item>긴 컨텍스트</item>
-    <item>고품질</item>
-    <item>무료 할당</item>
-    <item>국산</item>
-  </string-array>
   <string name="assistant_detail_subagent_desc">서브에이전트 프로필, 깊이 및 위임 구성</string>
   <string name="assistant_page_tab_subagent">서브에이전트</string>
   <string name="subagent_enable_title">서브에이전트 사용</string>

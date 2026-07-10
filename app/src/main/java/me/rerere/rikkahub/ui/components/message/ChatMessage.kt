@@ -129,6 +129,7 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    selectionCompact: Boolean = false,
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -176,7 +177,12 @@ fun ChatMessage(
                     model = model,
                     assistant = assistant,
                     loading = loading,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    onClick = assistant?.let {
+                        {
+                            navController.navigate(Screen.AssistantDetail(id = it.id.toString()))
+                        }
+                    },
                 )
                 ChatMessageUserAvatar(
                     message = message,
@@ -197,6 +203,7 @@ fun ChatMessage(
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
+                selectionCompact = selectionCompact,
             )
 
             message.translation?.let { translation ->
@@ -302,6 +309,7 @@ private fun MessagePartsBlock(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
+    selectionCompact: Boolean = false,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -394,7 +402,7 @@ private fun MessagePartsBlock(
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
-                if (block.steps.isNotEmpty()) {
+                if (!selectionCompact && block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
                     ChainOfThought(
                         modifier = Modifier.animateContentSize(),
@@ -448,6 +456,15 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
+                        val visualText = part.text.replaceRegexes(
+                            assistant = assistant,
+                            scope = if (role == MessageRole.USER) {
+                                AssistantAffectScope.USER
+                            } else {
+                                AssistantAffectScope.ASSISTANT
+                            },
+                            visual = true,
+                        )
                         val textContent = @Composable {
                             if (role == MessageRole.USER) {
                                 Surface(
@@ -457,14 +474,18 @@ private fun MessagePartsBlock(
                                     onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
-                                        MarkdownBlock(
-                                            content = part.text.replaceRegexes(
-                                                assistant = assistant,
-                                                scope = AssistantAffectScope.USER,
-                                                visual = true,
-                                            ),
-                                            onClickCitation = handleClickCitation
-                                        )
+                                        if (selectionCompact) {
+                                            Text(
+                                                text = visualText,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        } else {
+                                            MarkdownBlock(
+                                                content = visualText,
+                                                onClickCitation = handleClickCitation
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -475,27 +496,36 @@ private fun MessagePartsBlock(
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
-                                            MarkdownBlock(
-                                                content = part.text.replaceRegexes(
-                                                    assistant = assistant,
-                                                    scope = AssistantAffectScope.ASSISTANT,
-                                                    visual = true,
-                                                ),
-                                                onClickCitation = handleClickCitation,
-                                            )
+                                            if (selectionCompact) {
+                                                Text(
+                                                    text = visualText,
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            } else {
+                                                MarkdownBlock(
+                                                    content = visualText,
+                                                    onClickCitation = handleClickCitation,
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
-                                    MarkdownBlock(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.ASSISTANT,
-                                            visual = true,
-                                        ),
-                                        onClickCitation = handleClickCitation,
-                                        modifier = Modifier
-                                            .animateContentSize()
-                                    )
+                                    if (selectionCompact) {
+                                        Text(
+                                            text = visualText,
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.animateContentSize(),
+                                        )
+                                    } else {
+                                        MarkdownBlock(
+                                            content = visualText,
+                                            onClickCitation = handleClickCitation,
+                                            modifier = Modifier
+                                                .animateContentSize()
+                                        )
+                                    }
                                 }
                             }
                         }
