@@ -12,6 +12,63 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.23
+
+### 新功能 / Features（本 Fork，v2.3.22 之后）
+
+- **对话级记忆表抽屉** — 聊天页顶栏新增记忆表入口，打开右侧抽屉查看/编辑当前对话的记忆表；助手级与全局文档可「同步到对话级」并跟随来源，也可断开跟随独立编辑，fork/迁移对话时记忆表随行。（#89 #84）
+  **Conversation-scoped memory table drawer** — A memory table entry in the chat top bar opens a right-side drawer to view/edit the current conversation's tables; assistant-level and global documents can be synced to conversation scope and follow their source, or detach to be edited independently, and tables travel with the conversation when forking/moving. (#89 #84)
+
+- **记忆表快照与历史回滚** — 记忆表文档每次改动都会留存快照，可按 revision 回滚到旧版本。（#96）
+  **Memory table snapshots and rollback** — Each memory table document edit stores a snapshot so you can roll back to an earlier revision. (#96)
+
+- **记忆表 JSON 导出/导入** — 记忆表模板与文档支持打包导出/导入，冲突可按 SKIP/OVERWRITE/DUPLICATE 策略处理。（#100）
+  **Memory table JSON export/import** — Memory table templates and documents can be exported/imported as a bundle, with SKIP/OVERWRITE/DUPLICATE conflict strategies. (#100)
+
+- **记忆表工具增强** — `memory_table_tool` 新增 query 按表/列/值过滤、apply_ops 批量原子写、delete_row 按行删除、update_template/delete_template，read 支持列出全部文档并按 scope 过滤。（#97 #98 #92 #95 #88）
+  **Memory table tool enhancements** — `memory_table_tool` adds query filtering by table/column/value, atomic batch writes via apply_ops, row-level delete_row, update_template/delete_template, and read now lists all documents filtered by scope. (#97 #98 #92 #95 #88)
+
+- **记忆表注入控制** — 每张表可单独开关注入（per-table 门控），trigger-send 表仅注入与近期对话相关的行，系统提示可用 `{{memory_tables}}` 宏控制注入位置。（#93 #94 #99）
+  **Memory table injection control** — Per-table injection toggles, trigger-send tables inject only rows relevant to recent turns, and the `{{memory_tables}}` macro controls injection placement in the system prompt. (#93 #94 #99)
+
+- **记忆表默认模板多列化** — 新建记忆表默认改为多列结构化示例，避免误判「表格只能存 key-value」。（#81）
+  **Multi-column default memory table** — New memory tables default to a multi-column structured example instead of implying tables are key-value only. (#81)
+
+- **预设系统增强** — 新增默认全量预设，快速注入（ModeInjection）按预设隔离显示；点击扩展条目直接弹出对应编辑弹窗；子代理配置支持关联预设进行 prompt 注入。（#73 #75 #74）
+  **Prompt preset enhancements** — Added a default full preset with ModeInjection scoped per preset, clicking an extension entry opens its editor directly, and subagent profiles can associate presets for prompt injection. (#73 #75 #74)
+
+- **子代理工具可观测性** — 子代理工具卡片显示 token 计数，弹窗可展开查看传输给子代理的上下文。（#76 #79）
+  **Subagent tool observability** — Subagent tool cards show token counts, and the dialog can expand to show the context transferred to the subagent. (#76 #79)
+
+- **Provider 单独限速** — 每个提供商可单独配置 RPM/TPM，客户端自动延迟以避免触发服务端上限。（#82）
+  **Per-provider rate limiting** — Each provider can be configured with its own RPM/TPM, and the client auto-delays to stay under server-side limits. (#82)
+
+- **供应商标签管理** — 筛选区渲染全部用户自建/已挂载标签，并可在「管理标签」中新增标签。（#77）
+  **Provider tag management** — The filter area renders all user-created/attached tags and lets you add new tags in the tag manager. (#77)
+
+- **对话交互** — 点击对话流中的助手头像直接进入助手配置页；分享多选折叠视图每条正文限 3 行以降低列表高度。（#70 #80）
+  **Chat interactions** — Tapping an assistant avatar in the chat opens its settings page, and the share multi-select collapsed view limits each body to 3 lines. (#70 #80)
+
+### 修复 / Fixes（本 Fork，v2.3.22 之后）
+
+- **记忆表数据安全** — upsert_rows 改为原子写并校验 payloadJson，避免残缺数据覆盖旧文档；patch 行级合并按表主键（explicit→primaryKey→key）而非硬编码 `key`；模板写入校验 schemaJson；工具错误封装为可读结构而非抛原始异常；delete_rows 不再误删整份文档。（#85 #86 #83 #87 #90）
+  **Memory table data safety** — upsert_rows is now atomic and validates payloadJson to avoid overwriting with partial data; patch merges by table primary key (explicit→primaryKey→key) instead of a hardcoded `key`; template writes validate schemaJson; tool errors return a readable structure instead of raw exceptions; delete_rows no longer deletes the whole document. (#85 #86 #83 #87 #90)
+
+- **注入文案** — `MemoryTableInjectionTransformer` 明确为限制文档数（maxDocuments），修正原 maxRows 误导文案。（#91）
+  **Injection wording** — `MemoryTableInjectionTransformer` now clearly limits document count (maxDocuments), fixing the misleading maxRows wording. (#91)
+
+- **预设单选** — 扩展管理中预设改为同一时间只能启用一个。（#72）
+  **Single active preset** — Only one preset can be enabled at a time in extension management. (#72)
+
+- **搜索框换行** — 模型列表搜索框限制单行，提示文字过长不再换行变高。（#71）
+  **Search field wrapping** — The model list search field is single-line and no longer grows when the placeholder is long. (#71)
+
+- **编辑预设弹窗** — 编辑预设 BottomSheet 禁用 PartiallyExpanded，初始全屏展开不再弹跳。（#78）
+  **Edit preset sheet** — The edit preset BottomSheet disables PartiallyExpanded and opens fully expanded without bouncing. (#78)
+
+- **压缩后滚动定位** — 压缩聊天切换 UI 窗口后，列表定位到可见底部而非隐藏消息。（#101）
+  **Scroll position after compaction** — After compacting a chat and switching windows, the list scrolls to the visible bottom instead of a hidden message. (#101)
+
 ## v2.3.22
 
 ### 新功能 / Features（本 Fork，v2.3.21 之后）
