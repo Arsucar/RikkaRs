@@ -12,6 +12,30 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.26
+
+### 新功能 / Features（本 Fork，v2.3.25 之后）
+
+- **记忆表只读写入门控** — `updatePolicy.enabled = false` 现在会阻止 AI 对对应表执行新增、修改或删行，并保持批量操作原子性；缺省策略仍兼容为可写。（#107）
+  **Read-only memory-table write gate** — `updatePolicy.enabled = false` now prevents AI row inserts, updates, and deletions on the affected table while preserving atomic batch behavior; missing policies remain writable for compatibility. (#107)
+
+- **`~dm` 默认模型命令** — 在聊天输入框完整输入 `~dm` / `～dm` 可将当前生效模型设为该助手的默认模型，并提供明确操作反馈。（#108）
+  **`~dm` default-model command** — Entering the exact `~dm` / `～dm` command in chat sets the currently effective model as the assistant default and provides clear feedback. (#108)
+
+- **最终对话上下文预览** — 右侧抽屉新增上下文检查器，可只读查看下一次请求经过组装、截断和 transformer 处理后实际发送给模型的消息，并支持统计与复制。（#109）
+  **Final conversation context inspector** — A new drawer inspector previews the read-only messages that would actually be sent after assembly, truncation, and transformer processing, with summary statistics and copy support. (#109)
+
+### 修复 / Fixes（本 Fork，v2.3.25 之后）
+
+- **日志详情 JsonTree 崩溃** — JsonTree 展开状态改用 Bundle 可保存格式，修复打开请求日志详情时因 Saver 返回裸 Map 导致的闪退。（#105）
+  **Log-detail JsonTree crash** — JsonTree expansion state now uses a Bundle-saveable representation, fixing the crash caused by its Saver returning a raw Map when opening request-log details. (#105)
+
+- **Shell 与子代理文件 chip 缺失** — 工作区工具现在报告 shell 命令产生的新增/修改文件，并强化路径规范化与差异合并，让主代理及子代理生成的文件可靠显示在消息下方。（#106）
+  **Missing shell and subagent file chips** — Workspace tools now report files created or modified by shell commands and harden path normalization and diff merging so main-agent and subagent outputs reliably appear below messages. (#106)
+
+- **子代理 context 复用诊断** — `CONTEXT_SCOPE_MISMATCH` 现在列出具体不匹配的 scope 字段，并明确缓存 context 与本次请求的比较方向，同时避免泄露权限指纹等原值。（#110）
+  **Subagent context-reuse diagnostics** — `CONTEXT_SCOPE_MISMATCH` now identifies the mismatched scope fields and clearly distinguishes cached context from the current request without exposing permission fingerprints or other raw values. (#110)
+
 ## v2.3.25
 
 ### 新功能 / Features（本 Fork，v2.3.24 之后）
