@@ -12,6 +12,13 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.27
+
+### 新功能 / Features（本 Fork，v2.3.26 之后）
+
+- **聊天附件支持任意文件类型** — 普通文件上传不再按扩展名或 MIME 白名单拒绝文件；ZIP、APK、无扩展名及未知类型文件均可保存为附件，未知 MIME 使用 `application/octet-stream`。（#111）
+  **Arbitrary chat attachment types** — General file upload no longer rejects files through extension or MIME allowlists; ZIP, APK, extensionless, and unknown file types can be attached, with unknown MIME values using `application/octet-stream`. (#111)
+
 ## v2.3.26
 
 ### 新功能 / Features（本 Fork，v2.3.25 之后）
