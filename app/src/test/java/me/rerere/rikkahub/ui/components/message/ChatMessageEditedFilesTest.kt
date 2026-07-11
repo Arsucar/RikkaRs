@@ -85,6 +85,26 @@ class ChatMessageEditedFilesTest {
         assertEquals(emptyList<String>(), extractEditedFilePaths(parts))
     }
 
+    @Test
+    fun filtersInvalidShellPathsBeforeDeduplication() {
+        val parts = listOf(
+            executedTool(
+                "workspace_shell",
+                """{"command":"generate"}""",
+                ShellChangedFilesMetadata(
+                    listOf(
+                        "/workspace/b.txt",
+                        "/tmp/out.txt",
+                        "/workspace/../escape.txt",
+                        "/workspace/b.txt",
+                    ),
+                ).toMetadata(),
+            ),
+        )
+
+        assertEquals(listOf("/workspace/b.txt"), extractEditedFilePaths(parts))
+    }
+
     private fun executedTool(
         name: String,
         input: String,

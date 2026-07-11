@@ -26,7 +26,7 @@ class WorkspaceChangedFileScanner(
             if (!filesRoot.isDirectory) return emptyList()
             val rootPath = filesRoot.toPath()
             val deadline = nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis.coerceAtLeast(0L))
-            val resultLimit = maxChangedFiles.coerceAtLeast(0)
+            val resultLimit = maxChangedFiles.coerceIn(0, MAX_WORKSPACE_CHANGED_FILES)
             val changedFiles = TreeSet<String>()
             fileTreeWalker(
                 rootPath,
