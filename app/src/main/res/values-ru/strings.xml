@@ -1570,4 +1570,8 @@
   <string name="skill_detail_page_copy_failed">Не удалось создать личную копию</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
+  <string name="chat_input_default_model_command_detail">Установить %1$s моделью ассистента по умолчанию</string>
+  <string name="chat_input_default_model_saved">Модель %1$s установлена для ассистента по умолчанию</string>
+  <string name="chat_input_default_model_unavailable">Сейчас нет доступной модели</string>
+  <string name="chat_input_default_model_unknown">Неизвестная модель</string>
 </resources>

@@ -1685,4 +1685,8 @@
   <string name="skill_detail_page_select_assistant">Select assistant</string>
   <string name="skill_detail_page_copy_success">Private copy created and enabled.</string>
   <string name="skill_detail_page_copy_failed">Failed to create private copy.</string>
+  <string name="chat_input_default_model_command_detail">Set %1$s as the assistant default model</string>
+  <string name="chat_input_default_model_saved">Set %1$s as the assistant default model</string>
+  <string name="chat_input_default_model_unavailable">No model is currently available</string>
+  <string name="chat_input_default_model_unknown">Unknown model</string>
 </resources>

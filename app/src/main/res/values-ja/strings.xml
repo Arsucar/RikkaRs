@@ -1570,4 +1570,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skill_detail_page_copy_failed">専用コピーを作成できませんでした</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
+  <string name="chat_input_default_model_command_detail">%1$s をアシスタントのデフォルトモデルに設定</string>
+  <string name="chat_input_default_model_saved">%1$s をアシスタントのデフォルトモデルに設定しました</string>
+  <string name="chat_input_default_model_unavailable">現在利用可能なモデルはありません</string>
+  <string name="chat_input_default_model_unknown">不明なモデル</string>
 </resources>

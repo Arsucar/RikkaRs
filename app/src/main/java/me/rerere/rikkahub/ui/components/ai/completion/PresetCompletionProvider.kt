@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.components.ai.completion
 
-import androidx.compose.ui.text.TextRange
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.MagicWand01
 import me.rerere.rikkahub.data.model.Preset
@@ -13,8 +12,9 @@ class PresetCompletionProvider(
 
     override suspend fun complete(context: ChatCompletionContext): ChatCompletionList? {
         if (context.hasSelection || presets.isEmpty()) return null
-        val command = findPresetCommand(context.text, context.cursor) ?: return null
+        val command = findTildeCompletionCommand(context.text, context.cursor) ?: return null
         val query = command.query
+        if (query == DEFAULT_MODEL_COMMAND_QUERY) return null
         val items = presets
             .asSequence()
             .mapNotNull { preset ->
@@ -74,33 +74,6 @@ class PresetCompletionProvider(
         val span = (lastMatch - firstMatch + 1).coerceAtLeast(query.length)
         return 500 - span.coerceAtMost(300) - firstMatch.coerceAtLeast(0).coerceAtMost(100)
     }
-
-    private data class PresetCommand(
-        val query: String,
-        val range: TextRange,
-    )
-
-    private fun findPresetCommand(text: String, cursor: Int): PresetCommand? {
-        if (cursor < 0 || cursor > text.length) return null
-        val prefix = text.substring(0, cursor)
-        val startHalf = prefix.lastIndexOf('~')
-        val startFull = prefix.lastIndexOf('～')
-        if (startHalf < 0 && startFull < 0) return null
-        val useFullWidth = startFull > startHalf
-        val start = if (useFullWidth) startFull else startHalf
-        if (start > 0 && !text[start - 1].isPresetBoundary(useFullWidth)) return null
-
-        val query = prefix.substring(start + 1)
-        if (query.any { it.isWhitespace() }) return null
-        return PresetCommand(
-            query = query,
-            range = TextRange(start, cursor),
-        )
-    }
-
-    private fun Char.isPresetBoundary(fullWidth: Boolean): Boolean =
-        if (fullWidth) true
-        else isWhitespace() || this in "([{<\"'"
 
     companion object {
         private const val MAX_COMPLETION_ITEMS = 8

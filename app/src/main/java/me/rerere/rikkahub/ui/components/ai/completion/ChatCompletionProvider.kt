@@ -26,7 +26,15 @@ data class ChatCompletionItem(
     val sortScore: Int = 0,
     val skillName: String? = null,
     val presetId: Uuid? = null,
+    val action: ChatCompletionAction? = null,
 )
+
+sealed interface ChatCompletionAction {
+    data class SetAssistantDefaultModel(
+        val modelId: Uuid?,
+        val modelName: String?,
+    ) : ChatCompletionAction
+}
 
 interface ChatCompletionProvider {
     val id: String

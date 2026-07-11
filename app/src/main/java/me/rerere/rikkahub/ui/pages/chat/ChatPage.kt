@@ -91,6 +91,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
+import me.rerere.rikkahub.ui.components.ai.completion.DefaultModelCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.SlashCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.PresetCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
@@ -462,6 +463,13 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
+    val unknownModelName = stringResource(R.string.chat_input_default_model_unknown)
+    val defaultModelName = currentChatModel?.let { model ->
+        model.displayName.ifBlank { model.modelId }.ifBlank { unknownModelName }
+    }
+    val defaultModelDetail = defaultModelName?.let { modelName ->
+        stringResource(R.string.chat_input_default_model_command_detail, modelName)
+    } ?: stringResource(R.string.chat_input_default_model_unavailable)
 
     val completionProviders = remember(
         assistant.id,
@@ -471,6 +479,9 @@ private fun ChatPageContent(
         assistant.enabledSkills,
         setting.presets,
         skillManager,
+        currentChatModel,
+        defaultModelDetail,
+        unknownModelName,
     ) {
         buildList {
             // Add workspace file completion (@)
@@ -493,6 +504,13 @@ private fun ChatPageContent(
                     )
                 )
             }
+            add(
+                DefaultModelCompletionProvider(
+                    model = currentChatModel,
+                    detail = defaultModelDetail,
+                    unknownModelName = unknownModelName,
+                )
+            )
             if (setting.presets.isNotEmpty()) {
                 add(PresetCompletionProvider(setting.presets))
             }

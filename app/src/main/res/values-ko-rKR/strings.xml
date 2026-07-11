@@ -1570,4 +1570,8 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="skill_detail_page_copy_failed">전용 복사본을 만들지 못했습니다</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 괄호 안 내용 읽지 않기</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">활성화하면 TTS가 괄호 안의 내용을 읽지 않습니다</string>
+  <string name="chat_input_default_model_command_detail">%1$s을(를) 어시스턴트 기본 모델로 설정</string>
+  <string name="chat_input_default_model_saved">%1$s을(를) 어시스턴트 기본 모델로 설정했습니다</string>
+  <string name="chat_input_default_model_unavailable">현재 사용 가능한 모델이 없습니다</string>
+  <string name="chat_input_default_model_unknown">알 수 없는 모델</string>
 </resources>

@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -100,6 +101,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionContext
+import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionAction
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionItem
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionList
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionProvider
@@ -427,6 +429,8 @@ private fun TextInputRow(
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
     val assistant = settings.getCurrentAssistant()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
@@ -542,12 +546,27 @@ private fun TextInputRow(
             CompletionPopup(
                 completionList = list,
                 onItemClick = { item ->
-                    state.applyCompletion(
+                    when (val result = state.applyCompletion(
                         replacementRange = list.replacementRange,
                         item = item,
                         assistant = assistant,
                         onUpdateAssistant = onUpdateAssistant,
-                    )
+                    )) {
+                        is ChatCompletionApplyResult.DefaultModelSaved -> toaster.show(
+                            message = context.getString(
+                                R.string.chat_input_default_model_saved,
+                                result.modelName,
+                            ),
+                            type = ToastType.Success,
+                        )
+
+                        ChatCompletionApplyResult.DefaultModelUnavailable -> toaster.show(
+                            message = context.getString(R.string.chat_input_default_model_unavailable),
+                            type = ToastType.Error,
+                        )
+
+                        ChatCompletionApplyResult.None -> Unit
+                    }
                     completionList = null
                 },
             )
@@ -678,7 +697,7 @@ private fun ChatInputState.applyCompletion(
     item: ChatCompletionItem,
     assistant: Assistant,
     onUpdateAssistant: (Assistant) -> Unit,
-) {
+): ChatCompletionApplyResult {
     val textLength = textContent.text.length
     val start = replacementRange.min.coerceIn(0, textLength)
     val end = replacementRange.max.coerceIn(start, textLength)
@@ -688,10 +707,32 @@ private fun ChatInputState.applyCompletion(
     item.presetId?.let { presetId ->
         onUpdateAssistant(assistant.copy(presetIds = setOf(presetId)))
     }
+    val result = when (val action = item.action) {
+        is ChatCompletionAction.SetAssistantDefaultModel -> {
+            val modelId = action.modelId
+            if (modelId == null) {
+                ChatCompletionApplyResult.DefaultModelUnavailable
+            } else {
+                onUpdateAssistant(assistant.copy(chatModelId = modelId))
+                ChatCompletionApplyResult.DefaultModelSaved(action.modelName.orEmpty())
+            }
+        }
+
+        null -> ChatCompletionApplyResult.None
+    }
     textContent.edit {
         replace(start, end, item.insertText)
         selection = TextRange(start + item.insertText.length)
     }
+    return result
+}
+
+private sealed interface ChatCompletionApplyResult {
+    data object None : ChatCompletionApplyResult
+
+    data class DefaultModelSaved(val modelName: String) : ChatCompletionApplyResult
+
+    data object DefaultModelUnavailable : ChatCompletionApplyResult
 }
 
 @Composable

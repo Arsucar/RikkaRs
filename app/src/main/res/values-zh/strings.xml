@@ -1675,4 +1675,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skill_detail_page_select_assistant">选择助手</string>
   <string name="skill_detail_page_copy_success">已创建并启用私有副本</string>
   <string name="skill_detail_page_copy_failed">创建私有副本失败</string>
+  <string name="chat_input_default_model_command_detail">将 %1$s 设为助手默认模型</string>
+  <string name="chat_input_default_model_saved">已将 %1$s 设为助手默认模型</string>
+  <string name="chat_input_default_model_unavailable">当前无可用模型</string>
+  <string name="chat_input_default_model_unknown">未知模型</string>
 </resources>

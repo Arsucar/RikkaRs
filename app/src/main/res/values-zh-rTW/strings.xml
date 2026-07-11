@@ -1551,4 +1551,8 @@
   <string name="skill_detail_page_copy_failed">建立私有副本失敗</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
+  <string name="chat_input_default_model_command_detail">將 %1$s 設為助手預設模型</string>
+  <string name="chat_input_default_model_saved">已將 %1$s 設為助手預設模型</string>
+  <string name="chat_input_default_model_unavailable">目前沒有可用的模型</string>
+  <string name="chat_input_default_model_unknown">未知模型</string>
 </resources>
