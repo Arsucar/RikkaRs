@@ -12,6 +12,18 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.25
+
+### 新功能 / Features（本 Fork，v2.3.24 之后）
+
+- **子代理上下文缓存与复用** — 子代理在正常完成、失败、中断或停止后保留完整上下文；`spawn_subagent` 可通过 `reuse_context_id` 追加指令并继续已有历史，同时提供滑动 TTL、LRU 淘汰、并发租约与作用域/权限校验。（#104）
+  **Subagent context caching and reuse** — Subagents retain their complete context after completion, failure, interruption, or cancellation; `spawn_subagent` can append instructions and continue existing history via `reuse_context_id`, with sliding TTL, LRU eviction, concurrency leases, and scope/permission validation. (#104)
+
+### 修复 / Fixes（本 Fork，v2.3.24 之后）
+
+- **Markdown 表格横滑手势冲突** — 聊天消息中的宽 Markdown/HTML 表格左右滚动时不再误触右侧抽屉，并保持表格外抽屉手势、纵向滚动及非溢出表格行为不变。（#102）
+  **Markdown table swipe gesture conflict** — Horizontally scrolling wide Markdown/HTML tables in chat no longer accidentally opens the right drawer, while drawer gestures outside tables, vertical scrolling, and non-overflowing tables remain unchanged. (#102)
+
 ## v2.3.24
 
 ### 上游同步 / Upstream Sync（本 Fork，v2.3.23 之后）
