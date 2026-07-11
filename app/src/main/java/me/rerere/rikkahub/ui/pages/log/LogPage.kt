@@ -333,9 +333,7 @@ private fun UnifiedLogList(
 
     selectedLog?.let { log ->
         val detailListState = rememberLazyListState()
-        // Pass id as String: kotlin.uuid.Uuid is not Bundle-serializable and would
-        // crash rememberSaveable inside rememberJsonTreeState (see issue #64).
-        val requestBodyJsonTreeState = rememberJsonTreeState(log.id.toString())
+        val requestBodyJsonTreeState = rememberJsonTreeState(log.id)
         val sheetSnackbarHostState = remember { SnackbarHostState() }
         ModalBottomSheet(
             onDismissRequest = {

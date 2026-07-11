@@ -59,9 +59,26 @@ class JsonTreeState internal constructor(
     internal fun snapshot(): Map<String, Boolean> = expandedPaths.toMap()
 
     companion object {
-        val Saver: Saver<JsonTreeState, Map<String, Boolean>> = Saver(
-            save = { it.snapshot() },
-            restore = { JsonTreeState(it) },
+        val Saver: Saver<JsonTreeState, ArrayList<String>> = Saver(
+            save = { state ->
+                ArrayList<String>(state.expandedPaths.size * 2).apply {
+                    state.expandedPaths.forEach { (path, expanded) ->
+                        add(path)
+                        add(expanded.toString())
+                    }
+                }
+            },
+            restore = { saved ->
+                JsonTreeState(
+                    buildMap(saved.size / 2) {
+                        saved.chunked(2).forEach { entry ->
+                            if (entry.size == 2) {
+                                put(entry[0], entry[1].toBooleanStrict())
+                            }
+                        }
+                    }
+                )
+            },
         )
     }
 }
