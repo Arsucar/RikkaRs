@@ -877,3 +877,37 @@ Added memory table template descriptions, moved template settings into the docum
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Review working tree hygiene
+
+**Date**: 2026-07-11
+**Task**: Review working tree hygiene
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Reviewed the working tree, removed sensitive temporary UI captures and review logs, added narrow ignore rules, documented repository hygiene guidance, synchronized prior Trellis archives, and archived the review task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8014c91a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

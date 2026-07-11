@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
-- **Last Active**: 2026-07-07
+- **Total Sessions**: 22
+- **Last Active**: 2026-07-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~879 | Active |
+| `journal-1.md` | ~913 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-07-11 | Review working tree hygiene | `8014c91a` | `release/rikka-arsucar` |
 | 21 | 2026-07-07 | Memory table editor follow-up | `c1e6a4e0` | `release/rikka-arsucar` |
 | 20 | 2026-07-06 | Resolve issues 49-51 | `e860756f` | `release/rikka-arsucar` |
 | 19 | 2026-07-06 | Resolve open issue backlog | `a8d3f40e` | `release/rikka-arsucar` |
