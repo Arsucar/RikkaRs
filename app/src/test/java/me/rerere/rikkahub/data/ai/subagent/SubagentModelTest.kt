@@ -106,6 +106,7 @@ class SubagentModelTest {
                 input = "{}",
                 output = "",
                 executed = false,
+                changedFiles = listOf("/workspace/generated.txt"),
             ),
         )
         val listSerializer = kotlinx.serialization.builtins.ListSerializer(SubagentTranscriptStep.serializer())
@@ -115,6 +116,17 @@ class SubagentModelTest {
         val tool = decoded[1] as SubagentTranscriptStep.ToolCall
         assertEquals(1_700_000_000_123L, reasoning.createdAt)
         assertFalse(tool.executed)
+        assertEquals(listOf("/workspace/generated.txt"), tool.changedFiles)
+    }
+
+    @Test
+    fun subagentTranscriptStep_oldToolCallDefaultsChangedFilesToEmpty() {
+        val encoded = """[{"type":"tool_call","toolName":"workspace_shell","input":"{}","output":"ok"}]"""
+        val serializer = kotlinx.serialization.builtins.ListSerializer(SubagentTranscriptStep.serializer())
+
+        val tool = json.decodeFromString(serializer, encoded).single() as SubagentTranscriptStep.ToolCall
+
+        assertEquals(emptyList<String>(), tool.changedFiles)
     }
 
     @Test

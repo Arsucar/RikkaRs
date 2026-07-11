@@ -57,6 +57,14 @@ data class DiffMetadata(
 ) : PartMetadata
 
 /**
+ * workspace_shell 在 files 区创建或修改的文件；仅供 UI 展示，不进入工具结果正文。
+ */
+@Serializable
+data class ShellChangedFilesMetadata(
+    val changedFiles: List<String> = emptyList(),
+) : PartMetadata
+
+/**
  * 将 metadata 解析为类型化的 [PartMetadata], 解析失败或 metadata 为 null 时返回 null
  *
  * 由于 json 配置了 ignoreUnknownKeys, 不同 provider 的 metadata 互不干扰

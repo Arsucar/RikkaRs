@@ -12,6 +12,7 @@ class WorkspaceManager(
     private val shellRunner: WorkspaceShellRunner = HostShellRunner(),
     private val filesBaseDirProvider: () -> File = { baseDir },
     private val globalLock: WorkspaceGlobalLock? = null,
+    private val changedFileScanner: WorkspaceChangedFileScanner = WorkspaceChangedFileScanner(),
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
 
@@ -174,7 +175,8 @@ class WorkspaceManager(
             ShellCommandVerdict.Allowed -> Unit
         }
 
-        return shellRunner.execute(
+        val scanStartedAtMillis = System.currentTimeMillis()
+        val result = shellRunner.execute(
             WorkspaceShellContext(
                 root = root,
                 command = command,
@@ -188,6 +190,9 @@ class WorkspaceManager(
                 extraBindMounts = extraBindMounts,
             )
         )
+        if (result.exitCode != 0 || result.timedOut) return result
+        val changedFiles = changedFileScanner.scan(filesDir(root), scanStartedAtMillis)
+        return result.copy(changedFiles = changedFiles)
     }
 
     private fun requireValidRoot(root: String) {

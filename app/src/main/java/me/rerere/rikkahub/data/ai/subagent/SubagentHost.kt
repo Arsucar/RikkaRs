@@ -24,6 +24,8 @@ import me.rerere.ai.core.merge
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ShellChangedFilesMetadata
+import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.util.HttpException
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
@@ -33,6 +35,7 @@ import me.rerere.rikkahub.data.ai.tools.workspaceShellTranscriptInput
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.workspace.normalizeWorkspaceChangedFiles
 import kotlin.uuid.Uuid
 
 private const val TAG = "SubagentHost"
@@ -771,9 +774,16 @@ class SubagentHost(
                         }
 
                         is UIMessagePart.Tool -> {
-                            val outputText = part.output
-                                .filterIsInstance<UIMessagePart.Text>()
+                            val textOutputs = part.output.filterIsInstance<UIMessagePart.Text>()
+                            val outputText = textOutputs
                                 .joinToString("\n") { it.text }
+                            val changedFiles = if (part.toolName == WORKSPACE_SHELL_TOOL_NAME) {
+                                normalizeWorkspaceChangedFiles(textOutputs.flatMap { outputPart ->
+                                    outputPart.metadataAs<ShellChangedFilesMetadata>()?.changedFiles.orEmpty()
+                                })
+                            } else {
+                                emptyList()
+                            }
                             val toolOutputLimit = when {
                                 truncateToolOutput > 0 -> truncateToolOutput
                                 truncateChars > 0 -> truncateChars
@@ -791,6 +801,7 @@ class SubagentHost(
                                     input = compactTranscriptToolInput(part.toolName, part.input, truncateChars),
                                     output = output,
                                     executed = part.isExecuted,
+                                    changedFiles = changedFiles,
                                 ),
                             )
                         }

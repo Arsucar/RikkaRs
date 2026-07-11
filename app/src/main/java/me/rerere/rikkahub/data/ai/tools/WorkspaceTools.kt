@@ -9,6 +9,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.DiffMetadata
+import me.rerere.ai.ui.ShellChangedFilesMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
@@ -19,6 +20,7 @@ import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
+import me.rerere.workspace.normalizeWorkspaceChangedFiles
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -282,18 +284,19 @@ private fun createShellTool(
             timeoutMillis = timeoutMillis,
             extraBindMounts = extraBindMounts,
         )
-        listOf(
-            UIMessagePart.Text(
-                buildJsonObject {
-                    put("exitCode", result.exitCode)
-                    put("stdout", result.stdout)
-                    put("stderr", result.stderr)
-                    put("timedOut", result.timedOut)
-                    if (result.truncated) put("truncated", true)
-                }.toString()
-            )
-        )
+        listOf(workspaceShellResultPart(result))
     },
+)
+
+internal fun workspaceShellResultPart(result: WorkspaceCommandResult): UIMessagePart.Text = UIMessagePart.Text(
+    buildJsonObject {
+        put("exitCode", result.exitCode)
+        put("stdout", result.stdout)
+        put("stderr", result.stderr)
+        put("timedOut", result.timedOut)
+        if (result.truncated) put("truncated", true)
+    }.toString(),
+    metadata = ShellChangedFilesMetadata(normalizeWorkspaceChangedFiles(result.changedFiles)).toMetadata(),
 )
 
 private fun kotlinx.serialization.json.JsonObject.string(name: String): String? =

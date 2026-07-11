@@ -142,4 +142,21 @@ class MessageMetadataTest {
         )
         assertEquals(diff, part.metadataAs<DiffMetadata>()?.diff)
     }
+
+    @Test
+    fun `shell changed files metadata defaults empty and round trips`() {
+        val emptyPart = UIMessagePart.Text(text = "{}", metadata = ShellChangedFilesMetadata().toMetadata())
+        assertEquals(emptyList<String>(), emptyPart.metadataAs<ShellChangedFilesMetadata>()?.changedFiles)
+
+        val part: UIMessagePart = UIMessagePart.Text(
+            text = "{}",
+            metadata = ShellChangedFilesMetadata(listOf("/workspace/a.txt")).toMetadata(),
+        )
+        val json = Json { ignoreUnknownKeys = true }
+        val restored = json.decodeFromString<UIMessagePart>(json.encodeToString(part))
+        assertEquals(
+            listOf("/workspace/a.txt"),
+            restored.metadataAs<ShellChangedFilesMetadata>()?.changedFiles,
+        )
+    }
 }

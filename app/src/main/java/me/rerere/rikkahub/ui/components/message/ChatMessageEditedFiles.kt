@@ -41,7 +41,10 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ShellChangedFilesMetadata
+import me.rerere.ai.ui.metadataAs
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
+import me.rerere.rikkahub.data.ai.tools.WORKSPACE_SHELL_TOOL_NAME
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
@@ -55,6 +58,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
 import me.rerere.rikkahub.utils.MAX_TEXT_FILE_VIEW_BYTES
+import me.rerere.workspace.normalizeWorkspaceChangedFiles
 import me.rerere.rikkahub.utils.isMarkdownFileName
 import me.rerere.rikkahub.utils.isTextFileSizeAllowed
 import me.rerere.rikkahub.utils.isTextLikeFileName
@@ -75,12 +79,7 @@ internal fun EditedFilesList(
 ) {
     val workspaceId = assistant?.workspaceId?.toString() ?: return
     val editedFiles = remember(parts) {
-        val fromTopLevelTools = parts.filterIsInstance<UIMessagePart.Tool>()
-            .filter { it.toolName in WORKSPACE_FILE_TOOL_NAMES && it.isExecuted }
-            .mapNotNull { tool ->
-                tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
-            }
-        (fromTopLevelTools + extractSubagentEditedPaths(parts)).distinct()
+        extractEditedFilePaths(parts)
     }
     if (editedFiles.isEmpty()) return
 
@@ -381,6 +380,24 @@ internal fun EditedFilesList(
     }
 }
 
+internal fun extractEditedFilePaths(parts: List<UIMessagePart>): List<String> {
+    val fromTopLevelTools = parts.filterIsInstance<UIMessagePart.Tool>()
+        .filter { it.isExecuted }
+        .flatMap { tool ->
+            when (tool.toolName) {
+                in WORKSPACE_FILE_TOOL_NAMES -> listOfNotNull(
+                    tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull,
+                )
+                WORKSPACE_SHELL_TOOL_NAME -> normalizeWorkspaceChangedFiles(
+                    tool.output.filterIsInstance<UIMessagePart.Text>()
+                        .flatMap { it.metadataAs<ShellChangedFilesMetadata>()?.changedFiles.orEmpty() },
+                )
+                else -> emptyList()
+            }
+        }
+    return (fromTopLevelTools + extractSubagentEditedPaths(parts)).filter { it.isNotBlank() }.distinct()
+}
+
 private fun extractSubagentEditedPaths(parts: List<UIMessagePart>): List<String> {
     return parts.filterIsInstance<UIMessagePart.Tool>()
         .filter { it.toolName == "spawn_subagent" }
@@ -392,12 +409,18 @@ private fun extractSubagentEditedPaths(parts: List<UIMessagePart>): List<String>
                 JsonInstant.decodeFromJsonElement(subagentTranscriptListSerializer, transcriptJson)
             }.getOrElse { emptyList() }
             steps.filterIsInstance<SubagentTranscriptStep.ToolCall>()
-                .filter { it.toolName in WORKSPACE_FILE_TOOL_NAMES && it.executed }
-                .mapNotNull { step ->
-                    runCatching {
-                        JsonInstant.parseToJsonElement(step.input).jsonObject["path"]
-                            ?.jsonPrimitive?.contentOrNull
-                    }.getOrNull()
+                .filter { it.executed }
+                .flatMap { step ->
+                    when (step.toolName) {
+                        in WORKSPACE_FILE_TOOL_NAMES -> listOfNotNull(
+                            runCatching {
+                                JsonInstant.parseToJsonElement(step.input).jsonObject["path"]
+                                    ?.jsonPrimitive?.contentOrNull
+                            }.getOrNull(),
+                        )
+                        WORKSPACE_SHELL_TOOL_NAME -> normalizeWorkspaceChangedFiles(step.changedFiles)
+                        else -> emptyList()
+                    }
                 }
         }
 }

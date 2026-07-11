@@ -14,6 +14,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ShellChangedFilesMetadata
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.HttpException
 import me.rerere.rikkahub.data.ai.resolveGenerationCountdownRemaining
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
@@ -512,5 +514,42 @@ class SubagentRuntimeTest {
         assertEquals("e".repeat(10) + "\u2026", output.getValue("stderr").jsonPrimitive.contentOrNull)
         assertEquals("0", output.getValue("exitCode").jsonPrimitive.contentOrNull)
         assertEquals("false", output.getValue("timedOut").jsonPrimitive.contentOrNull)
+    }
+
+    @Test
+    fun buildTranscript_preservesShellChangedFilesOutsideTruncatedOutput() {
+        val shellOutput = buildJsonObject {
+            put("exitCode", 0)
+            put("stdout", "o".repeat(50))
+            put("stderr", "")
+            put("timedOut", false)
+        }.toString()
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "1",
+                        toolName = "workspace_shell",
+                        input = """{"command":"generate"}""",
+                        output = listOf(
+                            UIMessagePart.Text(
+                                shellOutput,
+                                metadata = ShellChangedFilesMetadata(
+                                    listOf("/workspace/a.txt", "/workspace/b.txt"),
+                                ).toMetadata(),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val tool = SubagentHost.buildTranscript(messages, truncateToolOutput = 5)
+            .single() as SubagentTranscriptStep.ToolCall
+
+        assertEquals(listOf("/workspace/a.txt", "/workspace/b.txt"), tool.changedFiles)
+        assertEquals("o".repeat(5) + "\u2026", Json.parseToJsonElement(tool.output).jsonObject
+            .getValue("stdout").jsonPrimitive.contentOrNull)
     }
 }

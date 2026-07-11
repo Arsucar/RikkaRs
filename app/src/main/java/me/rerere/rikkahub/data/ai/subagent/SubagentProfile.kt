@@ -132,6 +132,7 @@ sealed interface SubagentTranscriptStep {
         val input: String,
         val output: String,
         val executed: Boolean = true,
+        val changedFiles: List<String> = emptyList(),
     ) : SubagentTranscriptStep
 
     @Serializable
