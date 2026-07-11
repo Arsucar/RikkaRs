@@ -16,6 +16,9 @@
 - `GenerationHandler.generateText(assistant: Assistant, stepsCountdownThreshold: Int? = null, ...)`
 - `SubagentSessionRegistry.requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON)`
 - `SubagentHost.requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON)`
+- `SubagentContextCache.acquireForReuse(contextId, scope)`
+- `SubagentResult.contextId: String?`
+- `SubagentResult.contextStatus: SubagentStatus?`
 
 ### 3. Contracts
 
@@ -33,6 +36,18 @@
 - Delegation-only mode may expose read/context tools plus `spawn_subagent`, but its prompt must not claim write or shell execution tools are available when they are filtered out.
 - Missing tool calls must return a clear tool-unavailable result instead of a stack trace when the model calls a tool that is not registered in the current assistant mode.
 - Default subagent cancellation is a neutral stop (`SUBAGENT_STOPPED_REASON`). Only user stop paths such as `ChatService.stopGeneration()` may pass `SUBAGENT_USER_CANCEL_REASON`.
+- A reusable subagent context stores the complete `List<UIMessage>`. `SubagentTranscriptStep` remains a truncated UI/audit projection and must not be used to resume generation.
+- Cache ingress, storage, and returned contexts must use defensive message snapshots, including message/part lists, mutable part metadata holders, and nested `Tool.output` parts.
+- Fresh subagent runs allocate a context id before provider generation. Every emitted message chunk must update the cache before UI progress callbacks run.
+- Reuse atomically appends one new user task while acquiring the lease. Executed `UIMessagePart.Tool` values stay in history and must not be executed again.
+- Context reuse is an atomic lease. A context in `RUNNING` state rejects concurrent reuse with `CONTEXT_IN_USE` instead of waiting.
+- Reuse scope includes root conversation, parent assistant, workspace id/cwd, depth, profile, and workspace access. Scope mismatch must fail without exposing cached content.
+- Context cache expiry is sliding (one hour by default) and eviction is access-order LRU (16 entries by default). `RUNNING` entries neither expire nor evict; temporary overflow is allowed until a terminal transition.
+- Completion, provider/stream interruption, and user stop retain the latest full message snapshot with `COMPLETED`, `INTERRUPTED`, or `FAILED` status.
+- Cancellation cleanup must persist `INTERRUPTED` under `NonCancellable` and then rethrow `CancellationException`; child-tool setup and other `runCatching` blocks must not swallow cancellation.
+- Local validation/programming failures use `FAILED`; provider transport/stream failures use `INTERRUPTED`; recognized context-window errors use `FAILED` plus `CONTEXT_TOO_LONG` only for reuse calls.
+- Context ids and statuses must be present in final tool payload/metadata. Streaming placeholder metadata must expose the id before the first assistant output so cancellation cannot hide it.
+- Context-length normalization applies only to reuse and only to recognized provider context-window errors. Do not estimate tokens from character count.
 
 ### 4. Validation & Error Matrix
 
@@ -49,6 +64,12 @@
 - Delegation-only model calls filtered `workspace_shell` -> tool output says the tool is not available in this assistant mode and lists available tools.
 - Internal/parent stop without explicit user reason -> subagent summary is not "Task cancelled by user".
 - Explicit `ChatService.stopGeneration()` user stop -> reason remains `Generation cancelled by user`.
+- Completed context -> can be leased again with the same owner scope and its full history.
+- Provider fails after emitted chunks -> cached messages equal the latest emitted chunk and status is `INTERRUPTED`.
+- Expired context -> reuse returns `CONTEXT_EXPIRED`; unknown id -> `CONTEXT_NOT_FOUND`.
+- Cache over capacity -> evict the least-recently-used terminal entry, never a running entry.
+- Two concurrent reuse attempts -> exactly one lease succeeds and the other returns `CONTEXT_IN_USE`.
+- Reuse from another conversation/assistant/workspace/depth/profile/access scope -> `CONTEXT_SCOPE_MISMATCH`.
 
 ### 5. Good/Base/Bad Cases
 
@@ -72,6 +93,10 @@
 - Unit or focused static test that root subagent enablement excludes `finish_work`, while `buildSubagentTools()` still injects it for child loops.
 - Unit test that default subagent cancellation reason is neutral and user-cancel wording requires `SUBAGENT_USER_CANCEL_REASON`.
 - Focused check that missing/unregistered tool calls return clear unavailable-tool output.
+- Unit tests for subagent context TTL, expiry tombstone bounds, LRU order, running-entry protection, concurrent leases, and scope validation.
+- Unit tests for deep snapshot isolation, atomic task append, permission fingerprint stability, cancellation persistence/rethrow, and failure classification.
+- Unit tests that tool schema accepts `reuse_context_id` and result payload/metadata round-trip `context_id` plus status.
+- Unit tests that interrupted histories retain executed tool input/output and reuse does not replay those tools.
 - Compile check: `.\gradlew :app:compileDebugKotlin --no-daemon`.
 
 ### 7. Wrong vs Correct

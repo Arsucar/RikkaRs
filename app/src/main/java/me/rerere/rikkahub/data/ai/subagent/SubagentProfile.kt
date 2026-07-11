@@ -112,6 +112,8 @@ data class SubagentResult(
     @SerialName("truncated") val truncated: Boolean = false,
     @SerialName("max_tool_calls") val maxToolCalls: Int? = null,
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
+    @SerialName("context_id") val contextId: String? = null,
+    @SerialName("context_status") val contextStatus: SubagentStatus? = null,
 )
 
 @Serializable

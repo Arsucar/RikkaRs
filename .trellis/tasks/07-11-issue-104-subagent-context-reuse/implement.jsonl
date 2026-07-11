@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"App 运行时变更入口与验证要求"}
+{"file":".trellis/spec/app/subagent-runtime.md","reason":"既有子代理生命周期、权限、预算和取消契约"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"协程取消、共享状态和 CAS/并发注意事项"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"schema、service、host、result 和 UI metadata 跨层契约"}
+{"file":".trellis/tasks/07-11-issue-104-subagent-context-reuse/research/architecture.md","reason":"当前架构、根因和 AC 实现映射"}

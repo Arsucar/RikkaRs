@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"App 模块质量门"}
+{"file":".trellis/spec/app/subagent-runtime.md","reason":"复核既有与新增子代理运行时契约"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"重点检查 lease、取消和共享状态竞态"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查所有 schema/result/metadata 消费方一致性"}
+{"file":".trellis/tasks/07-11-issue-104-subagent-context-reuse/research/architecture.md","reason":"逐条核对根因与 AC 覆盖"}

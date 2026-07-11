@@ -2,8 +2,11 @@ package me.rerere.rikkahub.data.ai.subagent
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,6 +24,7 @@ import me.rerere.ai.core.merge
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.HttpException
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
@@ -48,6 +52,87 @@ private const val TOOL_BUDGET_SUMMARY_PROMPT =
         "and any limitations caused by the budget."
 
 private object ToolCallBudgetStop : Exception()
+
+internal enum class SubagentFailureDisposition {
+    INTERRUPTED,
+    FAILED,
+    CONTEXT_TOO_LONG,
+}
+
+internal fun classifySubagentFailure(
+    error: Throwable,
+    reusedContext: Boolean,
+): SubagentFailureDisposition {
+    if (reusedContext && isContextTooLongError(error)) {
+        return SubagentFailureDisposition.CONTEXT_TOO_LONG
+    }
+    if (error is CancellationException) return SubagentFailureDisposition.INTERRUPTED
+
+    var current: Throwable? = error
+    while (current != null) {
+        if (current is IOException || current is HttpException) {
+            return SubagentFailureDisposition.INTERRUPTED
+        }
+        current = current.cause
+    }
+    return SubagentFailureDisposition.FAILED
+}
+
+private fun isContextTooLongError(error: Throwable): Boolean {
+    var current: Throwable? = error
+    while (current != null) {
+        val message = current.message.orEmpty().lowercase()
+        if (
+            "context_length_exceeded" in message ||
+            "maximum context length" in message ||
+            "context window" in message && ("exceed" in message || "too long" in message) ||
+            "input is too long" in message
+        ) {
+            return true
+        }
+        current = current.cause
+    }
+    return false
+}
+
+internal fun subagentPermissionFingerprint(profile: SubagentProfile, parent: Assistant): String = buildString {
+    append(profile.workspaceAccess.name)
+    append('|').append(profile.workspaceApproval.name)
+    append('|').append(profile.allowedPathPrefixes.sorted().joinToString(","))
+    append('|').append(profile.toolApprovalOverrides.toSortedMap().entries.joinToString(","))
+    append('|').append(profile.inheritTools)
+    append('|').append(profile.excludedTools.sorted().joinToString(","))
+    append('|').append(profile.canSpawn)
+    val localTools = if (profile.inheritTools) {
+        parent.localTools + profile.extraLocalTools
+    } else {
+        profile.localTools
+    }
+    append('|').append(localTools.map { it.toString() }.sorted().joinToString(","))
+    val skills = if (profile.inheritTools) parent.enabledSkills else profile.enabledSkills
+    append('|').append(skills.sorted().joinToString(","))
+    val mcpServers = if (profile.inheritTools) parent.mcpServers else profile.mcpServerIds
+    append('|').append(mcpServers.map { it.toString() }.sorted().joinToString(","))
+}
+
+internal suspend fun persistSubagentFailure(
+    cache: SubagentContextCache,
+    contextId: String,
+    status: SubagentStatus,
+    fallbackMessages: List<UIMessage>,
+    fallbackUsage: TokenUsage?,
+    error: String,
+): SubagentContext? = withContext(NonCancellable) {
+    require(status != SubagentStatus.RUNNING) { "failure status must be terminal" }
+    val cached = cache.snapshot(contextId)
+    cache.finish(
+        contextId = contextId,
+        status = status,
+        messages = cached?.messages ?: fallbackMessages,
+        usage = cached?.usage ?: fallbackUsage,
+        error = error,
+    )
+}
 
 internal object SubagentSessionRegistry {
     private val activeSessions = ConcurrentHashMap<Uuid, AtomicInteger>()
@@ -113,6 +198,7 @@ internal fun resolveSubagentCountdownThreshold(maxToolCalls: Int, configuredThre
 
 class SubagentHost(
     private val generationHandler: GenerationHandler,
+    internal val contextCache: SubagentContextCache = SubagentContextCache(),
 ) {
     fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON) {
         SubagentSessionRegistry.requestCancel(conversationId, reason)
@@ -129,7 +215,8 @@ class SubagentHost(
         maxDepth: Int = parentAssistant.subagentMaxDepth,
         workspaceCwd: String? = null,
         conversationId: Uuid? = null,
-        onProgress: ((List<UIMessage>) -> Unit)? = null,
+        reuseContextId: String? = null,
+        onProgress: ((String, List<UIMessage>) -> Unit)? = null,
     ): SubagentResult {
         if (conversationId != null) {
             SubagentSessionRegistry.register(conversationId)
@@ -146,6 +233,7 @@ class SubagentHost(
                 maxDepth,
                 workspaceCwd,
                 conversationId,
+                reuseContextId,
                 onProgress,
             )
         } finally {
@@ -166,7 +254,8 @@ class SubagentHost(
         maxDepth: Int,
         workspaceCwd: String?,
         conversationId: Uuid?,
-        onProgress: ((List<UIMessage>) -> Unit)?,
+        reuseContextId: String?,
+        onProgress: ((String, List<UIMessage>) -> Unit)?,
     ): SubagentResult {
         val profile = SubagentRegistry.resolveProfile(
             profileName,
@@ -191,29 +280,60 @@ class SubagentHost(
             )
         }
 
-        val childModel = profile.chatModelId
-            ?.let { settings.findModelById(it) }
-            ?: parentModel
-
-        val childAssistant = buildChildAssistant(profile, parentAssistant, depth, maxDepth)
-        val childTools = runCatching {
-            sandboxToolsForSubagent(buildChildTools(childAssistant, depth))
-        }.getOrElse {
-            Log.w(TAG, "spawn: buildChildTools failed: ${it.message}")
-            emptyList()
+        val scope = SubagentContextScope(
+            conversationId = conversationId,
+            parentAssistantId = parentAssistant.id,
+            workspaceId = parentAssistant.workspaceId,
+            workspaceCwd = workspaceCwd,
+            depth = depth,
+            profileName = profile.name,
+            workspaceAccess = profile.workspaceAccess,
+            permissionFingerprint = subagentPermissionFingerprint(profile, parentAssistant),
+        )
+        val acquiredContext = try {
+            if (reuseContextId == null) {
+                contextCache.createAndAcquire(scope, listOf(UIMessage.user(task)))
+            } else {
+                contextCache.acquireForReuse(
+                    contextId = reuseContextId,
+                    scope = scope,
+                    messagesToAppend = listOf(UIMessage.user(task)),
+                )
+            }
+        } catch (error: SubagentContextException) {
+            return SubagentResult(
+                profileName = profile.name,
+                summary = "",
+                succeeded = false,
+                error = "${error.code}: ${error.message}",
+                depth = depth,
+                contextId = reuseContextId,
+                contextStatus = if (error.code == SubagentContextErrorCode.CONTEXT_IN_USE) {
+                    SubagentStatus.RUNNING
+                } else {
+                    null
+                },
+            )
         }
+        val contextId = acquiredContext.contextId
         val effectiveMaxToolCalls = effectiveMaxToolCalls(profile)
 
         var totalUsage: TokenUsage? = null
         var steps = 0
         var totalToolLoopSteps = 0
-        var lastMessages = listOf<UIMessage>()
+        var lastMessages = acquiredContext.messages
 
         return runCatching {
+            onProgress?.invoke(contextId, acquiredContext.messages)
+            val childModel = profile.chatModelId
+                ?.let { settings.findModelById(it) }
+                ?: parentModel
+            val childAssistant = buildChildAssistant(profile, parentAssistant, depth, maxDepth)
+            val childTools = sandboxToolsForSubagent(buildChildTools(childAssistant, depth))
             Log.i(TAG, "spawn: subagent '${profile.name}' (depth=$depth) started")
 
             var generationLimitReached = false
-            var messages = listOf(UIMessage.user(task))
+            var messages = acquiredContext.messages
 
             var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
             var run = runToCompletion(
@@ -225,6 +345,7 @@ class SubagentHost(
                 initialMessages = messages,
                 workspaceCwd = workspaceCwd,
                 conversationId = conversationId,
+                contextId = contextId,
                 onProgress = onProgress,
             )
             steps += 1
@@ -249,6 +370,7 @@ class SubagentHost(
                     generationLoopLimit = SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT,
                     workspaceCwd = workspaceCwd,
                     conversationId = conversationId,
+                    contextId = contextId,
                     onProgress = onProgress,
                     enforceToolBudget = false,
                 )
@@ -264,22 +386,9 @@ class SubagentHost(
             val minLength = profile.summaryMinLength
             while (remainingContinuations > 0 && minLength > 0 && summary.length < minLength) {
                 if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
-                    val transcript = buildTranscript(messages)
                     val reason = SubagentSessionRegistry.cancelReason(conversationId)
                         ?: SUBAGENT_STOPPED_REASON
-                    return@runCatching SubagentResult(
-                        profileName = profile.name,
-                        summary = cancellationSummary(reason),
-                        succeeded = false,
-                        error = reason,
-                        depth = depth,
-                        usage = totalUsage,
-                        steps = steps,
-                        toolCallCount = countToolCalls(messages),
-                        toolLoopSteps = totalToolLoopSteps,
-                        maxToolCalls = effectiveMaxToolCalls,
-                        transcript = transcript,
-                    )
+                    throw CancellationException(reason)
                 }
                 remainingContinuations -= 1
                 preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
@@ -294,6 +403,7 @@ class SubagentHost(
                     generationLoopLimit = SUBAGENT_SUMMARY_GENERATION_LOOP_LIMIT,
                     workspaceCwd = workspaceCwd,
                     conversationId = conversationId,
+                    contextId = contextId,
                     onProgress = onProgress,
                     enforceToolBudget = false,
                 )
@@ -319,46 +429,58 @@ class SubagentHost(
                 truncated = truncated || generationLimitReached,
                 maxToolCalls = effectiveMaxToolCalls,
                 transcript = transcript,
+                contextId = contextId,
+                contextStatus = SubagentStatus.COMPLETED,
+            )
+            contextCache.finish(
+                contextId = contextId,
+                status = SubagentStatus.COMPLETED,
+                messages = messages,
+                usage = totalUsage,
             )
             logResult(result)
             result
         }.onFailure {
-            if (it is CancellationException) {
-                if (SubagentSessionRegistry.isCancelRequested(conversationId)) return@onFailure
-                throw it
+            if (it !is CancellationException) {
+                Log.e(TAG, "spawn: subagent '${profile.name}' failed (${it.javaClass.simpleName})")
             }
-            Log.e(TAG, "spawn: subagent '${profile.name}' failed: ${it.message}", it)
         }.getOrElse { failure ->
-            if (failure is CancellationException && SubagentSessionRegistry.isCancelRequested(conversationId)) {
-                val transcript = buildTranscript(lastMessages)
-                val reason = SubagentSessionRegistry.cancelReason(conversationId)
-                    ?: SUBAGENT_STOPPED_REASON
-                return SubagentResult(
-                    profileName = profile.name,
-                    summary = cancellationSummary(reason),
-                    succeeded = false,
-                    error = reason,
-                    depth = depth,
-                    usage = totalUsage,
-                    steps = steps,
-                    toolCallCount = countToolCalls(lastMessages),
-                    toolLoopSteps = totalToolLoopSteps,
-                    maxToolCalls = effectiveMaxToolCalls,
-                    transcript = transcript,
-                )
+            val disposition = classifySubagentFailure(failure, reusedContext = reuseContextId != null)
+            val status = if (disposition == SubagentFailureDisposition.INTERRUPTED) {
+                SubagentStatus.INTERRUPTED
+            } else {
+                SubagentStatus.FAILED
             }
+            val error = if (disposition == SubagentFailureDisposition.CONTEXT_TOO_LONG) {
+                "${SubagentContextErrorCode.CONTEXT_TOO_LONG}: cached subagent context is too long for the provider"
+            } else {
+                failure.message ?: failure.javaClass.name
+            }
+            val persisted = persistSubagentFailure(
+                cache = contextCache,
+                contextId = contextId,
+                status = status,
+                fallbackMessages = lastMessages,
+                fallbackUsage = totalUsage,
+                error = error,
+            )
+            lastMessages = persisted?.messages ?: lastMessages
+            totalUsage = persisted?.usage ?: totalUsage
             if (failure is CancellationException) throw failure
             SubagentResult(
                 profileName = profile.name,
                 summary = "",
                 succeeded = false,
-                error = failure.message ?: failure.javaClass.name,
+                error = error,
                 depth = depth,
                 usage = totalUsage,
                 steps = steps,
                 toolCallCount = countToolCalls(lastMessages),
                 toolLoopSteps = totalToolLoopSteps,
                 maxToolCalls = effectiveMaxToolCalls,
+                transcript = buildTranscript(lastMessages),
+                contextId = contextId,
+                contextStatus = status,
             )
         }
     }
@@ -401,7 +523,8 @@ class SubagentHost(
         generationLoopLimit: Int = effectiveGenerationLoopLimit(profile),
         workspaceCwd: String?,
         conversationId: Uuid? = null,
-        onProgress: ((List<UIMessage>) -> Unit)?,
+        contextId: String,
+        onProgress: ((String, List<UIMessage>) -> Unit)?,
         enforceToolBudget: Boolean = true,
     ): RunCompletion {
         var lastEmitTime = 0L
@@ -416,7 +539,7 @@ class SubagentHost(
                 if (signature != lastSignature || now - lastEmitTime >= minIntervalMs) {
                     lastSignature = signature
                     lastEmitTime = now
-                    cb(messages)
+                    cb(contextId, messages)
                 }
             }
         }
@@ -443,6 +566,11 @@ class SubagentHost(
             ).onEach { chunk ->
                 if (chunk is GenerationChunk.Messages) {
                     finalMessages = chunk.messages
+                    contextCache.updateProgress(
+                        contextId = contextId,
+                        messages = chunk.messages,
+                        usage = accumulateUsage(chunk.messages),
+                    )
                     throttledOnProgress?.invoke(chunk.messages)
                     if (SubagentSessionRegistry.isCancelRequested(conversationId)) {
                         throw CancellationException(
@@ -461,7 +589,12 @@ class SubagentHost(
             }.collect { }
         } catch (_: ToolCallBudgetStop) {
         }
-        onProgress?.invoke(finalMessages)
+        contextCache.updateProgress(
+            contextId = contextId,
+            messages = finalMessages,
+            usage = accumulateUsage(finalMessages),
+        )
+        onProgress?.invoke(contextId, finalMessages)
 
         val assistantDelta = finalMessages.count { it.role == MessageRole.ASSISTANT } -
             initialMessages.count { it.role == MessageRole.ASSISTANT }
@@ -606,13 +739,6 @@ class SubagentHost(
 
     private fun subagentCountdownThreshold(profile: SubagentProfile, assistant: Assistant): Int? =
         resolveSubagentCountdownThreshold(effectiveMaxToolCalls(profile), assistant.stepsCountdownThreshold)
-
-    private fun cancellationSummary(reason: String): String =
-        if (reason == SUBAGENT_USER_CANCEL_REASON) {
-            "Task cancelled by user"
-        } else {
-            "Task stopped before completion"
-        }
 
     private data class RunCompletion(
         val messages: List<UIMessage>,

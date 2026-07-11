@@ -27,7 +27,12 @@ val SUBAGENT_TOOL_NAMES: Set<String> = setOf(
 
 fun createSubagentTools(
     json: Json,
-    spawn: suspend (profileName: String, task: String, description: String) -> SubagentResult,
+    spawn: suspend (
+        profileName: String,
+        task: String,
+        description: String,
+        reuseContextId: String?,
+    ) -> SubagentResult,
     askBtw: suspend (question: String) -> String,
     getProfiles: () -> List<SubagentProfile>,
     includeAskBtw: Boolean = true,
@@ -39,10 +44,11 @@ fun createSubagentTools(
         description = buildString {
             appendLine(
                 """
-                Launch a subagent to handle a task autonomously. The subagent runs its own tool loop with a fresh context and reports back a summary.
+                Launch a subagent to handle a task autonomously, or continue a previous subagent by passing `reuse_context_id`.
 
                 Writing the task prompt:
-                - The subagent starts with ZERO context — include the goal, known facts, paths, and specifics.
+                - A new subagent starts with ZERO context — include the goal, known facts, paths, and specifics.
+                - When reusing a context, the task is appended to its complete existing history.
                 - Give the question, not step-by-step instructions when investigating.
 
                 When to USE: research needing many reads/searches, multi-step scoped tasks, parallel independent work.
@@ -109,6 +115,13 @@ fun createSubagentTools(
                             put("description", "Short label for this delegation (optional)")
                         },
                     )
+                    put(
+                        "reuse_context_id",
+                        buildJsonObject {
+                            put("type", "string")
+                            put("description", "Context id returned by an earlier spawn_subagent call (optional)")
+                        },
+                    )
                 },
                 required = listOf("profile_name", "task"),
             )
@@ -120,8 +133,10 @@ fun createSubagentTools(
             val task = params["task"]?.jsonPrimitive?.contentOrNull
                 ?: error("task is required")
             val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val reuseContextId = params["reuse_context_id"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
             val profileSnapshot = getProfiles().firstOrNull { it.name == profileName }
-            val result = spawn(profileName, task, description)
+            val result = spawn(profileName, task, description, reuseContextId)
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
@@ -142,6 +157,8 @@ fun createSubagentTools(
                 put("subagent_transcript_size", JsonPrimitive(result.transcript.size))
                 put("subagent_succeeded", JsonPrimitive(result.succeeded))
                 put("subagent_streaming", JsonPrimitive(false))
+                result.contextId?.let { put("subagent_context_id", JsonPrimitive(it)) }
+                result.contextStatus?.let { put("subagent_context_status", JsonPrimitive(it.name)) }
             }
             val slimPayload = buildJsonObject {
                 put("profile_name", JsonPrimitive(result.profileName))
@@ -151,6 +168,8 @@ fun createSubagentTools(
                 result.usage?.let { put("usage", json.encodeToJsonElement(TokenUsage.serializer(), it)) }
                 put("max_tool_calls", JsonPrimitive(result.maxToolCalls ?: 32))
                 put("truncated", JsonPrimitive(result.truncated))
+                result.contextId?.let { put("context_id", JsonPrimitive(it)) }
+                result.contextStatus?.let { put("context_status", JsonPrimitive(it.name)) }
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },

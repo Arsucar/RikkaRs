@@ -60,6 +60,7 @@ import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.ai.subagent.SubagentHost
 import me.rerere.rikkahub.data.ai.subagent.SubagentSessionRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
+import me.rerere.rikkahub.data.ai.subagent.SubagentStatus
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
@@ -155,6 +156,8 @@ internal fun cleanStreamingTextPayload(text: String, json: Json): String {
         obj.forEach { (key, value) ->
             if (key == "streaming") {
                 put("streaming", JsonPrimitive(false))
+            } else if (key == "context_status") {
+                put("context_status", JsonPrimitive(SubagentStatus.INTERRUPTED.name))
             } else {
                 put(key, value)
             }
@@ -184,7 +187,11 @@ internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation 
                                 sourceMeta.forEach { (key, value) ->
                                     if (key == "subagent_streaming") {
                                         put("subagent_streaming", JsonPrimitive(false))
-                                    } else if (key == "subagent_cancelled" || key == "subagent_succeeded") {
+                                    } else if (
+                                        key == "subagent_cancelled" ||
+                                        key == "subagent_succeeded" ||
+                                        key == "subagent_context_status"
+                                    ) {
                                         // skip existing values, will be set below
                                     } else {
                                         put(key, value)
@@ -192,6 +199,7 @@ internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation 
                                 }
                                 put("subagent_cancelled", JsonPrimitive(true))
                                 put("subagent_succeeded", JsonPrimitive(false))
+                                put("subagent_context_status", JsonPrimitive(SubagentStatus.INTERRUPTED.name))
                             }
                         } else {
                             null
@@ -1306,6 +1314,7 @@ class ChatService(
         conversationId: Uuid,
         toolCallId: String?,
         profileName: String,
+        contextId: String,
         subMessages: List<UIMessage>,
     ) {
         runCatching {
@@ -1316,8 +1325,6 @@ class ChatService(
                 truncateChars = 200,
                 truncateToolOutput = 2000,
             )
-            if (transcript.isEmpty()) return@runCatching
-
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
             val loopSteps = subMessages.count { it.role == MessageRole.ASSISTANT }
             val toolCalls = subMessages.sumOf { msg ->
@@ -1335,11 +1342,15 @@ class ChatService(
                 put("subagent_tool_calls", JsonPrimitive(toolCalls))
                 put("subagent_succeeded", JsonPrimitive(false))
                 put("subagent_streaming", JsonPrimitive(true))
+                put("subagent_context_id", JsonPrimitive(contextId))
+                put("subagent_context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
             }
             val partialOutputText = buildJsonObject {
                 put("profile_name", JsonPrimitive(profileName))
                 put("succeeded", JsonPrimitive(false))
                 put("streaming", JsonPrimitive(true))
+                put("context_id", JsonPrimitive(contextId))
+                put("context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
             }.toString()
             val partialOutput = UIMessagePart.Text(
                 text = partialOutputText,
@@ -1808,7 +1819,7 @@ class ChatService(
         result += createSubagentTools(
             json = json,
             getProfiles = { mergedProfiles() },
-            spawn = { profileName, task, _ ->
+            spawn = { profileName, task, _, reuseContextId ->
                 val live = liveSettings()
                 val parent = liveAssistant()
                 val profile = SubagentRegistry.resolveProfile(
@@ -1851,12 +1862,14 @@ class ChatService(
                         maxDepth = maxDepth,
                         workspaceCwd = workspaceCwd,
                         conversationId = conversationId,
+                        reuseContextId = reuseContextId,
                         onProgress = if (conversationId != null) {
-                            { subMessages ->
+                            { contextId, subMessages ->
                                 updateSubagentProgress(
                                     conversationId,
                                     toolCallId,
                                     profile.name,
+                                    contextId,
                                     subMessages,
                                 )
                             }
@@ -1939,7 +1952,7 @@ class ChatService(
                                 disabledGlobal = parent.disabledGlobalSubagents,
                             )
                         },
-                        spawn = { nestedProfile, nestedTask, _ ->
+                        spawn = { nestedProfile, nestedTask, _, reuseContextId ->
                             val live = settingsStore.settingsFlow.value
                             val parent = live.assistants.firstOrNull { it.id == assistant.id } ?: assistant
                             val nested = SubagentRegistry.resolveProfile(
@@ -1981,12 +1994,14 @@ class ChatService(
                                     maxDepth = maxDepth,
                                     workspaceCwd = workspaceCwd,
                                     conversationId = conversationId,
+                                    reuseContextId = reuseContextId,
                                     onProgress = if (conversationId != null) {
-                                        { subMessages ->
+                                        { contextId, subMessages ->
                                             updateSubagentProgress(
                                                 conversationId,
                                                 toolCallId,
                                                 nested.name,
+                                                contextId,
                                                 subMessages,
                                             )
                                         }

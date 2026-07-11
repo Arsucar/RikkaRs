@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -12,12 +14,16 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.HttpException
 import me.rerere.rikkahub.data.ai.resolveGenerationCountdownRemaining
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +42,8 @@ class SubagentRuntimeTest {
             steps = 2,
             toolLoopSteps = 2,
             transcript = listOf(SubagentTranscriptStep.Text("ok")),
+            contextId = "context-1",
+            contextStatus = SubagentStatus.COMPLETED,
         )
         val encoded = json.encodeToString(SubagentResult.serializer(), result)
         val decoded = json.decodeFromString(SubagentResult.serializer(), encoded)
@@ -43,10 +51,92 @@ class SubagentRuntimeTest {
     }
 
     @Test
+    fun subagentResult_legacyPayloadWithoutContextFieldsStillDecodes() {
+        val decoded = json.decodeFromString(
+            SubagentResult.serializer(),
+            """{"profile_name":"explore","summary":"done","succeeded":true}""",
+        )
+
+        assertNull(decoded.contextId)
+        assertNull(decoded.contextStatus)
+    }
+
+    @Test
+    fun subagentFailureClassificationSeparatesCancellationProviderAndLocalFailures() {
+        assertEquals(
+            SubagentFailureDisposition.INTERRUPTED,
+            classifySubagentFailure(CancellationException("stop"), reusedContext = false),
+        )
+        assertEquals(
+            SubagentFailureDisposition.INTERRUPTED,
+            classifySubagentFailure(IOException("stream ended"), reusedContext = false),
+        )
+        assertEquals(
+            SubagentFailureDisposition.INTERRUPTED,
+            classifySubagentFailure(HttpException("provider unavailable"), reusedContext = false),
+        )
+        assertEquals(
+            SubagentFailureDisposition.FAILED,
+            classifySubagentFailure(IllegalArgumentException("invalid local profile"), reusedContext = false),
+        )
+    }
+
+    @Test
+    fun contextTooLongNormalizationOnlyAppliesToReuse() {
+        val failure = HttpException("maximum context length exceeded")
+
+        assertEquals(
+            SubagentFailureDisposition.CONTEXT_TOO_LONG,
+            classifySubagentFailure(failure, reusedContext = true),
+        )
+        assertEquals(
+            SubagentFailureDisposition.INTERRUPTED,
+            classifySubagentFailure(failure, reusedContext = false),
+        )
+    }
+
+    @Test
+    fun permissionFingerprintIsOrderStableAndChangesWithPermissionScope() {
+        val firstServer = Uuid.random()
+        val secondServer = Uuid.random()
+        val tools = listOf(LocalToolOption.TimeInfo, LocalToolOption.JavascriptEngine)
+        val parent = Assistant(
+            localTools = tools,
+            enabledSkills = linkedSetOf("alpha", "beta"),
+            mcpServers = linkedSetOf(firstServer, secondServer),
+        )
+        val profile = SubagentProfile(
+            name = "explore",
+            allowedPathPrefixes = listOf("/workspace/b", "/workspace/a"),
+            excludedTools = linkedSetOf("z", "a"),
+            extraLocalTools = tools,
+            toolApprovalOverrides = linkedMapOf("write" to true, "shell" to false),
+        )
+        val reorderedParent = parent.copy(
+            localTools = tools.reversed(),
+            enabledSkills = linkedSetOf("beta", "alpha"),
+            mcpServers = linkedSetOf(secondServer, firstServer),
+        )
+        val reorderedProfile = profile.copy(
+            allowedPathPrefixes = profile.allowedPathPrefixes.reversed(),
+            excludedTools = linkedSetOf("a", "z"),
+            extraLocalTools = tools.reversed(),
+            toolApprovalOverrides = linkedMapOf("shell" to false, "write" to true),
+        )
+
+        val fingerprint = subagentPermissionFingerprint(profile, parent)
+        assertEquals(fingerprint, subagentPermissionFingerprint(reorderedProfile, reorderedParent))
+        assertNotEquals(
+            fingerprint,
+            subagentPermissionFingerprint(profile.copy(workspaceAccess = WorkspaceAccess.FULL), parent),
+        )
+    }
+
+    @Test
     fun spawnSubagentTool_hasExpectedNameAndParameters() {
         val tools = createSubagentTools(
             json = json,
-            spawn = { _, _, _ ->
+            spawn = { _, _, _, _ ->
                 SubagentResult("explore", "s", true)
             },
             askBtw = { "a" },
@@ -57,13 +147,47 @@ class SubagentRuntimeTest {
         val schema = spawn.parameters() as InputSchema.Obj
         assertTrue(schema.required?.contains("profile_name") == true)
         assertTrue(schema.required?.contains("task") == true)
+        assertTrue("reuse_context_id" in schema.properties)
+    }
+
+    @Test
+    fun spawnSubagentTool_passesReuseContextAndReturnsContextMetadata() = runBlocking {
+        var receivedContextId: String? = null
+        val tool = createSubagentTools(
+            json = json,
+            spawn = { _, _, _, reuseContextId ->
+                receivedContextId = reuseContextId
+                SubagentResult(
+                    profileName = "explore",
+                    summary = "continued",
+                    succeeded = true,
+                    contextId = reuseContextId,
+                    contextStatus = SubagentStatus.COMPLETED,
+                )
+            },
+            askBtw = { "answer" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
+        ).first { it.name == "spawn_subagent" }
+
+        val output = tool.execute(
+            buildJsonObject {
+                put("profile_name", "explore")
+                put("task", "continue")
+                put("reuse_context_id", "context-1")
+            },
+        ).single() as UIMessagePart.Text
+
+        assertEquals("context-1", receivedContextId)
+        assertEquals("context-1", output.metadata?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull)
+        assertTrue(output.text.contains("\"context_id\":\"context-1\""))
+        assertTrue(output.text.contains("\"context_status\":\"COMPLETED\""))
     }
 
     @Test
     fun spawnSubagentTool_omitsParallelGuidanceWhenDisabled() {
         val tools = createSubagentTools(
             json = json,
-            spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
+            spawn = { _, _, _, _ -> SubagentResult("explore", "s", true) },
             askBtw = { "a" },
             getProfiles = { listOf(SubagentProfile(name = "explore")) },
             parallelExecutionEnabled = false,
@@ -76,7 +200,7 @@ class SubagentRuntimeTest {
     fun spawnSubagentTool_includesParallelGuidanceWhenEnabled() {
         val tools = createSubagentTools(
             json = json,
-            spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
+            spawn = { _, _, _, _ -> SubagentResult("explore", "s", true) },
             askBtw = { "a" },
             getProfiles = { listOf(SubagentProfile(name = "explore")) },
             parallelExecutionEnabled = true,
@@ -89,7 +213,7 @@ class SubagentRuntimeTest {
     fun askBtwTool_hasExpectedName() {
         val tools = createSubagentTools(
             json = json,
-            spawn = { _, _, _ -> SubagentResult("explore", "s", true) },
+            spawn = { _, _, _, _ -> SubagentResult("explore", "s", true) },
             askBtw = { "answer" },
             getProfiles = { listOf(SubagentProfile(name = "explore")) },
         )

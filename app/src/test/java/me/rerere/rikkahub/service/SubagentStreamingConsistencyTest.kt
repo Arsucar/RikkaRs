@@ -10,6 +10,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
+import me.rerere.rikkahub.data.ai.subagent.SubagentStatus
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import org.junit.Assert.assertEquals
@@ -24,6 +25,8 @@ class SubagentStreamingConsistencyTest {
         val textJson = """{"profile_name":"x","succeeded":false,"streaming":true}"""
         val metadata = buildJsonObject {
             put("subagent_streaming", JsonPrimitive(true))
+            put("subagent_context_id", JsonPrimitive("context-1"))
+            put("subagent_context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
         }
         val tool = UIMessagePart.Tool(
             toolCallId = "call-1",
@@ -47,6 +50,11 @@ class SubagentStreamingConsistencyTest {
         )
         val parsed = json.decodeFromString<JsonObject>(textPart.text)
         assertEquals(false, parsed["streaming"]?.jsonPrimitive?.content?.toBooleanStrictOrNull())
+        assertEquals(
+            SubagentStatus.INTERRUPTED.name,
+            textPart.metadata?.get("subagent_context_status")?.jsonPrimitive?.content,
+        )
+        assertEquals("context-1", textPart.metadata?.get("subagent_context_id")?.jsonPrimitive?.content)
     }
 
     @Test
