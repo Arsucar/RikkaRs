@@ -89,6 +89,7 @@ import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
+import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
@@ -278,7 +279,8 @@ fun ChatMessage(
                         markdown = textContent,
                         colorScheme = colorScheme
                     )
-                    navController.navigate(Screen.WebView(content = htmlContent.base64Encode()))
+                    val contentId = WebViewContentCache.store(context.cacheDir, htmlContent)
+                    navController.navigate(Screen.WebView(contentId = contentId))
                 }
             },
             onDismissRequest = {

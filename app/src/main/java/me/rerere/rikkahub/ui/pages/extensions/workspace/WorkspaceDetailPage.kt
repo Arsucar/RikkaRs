@@ -85,6 +85,7 @@ import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.MAX_TEXT_FILE_VIEW_BYTES
+import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.rikkahub.utils.isMarkdownFileName
 import me.rerere.rikkahub.utils.isTextFileSizeAllowed
 import me.rerere.rikkahub.utils.isTextLikeFileName
@@ -212,6 +213,14 @@ fun WorkspaceDetailPage(id: String) {
                 },
                 navigationIcon = { BackButton() },
                 actions = {
+                    if (pagerState.currentPage == 1) {
+                        IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                            Icon(
+                                HugeIcons.FileImport,
+                                contentDescription = stringResource(R.string.workspace_detail_import_file),
+                            )
+                        }
+                    }
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(HugeIcons.Refresh01, contentDescription = null)
                     }
@@ -238,13 +247,6 @@ fun WorkspaceDetailPage(id: String) {
                     icon = { Icon(HugeIcons.File02, contentDescription = null) },
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                 )
-            }
-        },
-        floatingActionButton = {
-            if (pagerState.currentPage == 1) {
-                FloatingActionButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
-                    Icon(HugeIcons.FileImport, contentDescription = stringResource(R.string.workspace_detail_import_file))
-                }
             }
         },
         containerColor = CustomColors.topBarColors.containerColor,
@@ -578,8 +580,8 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
         Text(
             text = when (progress.stage) {
                 RootfsInstallStage.DOWNLOADING -> {
-                    val total = progress.totalBytes?.let { " / ${formatBytes(it)}" }.orEmpty()
-                    stringResource(R.string.workspace_detail_downloading, formatBytes(progress.bytesRead), total)
+                    val total = progress.totalBytes?.let { " / ${it.fileSizeToString()}" }.orEmpty()
+                    stringResource(R.string.workspace_detail_downloading, progress.bytesRead.fileSizeToString(), total)
                 }
 
                 RootfsInstallStage.EXTRACTING -> {
@@ -797,7 +799,7 @@ private fun WorkspaceFileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = if (entry.isDirectory) entry.path else "${entry.path} · ${formatBytes(entry.sizeBytes)}",
+                    text = if (entry.isDirectory) entry.path else "${entry.path} · ${entry.sizeBytes.fileSizeToString()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">Движок JavaScript</string>
   <string name="assistant_page_local_tools_time_info_desc">Получить текущую дату, день недели, время и часовой пояс с устройства</string>
   <string name="assistant_page_local_tools_time_info_title">Информация о времени</string>
-  <string name="assistant_page_local_tools_tts_desc">Позвольте ИИ озвучить текст с помощью системного движка TTS устройства</string>
+  <string name="assistant_page_local_tools_tts_desc">Позвольте ИИ озвучить текст с помощью выбранного вами сервиса TTS</string>
   <string name="assistant_page_local_tools_tts_title">Преобразование текста в речь</string>
   <string name="assistant_page_manage_memory_title">Управление памятью</string>
   <string name="assistant_page_max_tokens">Макс. токенов</string>
@@ -1568,4 +1568,6 @@
   <string name="skill_detail_page_select_assistant">Выберите ассистента</string>
   <string name="skill_detail_page_copy_success">Личная копия создана и включена</string>
   <string name="skill_detail_page_copy_failed">Не удалось создать личную копию</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
 </resources>

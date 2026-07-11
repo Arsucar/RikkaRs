@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">자바스크립트 엔진</string>
   <string name="assistant_page_local_tools_time_info_desc">기기에서 현재 날짜, 요일, 시간, 시간대 정보 가져오기</string>
   <string name="assistant_page_local_tools_time_info_title">시간 정보</string>
-  <string name="assistant_page_local_tools_tts_desc">AI가 기기의 TTS 엔진을 사용해 텍스트를 음성으로 읽어줍니다</string>
+  <string name="assistant_page_local_tools_tts_desc">AI가 선택한 TTS 서비스를 사용해 텍스트를 음성으로 읽어줍니다</string>
   <string name="assistant_page_local_tools_tts_title">텍스트 음성 변환</string>
   <string name="assistant_page_manage_memory_title">기억 관리</string>
   <string name="assistant_page_max_tokens">최대 토큰</string>
@@ -1568,4 +1568,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="skill_detail_page_select_assistant">어시스턴트 선택</string>
   <string name="skill_detail_page_copy_success">전용 복사본을 만들고 활성화했습니다</string>
   <string name="skill_detail_page_copy_failed">전용 복사본을 만들지 못했습니다</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS 괄호 안 내용 읽지 않기</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">활성화하면 TTS가 괄호 안의 내용을 읽지 않습니다</string>
 </resources>

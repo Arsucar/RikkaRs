@@ -228,7 +228,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript 引擎</string>
   <string name="assistant_page_local_tools_time_info_desc">从设备获取当前日期、星期、时间和时区信息</string>
   <string name="assistant_page_local_tools_time_info_title">时间信息</string>
-  <string name="assistant_page_local_tools_tts_desc">让AI使用设备TTS引擎为您朗读文本</string>
+  <string name="assistant_page_local_tools_tts_desc">让AI使用您所选的TTS服务为您朗读文本</string>
   <string name="assistant_page_local_tools_tts_title">文字转语音</string>
   <string name="assistant_page_manage_memory_title">管理记忆</string>
   <string name="assistant_page_memory_scope_assistant">仅本助手</string>
@@ -921,8 +921,10 @@
   <string name="setting_display_page_skip_crop_image_desc">导入图片或拍照后跳过裁剪界面</string>
   <string name="setting_display_page_skip_crop_image_title">跳过图片编辑</string>
   <string name="setting_display_page_title">显示设置</string>
-  <string name="setting_display_page_tts_only_read_quoted_desc">启用后，TTS 仅朗读引号内的内容</string>
+  <string name="setting_display_page_tts_only_read_quoted_desc">启用后，TTS 仅朗读引号（包括 ""、\'\'、「」、『』）内的内容</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS仅朗读引用内容</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">启用后，TTS将不朗读括号内的内容</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS不朗读括号内的内容</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用应用图标动画替代默认的圆形加载指示器</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">使用APP图标风格的加载指示器</string>
   <string name="setting_display_page_volume_key_scroll_desc">使用音量键翻页，非常适合电子墨水屏</string>
@@ -1217,6 +1219,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_tts_page_speech_rate">语音速度</string>
   <string name="setting_tts_page_stability">稳定度</string>
   <string name="setting_tts_page_stability_description">控制语音的稳定度（0.0 - 1.0，越低越有表现力）</string>
+  <string name="setting_tts_page_temperature">温度</string>
+  <string name="setting_tts_page_temperature_description">控制语音的随机性（0.0 - 1.0，越高越有表现力）</string>
+  <string name="setting_tts_page_fish_audio_speed_description">语音速度（0.5 - 2.0，1.0 为正常语速）</string>
   <string name="setting_tts_page_speech_rate_description">控制语音播放速度 (0.1 - 3.0，1.0为正常速度)</string>
   <string name="setting_tts_page_speed">语速</string>
   <string name="setting_tts_page_speed_description">语音合成速度 (0.25 - 4.0)</string>

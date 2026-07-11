@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript 引擎</string>
   <string name="assistant_page_local_tools_time_info_desc">從裝置取得目前日期、星期、時間與時區資訊</string>
   <string name="assistant_page_local_tools_time_info_title">時間資訊</string>
-  <string name="assistant_page_local_tools_tts_desc">讓 AI 使用裝置的 TTS 引擎為您朗讀文字</string>
+  <string name="assistant_page_local_tools_tts_desc">讓 AI 使用您所選的 TTS 服務為您朗讀文字</string>
   <string name="assistant_page_local_tools_tts_title">文字轉語音</string>
   <string name="assistant_page_manage_memory_title">管理記憶</string>
   <string name="assistant_page_max_tokens">最大Token數</string>
@@ -1549,4 +1549,6 @@
   <string name="skill_detail_page_select_assistant">選擇助手</string>
   <string name="skill_detail_page_copy_success">已建立並啟用私有副本</string>
   <string name="skill_detail_page_copy_failed">建立私有副本失敗</string>
+  <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
+  <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
 </resources>
