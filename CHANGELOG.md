@@ -12,6 +12,42 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.24
+
+### 上游同步 / Upstream Sync（本 Fork，v2.3.23 之后）
+
+- **合并上游 rikkahub v2.4.1** — 合入上游 v2.4.1 及其后续提交，保留 Fork 定制（release-apk 工作流、去 Firebase），图片生成参数保留 Fork 细分设计（宽高比/质量/格式/背景/审核），新增每日构建工作流。（#68）
+  **Merge upstream rikkahub v2.4.1** — Merged upstream v2.4.1 and later commits while preserving fork customizations (release-apk workflow, Firebase removal); image generation keeps the fork's fine-grained parameters (aspect ratio/quality/format/background/moderation); added a daily-build workflow. (#68)
+
+- **Fish Audio 与 MiMo TTS** — 新增 Fish Audio、MiMo 语音合成提供商。
+  **Fish Audio and MiMo TTS** — Added Fish Audio and MiMo text-to-speech providers.
+
+- **TTS 不朗读括号内容** — 新增开关，启用后 TTS 跳过括号内的内容（可与引号过滤叠加）。
+  **TTS skips bracketed content** — New toggle to skip content inside brackets during TTS (stacks with quote filtering).
+
+- **文件夹分组与会话 API** — 会话侧栏支持文件夹分组，新增文件夹与事件路由。
+  **Folder grouping and conversation APIs** — Conversation sidebar supports folder grouping, with new folder and event routes.
+
+- **HEIF/HEIC 图片支持** — 新增 HEIF/HEIC 图片格式处理。
+  **HEIF/HEIC image support** — Added handling for HEIF/HEIC image formats.
+
+### 修复 / Fixes（本 Fork，v2.3.23 之后）
+
+- **前台服务崩溃拦截** — 拦截部分 OEM 因拒绝前台服务（FGS）权限导致 Web 服务器启动闪退的问题。
+  **Foreground service crash guard** — Catches startup crashes on some OEMs that deny foreground-service (FGS) permission for the web server.
+
+- **WebView 预览大数据崩溃** — WebView 预览改用本地文件缓存传输，避免数据量过大导致进程崩溃。
+  **WebView large-payload crash** — WebView preview now transfers via local file cache to avoid process crashes on large payloads.
+
+- **备份恢复目录缺失** — 备份恢复时对缺失目录标记为 BROKEN，不再直接删除对应记录。
+  **Backup restore missing directory** — Restore marks missing directories as BROKEN instead of deleting the records.
+
+- **SSE 流式丢字** — 修复流式响应偶发丢字问题。
+  **SSE streaming dropped characters** — Fixed occasional character loss in streaming responses.
+
+- **聊天头部与输入框细节** — 模型名称支持双行显示避免斜杠截断；输入框在键盘收起时增加底部呼吸间距。
+  **Chat header and input polish** — Model names can wrap to two lines to avoid slash truncation; the input field adds bottom spacing when the keyboard collapses.
+
 ## v2.3.23
 
 ### 新功能 / Features（本 Fork，v2.3.22 之后）
