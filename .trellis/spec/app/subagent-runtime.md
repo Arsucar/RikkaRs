@@ -82,6 +82,9 @@
 - Bad: every interrupted subagent run reports "Generation cancelled by user" regardless of the actual stop source.
 - Good: `applyPatch()` reads only fields exposed in `manage_subagent_profile.parameters()`.
 - Bad: `applyPatch()` keeps accepting removed advanced fields because models can still send schema-hidden JSON keys.
+- Good: context reuse validates owner scope, appends the new user task, and flips the context to `RUNNING` in one cache lock.
+- Base: a completed context is defensively snapshotted, leased by the same scope, and resumed from full `UIMessage` history.
+- Bad: code reads a cached list, releases the lock, appends the task later, or stores `SubagentTranscriptStep`; concurrent callers can share a lease and truncated transcripts cannot resume execution.
 
 ### 6. Tests Required
 
@@ -186,3 +189,25 @@ fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON
 ```
 
 User-facing stop callsites pass `SUBAGENT_USER_CANCEL_REASON` explicitly.
+
+#### Wrong
+
+```kotlin
+val cached = cache.get(contextId)
+val resumed = cached.messages + UIMessage.user(task)
+cache.markRunning(contextId)
+```
+
+The read, task append, and state transition are separate operations. Two callers can both reuse the same context, and a mutable message list can change after it is cached.
+
+#### Correct
+
+```kotlin
+val acquired = cache.acquireForReuse(
+    contextId = contextId,
+    scope = expectedScope,
+    messagesToAppend = listOf(UIMessage.user(task)),
+)
+```
+
+The cache validates TTL/status/scope, deep-snapshots history, appends the task, refreshes LRU/TTL, and changes status to `RUNNING` in one `Mutex` critical section.

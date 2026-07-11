@@ -32,7 +32,7 @@
 - [x] AC5：超过上限按最近最少访问淘汰非 RUNNING 项，绝不淘汰 RUNNING 项。
 - [x] 单测覆盖并发 lease、scope/profile 校验、重复中断、LRU/TTL 和结果/schema 序列化。
 - [x] 聚焦测试、app 编译和 Debug 安装验收通过。
-- [ ] #104 留下实现与测试证据评论后关闭。
+- [x] #104 留下实现与测试证据评论后关闭。
 
 ## Out of Scope
 

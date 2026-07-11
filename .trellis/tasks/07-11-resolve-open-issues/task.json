@@ -1,0 +1,30 @@
+{
+  "id": "resolve-open-issues",
+  "name": "resolve-open-issues",
+  "title": "处理全部开放 GitHub Issues",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-11",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-11-issue-68-upstream-sync-audit",
+    "07-11-issue-102-markdown-table-gesture",
+    "07-11-issue-104-subagent-context-reuse"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
