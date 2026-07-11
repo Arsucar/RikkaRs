@@ -1,4 +1,0 @@
-{"file":"docs/CHANGELOG_GUIDE.md","reason":"核对 v2.3.25 段落和 Release notes 完整性"}
-{"file":"docs/RIKKA_ARSUCAR_FORK_AND_CI.md","reason":"核对正式 workflow、版本和 Release 资产"}
-{"file":".trellis/spec/guides/repository-hygiene.md","reason":"最终提交、tag 和工作树卫生检查"}
-{"file":".trellis/tasks/07-11-release-resolved-issues-version/research/release-audit.md","reason":"复核 v2.3.25 目标版本和正式 Release 路径"}
