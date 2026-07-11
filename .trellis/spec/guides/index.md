@@ -23,6 +23,7 @@ These guides help you **ask the right questions before coding**.
 |-------|---------|-------------|
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| [Repository Hygiene Guide](./repository-hygiene.md) | Keep temporary device captures and sensitive debug data out of Git | After device UI inspection or before broad staging |
 
 ---
 
@@ -50,6 +51,14 @@ These guides help you **ask the right questions before coding**.
 - [ ] Multiple branches update the same derived state from `kind` / `action`
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When Handling Device Debug Artifacts
+
+- [ ] You generated a UIAutomator XML dump or device screenshot
+- [ ] Temporary `_*.xml` or `_*.png` files appear at the repository root
+- [ ] You are about to run `git add .` or `git add -A` after device inspection
+
+→ Read [Repository Hygiene Guide](./repository-hygiene.md)
 
 ### When Verifying AI Cross-Review Results
 

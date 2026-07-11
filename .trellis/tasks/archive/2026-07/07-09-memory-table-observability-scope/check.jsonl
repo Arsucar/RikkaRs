@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Scope visibility crosses tool descriptions, repository data, and UI availability."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Template lifecycle and scope guards should reuse shared helper behavior."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for memory-table tool/repository context."}

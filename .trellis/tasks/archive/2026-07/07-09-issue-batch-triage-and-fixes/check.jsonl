@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Parent issue batch coordinates several child tasks across UI, datastore, tools, and services."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Batch review needs duplicate-pattern checks across repeated issue fixes."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for datastore/tool/service review context."}
+{"file": ".trellis/spec/material3/material-color-utilities/frontend/index.md", "reason": "Frontend package guideline index for Compose UI review context."}

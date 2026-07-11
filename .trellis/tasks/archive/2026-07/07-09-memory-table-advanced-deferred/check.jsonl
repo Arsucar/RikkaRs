@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Deferred memory-table features depend on schema, tool, repository, and prompt-rendering contracts."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Future memory-table selectors and renderers should reuse shared semantics."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for memory-table planning context."}

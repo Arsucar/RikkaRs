@@ -17,3 +17,6 @@ local.properties
 .opencode/
 *.jks
 rikka-arsucar-release.jks
+/_*.png
+/_*.xml
+/.review-findings/

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Deferred upstream merge affects branch, workflow, and release boundaries when implemented later."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Deferred task still needs concrete review context for traceability."}

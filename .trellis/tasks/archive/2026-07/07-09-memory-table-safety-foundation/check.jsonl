@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Memory-table validation crosses schema JSON, payload JSON, repository writes, and tool errors."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Validation and readable errors should stay centralized instead of duplicated."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for memory-table model/repository context."}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Provider rate limits cross settings, UI, generation services, transformers, and subagent calls."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "All provider LLM calls should reuse the same limiter semantics."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for provider/generation context."}
+{"file": ".trellis/spec/material3/material-color-utilities/frontend/index.md", "reason": "Frontend package guideline index for provider settings UI context."}

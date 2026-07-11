@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Preset and subagent changes cross settings normalization, prompt injection, profile resolution, and UI metadata."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Subagent profile resolution and displayed context should share one effective-profile model."}
+{"file": ".trellis/spec/material3/material-color-utilities/backend/index.md", "reason": "Backend package guideline index for datastore/subagent context."}
+{"file": ".trellis/spec/material3/material-color-utilities/frontend/index.md", "reason": "Frontend package guideline index for Compose profile UI context."}

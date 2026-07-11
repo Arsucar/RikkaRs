@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for cross-layer and reuse risks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Fast fixes span UI resources, chat list state, and tool result metadata."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Repeated provider/model labels and subagent payload fields need consistency checks."}
+{"file": ".trellis/spec/material3/material-color-utilities/frontend/index.md", "reason": "Frontend package guideline index for Compose UI review context."}
