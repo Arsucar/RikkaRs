@@ -108,8 +108,8 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.base64Decode
-import me.rerere.rikkahub.utils.isAllowedFileType
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.utils.resolveChatFileUploadMetadata
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -848,25 +848,23 @@ private fun ChatFilesPickerSheet(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
                 val documents = uris.mapNotNull { uri ->
-                    val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
-                    val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
-                    if (isAllowedFileType(fileName, mime)) {
-                        val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
-                            ?: run {
-                                toaster.show(
-                                    context.getString(R.string.chat_input_file_read_failed, fileName),
-                                    type = ToastType.Error
-                                )
-                                return@mapNotNull null
-                            }
-                        UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
-                    } else {
-                        toaster.show(
-                            context.getString(R.string.chat_input_unsupported_file_type, fileName),
-                            type = ToastType.Error
-                        )
-                        null
-                    }
+                    val metadata = resolveChatFileUploadMetadata(
+                        fileName = filesManager.getFileNameFromUri(uri),
+                        mimeType = filesManager.getFileMimeType(uri),
+                    )
+                    val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
+                        ?: run {
+                            toaster.show(
+                                context.getString(R.string.chat_input_file_read_failed, metadata.fileName),
+                                type = ToastType.Error
+                            )
+                            return@mapNotNull null
+                        }
+                    UIMessagePart.Document(
+                        url = localUri.toString(),
+                        fileName = metadata.fileName,
+                        mime = metadata.mimeType,
+                    )
                 }
                 if (documents.isNotEmpty()) {
                     inputState.addFiles(documents)
