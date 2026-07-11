@@ -279,12 +279,18 @@ fun buildMemoryTableTools(
                         val ops = runCatching { json.parseToJsonElement(opsJson) as? JsonArray }.getOrNull()
                             ?: error("ops must be a JSON array")
                         val explicitRowKey = params.stringParameter("row_key")
-                        val templates = if (explicitRowKey == null) readTemplates() else emptyList()
+                        val templates = readTemplates()
+                        val readOnlyTables = readOnlyUpdateTables(
+                            json = json,
+                            templates = templates,
+                            templateIds = setOf(old.templateId),
+                        )
                         val updatedPayload = applyMemoryTableOps(
                             json = json,
                             documentId = id,
                             templateId = old.templateId,
                             templates = templates,
+                            readOnlyTables = readOnlyTables,
                             explicitRowKey = explicitRowKey,
                             payloadJson = old.payloadJson,
                             ops = ops,
@@ -313,6 +319,22 @@ fun buildMemoryTableTools(
                         val payloadJson = params["payload_json"]?.jsonPrimitive?.contentOrNull
                             ?: old?.payloadJson
                             ?: error("payload_json is required")
+                        val templates = readTemplates()
+                        val readOnlyTables = readOnlyUpdateTables(
+                            json = json,
+                            templates = templates,
+                            templateIds = buildSet {
+                                old?.templateId?.let(::add)
+                                add(templateId)
+                            },
+                        )
+                        ensureReadOnlyTablesUnchanged(
+                            json = json,
+                            action = action,
+                            oldPayloadJson = old?.payloadJson ?: "{}",
+                            newPayloadJson = payloadJson,
+                            readOnlyTables = readOnlyTables,
+                        )
                         json.encodeToJsonElement(
                             MemoryTableDocument.serializer(),
                             upsertDocument(
@@ -337,7 +359,12 @@ fun buildMemoryTableTools(
                         val patchJson = params["payload_json"]?.jsonPrimitive?.contentOrNull
                             ?: error("payload_json is required")
                         val explicitRowKey = params.stringParameter("row_key")
-                        val templates = if (explicitRowKey == null) readTemplates() else emptyList()
+                        val templates = readTemplates()
+                        val readOnlyTables = readOnlyUpdateTables(
+                            json = json,
+                            templates = templates,
+                            templateIds = setOf(old.templateId),
+                        )
                         val merged = mergeTopLevelJsonObject(
                             json = json,
                             templateId = old.templateId,
@@ -345,6 +372,13 @@ fun buildMemoryTableTools(
                             explicitRowKey = explicitRowKey,
                             original = old.payloadJson,
                             patch = patchJson,
+                        )
+                        ensureReadOnlyTablesUnchanged(
+                            json = json,
+                            action = action,
+                            oldPayloadJson = old.payloadJson,
+                            newPayloadJson = merged,
+                            readOnlyTables = readOnlyTables,
                         )
                         json.encodeToJsonElement(
                             MemoryTableDocument.serializer(),
@@ -384,10 +418,21 @@ fun buildMemoryTableTools(
                         val old = getDocument(id) ?: error("memory table document not found: $id")
                         ensureWritableMemoryTableScope(old.scopeType)
                         val explicitRowKey = params.stringParameter("row_key")
+                        val templates = readTemplates()
+                        val readOnlyTables = readOnlyUpdateTables(
+                            json = json,
+                            templates = templates,
+                            templateIds = setOf(old.templateId),
+                        )
+                        ensureWritableMemoryTableTable(
+                            action = action,
+                            table = table,
+                            readOnlyTables = readOnlyTables,
+                        )
                         val rowKey = resolveMemoryTableRowKey(
                             json = json,
                             templateId = old.templateId,
-                            templates = if (explicitRowKey == null) readTemplates() else emptyList(),
+                            templates = templates,
                             table = table,
                             explicitRowKey = explicitRowKey,
                         ) ?: error(
@@ -449,6 +494,62 @@ private fun ensureWritableMemoryTableScope(scopeType: MemoryTableScopeType) {
         error(
             "conversation scope writes are disabled until conversation memory-table UI is available; " +
                 "use assistant or global scope"
+        )
+    }
+}
+
+private fun readOnlyUpdateTables(
+    json: Json,
+    templates: List<MemoryTableTemplate>,
+    templateIds: Set<String>,
+): Set<String> = buildSet {
+    for (template in templates) {
+        if (template.id !in templateIds) continue
+        val schema = runCatching { json.parseToJsonElement(template.schemaJson) as? JsonObject }.getOrNull()
+            ?: continue
+        val tables = schema["tables"] as? JsonArray ?: continue
+        for (tableElement in tables) {
+            val table = tableElement as? JsonObject ?: continue
+            val name = table.stringValue("name") ?: continue
+            val updatePolicy = table["updatePolicy"] as? JsonObject ?: continue
+            val enabled = updatePolicy["enabled"] as? JsonPrimitive ?: continue
+            if (!enabled.isString && enabled.booleanOrNull == false) {
+                add(name)
+            }
+        }
+    }
+}
+
+private fun ensureWritableMemoryTableTable(
+    action: String,
+    table: String,
+    readOnlyTables: Set<String>,
+) {
+    if (table in readOnlyTables) {
+        error(
+            "$action cannot modify table '$table' because its template declares " +
+                "updatePolicy.enabled=false"
+        )
+    }
+}
+
+private fun ensureReadOnlyTablesUnchanged(
+    json: Json,
+    action: String,
+    oldPayloadJson: String,
+    newPayloadJson: String,
+    readOnlyTables: Set<String>,
+) {
+    if (readOnlyTables.isEmpty()) return
+    val oldPayload = runCatching { json.parseToJsonElement(oldPayloadJson) as? JsonObject }.getOrNull()
+        ?: error("existing payload_json must be a JSON object")
+    val newPayload = runCatching { json.parseToJsonElement(newPayloadJson) as? JsonObject }.getOrNull()
+        ?: error("payload_json must be a JSON object")
+    readOnlyTables.firstOrNull { table -> oldPayload[table] != newPayload[table] }?.let { table ->
+        ensureWritableMemoryTableTable(
+            action = action,
+            table = table,
+            readOnlyTables = readOnlyTables,
         )
     }
 }
@@ -644,6 +745,7 @@ private fun applyMemoryTableOps(
     documentId: String,
     templateId: String,
     templates: List<MemoryTableTemplate>,
+    readOnlyTables: Set<String>,
     explicitRowKey: String?,
     payloadJson: String,
     ops: JsonArray,
@@ -663,6 +765,11 @@ private fun applyMemoryTableOps(
 
         val updatedRows = when (type) {
             "insert", "update" -> {
+                ensureWritableMemoryTableTable(
+                    action = "apply_ops",
+                    table = table,
+                    readOnlyTables = readOnlyTables,
+                )
                 val row = op["row"] as? JsonObject
                     ?: error("ops[$index].row must be an object for $type")
                 val rowKey = rowKeyByTable.getOrPut(table) {
@@ -698,6 +805,11 @@ private fun applyMemoryTableOps(
             }
 
             "delete" -> {
+                ensureWritableMemoryTableTable(
+                    action = "apply_ops",
+                    table = table,
+                    readOnlyTables = readOnlyTables,
+                )
                 val rowKey = rowKeyByTable.getOrPut(table) {
                     resolveMemoryTableRowKey(
                         json = json,

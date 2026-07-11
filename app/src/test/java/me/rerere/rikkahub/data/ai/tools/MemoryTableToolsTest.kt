@@ -924,6 +924,410 @@ class MemoryTableToolsTest {
     }
 
     @Test
+    fun upsertRowsRejectsCreatingReadOnlyTable() = runBlocking {
+        var upserted = false
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { null },
+            upsertDocument = {
+                upserted = true
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("template_id", "template")
+                put("payload_json", """{"notes":[{"key":"private","value":"keep"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertUpdatePolicyError(result, "notes")
+        assertEquals(false, upserted)
+    }
+
+    @Test
+    fun upsertRowsRejectsChangingOrRemovingReadOnlyTable() = runBlocking {
+        var upsertCount = 0
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}],"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                upsertCount += 1
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+
+        val changed = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[],"notes":[{"key":"private","value":"changed"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+        val removed = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertUpdatePolicyError(changed, "notes")
+        assertUpdatePolicyError(removed, "notes")
+        assertEquals(0, upsertCount)
+    }
+
+    @Test
+    fun upsertRowsDistinguishesMissingAndNullReadOnlyTableValues() = runBlocking {
+        val existingPayloads = listOf(
+            "{}" to """{"notes":null}""",
+            """{"notes":null}""" to "{}",
+        )
+
+        existingPayloads.forEach { (oldPayload, newPayload) ->
+            var upserted = false
+            val existing = document(
+                id = "doc",
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = "assistant-a",
+                payloadJson = oldPayload,
+            )
+            val tool = buildMemoryTableTools(
+                json = json,
+                assistantId = "assistant-a",
+                readDocuments = { error("unexpected read") },
+                getDocument = { existing },
+                upsertDocument = {
+                    upserted = true
+                    it
+                },
+                deleteDocument = { error("unexpected delete") },
+                readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+            ).single()
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("action", "upsert_rows")
+                    put("document_id", "doc")
+                    put("payload_json", newPayload)
+                }
+            ).single() as UIMessagePart.Text
+
+            assertUpdatePolicyError(result, "notes")
+            assertEquals(false, upserted)
+        }
+    }
+
+    @Test
+    fun upsertRowsAllowsWritableChangesWhenReadOnlyTableIsUnchanged() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}],"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put(
+                    "payload_json",
+                    """{"facts":[{"key":"name","value":"Grace"}],"notes":[{"key":"private","value":"keep"}]}""",
+                )
+            }
+        )
+
+        val payload = json.parseToJsonElement(captured?.payloadJson.orEmpty()).jsonObject
+        assertEquals("Grace", payload.getValue("facts").jsonArray[0].jsonObject.getValue("value").jsonPrimitive.content)
+        assertEquals("keep", payload.getValue("notes").jsonArray[0].jsonObject.getValue("value").jsonPrimitive.content)
+    }
+
+    @Test
+    fun upsertRowsAppliesOldTemplatePolicyWhenSwitchingTemplates() = runBlocking {
+        var upserted = false
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"notes":[{"key":"private","value":"keep"}]}""",
+        ).copy(templateId = "old-template")
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                upserted = true
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = {
+                listOf(
+                    template(id = "old-template", schemaJson = mixedUpdatePolicySchemaJson()),
+                    template(id = "new-template", schemaJson = factsAndNotesKeySchemaJson()),
+                )
+            },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put("template_id", "new-template")
+                put("payload_json", """{"notes":[{"key":"private","value":"changed"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertUpdatePolicyError(result, "notes")
+        assertEquals(false, upserted)
+    }
+
+    @Test
+    fun updatePolicyDefaultsRemainWritable() = runBlocking {
+        val schemas = listOf(
+            factsKeySchemaJson(),
+            factsUpdatePolicyWithoutEnabledSchemaJson(),
+            factsMalformedUpdatePolicySchemaJson(),
+        )
+        schemas.forEachIndexed { index, schema ->
+            var captured: MemoryTableDocument? = null
+            val tool = buildMemoryTableTools(
+                json = json,
+                assistantId = "assistant-a",
+                readDocuments = { error("unexpected read") },
+                getDocument = { null },
+                upsertDocument = {
+                    captured = it
+                    it
+                },
+                deleteDocument = { error("unexpected delete") },
+                readTemplates = { listOf(template(id = "template-$index", schemaJson = schema)) },
+            ).single()
+
+            tool.execute(
+                buildJsonObject {
+                    put("action", "upsert_rows")
+                    put("template_id", "template-$index")
+                    put("payload_json", """{"facts":[{"key":"name","value":"Ada"}]}""")
+                }
+            )
+
+            assertTrue("schema $index should remain writable", captured != null)
+        }
+
+        var noTemplateCaptured: MemoryTableDocument? = null
+        val noTemplateTool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { null },
+            upsertDocument = {
+                noTemplateCaptured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { emptyList() },
+        ).single()
+        noTemplateTool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("template_id", "missing")
+                put("payload_json", """{"facts":[]}""")
+            }
+        )
+        assertTrue(noTemplateCaptured != null)
+    }
+
+    @Test
+    fun patchRowsRejectsReadOnlyChangesAndAllowsWritableChanges() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}],"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+
+        val rejected = tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"notes":[{"key":"private","value":"changed"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+        assertUpdatePolicyError(rejected, "notes")
+        assertEquals(null, captured)
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[{"key":"name","value":"Grace"}]}""")
+            }
+        )
+
+        val payload = json.parseToJsonElement(captured?.payloadJson.orEmpty()).jsonObject
+        assertEquals("Grace", payload.getValue("facts").jsonArray[0].jsonObject.getValue("value").jsonPrimitive.content)
+        assertEquals("keep", payload.getValue("notes").jsonArray[0].jsonObject.getValue("value").jsonPrimitive.content)
+    }
+
+    @Test
+    fun applyOpsRejectsAllReadOnlyMutationTypesAtomically() = runBlocking {
+        var upsertCount = 0
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[],"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                upsertCount += 1
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+        val opsCases = listOf(
+            """[{"type":"insert","table":"notes","row":{"key":"new","value":"x"}}]""",
+            """
+                [
+                  {"type":"insert","table":"facts","row":{"key":"ok","value":"x"}},
+                  {"type":"update","table":"notes","row":{"key":"private","value":"changed"}}
+                ]
+            """.trimIndent(),
+            """[{"type":"delete","table":"notes","row_key_value":"private"}]""",
+        )
+
+        opsCases.forEach { ops ->
+            val result = tool.execute(
+                buildJsonObject {
+                    put("action", "apply_ops")
+                    put("document_id", "doc")
+                    put("row_key", "key")
+                    put("ops", ops)
+                }
+            ).single() as UIMessagePart.Text
+            assertUpdatePolicyError(result, "notes")
+        }
+
+        assertEquals(0, upsertCount)
+    }
+
+    @Test
+    fun deleteRowRejectsReadOnlyTableEvenWithExplicitRowKey() = runBlocking {
+        var upserted = false
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                upserted = true
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = mixedUpdatePolicySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "delete_row")
+                put("document_id", "doc")
+                put("table", "notes")
+                put("row_key", "key")
+                put("row_key_value", "private")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertUpdatePolicyError(result, "notes")
+        assertEquals(false, upserted)
+    }
+
+    @Test
+    fun deleteDocumentIgnoresReadOnlyTablePolicy() = runBlocking {
+        var deletedId: String? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"notes":[{"key":"private","value":"keep"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { deletedId = it },
+            readTemplates = { error("delete_document must not read table policy") },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "delete_document")
+                put("document_id", "doc")
+                put("confirm_document_id", "doc")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertEquals("true", json.parseToJsonElement(result.text).jsonObject.getValue("success").jsonPrimitive.content)
+        assertEquals("doc", deletedId)
+    }
+
+    @Test
     fun upsertRowsReturnsReadableErrorWhenWriteFails() = runBlocking {
         val tool = buildMemoryTableTools(
             json = json,
@@ -990,6 +1394,53 @@ class MemoryTableToolsTest {
         }
     """.trimIndent()
 
+    private fun mixedUpdatePolicySchemaJson() = """
+        {
+          "tables": [
+            {
+              "name": "facts",
+              "columns": [
+                { "name": "key", "type": "string" },
+                { "name": "value", "type": "string" }
+              ],
+              "updatePolicy": { "enabled": true }
+            },
+            {
+              "name": "notes",
+              "columns": [
+                { "name": "key", "type": "string" },
+                { "name": "value", "type": "string" }
+              ],
+              "updatePolicy": { "enabled": false }
+            }
+          ]
+        }
+    """.trimIndent()
+
+    private fun factsUpdatePolicyWithoutEnabledSchemaJson() = """
+        {
+          "tables": [
+            {
+              "name": "facts",
+              "columns": [{ "name": "key", "type": "string" }],
+              "updatePolicy": { "triggerSend": false }
+            }
+          ]
+        }
+    """.trimIndent()
+
+    private fun factsMalformedUpdatePolicySchemaJson() = """
+        {
+          "tables": [
+            {
+              "name": "facts",
+              "columns": [{ "name": "key", "type": "string" }],
+              "updatePolicy": { "enabled": "false" }
+            }
+          ]
+        }
+    """.trimIndent()
+
     private fun peoplePrimaryKeySchemaJson() = """
         {
           "tables": [
@@ -1017,4 +1468,12 @@ class MemoryTableToolsTest {
         scopeId = scopeId,
         payloadJson = payloadJson,
     )
+
+    private fun assertUpdatePolicyError(result: UIMessagePart.Text, table: String) {
+        val payload = json.parseToJsonElement(result.text).jsonObject
+        assertEquals("false", payload.getValue("success").jsonPrimitive.content)
+        val error = payload.getValue("error").jsonPrimitive.content
+        assertTrue(error.contains("updatePolicy.enabled=false"))
+        assertTrue(error.contains(table))
+    }
 }

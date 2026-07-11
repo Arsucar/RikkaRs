@@ -97,7 +97,8 @@ fun validateMemoryTableSchemaJson(schemaJson: String) {
             table["injectPolicy"],
             "schemaJson.tables[$tableIndex].injectPolicy",
         )
-        // updatePolicy shares the same shape (used by the update-side gate).
+        // updatePolicy shares the same shape and is consumed by MemoryTableTools
+        // to gate AI row writes for tables whose enabled flag is false.
         validateMemoryTablePolicy(
             table["updatePolicy"],
             "schemaJson.tables[$tableIndex].updatePolicy",
