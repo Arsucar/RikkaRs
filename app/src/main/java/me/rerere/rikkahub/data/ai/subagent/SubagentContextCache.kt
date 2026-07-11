@@ -128,9 +128,14 @@ class SubagentContextCache(
             )
         }
         if (existing.scope != scope) {
+            val mismatchedFields = scopeMismatchFields(
+                actual = existing.scope,
+                expected = scope,
+            )
             throw SubagentContextException(
                 SubagentContextErrorCode.CONTEXT_SCOPE_MISMATCH,
-                "Subagent context belongs to a different conversation or execution scope",
+                "Subagent context scope mismatch: actual(cached) differs from expected(requested) for fields: " +
+                    mismatchedFields.joinToString(),
             )
         }
         val acquired = existing.touch(now).copy(
@@ -196,6 +201,20 @@ class SubagentContextCache(
     )
 
     private fun SubagentContext.snapshot(): SubagentContext = copy(messages = snapshotMessages(messages))
+
+    private fun scopeMismatchFields(
+        actual: SubagentContextScope,
+        expected: SubagentContextScope,
+    ): List<String> = buildList {
+        if (actual.conversationId != expected.conversationId) add("conversationId")
+        if (actual.parentAssistantId != expected.parentAssistantId) add("parentAssistantId")
+        if (actual.workspaceId != expected.workspaceId) add("workspaceId")
+        if (actual.workspaceCwd != expected.workspaceCwd) add("workspaceCwd")
+        if (actual.depth != expected.depth) add("depth")
+        if (actual.profileName != expected.profileName) add("profileName")
+        if (actual.workspaceAccess != expected.workspaceAccess) add("workspaceAccess")
+        if (actual.permissionFingerprint != expected.permissionFingerprint) add("permissionFingerprint")
+    }
 
     private fun snapshotMessages(messages: List<UIMessage>): List<UIMessage> = messages.map { message ->
         message.copy(

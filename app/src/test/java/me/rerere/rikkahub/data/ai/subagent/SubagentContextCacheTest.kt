@@ -221,28 +221,72 @@ class SubagentContextCacheTest {
     }
 
     @Test
-    fun mismatchedOwnerScopeIsRejected() = runBlocking {
+    fun eachMismatchedOwnerScopeFieldIsNamedAndRejected() = runBlocking {
         val cache = SubagentContextCache()
         val context = completed(cache, "task")
 
         val mismatches = listOf(
-            scope.copy(conversationId = Uuid.random()),
-            scope.copy(parentAssistantId = Uuid.random()),
-            scope.copy(workspaceId = Uuid.random()),
-            scope.copy(workspaceCwd = "/other"),
-            scope.copy(depth = 2),
-            scope.copy(profileName = "review"),
-            scope.copy(workspaceAccess = WorkspaceAccess.FULL),
-            scope.copy(permissionFingerprint = "expanded-permissions"),
+            "conversationId" to scope.copy(conversationId = Uuid.random()),
+            "parentAssistantId" to scope.copy(parentAssistantId = Uuid.random()),
+            "workspaceId" to scope.copy(workspaceId = Uuid.random()),
+            "workspaceCwd" to scope.copy(workspaceCwd = "/other"),
+            "depth" to scope.copy(depth = 2),
+            "profileName" to scope.copy(profileName = "review"),
+            "workspaceAccess" to scope.copy(workspaceAccess = WorkspaceAccess.FULL),
+            "permissionFingerprint" to scope.copy(permissionFingerprint = "expanded-permissions"),
         )
 
-        mismatches.forEach { mismatchedScope ->
+        mismatches.forEach { (fieldName, mismatchedScope) ->
             val error = expectContextError {
                 cache.acquireForReuse(context.contextId, mismatchedScope)
             }
             assertEquals(SubagentContextErrorCode.CONTEXT_SCOPE_MISMATCH, error.code)
+            assertTrue(error.message.orEmpty().contains("actual(cached)"))
+            assertTrue(error.message.orEmpty().contains("expected(requested)"))
+            assertTrue(error.message.orEmpty().contains(fieldName))
             assertEquals(SubagentStatus.COMPLETED, cache.snapshot(context.contextId)?.status)
         }
+    }
+
+    @Test
+    fun multipleScopeMismatchesAreReportedInStableFieldOrder() = runBlocking {
+        val cache = SubagentContextCache()
+        val context = completed(cache, "task")
+        val mismatchedScope = scope.copy(
+            conversationId = Uuid.random(),
+            workspaceCwd = "/other",
+            permissionFingerprint = "expanded-permissions",
+        )
+
+        val error = expectContextError {
+            cache.acquireForReuse(context.contextId, mismatchedScope)
+        }
+
+        assertEquals(SubagentContextErrorCode.CONTEXT_SCOPE_MISMATCH, error.code)
+        assertEquals(
+            "Subagent context scope mismatch: actual(cached) differs from expected(requested) for fields: " +
+                "conversationId, workspaceCwd, permissionFingerprint",
+            error.message,
+        )
+    }
+
+    @Test
+    fun permissionFingerprintMismatchDoesNotExposeSensitiveValues() = runBlocking {
+        val cache = SubagentContextCache()
+        val context = completed(cache, "task")
+        val requestedFingerprint = "secret-expanded-permissions"
+
+        val error = expectContextError {
+            cache.acquireForReuse(
+                context.contextId,
+                scope.copy(permissionFingerprint = requestedFingerprint),
+            )
+        }
+
+        assertEquals(SubagentContextErrorCode.CONTEXT_SCOPE_MISMATCH, error.code)
+        assertTrue(error.message.orEmpty().contains("permissionFingerprint"))
+        assertFalse(error.message.orEmpty().contains(scope.permissionFingerprint))
+        assertFalse(error.message.orEmpty().contains(requestedFingerprint))
     }
 
     @Test
