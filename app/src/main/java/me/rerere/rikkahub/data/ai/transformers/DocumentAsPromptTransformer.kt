@@ -13,6 +13,7 @@ import me.rerere.document.PptxParser
 import java.io.File
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

@@ -50,10 +50,12 @@ suspend fun createWorkspaceTools(
     cwd: String? = null,
     knownMounts: List<WorkspaceKnownMount> = emptyList(),
     extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    approvalOverrides: Map<String, Boolean>? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
-    val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
-    fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
+    val resolvedApprovalOverrides = approvalOverrides
+        ?: workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, resolvedApprovalOverrides)
 
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 

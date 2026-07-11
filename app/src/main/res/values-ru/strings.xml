@@ -1574,4 +1574,26 @@
   <string name="chat_input_default_model_saved">Модель %1$s установлена для ассистента по умолчанию</string>
   <string name="chat_input_default_model_unavailable">Сейчас нет доступной модели</string>
   <string name="chat_input_default_model_unknown">Неизвестная модель</string>
+  <string name="context_inspector_menu_title">Проверить контекст диалога</string>
+  <string name="context_inspector_menu_subtitle">Предпросмотр итоговых сообщений и инструментов следующего запроса</string>
+  <string name="context_inspector_title">Контекст диалога</string>
+  <string name="context_inspector_back">Назад</string>
+  <string name="context_inspector_refresh">Обновить</string>
+  <string name="context_inspector_copy_all">Копировать всё</string>
+  <string name="context_inspector_loading">Подготовка точного предпросмотра контекста…</string>
+  <string name="context_inspector_unknown_error">Не удалось подготовить предпросмотр контекста</string>
+  <string name="context_inspector_retry">Повторить</string>
+  <string name="context_inspector_empty">Итоговый контекст пуст</string>
+  <string name="context_inspector_overview">Обзор</string>
+  <string name="context_inspector_messages">Сообщения: %1$d</string>
+  <string name="context_inspector_history">Сохранено истории: %1$d / %2$d</string>
+  <string name="context_inspector_truncated">Обрезано: %1$s</string>
+  <string name="context_inspector_conversation_prompt">Системная инструкция диалога: %1$s</string>
+  <string name="context_inspector_characters">Символы: %1$d</string>
+  <string name="context_inspector_tools">Инструменты: %1$d</string>
+  <string name="context_inspector_yes">Да</string>
+  <string name="context_inspector_no">Нет</string>
+  <string name="context_inspector_error_assistant">Не удалось определить ассистента диалога</string>
+  <string name="context_inspector_error_model">Выберите модель чата перед проверкой контекста</string>
+  <string name="context_inspector_error_pending_tool">Обработайте ожидающий запрос инструмента перед просмотром следующего контекста модели</string>
 </resources>

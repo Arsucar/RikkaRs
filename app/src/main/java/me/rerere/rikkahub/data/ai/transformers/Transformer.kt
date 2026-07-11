@@ -17,7 +17,20 @@ class TransformerContext(
     val conversationLorebookIds: Set<Uuid> = emptySet(),
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     val workspaceCwd: String? = null,
+    val executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
 )
+
+enum class TransformerExecutionMode {
+    Send,
+    Preview,
+}
+
+enum class PreviewTransformPolicy {
+    Unsupported,
+    SideEffectFree,
+}
+
+class PreviewSideEffectRequiredException(message: String) : IllegalStateException(message)
 
 interface MessageTransformer {
     /**
@@ -35,7 +48,11 @@ interface MessageTransformer {
     }
 }
 
-interface InputMessageTransformer : MessageTransformer
+interface InputMessageTransformer : MessageTransformer {
+    /** New transformers fail closed in preview until their side effects are explicitly audited. */
+    val previewPolicy: PreviewTransformPolicy
+        get() = PreviewTransformPolicy.Unsupported
+}
 
 interface OutputMessageTransformer : MessageTransformer {
     /**
@@ -71,6 +88,7 @@ suspend fun List<UIMessage>.transforms(
     conversationLorebookIds: Set<Uuid> = emptySet(),
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     workspaceCwd: String? = null,
+    executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -81,8 +99,18 @@ suspend fun List<UIMessage>.transforms(
         conversationLorebookIds = conversationLorebookIds,
         processingStatus = processingStatus,
         workspaceCwd = workspaceCwd,
+        executionMode = executionMode,
     )
     return transformers.fold(this) { acc, transformer ->
+        if (
+            executionMode == TransformerExecutionMode.Preview &&
+            transformer is InputMessageTransformer &&
+            transformer.previewPolicy == PreviewTransformPolicy.Unsupported
+        ) {
+            throw PreviewSideEffectRequiredException(
+                "${transformer::class.simpleName ?: "Unknown transformer"} cannot run without side effects in preview",
+            )
+        }
         transformer.transform(ctx, acc)
     }
 }

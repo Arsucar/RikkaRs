@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +46,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Save
+import com.composables.icons.lucide.ScanEye
 import com.composables.icons.lucide.Trash2
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -53,11 +55,14 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.utils.UiState
 
 // #89: 对话级记忆表右侧抽屉。
 // - 查看当前对话生效的记忆表（CONVERSATION 及继承的 ASSISTANT/GLOBAL）
@@ -164,6 +169,7 @@ private fun scopeLabel(scopeType: MemoryTableScopeType): String = when (scopeTyp
 private enum class ConversationDrawerScreen {
     Menu,
     MemoryTable,
+    ContextInspector,
 }
 
 /**
@@ -190,6 +196,9 @@ fun ConversationDrawerContent(
     onCreateConversationDocument: (templateId: String) -> Unit,
     onDeleteDocument: (documentId: String) -> Unit,
     onSetFollow: (documentId: String, follow: Boolean) -> Unit,
+    contextPreviewState: UiState<ContextPreview>,
+    onLoadContextPreview: () -> Unit,
+    onClearContextPreview: () -> Unit,
 ) {
     // onDismiss 已由中转菜单移除（不再有关闭按钮），关闭统一走遮罩点击/返回键。
     var screen by remember { mutableStateOf(ConversationDrawerScreen.Menu) }
@@ -198,12 +207,17 @@ fun ConversationDrawerContent(
     LaunchedEffect(drawerOpen) {
         if (!drawerOpen) {
             screen = ConversationDrawerScreen.Menu
+            onClearContextPreview()
         }
     }
 
     when (screen) {
         ConversationDrawerScreen.Menu -> ConversationDrawerMenu(
             onOpenMemoryTable = { screen = ConversationDrawerScreen.MemoryTable },
+            onOpenContextInspector = {
+                screen = ConversationDrawerScreen.ContextInspector
+                onLoadContextPreview()
+            },
         )
 
         ConversationDrawerScreen.MemoryTable -> ConversationMemoryTableDrawerContent(
@@ -220,6 +234,15 @@ fun ConversationDrawerContent(
             onDeleteDocument = onDeleteDocument,
             onSetFollow = onSetFollow,
         )
+
+        ConversationDrawerScreen.ContextInspector -> ConversationContextInspector(
+            state = contextPreviewState,
+            onBack = {
+                onClearContextPreview()
+                screen = ConversationDrawerScreen.Menu
+            },
+            onRefresh = onLoadContextPreview,
+        )
     }
 }
 
@@ -227,6 +250,7 @@ fun ConversationDrawerContent(
 @Composable
 private fun ConversationDrawerMenu(
     onOpenMemoryTable: () -> Unit,
+    onOpenContextInspector: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -239,6 +263,12 @@ private fun ConversationDrawerMenu(
             title = "对话记忆表",
             subtitle = "查看并管理当前对话生效的记忆表",
             onClick = onOpenMemoryTable,
+        )
+        ConversationDrawerMenuItem(
+            icon = Lucide.ScanEye,
+            title = stringResource(R.string.context_inspector_menu_title),
+            subtitle = stringResource(R.string.context_inspector_menu_subtitle),
+            onClick = onOpenContextInspector,
         )
     }
 }

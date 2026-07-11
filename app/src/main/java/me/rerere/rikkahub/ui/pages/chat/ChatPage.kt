@@ -78,8 +78,7 @@ import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.getAssistantById
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.datastore.resolveAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.resolveChatModelId
 import me.rerere.rikkahub.data.files.FilesManager
@@ -146,6 +145,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val horizontalGestureExclusionState = remember { HorizontalGestureExclusionState() }
     val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
+    val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
@@ -352,6 +352,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                     }
                                 }
                             },
+                            contextPreviewState = contextPreviewState,
+                            onLoadContextPreview = vm::loadContextPreview,
+                            onClearContextPreview = vm::clearContextPreview,
                         )
                     }
                 }
@@ -461,7 +464,7 @@ private fun ChatPageContent(
     val skillManager: SkillManager = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
-    val assistant = setting.getCurrentAssistant()
+    val assistant = setting.resolveAssistant(conversation)
     var showFilesSheet by remember { mutableStateOf(false) }
     val unknownModelName = stringResource(R.string.chat_input_default_model_unknown)
     val defaultModelName = currentChatModel?.let { model ->
@@ -548,6 +551,7 @@ private fun ChatPageContent(
                     state = inputState,
                     loading = loadingJob != null,
                     settings = setting,
+                    assistant = assistant,
                     hazeState = hazeState,
                     completionProviders = completionProviders,
                     chatModelId = setting.resolveChatModelId(conversation),
@@ -961,7 +965,7 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Column {
-                    val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+                    val assistant = settings.resolveAssistant(conversation)
                     val model = settings.getCurrentChatModel(conversation)
                     val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
                     Text(

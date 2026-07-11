@@ -135,6 +135,7 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
 }
 
 object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     private val defaultProvider = DefaultPlaceholderProvider
 
     override suspend fun transform(

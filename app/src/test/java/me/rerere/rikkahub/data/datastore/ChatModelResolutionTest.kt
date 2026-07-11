@@ -8,6 +8,37 @@ import kotlin.uuid.Uuid
 
 class ChatModelResolutionTest {
     @Test
+    fun conversationAssistantOverridesGloballySelectedAssistant() {
+        val selectedAssistant = Assistant(name = "Selected")
+        val conversationAssistant = Assistant(name = "Conversation")
+        val settings = Settings.dummy().copy(
+            assistantId = selectedAssistant.id,
+            assistants = listOf(selectedAssistant, conversationAssistant),
+        )
+        val conversation = Conversation(
+            assistantId = conversationAssistant.id,
+            messageNodes = emptyList(),
+        )
+
+        assertEquals(conversationAssistant, settings.resolveAssistant(conversation))
+    }
+
+    @Test
+    fun missingConversationAssistantFallsBackToGloballySelectedAssistant() {
+        val selectedAssistant = Assistant(name = "Selected")
+        val settings = Settings.dummy().copy(
+            assistantId = selectedAssistant.id,
+            assistants = listOf(selectedAssistant),
+        )
+        val conversation = Conversation(
+            assistantId = Uuid.random(),
+            messageNodes = emptyList(),
+        )
+
+        assertEquals(selectedAssistant, settings.resolveAssistant(conversation))
+    }
+
+    @Test
     fun conversationModelOverridesAssistantAndGlobalModel() {
         val globalModelId = Uuid.random()
         val assistantModelId = Uuid.random()

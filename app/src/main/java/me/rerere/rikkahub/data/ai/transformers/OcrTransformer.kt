@@ -27,6 +27,8 @@ import kotlin.time.Duration.Companion.days
 private const val TAG = "OcrTransformer"
 
 object OcrTransformer : InputMessageTransformer, KoinComponent {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
+
     private val cache by lazy {
         val context = get<Context>()
         val json = Json { allowStructuredMapKeys = true }
@@ -40,7 +42,7 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
             capacity = 64,
             store = store,
             deleteOnEvict = true,
-            preloadFromStore = true,
+            preloadFromStore = false,
             expireAfterWriteMillis = 3.days.inWholeMilliseconds,
         )
     }
@@ -60,13 +62,21 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
 
         return withContext(Dispatchers.IO) {
             try {
-                ctx.processingStatus.value = "正在识别图片..."
+                if (ctx.executionMode == TransformerExecutionMode.Send) {
+                    ctx.processingStatus.value = "正在识别图片..."
+                }
                 messages.map { message ->
                     message.copy(
                         parts = message.parts.map { part ->
                             when {
                                 part is UIMessagePart.Image && part.url.startsWith("file:") -> {
-                                    UIMessagePart.Text(performOcr(part))
+                                    UIMessagePart.Text(
+                                        if (ctx.executionMode == TransformerExecutionMode.Preview) {
+                                            performCachedOcr(part)
+                                        } else {
+                                            performOcr(part)
+                                        },
+                                    )
                                 }
 
                                 else -> part
@@ -75,9 +85,20 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
                     )
                 }
             } finally {
-                ctx.processingStatus.value = null
+                if (ctx.executionMode == TransformerExecutionMode.Send) {
+                    ctx.processingStatus.value = null
+                }
             }
         }
+    }
+
+    internal fun performCachedOcr(
+        part: UIMessagePart.Image,
+        lookup: (String) -> String? = cache::peek,
+    ): String {
+        return lookup(part.url) ?: throw PreviewSideEffectRequiredException(
+            "OCR cache is missing for ${part.url}; an exact preview would require an OCR request",
+        )
     }
 
     suspend fun performOcr(part: UIMessagePart.Image): String = runCatching {

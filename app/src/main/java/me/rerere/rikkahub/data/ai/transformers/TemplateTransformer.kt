@@ -16,6 +16,7 @@ class TemplateTransformer(
     private val engine: PebbleEngine,
     private val settingsStore: SettingsStore
 ) : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

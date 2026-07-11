@@ -34,6 +34,7 @@ class MemoryTableInjectionTransformer(
     private val maxTokens: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
     private val maxChars: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
 ) : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

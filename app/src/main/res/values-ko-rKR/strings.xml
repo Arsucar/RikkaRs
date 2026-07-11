@@ -1574,4 +1574,26 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_input_default_model_saved">%1$s을(를) 어시스턴트 기본 모델로 설정했습니다</string>
   <string name="chat_input_default_model_unavailable">현재 사용 가능한 모델이 없습니다</string>
   <string name="chat_input_default_model_unknown">알 수 없는 모델</string>
+  <string name="context_inspector_menu_title">대화 컨텍스트 확인</string>
+  <string name="context_inspector_menu_subtitle">다음 모델 요청의 최종 메시지와 도구 미리보기</string>
+  <string name="context_inspector_title">대화 컨텍스트</string>
+  <string name="context_inspector_back">뒤로</string>
+  <string name="context_inspector_refresh">새로고침</string>
+  <string name="context_inspector_copy_all">모두 복사</string>
+  <string name="context_inspector_loading">정확한 컨텍스트 미리보기를 준비하는 중…</string>
+  <string name="context_inspector_unknown_error">컨텍스트 미리보기를 준비할 수 없습니다</string>
+  <string name="context_inspector_retry">다시 시도</string>
+  <string name="context_inspector_empty">최종 컨텍스트가 비어 있습니다</string>
+  <string name="context_inspector_overview">개요</string>
+  <string name="context_inspector_messages">메시지: %1$d</string>
+  <string name="context_inspector_history">유지된 기록: %1$d / %2$d</string>
+  <string name="context_inspector_truncated">잘림: %1$s</string>
+  <string name="context_inspector_conversation_prompt">대화 시스템 프롬프트: %1$s</string>
+  <string name="context_inspector_characters">문자 수: %1$d</string>
+  <string name="context_inspector_tools">도구: %1$d</string>
+  <string name="context_inspector_yes">예</string>
+  <string name="context_inspector_no">아니요</string>
+  <string name="context_inspector_error_assistant">대화의 어시스턴트를 확인할 수 없습니다</string>
+  <string name="context_inspector_error_model">컨텍스트를 확인하기 전에 채팅 모델을 선택하세요</string>
+  <string name="context_inspector_error_pending_tool">보류 중인 도구 요청을 처리한 후 다음 모델 컨텍스트를 미리 보세요</string>
 </resources>

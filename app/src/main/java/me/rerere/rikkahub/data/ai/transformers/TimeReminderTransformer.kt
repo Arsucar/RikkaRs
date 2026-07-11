@@ -19,6 +19,7 @@ private const val TIME_GAP_THRESHOLD_SECONDS = 3600L // 1 小时
  * 在时间间隔较大的消息之前自动注入 <time_reminder>，帮助 AI 了解对话的时间间隔
  */
 object TimeReminderTransformer : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

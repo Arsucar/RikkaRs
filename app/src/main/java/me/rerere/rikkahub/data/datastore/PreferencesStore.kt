@@ -932,8 +932,12 @@ fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {
 
 fun Settings.resolveChatModelId(
     conversation: Conversation? = null,
-    assistant: Assistant = conversation?.let { getAssistantById(it.assistantId) } ?: getCurrentAssistant(),
+    assistant: Assistant = resolveAssistant(conversation),
 ): Uuid = conversation?.chatModelId ?: assistant.chatModelId ?: chatModelId
+
+fun Settings.resolveAssistant(conversation: Conversation? = null): Assistant {
+    return conversation?.let { getAssistantById(it.assistantId) } ?: getCurrentAssistant()
+}
 
 fun Settings.getCurrentChatModel(conversation: Conversation? = null): Model? {
     return findModelById(resolveChatModelId(conversation))

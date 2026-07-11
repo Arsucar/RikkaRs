@@ -41,8 +41,8 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
-import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.TransformerExecutionMode
 import me.rerere.rikkahub.data.files.FileFolders
 import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
@@ -103,6 +103,36 @@ class GenerationHandler(
     private val json: Json,
     private val memoryRepo: MemoryRepository,
 ) {
+    suspend fun prepareFirstProviderInput(
+        settings: Settings,
+        model: Model,
+        messages: List<UIMessage>,
+        inputTransformers: List<InputMessageTransformer>,
+        assistant: Assistant,
+        memories: List<AssistantMemory>,
+        tools: List<Tool>,
+        conversationSystemPrompt: String? = null,
+        conversationModeInjectionIds: Set<Uuid> = emptySet(),
+        conversationLorebookIds: Set<Uuid> = emptySet(),
+        workspaceCwd: String? = null,
+        mode: GenerationPreparationMode,
+        processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    ): PreparedProviderInput = prepareProviderInput(
+        settings = settings,
+        model = model,
+        messages = messages,
+        transformers = inputTransformers,
+        assistant = assistant,
+        memories = memories,
+        tools = buildToolsForStep(assistant = assistant, tools = tools, isLastStep = false),
+        conversationSystemPrompt = conversationSystemPrompt,
+        conversationModeInjectionIds = conversationModeInjectionIds,
+        conversationLorebookIds = conversationLorebookIds,
+        workspaceCwd = workspaceCwd,
+        mode = mode,
+        processingStatus = processingStatus,
+    )
+
     fun generateText(
         settings: Settings,
         model: Model,
@@ -121,6 +151,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        firstPreparedInput: PreparedProviderInput? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -142,50 +173,25 @@ class GenerationHandler(
             val inCountdown = countdownThreshold > 0 && !isLastStep && countdownRemaining <= countdownThreshold
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id}) isLastStep=$isLastStep remaining=$remaining")
 
-            if (isLastStep) {
+            val injectedStepPrompt = if (isLastStep) {
                 messages = messages + UIMessage.user(MAX_STEPS_PROMPT.trimIndent())
+                true
             } else if (inCountdown) {
                 messages = messages + UIMessage.user(
                     "[$stepsCountdownLabel remaining: $countdownRemaining/$countdownTotal] " +
                         "Focus on completing the core task. Avoid further exploration."
                 )
+                true
+            } else {
+                false
             }
 
-            val toolsInternal = buildList {
-                if (isLastStep) {
-                    Log.i(TAG, "streamText: last step reached, disabling all tools to force summary")
-                } else {
-                    Log.i(TAG, "generateInternal: build tools($assistant)")
-                    if (assistant.enableMemory) {
-                        val defaultMemoryScope = if (assistant.useGlobalMemory) MemoryScope.GLOBAL else MemoryScope.ASSISTANT
-                        buildMemoryTools(
-                            json = json,
-                            defaultScope = defaultMemoryScope,
-                            onList = {
-                                memoryRepo.getEffectiveMemories(assistant.id.toString())
-                            },
-                            onCreation = { content, scope ->
-                                memoryRepo.addMemory(
-                                    assistantId = assistant.id.toString(),
-                                    content = content,
-                                    scope = scope,
-                                )
-                            },
-                            onUpdate = { id, content, scope ->
-                                memoryRepo.updateMemory(
-                                    id = id,
-                                    content = content,
-                                    scope = scope,
-                                    assistantId = assistant.id.toString(),
-                                )
-                            },
-                            onDelete = { id ->
-                                memoryRepo.deleteMemory(id)
-                            }
-                        ).let(this::addAll)
-                    }
-                    addAll(tools)
-                }
+            val canReuseFirstPreparedInput =
+                stepIndex == 0 && firstPreparedInput != null && !injectedStepPrompt
+            val toolsInternal = if (canReuseFirstPreparedInput) {
+                checkNotNull(firstPreparedInput).tools
+            } else {
+                buildToolsForStep(assistant, tools, isLastStep)
             }
 
             // Check if we have tool calls ready to continue after user interaction.
@@ -233,6 +239,7 @@ class GenerationHandler(
                     conversationModeInjectionIds = conversationModeInjectionIds,
                     conversationLorebookIds = conversationLorebookIds,
                     workspaceCwd = workspaceCwd,
+                    preparedInput = if (canReuseFirstPreparedInput) checkNotNull(firstPreparedInput) else null,
                 )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
@@ -373,7 +380,7 @@ class GenerationHandler(
         settings: Settings,
         messages: List<UIMessage>,
         onUpdateMessages: suspend (List<UIMessage>) -> Unit,
-        transformers: List<MessageTransformer>,
+        transformers: List<InputMessageTransformer>,
         model: Model,
         providerImpl: Provider<ProviderSetting>,
         provider: ProviderSetting,
@@ -385,51 +392,29 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        preparedInput: PreparedProviderInput? = null,
     ) {
-        val internalMessages = buildList {
-            val system = buildString {
-                val effectiveSystemPrompt =
-                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
-                        conversationSystemPrompt
-                    } else {
-                        assistant.systemPrompt
-                    }
-                if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
-                // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-            }
-            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
-        }.transforms(
-            transformers = transformers,
-            context = context,
-            model = model,
-            assistant = assistant,
+        val prepared = preparedInput ?: prepareProviderInput(
             settings = settings,
+            model = model,
+            messages = messages,
+            transformers = transformers,
+            assistant = assistant,
+            memories = memories,
+            tools = tools,
+            conversationSystemPrompt = conversationSystemPrompt,
             conversationModeInjectionIds = conversationModeInjectionIds,
             conversationLorebookIds = conversationLorebookIds,
-            processingStatus = processingStatus,
             workspaceCwd = workspaceCwd,
+            mode = GenerationPreparationMode.Send,
+            processingStatus = processingStatus,
         )
-
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
             model = model,
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
-            tools = tools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
@@ -440,17 +425,18 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
-        ProviderRateLimiter.await(
-            provider = provider,
-            messages = internalMessages,
-            params = params,
-        )
         if (stream) {
-            providerImpl.streamText(
+            executePreparedProviderRequest(
                 providerSetting = provider,
-                messages = internalMessages,
-                params = params
-            ).collect {
+                prepared = prepared,
+                params = params,
+            ) { exactMessages, exactParams ->
+                providerImpl.streamText(
+                    providerSetting = provider,
+                    messages = exactMessages,
+                    params = exactParams,
+                )
+            }.collect {
                 messages = messages.handleMessageChunk(chunk = it, model = model)
                 it.usage?.let { usage ->
                     messages = messages.mapIndexed { index, message ->
@@ -464,11 +450,17 @@ class GenerationHandler(
                 onUpdateMessages(messages)
             }
         } else {
-            val chunk = providerImpl.generateText(
+            val chunk = executePreparedProviderRequest(
                 providerSetting = provider,
-                messages = internalMessages,
+                prepared = prepared,
                 params = params,
-            )
+            ) { exactMessages, exactParams ->
+                providerImpl.generateText(
+                    providerSetting = provider,
+                    messages = exactMessages,
+                    params = exactParams,
+                )
+            }
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
             chunk.usage?.let { usage ->
                 messages = messages.mapIndexed { index, message ->
@@ -483,6 +475,110 @@ class GenerationHandler(
             }
             onUpdateMessages(messages)
         }
+    }
+
+    private fun buildToolsForStep(
+        assistant: Assistant,
+        tools: List<Tool>,
+        isLastStep: Boolean,
+    ): List<Tool> = buildList {
+        if (isLastStep) {
+            Log.i(TAG, "streamText: last step reached, disabling all tools to force summary")
+            return@buildList
+        }
+        Log.i(TAG, "generateInternal: build tools($assistant)")
+        if (assistant.enableMemory) {
+            val defaultMemoryScope = if (assistant.useGlobalMemory) MemoryScope.GLOBAL else MemoryScope.ASSISTANT
+            addAll(
+                buildMemoryTools(
+                    json = json,
+                    defaultScope = defaultMemoryScope,
+                    onList = { memoryRepo.getEffectiveMemories(assistant.id.toString()) },
+                    onCreation = { content, scope ->
+                        memoryRepo.addMemory(assistant.id.toString(), content, scope)
+                    },
+                    onUpdate = { id, content, scope ->
+                        memoryRepo.updateMemory(
+                            id = id,
+                            content = content,
+                            scope = scope,
+                            assistantId = assistant.id.toString(),
+                        )
+                    },
+                    onDelete = { id -> memoryRepo.deleteMemory(id) },
+                ),
+            )
+        }
+        addAll(tools)
+    }
+
+    private suspend fun prepareProviderInput(
+        settings: Settings,
+        model: Model,
+        messages: List<UIMessage>,
+        transformers: List<InputMessageTransformer>,
+        assistant: Assistant,
+        memories: List<AssistantMemory>,
+        tools: List<Tool>,
+        conversationSystemPrompt: String?,
+        conversationModeInjectionIds: Set<Uuid>,
+        conversationLorebookIds: Set<Uuid>,
+        workspaceCwd: String?,
+        mode: GenerationPreparationMode,
+        processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    ): PreparedProviderInput {
+        val preparedTools = tools.snapshotToolDefinitions()
+        val usedConversationSystemPrompt =
+            assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()
+        val retainedMessages = messages.limitContext(assistant.contextMessageSize)
+        val internalMessages = buildList {
+            val system = buildString {
+                val effectiveSystemPrompt =
+                    if (usedConversationSystemPrompt) {
+                        conversationSystemPrompt.orEmpty()
+                    } else {
+                        assistant.systemPrompt
+                    }
+                if (effectiveSystemPrompt.isNotBlank()) {
+                    append(effectiveSystemPrompt)
+                }
+
+                // 记忆
+                if (assistant.enableMemory) {
+                    appendLine()
+                    append(buildMemoryPrompt(memories = memories))
+                }
+                // 工具prompt
+                preparedTools.forEach { tool ->
+                    appendLine()
+                    append(tool.systemPrompt(model, messages))
+                }
+            }
+            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+            addAll(retainedMessages)
+        }.transforms(
+            transformers = transformers,
+            context = context,
+            model = model,
+            assistant = assistant,
+            settings = settings,
+            conversationModeInjectionIds = conversationModeInjectionIds,
+            conversationLorebookIds = conversationLorebookIds,
+            processingStatus = processingStatus,
+            workspaceCwd = workspaceCwd,
+            executionMode = if (mode == GenerationPreparationMode.Preview) {
+                TransformerExecutionMode.Preview
+            } else {
+                TransformerExecutionMode.Send
+            },
+        )
+        return PreparedProviderInput(
+            messages = internalMessages,
+            tools = preparedTools,
+            sourceMessageCount = messages.size,
+            retainedSourceMessageCount = retainedMessages.size,
+            usedConversationSystemPrompt = usedConversationSystemPrompt,
+        )
     }
 
     private suspend fun executeSingleTool(
@@ -680,6 +776,21 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+}
+
+internal suspend fun <T : ProviderSetting, R> executePreparedProviderRequest(
+    providerSetting: T,
+    prepared: PreparedProviderInput,
+    params: TextGenerationParams,
+    request: suspend (messages: List<UIMessage>, params: TextGenerationParams) -> R,
+): R {
+    val exactParams = params.copy(tools = prepared.tools)
+    ProviderRateLimiter.await(
+        provider = providerSetting,
+        messages = prepared.messages,
+        params = exactParams,
+    )
+    return request(prepared.messages, exactParams)
 }
 
 internal fun resolveGenerationCountdownRemaining(

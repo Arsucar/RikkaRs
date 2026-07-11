@@ -46,8 +46,13 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.ContextPreview
+import me.rerere.rikkahub.data.ai.GenerationPreparationMode
+import me.rerere.rikkahub.data.ai.GenerationPreparationException
+import me.rerere.rikkahub.data.ai.PreparedProviderInput
 import me.rerere.rikkahub.data.ai.ProviderRateLimiter
 import me.rerere.rikkahub.data.ai.currentToolCallId
+import me.rerere.rikkahub.data.ai.toContextPreview
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -87,6 +92,7 @@ import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
+import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.SlashSkillInputTransformer
@@ -105,9 +111,12 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.resolveAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.shouldEnableMemoryTable
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -137,6 +146,61 @@ private data class AssistantSkillMounts(
     val knownMounts: List<WorkspaceKnownMount>,
     val bindMounts: List<WorkspaceBindMount>,
 )
+
+private data class PreparedGenerationRequest(
+    val conversation: Conversation,
+    val assistant: Assistant,
+    val model: Model,
+    val settings: Settings,
+    val messages: List<UIMessage>,
+    val memories: List<AssistantMemory>,
+    val inputTransformers: List<InputMessageTransformer>,
+    val tools: List<Tool>,
+    val workspaceCwd: String?,
+    val providerInput: PreparedProviderInput?,
+)
+
+private data class ResolvedGenerationTarget(
+    val assistant: Assistant,
+    val model: Model,
+)
+
+private fun Settings.resolveGenerationTarget(conversation: Conversation): ResolvedGenerationTarget? {
+    val assistant = resolveAssistant(conversation)
+    val model = getCurrentChatModel(conversation) ?: return null
+    return ResolvedGenerationTarget(assistant = assistant, model = model)
+}
+
+internal fun sanitizeInvalidMessages(conversation: Conversation): Conversation {
+    val sanitizedNodes = conversation.messageNodes.mapNotNull { originalNode ->
+        if (originalNode.messages.isEmpty()) return@mapNotNull null
+        val node = if (originalNode.selectIndex in originalNode.messages.indices) {
+            originalNode
+        } else {
+            originalNode.copy(selectIndex = 0)
+        }
+        val currentMessage = node.currentMessage
+        val unresolvedTools = currentMessage.getTools().filter { !it.isExecuted }
+        if (unresolvedTools.isEmpty() || unresolvedTools.any { it.canResumeExecution }) {
+            return@mapNotNull node
+        }
+
+        val remaining = node.messages.filter { it.id != currentMessage.id }
+        if (remaining.isEmpty()) return@mapNotNull null
+        node.copy(
+            messages = remaining,
+            selectIndex = (node.selectIndex - 1).coerceIn(remaining.indices),
+        )
+    }
+    return if (sanitizedNodes == conversation.messageNodes) {
+        conversation
+    } else {
+        conversation.copy(messageNodes = sanitizedNodes)
+    }
+}
+
+internal fun List<UIMessage>.hasResumablePendingTool(): Boolean =
+    lastOrNull()?.getTools()?.any { it.canResumeExecution } == true
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -278,9 +342,6 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
 ) {
-    // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
-    private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
-
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
@@ -613,9 +674,9 @@ class ChatService(
     ) {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
-        val assistant = settings.getAssistantById(initialConversation.assistantId)
-            ?: settings.getCurrentAssistant()
-        val model = settings.getCurrentChatModel(initialConversation) ?: return
+        val target = settings.resolveGenerationTarget(initialConversation) ?: return
+        val assistant = target.assistant
+        val model = target.model
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -639,203 +700,39 @@ class ChatService(
                 }
             }
 
-            // check invalid messages
-            checkInvalidMessages(conversationId)
-            val conversation = getConversationFlow(conversationId).value
-            // 有效 CWD：会话级 > 助手默认 > /workspace，统一规范化
-            val effectiveWorkspaceCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
-            val memoryTableEnabled = shouldEnableMemoryTable(
-                settingsEnabled = settings.enableMemoryTable,
-                assistantEnabled = assistant.enableMemoryTable,
+            // Keep send cleanup behavior, but derive it through the same pure projection used by preview.
+            val currentConversation = getConversationFlow(conversationId).value
+            val conversation = sanitizeInvalidMessages(currentConversation)
+            if (conversation != currentConversation) {
+                updateConversation(conversationId, conversation)
+            }
+            val session = getOrCreateSession(conversationId)
+            val prepared = prepareGenerationRequest(
+                settings = settings,
+                assistant = assistant,
+                model = model,
+                conversation = conversation,
+                messageRange = messageRange,
+                mode = GenerationPreparationMode.Send,
+                processingStatus = session.processingStatus,
             )
-            val memoryTableTemplates = if (memoryTableEnabled) {
-                memoryTableRepository.getTemplates()
-            } else {
-                emptyList()
-            }
-            val memoryTableDocuments = if (memoryTableEnabled) {
-                memoryTableRepository.getEffectiveDocuments(
-                    assistantId = assistant.id.toString(),
-                    conversationId = conversation.id.toString(),
-                ).let { docs ->
-                    // #89: 对话开启隔离时，仅注入对话级记忆表，屏蔽助手级/全局，避免重复注入。
-                    if (conversation.memoryTableIsolation) {
-                        docs.filter { it.scopeType == MemoryTableScopeType.CONVERSATION }
-                    } else {
-                        docs
-                    }
-                }
-            } else {
-                emptyList()
-            }
 
             // start generating
-            val session = getOrCreateSession(conversationId)
             generationHandler.generateText(
-                settings = settings,
-                model = model,
+                settings = prepared.settings,
+                model = prepared.model,
                 processingStatus = session.processingStatus,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
-                assistant = assistant,
-                conversationSystemPrompt = conversation.customSystemPrompt,
-                conversationModeInjectionIds = conversation.modeInjectionIds,
-                conversationLorebookIds = conversation.lorebookIds,
-                workspaceCwd = effectiveWorkspaceCwd,
-                memories = memoryRepository.getEffectiveMemories(assistant.id.toString()),
-                inputTransformers = buildList {
-                    addAll(inputTransformers)
-                    if (memoryTableEnabled) {
-                        add(
-                            MemoryTableInjectionTransformer(
-                                templates = memoryTableTemplates,
-                                documents = memoryTableDocuments,
-                            )
-                        )
-                    }
-                    add(templateTransformer)
-                    add(workspaceReminderTransformer)
-                },
+                messages = prepared.messages,
+                assistant = prepared.assistant,
+                conversationSystemPrompt = prepared.conversation.customSystemPrompt,
+                conversationModeInjectionIds = prepared.conversation.modeInjectionIds,
+                conversationLorebookIds = prepared.conversation.lorebookIds,
+                workspaceCwd = prepared.workspaceCwd,
+                memories = prepared.memories,
+                inputTransformers = prepared.inputTransformers,
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    val delegateOnly = assistant.enableSubagents && assistant.subagentDelegateOnly
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-                    addAll(
-                        localTools.getTools(
-                            if (delegateOnly) {
-                                assistant.localTools.filter { it in DELEGATE_ALLOWED_LOCAL_TOOLS }
-                            } else {
-                                assistant.localTools
-                            }
-                        )
-                    )
-                    if (assistant.enableRecentChatsReference) {
-                        addAll(createConversationTools(conversationRepo, assistant.id))
-                    }
-                    addAll(
-                        buildMemoryTableToolsIfEnabled(
-                            enabled = memoryTableEnabled,
-                            json = json,
-                            assistantId = assistant.id.toString(),
-                            conversationId = conversation.id.toString(),
-                            readDocuments = {
-                                memoryTableRepository.getEffectiveDocuments(
-                                    assistantId = assistant.id.toString(),
-                                    conversationId = conversation.id.toString(),
-                                )
-                            },
-                            getDocument = { documentId ->
-                                memoryTableRepository.getDocument(documentId)
-                            },
-                            upsertDocument = { document ->
-                                memoryTableRepository.upsertDocument(document)
-                            },
-                            deleteDocument = { documentId ->
-                                memoryTableRepository.deleteDocument(documentId)
-                            },
-                            readTemplates = {
-                                memoryTableRepository.getTemplates()
-                            },
-                            upsertTemplate = { template ->
-                                memoryTableRepository.upsertTemplate(template)
-                            },
-                            deleteTemplate = { templateId ->
-                                memoryTableRepository.deleteTemplate(templateId)
-                            },
-                        )
-                    )
-                    addAll(
-                        createWorkspaceToolsIfReady(
-                            workspaceId = assistant.workspaceId?.toString(),
-                            assistantId = assistant.id,
-                            cwd = effectiveWorkspaceCwd,
-                            readOnly = delegateOnly,
-                        )
-                    )
-                    if (!delegateOnly && assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkillsForAssistant(assistant.id),
-                            )
-                        )
-                    }
-                    if (!delegateOnly) {
-                        addAll(
-                            buildSkillManagementTools(
-                                assistantId = assistant.id,
-                                skillManager = skillManager,
-                                autoEnable = true,
-                                onSkillEnabled = { skillName ->
-                                    settingsStore.update { settings ->
-                                        settings.copy(
-                                            assistants = settings.assistants.map { a ->
-                                                if (a.id == assistant.id) {
-                                                    a.copy(enabledSkills = a.enabledSkills + skillName)
-                                                } else {
-                                                    a
-                                                }
-                                            }
-                                        )
-                                    }
-                                },
-                            )
-                        )
-                    }
-                    if (!delegateOnly) {
-                        mcpManager.getAllAvailableTools().also { allTools ->
-                            val invalidNames = allTools
-                                .map { it.second }
-                                .distinct()
-                                .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
-                            if (invalidNames.isNotEmpty()) {
-                                addError(
-                                    error = IllegalStateException(
-                                        context.getString(
-                                            R.string.error_mcp_invalid_server_name,
-                                            invalidNames.joinToString(", ")
-                                        )
-                                    ),
-                                    conversationId = conversationId,
-                                )
-                                return
-                            }
-                        }.forEach { (serverId, serverName, tool) ->
-                            add(
-                                Tool(
-                                    name = "mcp__${serverName}__${tool.name}",
-                                    description = tool.description ?: "",
-                                    parameters = { tool.inputSchema },
-                                    needsApproval = { tool.needsApproval },
-                                    execute = {
-                                        mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                    },
-                                )
-                            )
-                        }
-                    }
-                    if (assistant.enableSubagents) {
-                        addAll(
-                            buildSubagentToolsForChat(
-                                assistant = assistant,
-                                settings = settings,
-                                parentModel = model,
-                                parentTools = this@buildList,
-                                workspaceCwd = effectiveWorkspaceCwd,
-                                conversationId = conversationId,
-                                depth = 0,
-                                delegateOnly = delegateOnly,
-                            ),
-                        )
-                    }
-                },
+                tools = prepared.tools,
+                firstPreparedInput = prepared.providerInput,
             ).onCompletion {
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
@@ -884,7 +781,12 @@ class ChatService(
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
             it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            if (it is GenerationPreparationException.InvalidMcpServerName) {
+                // Preserve the pre-refactor send behavior: report the MCP validation error directly.
+                addError(it, conversationId)
+            } else {
+                addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            }
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
             cleanupStreamingSubagentMetadata(conversationId)
@@ -902,14 +804,255 @@ class ChatService(
         }
     }
 
+    suspend fun buildContextPreview(conversationId: Uuid): ContextPreview {
+        val settings = settingsStore.settingsFlow.first()
+        val conversation = sanitizeInvalidMessages(getConversationFlow(conversationId).value)
+        val target = settings.resolveGenerationTarget(conversation)
+            ?: throw IllegalStateException(context.getString(R.string.context_inspector_error_model))
+        return prepareGenerationRequest(
+            settings = settings,
+            assistant = target.assistant,
+            model = target.model,
+            conversation = conversation,
+            messageRange = null,
+            mode = GenerationPreparationMode.Preview,
+        ).providerInput?.toContextPreview(json)
+            ?: error("Preview preparation did not produce provider input")
+    }
+
+    private suspend fun prepareGenerationRequest(
+        settings: Settings,
+        assistant: Assistant,
+        model: Model,
+        conversation: Conversation,
+        messageRange: ClosedRange<Int>?,
+        mode: GenerationPreparationMode,
+        processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    ): PreparedGenerationRequest {
+        val effectiveWorkspaceCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
+        val workspace = assistant.workspaceId
+            ?.toString()
+            ?.let { workspaceRepository.getById(it) }
+        val memoryTableEnabled = shouldEnableMemoryTable(
+            settingsEnabled = settings.enableMemoryTable,
+            assistantEnabled = assistant.enableMemoryTable,
+        )
+        val memoryTableTemplates = if (memoryTableEnabled) memoryTableRepository.getTemplates() else emptyList()
+        val memoryTableDocuments = if (memoryTableEnabled) {
+            memoryTableRepository.getEffectiveDocuments(
+                assistantId = assistant.id.toString(),
+                conversationId = conversation.id.toString(),
+            ).let { documents ->
+                if (conversation.memoryTableIsolation) {
+                    documents.filter { it.scopeType == MemoryTableScopeType.CONVERSATION }
+                } else {
+                    documents
+                }
+            }
+        } else {
+            emptyList()
+        }
+        val messages = if (messageRange != null) {
+            conversation.currentMessages.subList(messageRange.start, messageRange.endInclusive + 1)
+        } else {
+            conversation.currentMessages
+        }
+        val hasResumablePendingTool = messages.hasResumablePendingTool()
+        if (mode == GenerationPreparationMode.Preview && hasResumablePendingTool) {
+            throw GenerationPreparationException.PendingToolExecution(
+                context.getString(R.string.context_inspector_error_pending_tool),
+            )
+        }
+        val transformers = buildList {
+            addAll(inputTransformers)
+            if (memoryTableEnabled) {
+                add(MemoryTableInjectionTransformer(memoryTableTemplates, memoryTableDocuments))
+            }
+            add(templateTransformer)
+            add(WorkspaceReminderTransformer(workspace))
+        }
+        val tools = buildGenerationTools(
+            settings = settings,
+            assistant = assistant,
+            model = model,
+            conversation = conversation,
+            memoryTableEnabled = memoryTableEnabled,
+            effectiveWorkspaceCwd = effectiveWorkspaceCwd,
+            workspace = workspace,
+            mode = mode,
+        )
+        val memories = memoryRepository.getEffectiveMemories(assistant.id.toString())
+        val providerInput = if (hasResumablePendingTool) {
+            // The send loop must execute the approved/denied/answered tool first. Its output changes
+            // the next provider input, so preparing/transformation here would be both stale and unsafe.
+            null
+        } else {
+            generationHandler.prepareFirstProviderInput(
+                settings = settings,
+                model = model,
+                messages = messages,
+                inputTransformers = transformers,
+                assistant = assistant,
+                memories = memories,
+                tools = tools,
+                conversationSystemPrompt = conversation.customSystemPrompt,
+                conversationModeInjectionIds = conversation.modeInjectionIds,
+                conversationLorebookIds = conversation.lorebookIds,
+                workspaceCwd = effectiveWorkspaceCwd,
+                mode = mode,
+                processingStatus = processingStatus,
+            )
+        }
+        return PreparedGenerationRequest(
+            conversation = conversation,
+            assistant = assistant,
+            model = model,
+            settings = settings,
+            messages = messages,
+            memories = memories,
+            inputTransformers = transformers,
+            tools = tools,
+            workspaceCwd = effectiveWorkspaceCwd,
+            providerInput = providerInput,
+        )
+    }
+
+    private suspend fun buildGenerationTools(
+        settings: Settings,
+        assistant: Assistant,
+        model: Model,
+        conversation: Conversation,
+        memoryTableEnabled: Boolean,
+        effectiveWorkspaceCwd: String?,
+        workspace: WorkspaceEntity?,
+        mode: GenerationPreparationMode,
+    ): List<Tool> = buildList {
+        val delegateOnly = assistant.enableSubagents && assistant.subagentDelegateOnly
+        if (settings.enableWebSearch) addAll(createSearchTools(settings))
+        addAll(
+            localTools.getTools(
+                if (delegateOnly) assistant.localTools.filter { it in DELEGATE_ALLOWED_LOCAL_TOOLS }
+                else assistant.localTools,
+            ),
+        )
+        if (assistant.enableRecentChatsReference) {
+            addAll(createConversationTools(conversationRepo, assistant.id))
+        }
+        addAll(
+            buildMemoryTableToolsIfEnabled(
+                enabled = memoryTableEnabled,
+                json = json,
+                assistantId = assistant.id.toString(),
+                conversationId = conversation.id.toString(),
+                readDocuments = {
+                    memoryTableRepository.getEffectiveDocuments(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                },
+                getDocument = memoryTableRepository::getDocument,
+                upsertDocument = memoryTableRepository::upsertDocument,
+                deleteDocument = memoryTableRepository::deleteDocument,
+                readTemplates = memoryTableRepository::getTemplates,
+                upsertTemplate = memoryTableRepository::upsertTemplate,
+                deleteTemplate = memoryTableRepository::deleteTemplate,
+            ),
+        )
+        addAll(
+            createWorkspaceToolsIfReady(
+                workspace = workspace,
+                assistantId = assistant.id,
+                cwd = effectiveWorkspaceCwd,
+                readOnly = delegateOnly,
+                createSkillDirectories = mode == GenerationPreparationMode.Send,
+            ),
+        )
+        if (!delegateOnly && assistant.enabledSkills.isNotEmpty()) {
+            addAll(
+                createSkillTools(
+                    assistant.enabledSkills,
+                    skillManager.listSkillsForAssistant(
+                        assistantId = assistant.id,
+                        createIfMissing = mode == GenerationPreparationMode.Send,
+                    ),
+                ),
+            )
+        }
+        if (!delegateOnly) {
+            addAll(
+                buildSkillManagementTools(
+                    assistantId = assistant.id,
+                    skillManager = skillManager,
+                    autoEnable = true,
+                    onSkillEnabled = { skillName ->
+                        settingsStore.update { current ->
+                            current.copy(
+                                assistants = current.assistants.map { item ->
+                                    if (item.id == assistant.id) {
+                                        item.copy(enabledSkills = item.enabledSkills + skillName)
+                                    } else {
+                                        item
+                                    }
+                                },
+                            )
+                        }
+                    },
+                ),
+            )
+        }
+        if (!delegateOnly) {
+            val allMcpTools = mcpManager.getAllAvailableTools()
+            val invalidNames = allMcpTools.map { it.second }.distinct().filter { name ->
+                name.isEmpty() || !name.all {
+                    it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9'
+                }
+            }
+            if (invalidNames.isNotEmpty()) {
+                throw GenerationPreparationException.InvalidMcpServerName(
+                    invalidNames = invalidNames,
+                    message = context.getString(
+                        R.string.error_mcp_invalid_server_name,
+                        invalidNames.joinToString(", "),
+                    ),
+                )
+            }
+            allMcpTools.forEach { (serverId, serverName, tool) ->
+                add(
+                    Tool(
+                        name = "mcp__${serverName}__${tool.name}",
+                        description = tool.description.orEmpty(),
+                        parameters = { tool.inputSchema },
+                        needsApproval = { tool.needsApproval },
+                        execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
+                    ),
+                )
+            }
+        }
+        if (assistant.enableSubagents) {
+            addAll(
+                buildSubagentToolsForChat(
+                    assistant = assistant,
+                    settings = settings,
+                    parentModel = model,
+                    parentTools = this@buildList,
+                    workspaceCwd = effectiveWorkspaceCwd,
+                    conversationId = conversation.id,
+                    depth = 0,
+                    delegateOnly = delegateOnly,
+                ),
+            )
+        }
+    }
+
     private suspend fun createWorkspaceToolsIfReady(
-        workspaceId: String?,
+        workspace: WorkspaceEntity?,
         assistantId: Uuid,
         cwd: String? = null,
         readOnly: Boolean = false,
+        createSkillDirectories: Boolean = true,
     ): List<Tool> {
-        if (workspaceId.isNullOrBlank()) return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+        workspace ?: return emptyList()
+        val workspaceId = workspace.id
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
             Log.d(
                 TAG,
@@ -917,7 +1060,10 @@ class ChatService(
             )
             return emptyList()
         }
-        val privateSkillMounts = assistantPrivateSkillMounts(assistantId)
+        val privateSkillMounts = assistantPrivateSkillMounts(
+            assistantId = assistantId,
+            createDirectories = createSkillDirectories,
+        )
         val all = createWorkspaceTools(
             workspaceId = workspaceId,
             workspaceRepository = workspaceRepository,
@@ -925,18 +1071,24 @@ class ChatService(
             knownMounts = listOf(
                 WorkspaceKnownMount(
                     target = "/skills",
-                    source = skillManager.getSkillsDir(),
-                    allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
+                    source = skillManager.getSkillsDir(createIfMissing = createSkillDirectories),
+                    allowedSymlinkRoots = listOf(
+                        skillManager.getSkillSharedDir(createIfMissing = createSkillDirectories),
+                    ),
                 )
             ) + privateSkillMounts.knownMounts,
             extraBindMounts = privateSkillMounts.bindMounts,
+            approvalOverrides = workspace.toolApprovalOverrides(),
         )
         return if (readOnly) all.filter { it.name == "workspace_read_file" } else all
     }
 
-    private fun assistantPrivateSkillMounts(assistantId: Uuid): AssistantSkillMounts {
-        val assistantSkillsDir = skillManager.getAssistantSkillsDir(assistantId)
-        val skillSharedDir = skillManager.getSkillSharedDir()
+    private fun assistantPrivateSkillMounts(
+        assistantId: Uuid,
+        createDirectories: Boolean = true,
+    ): AssistantSkillMounts {
+        val assistantSkillsDir = skillManager.getAssistantSkillsDir(assistantId, createDirectories)
+        val skillSharedDir = skillManager.getSkillSharedDir(createDirectories)
         return AssistantSkillMounts(
             knownMounts = listOf(
                 WorkspaceKnownMount(
@@ -952,56 +1104,6 @@ class ChatService(
                 )
             ),
         )
-    }
-
-    // ---- 检查无效消息 ----
-
-    private fun checkInvalidMessages(conversationId: Uuid) {
-        val conversation = getConversationFlow(conversationId).value
-        var messagesNodes = conversation.messageNodes
-
-        // 移除无效 tool (未执行的 Tool)
-        messagesNodes = messagesNodes.mapIndexed { _, node ->
-            // Check for Tool type with non-executed tools
-            val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
-
-            if (hasPendingTools) {
-                // Keep messages that are ready to resume, such as approved/denied/answered tools.
-                val hasResumableTool = node.currentMessage.getTools().any {
-                    !it.isExecuted && it.approvalState.canResumeToolExecution()
-                }
-                if (hasResumableTool) {
-                    return@mapIndexed node
-                }
-
-                // If all tools are executed, it's valid
-                val allToolsExecuted = node.currentMessage.getTools().all { it.isExecuted }
-                if (allToolsExecuted && node.currentMessage.getTools().isNotEmpty()) {
-                    return@mapIndexed node
-                }
-
-                // Remove messages that still have unresolved tool approvals.
-                return@mapIndexed node.copy(
-                    messages = node.messages.filter { it.id != node.currentMessage.id },
-                    selectIndex = node.selectIndex - 1
-                )
-            }
-            node
-        }
-
-        // 更新index
-        messagesNodes = messagesNodes.map { node ->
-            if (node.messages.isNotEmpty() && node.selectIndex !in node.messages.indices) {
-                node.copy(selectIndex = 0)
-            } else {
-                node
-            }
-        }
-
-        // 移除无效消息
-        messagesNodes = messagesNodes.filter { it.messages.isNotEmpty() }
-
-        updateConversation(conversationId, conversation.copy(messageNodes = messagesNodes))
     }
 
     private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {

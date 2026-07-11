@@ -13,7 +13,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -31,6 +33,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.withRecentChatModel
+import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
@@ -67,6 +70,8 @@ class ChatVM(
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
+    private var contextPreviewJob: Job? = null
+    val contextPreviewState = MutableStateFlow<UiState<ContextPreview>>(UiState.Idle)
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
@@ -99,9 +104,30 @@ class ChatVM(
     }
 
     override fun onCleared() {
+        contextPreviewJob?.cancel()
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
+    }
+
+    fun loadContextPreview() {
+        contextPreviewJob?.cancel()
+        contextPreviewJob = viewModelScope.launch {
+            contextPreviewState.value = UiState.Loading
+            try {
+                contextPreviewState.value = UiState.Success(chatService.buildContextPreview(_conversationId))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                contextPreviewState.value = UiState.Error(error)
+            }
+        }
+    }
+
+    fun clearContextPreview() {
+        contextPreviewJob?.cancel()
+        contextPreviewJob = null
+        contextPreviewState.value = UiState.Idle
     }
 
     // 用户设置

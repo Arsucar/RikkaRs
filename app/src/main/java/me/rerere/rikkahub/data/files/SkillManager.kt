@@ -23,69 +23,90 @@ class SkillManager(
     @Volatile
     private var listCacheTimestamp: Long = 0L
 
-    fun listSkills(): List<SkillMetadata> {
+    fun listSkills(createIfMissing: Boolean = true): List<SkillMetadata> {
+        if (!createIfMissing) {
+            return listSkillsUncached(createIfMissing = false)
+        }
         val now = System.currentTimeMillis()
         val cached = listCache
         if (cached != null && now - listCacheTimestamp < LIST_CACHE_TTL_MS) {
             return cached
         }
-        val result = listSkillsUncached()
+        val result = listSkillsUncached(createIfMissing = true)
         listCache = result
         listCacheTimestamp = now
         return result
     }
 
-    fun listSkillsForAssistant(assistantId: Uuid?): List<SkillMetadata> {
-        val global = listSkills()
+    fun listSkillsForAssistant(
+        assistantId: Uuid?,
+        createIfMissing: Boolean = true,
+    ): List<SkillMetadata> {
+        val global = listSkills(createIfMissing)
         if (assistantId == null) return global
-        return (listAssistantSkills(assistantId) + global).distinctBy { it.name }
+        return (listAssistantSkills(assistantId, createIfMissing) + global).distinctBy { it.name }
     }
 
     fun invalidateListCache() {
         listCache = null
     }
 
-    fun getSkillsDir(): File {
+    fun getSkillsDir(createIfMissing: Boolean = true): File {
         val dir = context.filesDir.resolve(FileFolders.SKILLS)
-        if (!dir.exists()) dir.mkdirs()
+        if (createIfMissing && !dir.exists()) dir.mkdirs()
         return dir
     }
 
-    fun getAssistantSkillsDir(assistantId: Uuid): File {
+    fun getAssistantSkillsDir(assistantId: Uuid, createIfMissing: Boolean = true): File {
         val dir = context.filesDir
             .resolve(FileFolders.ASSISTANT_SKILLS)
             .resolve(assistantId.toString())
-        if (!dir.exists()) dir.mkdirs()
+        if (createIfMissing && !dir.exists()) dir.mkdirs()
         return dir
     }
 
-    fun getSkillSharedDir(): File {
+    fun getSkillSharedDir(createIfMissing: Boolean = true): File {
         val dir = context.filesDir.resolve(FileFolders.SKILL_SHARED)
-        if (!dir.exists()) dir.mkdirs()
+        if (createIfMissing && !dir.exists()) dir.mkdirs()
         return dir
     }
 
-    private fun listSkillsUncached(): List<SkillMetadata> {
-        val skillsDir = getSkillsDir()
-        return listSkillsInDir(skillsDir, ownerAssistantId = null)
+    private fun listSkillsUncached(createIfMissing: Boolean): List<SkillMetadata> {
+        val skillsDir = getSkillsDir(createIfMissing)
+        return listSkillsInDir(
+            skillsDir = skillsDir,
+            ownerAssistantId = null,
+            allowedSymlinkRoots = listOf(getSkillSharedDir(createIfMissing)),
+        )
     }
 
-    fun listAssistantSkills(assistantId: Uuid): List<SkillMetadata> {
-        val skillsDir = getAssistantSkillsDir(assistantId)
-        return listSkillsInDir(skillsDir, ownerAssistantId = assistantId)
+    fun listAssistantSkills(
+        assistantId: Uuid,
+        createIfMissing: Boolean = true,
+    ): List<SkillMetadata> {
+        val skillsDir = getAssistantSkillsDir(assistantId, createIfMissing)
+        return listSkillsInDir(
+            skillsDir = skillsDir,
+            ownerAssistantId = assistantId,
+            allowedSymlinkRoots = listOf(getSkillSharedDir(createIfMissing)),
+        )
     }
 
-    private fun listSkillsInDir(skillsDir: File, ownerAssistantId: Uuid?): List<SkillMetadata> {
+    private fun listSkillsInDir(
+        skillsDir: File,
+        ownerAssistantId: Uuid?,
+        allowedSymlinkRoots: List<File>,
+    ): List<SkillMetadata> {
         return skillsDir.listFiles()
             ?.filter { it.isDirectory }
             ?.mapNotNull { dir ->
                 val skillFile = SkillPaths.resolveSkillFile(
                     skillDir = dir,
                     relativePath = "SKILL.md",
-                    allowedSymlinkRoots = listOf(getSkillSharedDir()),
+                    allowedSymlinkRoots = allowedSymlinkRoots,
                 ) ?: return@mapNotNull null
                 if (!skillFile.exists()) return@mapNotNull null
-                parseSkillFile(skillFile, dir, ownerAssistantId)
+                parseSkillFile(skillFile, dir, ownerAssistantId, allowedSymlinkRoots)
             }
             ?: emptyList()
     }
@@ -388,7 +409,12 @@ class SkillManager(
         return null
     }
 
-    private fun parseSkillFile(skillFile: File, skillDir: File, ownerAssistantId: Uuid?): SkillMetadata? {
+    private fun parseSkillFile(
+        skillFile: File,
+        skillDir: File,
+        ownerAssistantId: Uuid?,
+        allowedSymlinkRoots: List<File> = listOf(getSkillSharedDir()),
+    ): SkillMetadata? {
         return runCatching {
             val content = skillFile.readText()
             val frontmatter = SkillFrontmatterParser.parse(content)
@@ -401,7 +427,7 @@ class SkillManager(
                 allowedTools = frontmatter["allowed-tools"]?.split(" ")?.filter { it.isNotBlank() } ?: emptyList(),
                 skillDir = skillDir,
                 ownerAssistantId = ownerAssistantId,
-                allowedSymlinkRoots = listOf(getSkillSharedDir()),
+                allowedSymlinkRoots = allowedSymlinkRoots,
             )
         }.getOrElse {
             Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)

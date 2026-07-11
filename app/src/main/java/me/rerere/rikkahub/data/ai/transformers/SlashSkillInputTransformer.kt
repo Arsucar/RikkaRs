@@ -6,6 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.SlashSkillTags
 
 object SlashSkillInputTransformer : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

@@ -1679,4 +1679,26 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_input_default_model_saved">已将 %1$s 设为助手默认模型</string>
   <string name="chat_input_default_model_unavailable">当前无可用模型</string>
   <string name="chat_input_default_model_unknown">未知模型</string>
+  <string name="context_inspector_menu_title">查看对话上下文</string>
+  <string name="context_inspector_menu_subtitle">预览下一次模型请求的最终消息与工具</string>
+  <string name="context_inspector_title">对话上下文</string>
+  <string name="context_inspector_back">返回</string>
+  <string name="context_inspector_refresh">刷新</string>
+  <string name="context_inspector_copy_all">复制全部</string>
+  <string name="context_inspector_loading">正在生成精确上下文预览…</string>
+  <string name="context_inspector_unknown_error">无法生成上下文预览</string>
+  <string name="context_inspector_retry">重试</string>
+  <string name="context_inspector_empty">最终上下文为空</string>
+  <string name="context_inspector_overview">概览</string>
+  <string name="context_inspector_messages">消息：%1$d</string>
+  <string name="context_inspector_history">保留历史：%1$d / %2$d</string>
+  <string name="context_inspector_truncated">已截断：%1$s</string>
+  <string name="context_inspector_conversation_prompt">对话系统提示：%1$s</string>
+  <string name="context_inspector_characters">字符数：%1$d</string>
+  <string name="context_inspector_tools">工具：%1$d</string>
+  <string name="context_inspector_yes">是</string>
+  <string name="context_inspector_no">否</string>
+  <string name="context_inspector_error_assistant">无法解析当前对话的助手</string>
+  <string name="context_inspector_error_model">请先选择聊天模型再查看上下文</string>
+  <string name="context_inspector_error_pending_tool">请先处理待确认的工具请求，再预览下一次模型上下文</string>
 </resources>

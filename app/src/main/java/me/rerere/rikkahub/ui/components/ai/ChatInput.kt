@@ -95,16 +95,16 @@ import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionContext
-import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionAction
+import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionApplyResult
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionItem
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionList
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionProvider
+import me.rerere.rikkahub.ui.components.ai.completion.prepareChatCompletionApplication
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -123,6 +123,7 @@ fun ChatInput(
     state: ChatInputState,
     loading: Boolean,
     settings: Settings,
+    assistant: Assistant,
     hazeState: HazeState,
     enableSearch: Boolean,
     onToggleSearch: (Boolean) -> Unit,
@@ -138,7 +139,6 @@ fun ChatInput(
     onLongSendClick: () -> Unit,
 ) {
     val toaster = LocalToaster.current
-    val assistant = settings.getCurrentAssistant()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
 
@@ -239,6 +239,7 @@ fun ChatInput(
 
                     TextInputRow(
                         state = state,
+                        assistant = assistant,
                         completionProviders = completionProviders,
                         onUpdateAssistant = onUpdateAssistant,
                         onSendMessage = { sendMessage() }
@@ -424,6 +425,7 @@ private fun ActionIconButton(
 @Composable
 private fun TextInputRow(
     state: ChatInputState,
+    assistant: Assistant,
     completionProviders: List<ChatCompletionProvider>,
     onUpdateAssistant: (Assistant) -> Unit,
     onSendMessage: () -> Unit,
@@ -432,7 +434,6 @@ private fun TextInputRow(
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
-    val assistant = settings.getCurrentAssistant()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
         settings.getQuickMessagesOfAssistant(assistant)
     }
@@ -698,41 +699,25 @@ private fun ChatInputState.applyCompletion(
     assistant: Assistant,
     onUpdateAssistant: (Assistant) -> Unit,
 ): ChatCompletionApplyResult {
-    val textLength = textContent.text.length
-    val start = replacementRange.min.coerceIn(0, textLength)
-    val end = replacementRange.max.coerceIn(start, textLength)
+    val application = prepareChatCompletionApplication(
+        textLength = textContent.text.length,
+        replacementRange = replacementRange,
+        item = item,
+        assistant = assistant,
+    )
     if (!item.skillName.isNullOrBlank()) {
         addPendingSlashSkill(item.skillName)
     }
-    item.presetId?.let { presetId ->
-        onUpdateAssistant(assistant.copy(presetIds = setOf(presetId)))
-    }
-    val result = when (val action = item.action) {
-        is ChatCompletionAction.SetAssistantDefaultModel -> {
-            val modelId = action.modelId
-            if (modelId == null) {
-                ChatCompletionApplyResult.DefaultModelUnavailable
-            } else {
-                onUpdateAssistant(assistant.copy(chatModelId = modelId))
-                ChatCompletionApplyResult.DefaultModelSaved(action.modelName.orEmpty())
-            }
-        }
-
-        null -> ChatCompletionApplyResult.None
-    }
+    application.assistantUpdate?.let(onUpdateAssistant)
     textContent.edit {
-        replace(start, end, item.insertText)
-        selection = TextRange(start + item.insertText.length)
+        replace(
+            application.replacementRange.min,
+            application.replacementRange.max,
+            application.insertText,
+        )
+        selection = TextRange(application.cursor)
     }
-    return result
-}
-
-private sealed interface ChatCompletionApplyResult {
-    data object None : ChatCompletionApplyResult
-
-    data class DefaultModelSaved(val modelName: String) : ChatCompletionApplyResult
-
-    data object DefaultModelUnavailable : ChatCompletionApplyResult
+    return application.result
 }
 
 @Composable

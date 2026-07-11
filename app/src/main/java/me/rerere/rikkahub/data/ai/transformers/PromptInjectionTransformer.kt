@@ -18,6 +18,7 @@ import kotlin.uuid.Uuid
  * 根据 Assistant 关联的 ModeInjection 和 Lorebook 进行提示词注入
  */
 object PromptInjectionTransformer : InputMessageTransformer {
+    override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,

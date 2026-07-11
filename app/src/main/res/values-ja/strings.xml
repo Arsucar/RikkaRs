@@ -1574,4 +1574,26 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_input_default_model_saved">%1$s をアシスタントのデフォルトモデルに設定しました</string>
   <string name="chat_input_default_model_unavailable">現在利用可能なモデルはありません</string>
   <string name="chat_input_default_model_unknown">不明なモデル</string>
+  <string name="context_inspector_menu_title">会話コンテキストを確認</string>
+  <string name="context_inspector_menu_subtitle">次のモデル要求の最終メッセージとツールをプレビュー</string>
+  <string name="context_inspector_title">会話コンテキスト</string>
+  <string name="context_inspector_back">戻る</string>
+  <string name="context_inspector_refresh">更新</string>
+  <string name="context_inspector_copy_all">すべてコピー</string>
+  <string name="context_inspector_loading">正確なコンテキストプレビューを準備中…</string>
+  <string name="context_inspector_unknown_error">コンテキストプレビューを準備できません</string>
+  <string name="context_inspector_retry">再試行</string>
+  <string name="context_inspector_empty">最終コンテキストは空です</string>
+  <string name="context_inspector_overview">概要</string>
+  <string name="context_inspector_messages">メッセージ：%1$d</string>
+  <string name="context_inspector_history">保持した履歴：%1$d / %2$d</string>
+  <string name="context_inspector_truncated">切り捨て：%1$s</string>
+  <string name="context_inspector_conversation_prompt">会話システムプロンプト：%1$s</string>
+  <string name="context_inspector_characters">文字数：%1$d</string>
+  <string name="context_inspector_tools">ツール：%1$d</string>
+  <string name="context_inspector_yes">はい</string>
+  <string name="context_inspector_no">いいえ</string>
+  <string name="context_inspector_error_assistant">会話のアシスタントを解決できません</string>
+  <string name="context_inspector_error_model">コンテキストを確認する前にチャットモデルを選択してください</string>
+  <string name="context_inspector_error_pending_tool">保留中のツール要求を処理してから、次のモデルコンテキストをプレビューしてください</string>
 </resources>

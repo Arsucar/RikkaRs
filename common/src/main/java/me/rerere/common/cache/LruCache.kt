@@ -68,6 +68,18 @@ class LruCache<K, V>(
         return null
     }
 
+    /**
+     * Reads a cached value without updating the in-memory LRU or mutating the backing store.
+     * Expired entries are treated as misses but deliberately left untouched.
+     */
+    fun peek(key: K): V? {
+        val inMemory = lock.withLock { map.entries.firstOrNull { it.key == key }?.value }
+        if (inMemory != null) {
+            return inMemory.takeUnless { it.isExpired(now()) }?.value
+        }
+        return store.loadEntry(key)?.takeUnless { it.isExpired(now()) }?.value
+    }
+
     fun put(key: K, value: V) = put(key, value, expireAfterWriteMillis)
 
     fun put(key: K, value: V, ttlMillis: Long?) {

@@ -1689,4 +1689,26 @@
   <string name="chat_input_default_model_saved">Set %1$s as the assistant default model</string>
   <string name="chat_input_default_model_unavailable">No model is currently available</string>
   <string name="chat_input_default_model_unknown">Unknown model</string>
+  <string name="context_inspector_menu_title">Inspect conversation context</string>
+  <string name="context_inspector_menu_subtitle">Preview the final messages and tools for the next model request</string>
+  <string name="context_inspector_title">Conversation context</string>
+  <string name="context_inspector_back">Back</string>
+  <string name="context_inspector_refresh">Refresh</string>
+  <string name="context_inspector_copy_all">Copy all</string>
+  <string name="context_inspector_loading">Preparing an exact context preview…</string>
+  <string name="context_inspector_unknown_error">Unable to prepare the context preview</string>
+  <string name="context_inspector_retry">Retry</string>
+  <string name="context_inspector_empty">The final context is empty</string>
+  <string name="context_inspector_overview">Overview</string>
+  <string name="context_inspector_messages">Messages: %1$d</string>
+  <string name="context_inspector_history">History retained: %1$d / %2$d</string>
+  <string name="context_inspector_truncated">Truncated: %1$s</string>
+  <string name="context_inspector_conversation_prompt">Conversation system prompt: %1$s</string>
+  <string name="context_inspector_characters">Characters: %1$d</string>
+  <string name="context_inspector_tools">Tools: %1$d</string>
+  <string name="context_inspector_yes">Yes</string>
+  <string name="context_inspector_no">No</string>
+  <string name="context_inspector_error_assistant">The conversation assistant could not be resolved</string>
+  <string name="context_inspector_error_model">Select a chat model before inspecting context</string>
+  <string name="context_inspector_error_pending_tool">A pending tool must be handled before the next provider context can be known</string>
 </resources>
