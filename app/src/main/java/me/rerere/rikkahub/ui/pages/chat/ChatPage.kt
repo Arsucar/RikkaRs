@@ -98,6 +98,8 @@ import me.rerere.rikkahub.ui.components.ai.useCropLauncher
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
+import me.rerere.rikkahub.ui.context.HorizontalGestureExclusionState
+import me.rerere.rikkahub.ui.context.LocalHorizontalGestureExclusionState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -140,6 +142,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     // #89: 右侧对话级记忆表抽屉。Compose 无原生右侧抽屉，用 RTL 包裹 ModalNavigationDrawer 实现，
     // drawerContent 与主内容都翻回 LTR 防止整页镜像。
     val rightDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val horizontalGestureExclusionState = remember { HorizontalGestureExclusionState() }
     val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
 
@@ -249,10 +252,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                         totalY += pc.y
                         if (!decided && (kotlin.math.abs(totalX) > slop || kotlin.math.abs(totalY) > slop)) {
                             decided = true
-                            // 仅当：水平为主 且 向左拖 且 两个抽屉都关闭时，接管手势
-                            claim = kotlin.math.abs(totalX) > kotlin.math.abs(totalY) &&
-                                totalX < 0 &&
-                                !rightDrawerState.isOpen && !drawerState.isOpen
+                            // 仅当水平向左拖、两个抽屉关闭且起点不在可横向滚动区域时接管手势
+                            claim = shouldClaimRightDrawerGesture(
+                                totalX = totalX,
+                                totalY = totalY,
+                                touchSlop = slop,
+                                drawersClosed = !rightDrawerState.isOpen && !drawerState.isOpen,
+                                gestureExcluded = horizontalGestureExclusionState.isExcluded(down.id.value),
+                            )
                         }
                         if (claim) {
                             // 在 Initial pass 消费，子节点（左抽屉/内容）后续拿不到该事件
@@ -265,7 +272,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 }
             }
     ) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    CompositionLocalProvider(
+        LocalHorizontalGestureExclusionState provides horizontalGestureExclusionState,
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+    ) {
         ModalNavigationDrawer(
             drawerState = rightDrawerState,
             // 打开后可滑动关闭；打开动作改用右缘手势条（见下方 Box），因为内层左抽屉会拦截关闭态的水平拖拽

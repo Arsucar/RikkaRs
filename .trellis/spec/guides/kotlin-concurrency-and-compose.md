@@ -90,3 +90,22 @@ fun commitConversationState(transform: (ConversationState) -> ConversationState)
 ### 检查清单
 - [ ] 同一 MutableStateFlow 的写入路径是否统一（所有写入用 CAS，不用直接 `= `）
 - [ ] CAS 是否有最大重试次数保护
+
+---
+
+## 4. Compose 指针手势的受限挂起与多指隔离
+
+### 受限挂起作用域
+
+`awaitEachGesture` / `AwaitPointerEventScope` 是受限挂起作用域。不要在其中调用普通 suspend 包装函数；即使包装函数内部最终调用的是 `awaitPointerEvent`，也会编译失败。需要跨事件保持资源时，使用非 suspend acquire，并在手势块内直接 `try/finally` release。
+
+### 多指隔离
+
+父子手势通过共享状态协商所有权时，不要只用全局 Boolean 或总引用计数。排除状态应按起始 `PointerId` 登记和查询，否则表格内的第二根手指会错误屏蔽从表格外开始的第一根手指手势。
+
+### 检查清单
+
+- [ ] `AwaitPointerEventScope` 内只调用允许的接收者挂起 API
+- [ ] acquire/release 在同一手势块内通过 `try/finally` 成对清理
+- [ ] 手势所有权状态按起始 pointer ID 隔离
+- [ ] 多指、取消和重复 release 均有回归测试

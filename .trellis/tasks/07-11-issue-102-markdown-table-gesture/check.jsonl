@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/index.md","reason":"App 模块质量门与安装验证"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"检查 pointer 取消、状态残留和 Compose 依赖"}
+{"file":".trellis/tasks/07-11-issue-102-markdown-table-gesture/research/root-cause.md","reason":"复核修复是否覆盖真实传播顺序"}
+
