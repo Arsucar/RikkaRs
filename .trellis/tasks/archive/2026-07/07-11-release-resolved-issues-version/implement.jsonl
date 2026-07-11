@@ -1,4 +1,0 @@
-{"file":"docs/CHANGELOG_GUIDE.md","reason":"正式发版 CHANGELOG 中英双语格式与提交流程"}
-{"file":"docs/RIKKA_ARSUCAR_FORK_AND_CI.md","reason":"dispatch bump、tag Release 与 arm64 产物契约"}
-{"file":".trellis/spec/guides/repository-hygiene.md","reason":"发版提交与设备/临时产物仓库卫生"}
-{"file":".trellis/tasks/07-11-release-resolved-issues-version/research/release-audit.md","reason":"当前版本、Secrets、workflow 和 dispatch→tag 两阶段审计"}
