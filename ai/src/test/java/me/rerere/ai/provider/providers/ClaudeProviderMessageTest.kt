@@ -1,5 +1,6 @@
 package me.rerere.ai.provider.providers
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -10,6 +11,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -43,6 +46,55 @@ class ClaudeProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages, false, ClaudePromptCacheTtl.FIVE_MINUTES) as JsonArray
+    }
+
+    private fun invokeParseMessage(content: JsonArray): UIMessage {
+        val method = ClaudeProvider::class.java.getDeclaredMethod("parseMessage", JsonArray::class.java)
+        method.isAccessible = true
+        return method.invoke(provider, content) as UIMessage
+    }
+
+    @Test
+    fun `tool use input accepts object and stringified object`() {
+        val objectInput = invokeParseMessage(
+            Json.parseToJsonElement(
+                """[{"type":"tool_use","id":"tool_1","name":"lookup","input":{"query":"kotlin"}}]"""
+            ).jsonArray
+        )
+        val stringInput = invokeParseMessage(
+            Json.parseToJsonElement(
+                """[{"type":"tool_use","id":"tool_1","name":"lookup","input":"{\"query\":\"kotlin\"}"}]"""
+            ).jsonArray
+        )
+        val invalidInput = invokeParseMessage(
+            Json.parseToJsonElement(
+                """[{"type":"tool_use","id":"tool_1","name":"lookup","input":["unexpected"]}]"""
+            ).jsonArray
+        )
+
+        val objectTool = objectInput.parts.single() as UIMessagePart.Tool
+        val stringTool = stringInput.parts.single() as UIMessagePart.Tool
+        val invalidTool = invalidInput.parts.single() as UIMessagePart.Tool
+        assertEquals("tool_1", objectTool.toolCallId)
+        assertEquals("lookup", objectTool.toolName)
+        assertEquals("""{"query":"kotlin"}""", objectTool.input)
+        assertEquals(objectTool.input, stringTool.input)
+        assertEquals("", invalidTool.input)
+    }
+
+    @Test
+    fun `non-object content blocks and SSE payloads are ignored safely`() {
+        val message = invokeParseMessage(
+            Json.parseToJsonElement(
+                """["relay noise",null,7,{"type":"text","text":"still parsed"}]"""
+            ).jsonArray
+        )
+
+        assertEquals(listOf(UIMessagePart.Text("still parsed")), message.parts)
+        assertNotNull(parseClaudeSsePayload("""{"delta":{"type":"text_delta","text":"ok"}}"""))
+        listOf("[]", "null", "\"relay noise\"", "not-json").forEach { payload ->
+            assertNull(parseClaudeSsePayload(payload))
+        }
     }
 
     @Test

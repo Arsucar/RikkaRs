@@ -41,16 +41,17 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
-import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.parseErrorDetailFromResponseBody
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.common.http.asJsonObjectLenient
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
@@ -728,14 +729,15 @@ class ChatCompletionsAPI(
                         )
                     )
                 }
-                toolCalls.forEach { toolCalls ->
-                    val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+                toolCalls.forEach { toolCallElement ->
+                    val toolCallObj = toolCallElement.jsonObjectOrNull ?: return@forEach
+                    val type = toolCallObj["type"]?.jsonPrimitive?.contentOrNull
                     if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
-                    val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
-                    val toolName =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
-                    val arguments =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
+                    val toolCallId = toolCallObj["id"]?.jsonPrimitive?.contentOrNull
+                    val functionObj = toolCallObj["function"].asJsonObjectLenient()
+                    val toolName = functionObj["name"]?.jsonPrimitive?.contentOrNull
+                    val arguments = functionObj["arguments"]?.jsonPrimitiveOrNull?.contentOrNull
+                        ?: functionObj["arguments"]?.toString()?.takeIf { it != "null" && it.isNotBlank() }
                     add(
                         UIMessagePart.Tool(
                             toolCallId = toolCallId ?: "",

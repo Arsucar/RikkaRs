@@ -1,5 +1,6 @@
 package me.rerere.ai.provider.providers.openai
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -72,6 +73,75 @@ class ChatCompletionsAPIMessageTest {
         method.isAccessible = true
         return method.invoke(api, listOf(UIMessage.user("hello")), params, providerSetting, stream)
             as JsonObject
+    }
+
+    private fun invokeParseMessage(message: JsonObject): UIMessage {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod("parseMessage", JsonObject::class.java)
+        method.isAccessible = true
+        return method.invoke(api, message) as UIMessage
+    }
+
+    @Test
+    fun `tool call function accepts object and stringified object`() {
+        val objectFunction = invokeParseMessage(
+            Json.parseToJsonElement(
+                """
+                {
+                  "role":"assistant",
+                  "tool_calls":[{
+                    "id":"call_1",
+                    "type":"function",
+                    "function":{"name":"lookup","arguments":"{\"query\":\"kotlin\"}"}
+                  }]
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+        val stringFunction = invokeParseMessage(
+            Json.parseToJsonElement(
+                """
+                {
+                  "role":"assistant",
+                  "tool_calls":[{
+                    "id":"call_1",
+                    "type":"function",
+                    "function":"{\"name\":\"lookup\",\"arguments\":{\"query\":\"kotlin\"}}"
+                  }]
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+
+        val objectTool = objectFunction.parts.single() as UIMessagePart.Tool
+        val stringTool = stringFunction.parts.single() as UIMessagePart.Tool
+        assertEquals("call_1", objectTool.toolCallId)
+        assertEquals("lookup", objectTool.toolName)
+        assertEquals("""{"query":"kotlin"}""", objectTool.input)
+        assertEquals(objectTool.input, stringTool.input)
+    }
+
+    @Test
+    fun `non-object tool calls are skipped and structured arguments are preserved`() {
+        val message = invokeParseMessage(
+            Json.parseToJsonElement(
+                """
+                {
+                  "role":"assistant",
+                  "tool_calls":[
+                    "relay noise",
+                    null,
+                    7,
+                    {"id":"call_2","function":{"name":"batch","arguments":[1,2]}}
+                  ]
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+
+        val tool = message.parts.single() as UIMessagePart.Tool
+        assertEquals("call_2", tool.toolCallId)
+        assertEquals("batch", tool.toolName)
+        assertEquals("[1,2]", tool.input)
     }
 
     @Test

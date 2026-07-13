@@ -43,17 +43,19 @@ import me.rerere.ai.ui.ClaudeReasoningMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
-import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.parseErrorDetailFromResponseBody
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.common.http.asJsonObjectLenient
 import me.rerere.common.http.await
+import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -67,6 +69,10 @@ import kotlin.time.Clock
 
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
+
+internal fun parseClaudeSsePayload(data: String): JsonObject? {
+    return runCatching { json.parseToJsonElement(data) }.getOrNull()?.jsonObjectOrNull
+}
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
@@ -189,10 +195,14 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     return
                 }
 
-                val dataJson = json.parseToJsonElement(data).jsonObject
+                val dataJson = parseClaudeSsePayload(data)
+                if (dataJson == null) {
+                    Log.w(TAG, "onEvent: skip non-object SSE payload")
+                    return
+                }
                 val deltaMessage = parseMessage(buildJsonArray {
-                    val contentBlockObj = dataJson["content_block"]?.jsonObject
-                    val deltaObj = dataJson["delta"]?.jsonObject
+                    val contentBlockObj = dataJson["content_block"]?.jsonObjectOrNull
+                    val deltaObj = dataJson["delta"]?.jsonObjectOrNull
                     if (contentBlockObj != null) {
                         add(contentBlockObj)
                     }
@@ -226,8 +236,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     }
 
                     "error" -> {
-                        val eventData = json.parseToJsonElement(data).jsonObject
-                        val error = eventData["error"]?.parseErrorDetail()
+                        val error = dataJson["error"]?.parseErrorDetail()
                         close(error)
                     }
                 }
@@ -522,7 +531,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         val parts = mutableListOf<UIMessagePart>()
 
         content.forEach { contentBlock ->
-            val block = contentBlock.jsonObject
+            val block = contentBlock.jsonObjectOrNull ?: return@forEach
             val type = block["type"]?.jsonPrimitive?.contentOrNull
 
             when (type) {
@@ -557,7 +566,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 "tool_use" -> {
                     val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""
                     val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
+                    val input = block["input"].asJsonObjectLenient()
                     parts.add(
                         UIMessagePart.Tool(
                             toolCallId = id,

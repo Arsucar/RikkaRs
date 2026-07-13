@@ -22,22 +22,11 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
             messages.map { message ->
                 message.copy(
                     parts = message.parts.toMutableList().apply {
-                        val documents = filterIsInstance<UIMessagePart.Document>()
-                        if (documents.isNotEmpty()) {
-                            documents.forEach { document ->
-                                val content = readDocumentContent(document)
-                                val path = resolveWorkspacePath(document)
-                                val pathAttr = path?.let { " path=\"$it\"" } ?: ""
-                                val prompt = """
-                                  <UploadFile name="${document.fileName}"$pathAttr>
-                                  ```
-                                  $content
-                                  ```
-                                  </UploadFile>
-                                  """.trimMargin()
-                                add(0, UIMessagePart.Text(prompt))
-                            }
-                        }
+                        appendDocumentPromptsInOrder(
+                            parts = this,
+                            readContent = ::readDocumentContent,
+                            resolvePath = ::resolveWorkspacePath,
+                        )
                     }
                 )
             }
@@ -86,4 +75,25 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
             "[ERROR, failed to read file: ${document.fileName}]"
         }
     }
+}
+
+internal fun appendDocumentPromptsInOrder(
+    parts: MutableList<UIMessagePart>,
+    readContent: (UIMessagePart.Document) -> String,
+    resolvePath: (UIMessagePart.Document) -> String?,
+) {
+    val prompts = parts.filterIsInstance<UIMessagePart.Document>().map { document ->
+        val content = readContent(document)
+        val pathAttr = resolvePath(document)?.let { " path=\"$it\"" } ?: ""
+        UIMessagePart.Text(
+            """
+                                  <UploadFile name="${document.fileName}"$pathAttr>
+                                  ```
+                                  $content
+                                  ```
+                                  </UploadFile>
+                                  """.trimMargin()
+        )
+    }
+    parts.addAll(prompts)
 }
