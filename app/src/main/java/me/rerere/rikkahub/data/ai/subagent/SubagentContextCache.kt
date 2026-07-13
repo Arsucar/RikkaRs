@@ -138,14 +138,31 @@ class SubagentContextCache(
                     mismatchedFields.joinToString(),
             )
         }
-        val acquired = existing.touch(now).copy(
-            messages = snapshotMessages(existing.messages + messagesToAppend),
-            status = SubagentStatus.RUNNING,
-            lastError = null,
-        )
-        contexts[contextId] = acquired
-        log("reused context=$contextId size=${contexts.size}")
-        acquired.snapshot()
+        acquireLocked(existing, now, messagesToAppend)
+    }
+
+    suspend fun acquireLatestCompleted(
+        scope: SubagentContextScope,
+        messagesToAppend: List<UIMessage> = emptyList(),
+    ): SubagentContext? = mutex.withLock {
+        val now = nowMillis()
+        pruneExpiredLocked(now)
+        val existing = contexts.values
+            .toList()
+            .asReversed()
+            .asSequence()
+            .filter { context ->
+                context.status == SubagentStatus.COMPLETED && context.scope == scope
+            }
+            .maxWithOrNull(
+                compareBy<SubagentContext>(
+                    { it.lastAccessAtMillis },
+                    { it.createdAtMillis },
+                ),
+            )
+            ?: return@withLock null
+
+        acquireLocked(existing, now, messagesToAppend)
     }
 
     suspend fun updateProgress(
@@ -194,6 +211,21 @@ class SubagentContextCache(
     }
 
     suspend fun size(): Int = mutex.withLock { contexts.size }
+
+    private fun acquireLocked(
+        existing: SubagentContext,
+        now: Long,
+        messagesToAppend: List<UIMessage>,
+    ): SubagentContext {
+        val acquired = existing.touch(now).copy(
+            messages = snapshotMessages(existing.messages + messagesToAppend),
+            status = SubagentStatus.RUNNING,
+            lastError = null,
+        )
+        contexts[existing.contextId] = acquired
+        log("reused context=${existing.contextId} size=${contexts.size}")
+        return acquired.snapshot()
+    }
 
     private fun SubagentContext.touch(now: Long): SubagentContext = copy(
         lastAccessAtMillis = now,

@@ -44,11 +44,14 @@ fun createSubagentTools(
         description = buildString {
             appendLine(
                 """
-                Launch a subagent to handle a task autonomously, or continue a previous subagent by passing `reuse_context_id`.
+                Launch a subagent to handle a task autonomously.
+                Pass `reuse_context_id` to explicitly continue a previous subagent.
+                When omitted, the host may automatically reuse the most recent completed context
+                with the same full scope.
 
                 Writing the task prompt:
-                - A new subagent starts with ZERO context — include the goal, known facts, paths, and specifics.
-                - When reusing a context, the task is appended to its complete existing history.
+                - Include the goal, known facts, paths, and specifics; a new context starts with ZERO prior history.
+                - When a context is reused, the task is appended to its complete existing history.
                 - Give the question, not step-by-step instructions when investigating.
 
                 When to USE: research needing many reads/searches, multi-step scoped tasks, parallel independent work.
@@ -119,7 +122,12 @@ fun createSubagentTools(
                         "reuse_context_id",
                         buildJsonObject {
                             put("type", "string")
-                            put("description", "Context id returned by an earlier spawn_subagent call (optional)")
+                            put(
+                                "description",
+                                "Context id returned by an earlier spawn_subagent call. Optional; when omitted, " +
+                                    "the most recent completed context with the same full scope may be " +
+                                    "reused automatically.",
+                            )
                         },
                     )
                 },

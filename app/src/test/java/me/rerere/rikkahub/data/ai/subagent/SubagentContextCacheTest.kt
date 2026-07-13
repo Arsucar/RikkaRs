@@ -221,6 +221,98 @@ class SubagentContextCacheTest {
     }
 
     @Test
+    fun acquireLatestCompletedUsesMostRecentlyAccessedExactScopeAndAppendsTask() = runBlocking {
+        var now = 0L
+        val cache = SubagentContextCache(nowMillis = { now })
+        val first = completed(cache, "first")
+        now = 10L
+        val second = completed(cache, "second")
+        now = 20L
+        cache.snapshot(first.contextId)
+        now = 30L
+
+        val acquired = cache.acquireLatestCompleted(
+            scope = scope,
+            messagesToAppend = listOf(UIMessage.user("follow up")),
+        )
+
+        assertEquals(first.contextId, acquired?.contextId)
+        assertEquals(listOf("first", "follow up"), acquired?.messages?.map { it.toText() })
+        assertEquals(SubagentStatus.RUNNING, acquired?.status)
+        assertEquals(SubagentStatus.COMPLETED, cache.snapshot(second.contextId)?.status)
+    }
+
+    @Test
+    fun acquireLatestCompletedRequiresEveryScopeFieldToMatch() = runBlocking {
+        val cache = SubagentContextCache()
+        val context = completed(cache, "task")
+        val mismatchedScopes = listOf(
+            scope.copy(conversationId = Uuid.random()),
+            scope.copy(parentAssistantId = Uuid.random()),
+            scope.copy(workspaceId = Uuid.random()),
+            scope.copy(workspaceCwd = "/other"),
+            scope.copy(depth = 2),
+            scope.copy(profileName = "review"),
+            scope.copy(workspaceAccess = WorkspaceAccess.FULL),
+            scope.copy(permissionFingerprint = "expanded-permissions"),
+        )
+
+        mismatchedScopes.forEach { mismatchedScope ->
+            assertNull(cache.acquireLatestCompleted(mismatchedScope))
+        }
+
+        assertEquals(context.contextId, cache.acquireLatestCompleted(scope)?.contextId)
+    }
+
+    @Test
+    fun acquireLatestCompletedSkipsRunningFailedInterruptedAndExpiredContexts() = runBlocking {
+        var now = 0L
+        val cache = SubagentContextCache(ttlMillis = 100L, nowMillis = { now })
+        val expired = cache.createAndAcquire(scope, listOf(UIMessage.user("expired")))
+        cache.finish(expired.contextId, SubagentStatus.COMPLETED)
+        now = 101L
+
+        cache.createAndAcquire(scope, listOf(UIMessage.user("running")))
+        val failed = cache.createAndAcquire(scope, listOf(UIMessage.user("failed")))
+        cache.finish(failed.contextId, SubagentStatus.FAILED, error = "context too long")
+        val interrupted = cache.createAndAcquire(scope, listOf(UIMessage.user("interrupted")))
+        cache.finish(interrupted.contextId, SubagentStatus.INTERRUPTED, error = "cancelled")
+
+        assertNull(cache.acquireLatestCompleted(scope))
+        assertNull(cache.snapshot(expired.contextId))
+    }
+
+    @Test
+    fun concurrentAcquireLatestCompletedLeasesSingleCandidateAtMostOnce() = runBlocking {
+        val cache = SubagentContextCache()
+        val context = completed(cache, "task")
+
+        val results = coroutineScope {
+            List(2) {
+                async { cache.acquireLatestCompleted(scope) }
+            }.awaitAll()
+        }
+
+        assertEquals(1, results.count { it?.contextId == context.contextId })
+        assertEquals(1, results.count { it == null })
+    }
+
+    @Test
+    fun concurrentAcquireLatestCompletedCanSelectNextEligibleCandidate() = runBlocking {
+        val cache = SubagentContextCache()
+        val first = completed(cache, "first")
+        val second = completed(cache, "second")
+
+        val results = coroutineScope {
+            List(2) {
+                async { cache.acquireLatestCompleted(scope) }
+            }.awaitAll()
+        }
+
+        assertEquals(setOf(first.contextId, second.contextId), results.mapNotNull { it?.contextId }.toSet())
+    }
+
+    @Test
     fun eachMismatchedOwnerScopeFieldIsNamedAndRejected() = runBlocking {
         val cache = SubagentContextCache()
         val context = completed(cache, "task")

@@ -199,6 +199,38 @@ internal fun resolveSubagentCountdownThreshold(maxToolCalls: Int, configuredThre
     return threshold.coerceAtMost(maxToolCalls.coerceIn(1, 256))
 }
 
+internal data class SubagentContextAcquisition(
+    val context: SubagentContext,
+    val reusedContext: Boolean,
+)
+
+internal suspend fun acquireSubagentContext(
+    cache: SubagentContextCache,
+    scope: SubagentContextScope,
+    task: String,
+    reuseContextId: String?,
+): SubagentContextAcquisition {
+    val taskMessage = listOf(UIMessage.user(task))
+    if (reuseContextId != null) {
+        return SubagentContextAcquisition(
+            context = cache.acquireForReuse(
+                contextId = reuseContextId,
+                scope = scope,
+                messagesToAppend = taskMessage,
+            ),
+            reusedContext = true,
+        )
+    }
+
+    cache.acquireLatestCompleted(scope, taskMessage)?.let { context ->
+        return SubagentContextAcquisition(context = context, reusedContext = true)
+    }
+    return SubagentContextAcquisition(
+        context = cache.createAndAcquire(scope, taskMessage),
+        reusedContext = false,
+    )
+}
+
 class SubagentHost(
     private val generationHandler: GenerationHandler,
     internal val contextCache: SubagentContextCache = SubagentContextCache(),
@@ -293,16 +325,13 @@ class SubagentHost(
             workspaceAccess = profile.workspaceAccess,
             permissionFingerprint = subagentPermissionFingerprint(profile, parentAssistant),
         )
-        val acquiredContext = try {
-            if (reuseContextId == null) {
-                contextCache.createAndAcquire(scope, listOf(UIMessage.user(task)))
-            } else {
-                contextCache.acquireForReuse(
-                    contextId = reuseContextId,
-                    scope = scope,
-                    messagesToAppend = listOf(UIMessage.user(task)),
-                )
-            }
+        val contextAcquisition = try {
+            acquireSubagentContext(
+                cache = contextCache,
+                scope = scope,
+                task = task,
+                reuseContextId = reuseContextId,
+            )
         } catch (error: SubagentContextException) {
             return SubagentResult(
                 profileName = profile.name,
@@ -318,6 +347,7 @@ class SubagentHost(
                 },
             )
         }
+        val acquiredContext = contextAcquisition.context
         val contextId = acquiredContext.contextId
         val effectiveMaxToolCalls = effectiveMaxToolCalls(profile)
 
@@ -448,7 +478,10 @@ class SubagentHost(
                 Log.e(TAG, "spawn: subagent '${profile.name}' failed (${it.javaClass.simpleName})")
             }
         }.getOrElse { failure ->
-            val disposition = classifySubagentFailure(failure, reusedContext = reuseContextId != null)
+            val disposition = classifySubagentFailure(
+                failure,
+                reusedContext = contextAcquisition.reusedContext,
+            )
             val status = if (disposition == SubagentFailureDisposition.INTERRUPTED) {
                 SubagentStatus.INTERRUPTED
             } else {

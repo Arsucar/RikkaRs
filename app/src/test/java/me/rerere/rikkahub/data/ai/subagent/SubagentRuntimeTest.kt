@@ -150,6 +150,14 @@ class SubagentRuntimeTest {
         assertTrue(schema.required?.contains("profile_name") == true)
         assertTrue(schema.required?.contains("task") == true)
         assertTrue("reuse_context_id" in schema.properties)
+        assertFalse(schema.required?.contains("reuse_context_id") == true)
+        val reuseDescription = schema.properties.getValue("reuse_context_id")
+            .jsonObject
+            .getValue("description")
+            .jsonPrimitive
+            .content
+        assertTrue(reuseDescription.contains("most recent completed context with the same full scope"))
+        assertTrue(spawn.description.contains("may automatically reuse the most recent completed context"))
     }
 
     @Test
@@ -183,6 +191,29 @@ class SubagentRuntimeTest {
         assertEquals("context-1", output.metadata?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull)
         assertTrue(output.text.contains("\"context_id\":\"context-1\""))
         assertTrue(output.text.contains("\"context_status\":\"COMPLETED\""))
+    }
+
+    @Test
+    fun spawnSubagentTool_omittingReuseContextPassesNullForAutomaticSelection() = runBlocking {
+        var receivedContextId: String? = "not-called"
+        val tool = createSubagentTools(
+            json = json,
+            spawn = { _, _, _, reuseContextId ->
+                receivedContextId = reuseContextId
+                SubagentResult(profileName = "explore", summary = "done", succeeded = true)
+            },
+            askBtw = { "answer" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
+        ).first { it.name == "spawn_subagent" }
+
+        tool.execute(
+            buildJsonObject {
+                put("profile_name", "explore")
+                put("task", "continue safely")
+            },
+        )
+
+        assertNull(receivedContextId)
     }
 
     @Test
