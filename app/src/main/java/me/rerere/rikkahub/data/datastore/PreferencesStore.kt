@@ -47,6 +47,9 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
@@ -67,6 +70,7 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+private const val MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL = -1
 const val RECENT_CHAT_MODELS_LIMIT = 8
 const val IMAGE_GALLERY_MIN_COLUMNS = 1
 const val IMAGE_GALLERY_MAX_COLUMNS = 6
@@ -129,6 +133,9 @@ class SettingsStore(
         val ASSISTANTS = stringPreferencesKey("assistants")
         val ASSISTANT_TAGS = stringPreferencesKey("assistant_tags")
         val ENABLE_MEMORY_TABLE = booleanPreferencesKey("enable_memory_table")
+        val MEMORY_TABLE_MAX_INJECT_DOCUMENTS = intPreferencesKey("memory_table_max_inject_documents")
+        val MEMORY_TABLE_MAX_INJECT_TOKENS = intPreferencesKey("memory_table_max_inject_tokens")
+        val MEMORY_TABLE_MAX_INJECT_CHARS = intPreferencesKey("memory_table_max_inject_chars")
         val MEMORY_TABLE_AUTO_SYNC_ENABLED = booleanPreferencesKey("memory_table_auto_sync_enabled")
 
         // 搜索
@@ -226,6 +233,18 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 enableMemoryTable = preferences[ENABLE_MEMORY_TABLE] == true,
+                memoryTableMaxInjectDocuments = decodeMemoryTableBudget(
+                    storedValue = preferences[MEMORY_TABLE_MAX_INJECT_DOCUMENTS],
+                    defaultValue = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
+                ),
+                memoryTableMaxInjectTokens = decodeMemoryTableBudget(
+                    storedValue = preferences[MEMORY_TABLE_MAX_INJECT_TOKENS],
+                    defaultValue = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
+                ),
+                memoryTableMaxInjectChars = decodeMemoryTableBudget(
+                    storedValue = preferences[MEMORY_TABLE_MAX_INJECT_CHARS],
+                    defaultValue = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
+                ),
                 memoryTableAutoSyncEnabled = false,
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
                 providerTagOrder = preferences[PROVIDER_TAG_ORDER]?.let {
@@ -515,6 +534,15 @@ class SettingsStore(
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
             preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
             preferences[ENABLE_MEMORY_TABLE] = settings.enableMemoryTable
+            preferences[MEMORY_TABLE_MAX_INJECT_DOCUMENTS] = encodeMemoryTableBudget(
+                settings.memoryTableMaxInjectDocuments
+            )
+            preferences[MEMORY_TABLE_MAX_INJECT_TOKENS] = encodeMemoryTableBudget(
+                settings.memoryTableMaxInjectTokens
+            )
+            preferences[MEMORY_TABLE_MAX_INJECT_CHARS] = encodeMemoryTableBudget(
+                settings.memoryTableMaxInjectChars
+            )
             preferences[MEMORY_TABLE_AUTO_SYNC_ENABLED] = false
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
@@ -630,6 +658,16 @@ class SettingsStore(
     }
 }
 
+internal fun decodeMemoryTableBudget(storedValue: Int?, defaultValue: Int): Int? = when {
+    storedValue == null -> defaultValue
+    storedValue == MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL -> null
+    storedValue >= 0 -> storedValue
+    else -> defaultValue
+}
+
+internal fun encodeMemoryTableBudget(value: Int?): Int =
+    value ?: MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL
+
 @Serializable
 data class Settings(
     @Transient
@@ -665,6 +703,9 @@ data class Settings(
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
     val enableMemoryTable: Boolean = false,
+    val memoryTableMaxInjectDocuments: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
+    val memoryTableMaxInjectTokens: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
+    val memoryTableMaxInjectChars: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
     val memoryTableAutoSyncEnabled: Boolean = false,
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),

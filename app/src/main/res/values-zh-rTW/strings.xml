@@ -1577,4 +1577,12 @@
   <string name="context_inspector_error_assistant">無法解析目前對話的助手</string>
   <string name="context_inspector_error_model">請先選擇聊天模型再查看上下文</string>
   <string name="context_inspector_error_pending_tool">請先處理待確認的工具請求，再預覽下一次模型上下文</string>
+  <string name="assistant_page_memory_table_budget_title">注入預算</string>
+  <string name="assistant_page_memory_table_budget_summary">文件 %1$s · Token %2$s · 字元 %3$s</string>
+  <string name="assistant_page_memory_table_budget_description">留空表示無限制。請輸入 Int 範圍內的非負十進位整數。</string>
+  <string name="assistant_page_memory_table_budget_documents">文件數上限</string>
+  <string name="assistant_page_memory_table_budget_tokens">Token 上限</string>
+  <string name="assistant_page_memory_table_budget_chars">字元上限</string>
+  <string name="assistant_page_memory_table_budget_unlimited">無限制</string>
+  <string name="assistant_page_memory_table_budget_invalid">請輸入支援範圍內的非負整數。</string>
 </resources>

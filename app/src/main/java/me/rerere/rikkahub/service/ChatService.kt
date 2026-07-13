@@ -866,7 +866,15 @@ class ChatService(
         val transformers = buildList {
             addAll(inputTransformers)
             if (memoryTableEnabled) {
-                add(MemoryTableInjectionTransformer(memoryTableTemplates, memoryTableDocuments))
+                add(
+                    MemoryTableInjectionTransformer(
+                        templates = memoryTableTemplates,
+                        documents = memoryTableDocuments,
+                        maxDocuments = settings.memoryTableMaxInjectDocuments,
+                        maxTokens = settings.memoryTableMaxInjectTokens,
+                        maxChars = settings.memoryTableMaxInjectChars,
+                    )
+                )
             }
             add(templateTransformer)
             add(WorkspaceReminderTransformer(workspace))

@@ -2,9 +2,11 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -36,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -141,7 +147,10 @@ private fun AssistantMemoryContent(
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
     var pendingDeleteMemoryTableTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
     var pendingDeleteMemoryTableDocument by remember { mutableStateOf<MemoryTableDocument?>(null) }
+    var showMemoryTableBudgetDialog by remember { mutableStateOf(false) }
     val defaultMemoryTableTemplateName = stringResource(R.string.assistant_page_memory_table_default_template)
+    val memoryTableBudgetUnlimitedLabel =
+        stringResource(R.string.assistant_page_memory_table_budget_unlimited)
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -251,6 +260,25 @@ private fun AssistantMemoryContent(
         )
     }
 
+    if (showMemoryTableBudgetDialog) {
+        MemoryTableBudgetDialog(
+            maxDocuments = settings.memoryTableMaxInjectDocuments,
+            maxTokens = settings.memoryTableMaxInjectTokens,
+            maxChars = settings.memoryTableMaxInjectChars,
+            onDismiss = { showMemoryTableBudgetDialog = false },
+            onSave = { maxDocuments, maxTokens, maxChars ->
+                onUpdateSettings(
+                    settings.copy(
+                        memoryTableMaxInjectDocuments = maxDocuments,
+                        memoryTableMaxInjectTokens = maxTokens,
+                        memoryTableMaxInjectChars = maxChars,
+                    )
+                )
+                showMemoryTableBudgetDialog = false
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -299,6 +327,37 @@ private fun AssistantMemoryContent(
                         }
                     )
                 }
+            )
+            item(
+                onClick = if (settings.enableMemoryTable) {
+                    { showMemoryTableBudgetDialog = true }
+                } else {
+                    null
+                },
+                modifier = Modifier.alpha(if (settings.enableMemoryTable) 1f else 0.38f),
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_memory_table_budget_title))
+                },
+                supportingContent = {
+                    Text(
+                        stringResource(
+                            R.string.assistant_page_memory_table_budget_summary,
+                            formatMemoryTableBudgetValue(
+                                settings.memoryTableMaxInjectDocuments,
+                                memoryTableBudgetUnlimitedLabel,
+                            ),
+                            formatMemoryTableBudgetValue(
+                                settings.memoryTableMaxInjectTokens,
+                                memoryTableBudgetUnlimitedLabel,
+                            ),
+                            formatMemoryTableBudgetValue(
+                                settings.memoryTableMaxInjectChars,
+                                memoryTableBudgetUnlimitedLabel,
+                            ),
+                        )
+                    )
+                },
+                trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
             )
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_assistant)) },
@@ -527,6 +586,117 @@ private fun AssistantMemoryContent(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    )
+}
+
+internal data class ParsedMemoryTableBudgetInput(
+    val value: Int?,
+    val isValid: Boolean,
+)
+
+internal fun parseMemoryTableBudgetInput(text: String): ParsedMemoryTableBudgetInput {
+    if (text.isEmpty()) return ParsedMemoryTableBudgetInput(value = null, isValid = true)
+    if (!text.all { it in '0'..'9' }) {
+        return ParsedMemoryTableBudgetInput(value = null, isValid = false)
+    }
+    val value = text.toIntOrNull()
+        ?: return ParsedMemoryTableBudgetInput(value = null, isValid = false)
+    return ParsedMemoryTableBudgetInput(value = value, isValid = true)
+}
+
+internal fun formatMemoryTableBudgetValue(value: Int?, unlimitedLabel: String): String =
+    value?.toString() ?: unlimitedLabel
+
+@Composable
+private fun MemoryTableBudgetDialog(
+    maxDocuments: Int?,
+    maxTokens: Int?,
+    maxChars: Int?,
+    onDismiss: () -> Unit,
+    onSave: (maxDocuments: Int?, maxTokens: Int?, maxChars: Int?) -> Unit,
+) {
+    var maxDocumentsText by remember(maxDocuments) { mutableStateOf(maxDocuments?.toString().orEmpty()) }
+    var maxTokensText by remember(maxTokens) { mutableStateOf(maxTokens?.toString().orEmpty()) }
+    var maxCharsText by remember(maxChars) { mutableStateOf(maxChars?.toString().orEmpty()) }
+    val parsedDocuments = parseMemoryTableBudgetInput(maxDocumentsText)
+    val parsedTokens = parseMemoryTableBudgetInput(maxTokensText)
+    val parsedChars = parseMemoryTableBudgetInput(maxCharsText)
+    val allValid = parsedDocuments.isValid && parsedTokens.isValid && parsedChars.isValid
+    val validationError = stringResource(R.string.assistant_page_memory_table_budget_invalid)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.assistant_page_memory_table_budget_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.assistant_page_memory_table_budget_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = maxDocumentsText,
+                    onValueChange = { maxDocumentsText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_memory_table_budget_documents))
+                    },
+                    supportingText = if (parsedDocuments.isValid) null else {
+                        { Text(validationError) }
+                    },
+                    isError = !parsedDocuments.isValid,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next,
+                    ),
+                )
+                OutlinedTextField(
+                    value = maxTokensText,
+                    onValueChange = { maxTokensText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_memory_table_budget_tokens)) },
+                    supportingText = if (parsedTokens.isValid) null else {
+                        { Text(validationError) }
+                    },
+                    isError = !parsedTokens.isValid,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next,
+                    ),
+                )
+                OutlinedTextField(
+                    value = maxCharsText,
+                    onValueChange = { maxCharsText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_memory_table_budget_chars)) },
+                    supportingText = if (parsedChars.isValid) null else {
+                        { Text(validationError) }
+                    },
+                    isError = !parsedChars.isValid,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(parsedDocuments.value, parsedTokens.value, parsedChars.value)
+                },
+                enabled = allValid,
+            ) {
+                Text(stringResource(R.string.assistant_page_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.assistant_page_cancel))
+            }
+        },
     )
 }
 

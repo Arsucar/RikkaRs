@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,6 +59,151 @@ class MemoryTableInjectionTransformerTest {
         )
 
         assertTrue(prompt.length <= 80)
+    }
+
+    @Test
+    fun defaultLimitsPreserveExistingHeaderBehavior() {
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template")),
+            documents = listOf(document("one", MemoryTableScopeType.ASSISTANT)),
+        )
+
+        assertTrue(prompt.contains("documents=1/1"))
+        assertTrue(prompt.contains("maxTokens=800"))
+        assertTrue(prompt.contains("maxChars=3200"))
+    }
+
+    @Test
+    fun nullDocumentLimitIncludesEveryAuthorizedDocument() {
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = """{"tables":[]}""")),
+            documents = listOf(
+                document("one", MemoryTableScopeType.ASSISTANT),
+                document("two", MemoryTableScopeType.GLOBAL),
+            ),
+            maxDocuments = null,
+            maxTokens = null,
+            maxChars = null,
+        )
+
+        assertTrue(prompt.contains("documents=2/2"))
+        assertTrue(prompt.contains("one"))
+        assertTrue(prompt.contains("two"))
+        assertFalse(prompt.contains("omitted by document limit"))
+    }
+
+    @Test
+    fun nullTokenLimitStillHonorsExplicitCharacterLimit() {
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = """{"tables":[]}""")),
+            documents = listOf(
+                document(
+                    "large",
+                    MemoryTableScopeType.ASSISTANT,
+                    payloadJson = """{"value":"${"x".repeat(1_000)}"}""",
+                )
+            ),
+            maxTokens = null,
+            maxChars = 300,
+        )
+
+        assertTrue(prompt.length <= 300)
+        assertTrue(prompt.contains("maxTokens=unlimited"))
+        assertTrue(prompt.contains("maxChars=300"))
+    }
+
+    @Test
+    fun nullCharacterLimitStillHonorsTokenDerivedLimit() {
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = """{"tables":[]}""")),
+            documents = listOf(
+                document(
+                    "large",
+                    MemoryTableScopeType.ASSISTANT,
+                    payloadJson = """{"value":"${"x".repeat(1_000)}"}""",
+                )
+            ),
+            maxTokens = 100,
+            maxChars = null,
+        )
+
+        assertTrue(prompt.length <= 400)
+        assertTrue(prompt.contains("maxTokens=100"))
+        assertTrue(prompt.contains("maxChars=400"))
+    }
+
+    @Test
+    fun allNullLimitsDoNotTruncateAndUseUnlimitedHeader() {
+        val payload = """{"value":"${"x".repeat(1_000)}"}"""
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = """{"tables":[]}""")),
+            documents = listOf(document("large", MemoryTableScopeType.ASSISTANT, payload)),
+            maxDocuments = null,
+            maxTokens = null,
+            maxChars = null,
+        )
+
+        assertTrue(prompt.contains("maxTokens=unlimited"))
+        assertTrue(prompt.contains("maxChars=unlimited"))
+        assertTrue(prompt.contains(payload))
+        assertTrue(prompt.trimEnd().endsWith("</memory_tables>"))
+    }
+
+    @Test
+    fun schemaTokenLimitTakesPrecedenceWhenUserTokenLimitIsNull() {
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(
+                template(
+                    "template",
+                    schemaJson = """{"tables":[],"maxInjectTokens":100}""",
+                )
+            ),
+            documents = listOf(
+                document(
+                    "large",
+                    MemoryTableScopeType.ASSISTANT,
+                    payloadJson = """{"value":"${"x".repeat(1_000)}"}""",
+                )
+            ),
+            maxTokens = null,
+            maxChars = null,
+        )
+
+        assertTrue(prompt.length <= 400)
+        assertTrue(prompt.contains("maxTokens=100"))
+        assertTrue(prompt.contains("maxChars=400"))
+    }
+
+    @Test
+    fun anyExplicitZeroOrNegativeBudgetDisablesInjection() {
+        val templates = listOf(template("template", schemaJson = """{"tables":[]}"""))
+        val documents = listOf(document("doc", MemoryTableScopeType.ASSISTANT))
+
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxDocuments = 0).isBlank())
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxTokens = 0).isBlank())
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxChars = 0).isBlank())
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxDocuments = -1).isBlank())
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxTokens = -1).isBlank())
+        assertTrue(buildMemoryTablePrompt(templates, documents, maxChars = -1).isBlank())
+    }
+
+    @Test
+    fun tokenToCharacterBudgetSaturatesInsteadOfOverflowing() {
+        assertEquals((Int.MAX_VALUE / 4) * 4, tokensToCharLimit(Int.MAX_VALUE / 4))
+        assertEquals(Int.MAX_VALUE, tokensToCharLimit(Int.MAX_VALUE / 4 + 1))
+        assertEquals(Int.MAX_VALUE, tokensToCharLimit(Int.MAX_VALUE))
+
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = """{"tables":[]}""")),
+            documents = listOf(document("doc", MemoryTableScopeType.ASSISTANT)),
+            maxTokens = Int.MAX_VALUE,
+            maxChars = null,
+        )
+
+        assertTrue(prompt.isNotBlank())
+        assertTrue(prompt.contains("maxTokens=${Int.MAX_VALUE}"))
+        assertTrue(prompt.contains("maxChars=${Int.MAX_VALUE}"))
+        assertFalse(prompt.contains("maxChars=-"))
     }
 
     @Test

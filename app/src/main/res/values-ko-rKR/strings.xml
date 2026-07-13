@@ -1525,6 +1525,14 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_scope_global_desc">메모리가 활성화된 모든 어시스턴트에서 이 메모리를 사용합니다</string>
   <string name="assistant_page_memory_table_global">메모리 테이블</string>
   <string name="assistant_page_memory_table_global_desc">구조화된 메모리 테이블을 전역으로 활성화합니다. 기본값은 꺼짐입니다.</string>
+  <string name="assistant_page_memory_table_budget_title">주입 예산</string>
+  <string name="assistant_page_memory_table_budget_summary">문서 %1$s · 토큰 %2$s · 문자 %3$s</string>
+  <string name="assistant_page_memory_table_budget_description">빈 입력은 무제한을 의미합니다. Int 범위의 음이 아닌 십진 정수를 입력하세요.</string>
+  <string name="assistant_page_memory_table_budget_documents">문서 제한</string>
+  <string name="assistant_page_memory_table_budget_tokens">토큰 제한</string>
+  <string name="assistant_page_memory_table_budget_chars">문자 제한</string>
+  <string name="assistant_page_memory_table_budget_unlimited">무제한</string>
+  <string name="assistant_page_memory_table_budget_invalid">지원 범위의 음이 아닌 정수를 입력하세요.</string>
   <string name="assistant_page_memory_table_assistant">메모리 테이블 사용</string>
   <string name="assistant_page_memory_table_assistant_desc">이 어시스턴트가 구조화된 메모리 테이블 문서를 읽고 업데이트하도록 허용합니다</string>
   <string name="assistant_page_memory_table_auto_sync">테이블 자동 동기화</string>

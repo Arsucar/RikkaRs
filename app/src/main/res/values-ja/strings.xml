@@ -1525,6 +1525,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_scope_global_desc">メモリが有効なすべてのアシスタントでこのメモリを使用します</string>
   <string name="assistant_page_memory_table_global">メモリテーブル</string>
   <string name="assistant_page_memory_table_global_desc">構造化メモリテーブルを全体で有効にします。デフォルトはオフです。</string>
+  <string name="assistant_page_memory_table_budget_title">注入予算</string>
+  <string name="assistant_page_memory_table_budget_summary">文書 %1$s · トークン %2$s · 文字 %3$s</string>
+  <string name="assistant_page_memory_table_budget_description">空の入力は無制限を意味します。Int の範囲内の負でない10進整数を入力してください。</string>
+  <string name="assistant_page_memory_table_budget_documents">文書数の上限</string>
+  <string name="assistant_page_memory_table_budget_tokens">トークン上限</string>
+  <string name="assistant_page_memory_table_budget_chars">文字数の上限</string>
+  <string name="assistant_page_memory_table_budget_unlimited">無制限</string>
+  <string name="assistant_page_memory_table_budget_invalid">対応範囲内の負でない整数を入力してください。</string>
   <string name="assistant_page_memory_table_assistant">メモリテーブルを使用</string>
   <string name="assistant_page_memory_table_assistant_desc">このアシスタントが構造化メモリテーブル文書を読み取り、更新できるようにします</string>
   <string name="assistant_page_memory_table_auto_sync">テーブルを自動同期</string>

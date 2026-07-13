@@ -11,12 +11,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
-
-internal const val DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS = 20
-internal const val DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS = 800
-internal const val DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS = 12_000
 
 private const val MEMORY_TABLE_CHARS_PER_TOKEN = 4
 
@@ -30,9 +29,9 @@ private val memoryTableSchemaJson = Json { ignoreUnknownKeys = true }
 class MemoryTableInjectionTransformer(
     private val templates: List<MemoryTableTemplate>,
     private val documents: List<MemoryTableDocument>,
-    private val maxDocuments: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
-    private val maxTokens: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
-    private val maxChars: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
+    private val maxDocuments: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
+    private val maxTokens: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
+    private val maxChars: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
 ) : InputMessageTransformer {
     override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
@@ -80,26 +79,35 @@ internal fun mergeMemoryTableIntoSystemText(originalText: String, content: Strin
 internal fun buildMemoryTablePrompt(
     templates: List<MemoryTableTemplate>,
     documents: List<MemoryTableDocument>,
-    maxDocuments: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
-    maxTokens: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
-    maxChars: Int = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
+    maxDocuments: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS,
+    maxTokens: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS,
+    maxChars: Int? = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
     recentConversationText: String = "",
 ): String {
-    if (documents.isEmpty() || maxDocuments <= 0 || maxTokens <= 0 || maxChars <= 0) return ""
+    if (
+        documents.isEmpty() ||
+        maxDocuments?.let { it <= 0 } == true ||
+        maxTokens?.let { it <= 0 } == true ||
+        maxChars?.let { it <= 0 } == true
+    ) {
+        return ""
+    }
     val templatesById = templates.associateBy { it.id }
     val schemaTokenLimit = templates
         .mapNotNull { extractMaxInjectTokens(it.schemaJson) }
         .minOrNull()
-    val effectiveTokens = minOf(maxTokens, schemaTokenLimit ?: maxTokens).coerceAtLeast(1)
-    val charBudget = minOf(maxChars, effectiveTokens * MEMORY_TABLE_CHARS_PER_TOKEN)
-    val limitedDocuments = documents.take(maxDocuments)
+    val effectiveTokenLimit = minNullableLimit(maxTokens, schemaTokenLimit)
+    val tokenDerivedCharLimit = effectiveTokenLimit?.let(::tokensToCharLimit)
+    val effectiveCharLimit = minNullableLimit(maxChars, tokenDerivedCharLimit)
+    val limitedDocuments = maxDocuments?.let { limit -> documents.take(limit) } ?: documents
     val omittedDocuments = documents.size - limitedDocuments.size
     val rendered = buildString {
         appendLine("<memory_tables>")
         appendLine("Structured memory table documents are active for this conversation.")
         appendLine(
             "Limits: documents=${limitedDocuments.size}/${documents.size}, " +
-                "maxTokens=$effectiveTokens, maxChars=$charBudget."
+                "maxTokens=${effectiveTokenLimit.formatMemoryTableLimit()}, " +
+                "maxChars=${effectiveCharLimit.formatMemoryTableLimit()}."
         )
         limitedDocuments.forEach { document ->
             val template = templatesById[document.templateId]
@@ -130,8 +138,21 @@ internal fun buildMemoryTablePrompt(
         }
         appendLine("</memory_tables>")
     }
-    return rendered.limitMemoryTableChars(charBudget)
+    return effectiveCharLimit?.let { limit -> rendered.limitMemoryTableChars(limit) } ?: rendered
 }
+
+internal fun minNullableLimit(first: Int?, second: Int?): Int? = when {
+    first == null -> second
+    second == null -> first
+    else -> minOf(first, second)
+}
+
+internal fun tokensToCharLimit(tokens: Int): Int =
+    (tokens.toLong() * MEMORY_TABLE_CHARS_PER_TOKEN.toLong())
+        .coerceAtMost(Int.MAX_VALUE.toLong())
+        .toInt()
+
+private fun Int?.formatMemoryTableLimit(): String = this?.toString() ?: "unlimited"
 
 private fun extractMaxInjectTokens(schemaJson: String): Int? {
     return runCatching {

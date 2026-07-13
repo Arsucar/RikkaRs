@@ -238,6 +238,14 @@
   <string name="assistant_page_memory_scope_global_desc">Use this memory in every assistant that has memory enabled</string>
   <string name="assistant_page_memory_table_global">Memory Tables</string>
   <string name="assistant_page_memory_table_global_desc">Enable structured memory tables globally. Off by default.</string>
+  <string name="assistant_page_memory_table_budget_title">Injection budget</string>
+  <string name="assistant_page_memory_table_budget_summary">Documents %1$s · Token %2$s · Characters %3$s</string>
+  <string name="assistant_page_memory_table_budget_description">Leave empty for unlimited. Enter a non-negative decimal integer within the Int range.</string>
+  <string name="assistant_page_memory_table_budget_documents">Document limit</string>
+  <string name="assistant_page_memory_table_budget_tokens">Token limit</string>
+  <string name="assistant_page_memory_table_budget_chars">Character limit</string>
+  <string name="assistant_page_memory_table_budget_unlimited">Unlimited</string>
+  <string name="assistant_page_memory_table_budget_invalid">Enter a non-negative whole number within the supported range.</string>
   <string name="assistant_page_memory_table_assistant">Use Memory Tables</string>
   <string name="assistant_page_memory_table_assistant_desc">Allow this assistant to read and update structured memory table documents</string>
   <string name="assistant_page_memory_table_auto_sync">Auto Sync Tables</string>

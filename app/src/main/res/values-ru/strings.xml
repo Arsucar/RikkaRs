@@ -1525,6 +1525,14 @@
   <string name="assistant_page_memory_scope_global_desc">Использовать эту память во всех ассистентах с включенной памятью</string>
   <string name="assistant_page_memory_table_global">Таблицы памяти</string>
   <string name="assistant_page_memory_table_global_desc">Включить структурированные таблицы памяти глобально. По умолчанию выключено.</string>
+  <string name="assistant_page_memory_table_budget_title">Бюджет добавления</string>
+  <string name="assistant_page_memory_table_budget_summary">Документы: %1$s · Токены: %2$s · Символы: %3$s</string>
+  <string name="assistant_page_memory_table_budget_description">Пустое поле означает отсутствие ограничения. Введите неотрицательное десятичное целое число в диапазоне Int.</string>
+  <string name="assistant_page_memory_table_budget_documents">Лимит документов</string>
+  <string name="assistant_page_memory_table_budget_tokens">Лимит токенов</string>
+  <string name="assistant_page_memory_table_budget_chars">Лимит символов</string>
+  <string name="assistant_page_memory_table_budget_unlimited">Без ограничений</string>
+  <string name="assistant_page_memory_table_budget_invalid">Введите неотрицательное целое число в поддерживаемом диапазоне.</string>
   <string name="assistant_page_memory_table_assistant">Использовать таблицы памяти</string>
   <string name="assistant_page_memory_table_assistant_desc">Разрешить этому ассистенту читать и обновлять документы структурированных таблиц памяти</string>
   <string name="assistant_page_memory_table_auto_sync">Автосинхронизация таблиц</string>
