@@ -39,7 +39,7 @@ class SSEEventSource(
     fun processResponse(response: Response) {
         response.use {
             if (!response.isSuccessful) {
-                listener.onFailure(this, null, response)
+                listener.onFailure(this, httpStatusException(response.code, response.message), response)
                 return
             }
 

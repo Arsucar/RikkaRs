@@ -6,25 +6,24 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Response
 
 class HttpException(
     message: String
 ) : RuntimeException(message)
 
+private val errorFields = listOf("error", "detail", "message", "description")
+private const val MAX_HTTP_REASON_LENGTH = 100
+const val MAX_ERROR_BODY_LOG_PREVIEW_LENGTH = 500
+
 fun JsonElement.parseErrorDetail(): HttpException {
     return when (this) {
         is JsonObject -> {
-            // 尝试获取常见的错误字段
-            val errorFields = listOf("error", "detail", "message", "description")
-
-            // 查找第一个存在的错误字段
             val foundField = errorFields.firstOrNull { this[it] != null }
 
             if (foundField != null) {
-                // 递归解析找到的字段值
                 this[foundField]!!.parseErrorDetail()
             } else {
-                // 如果没有找到任何错误字段，序列化整个对象
                 HttpException(Json.encodeToString(JsonElement.serializer(), this))
             }
         }
@@ -33,43 +32,153 @@ fun JsonElement.parseErrorDetail(): HttpException {
             if (this.isEmpty()) {
                 HttpException("Unknown error: Empty JSON array")
             } else {
-                // 递归解析数组的第一个元素
                 this.first().parseErrorDetail()
             }
         }
 
-        is JsonPrimitive -> {
-            // 对于基本类型，直接使用其内容
-            HttpException(this.jsonPrimitive.content)
-        }
+        is JsonPrimitive -> HttpException(this.jsonPrimitive.content)
 
-        else -> {
-            // 其他情况，序列化整个元素
-            HttpException(Json.encodeToString(JsonElement.serializer(), this))
-        }
+        else -> HttpException(Json.encodeToString(JsonElement.serializer(), this))
     }
 }
 
-fun parseErrorDetailFromResponseBody(bodyRaw: String): HttpException? {
-    val trimmed = bodyRaw.trim()
-    if (trimmed.isBlank()) return null
+fun httpStatusException(
+    statusCode: Int,
+    reasonPhrase: String? = null
+): HttpException = HttpException(formatHttpStatus(statusCode, reasonPhrase))
 
-    runCatching { Json.parseToJsonElement(trimmed) }
-        .onSuccess { return it.parseErrorDetail() }
+fun parseHttpErrorResponse(
+    response: Response,
+    bodyRaw: String?
+): HttpException {
+    return parseErrorDetailFromResponseBody(
+        bodyRaw = bodyRaw,
+        statusCode = response.code,
+        reasonPhrase = response.message,
+        contentType = response.body.contentType()?.toString()
+    ) ?: httpStatusException(response.code, response.message)
+}
 
-    val lines = trimmed.split("\n")
+fun parseErrorDetailFromResponseBody(
+    bodyRaw: String?,
+    statusCode: Int? = null,
+    reasonPhrase: String? = null,
+    contentType: String? = null
+): HttpException? {
+    val status = statusCode?.let { formatHttpStatus(it, reasonPhrase) }
+    val trimmed = bodyRaw?.trim().orEmpty()
+    if (trimmed.isBlank()) return status?.let(::HttpException)
+
+    parseJsonError(trimmed)?.let { return combineStatusAndDetail(status, it) }
+
+    if (isHtmlResponse(trimmed, contentType)) {
+        return HttpException(withStatus(status, "Upstream returned an unexpected HTML response"))
+    }
+
+    parseJsonSequenceError(trimmed)?.let { return combineStatusAndDetail(status, it) }
+
+    return HttpException(withStatus(status, "Upstream returned an unexpected non-JSON response"))
+}
+
+fun errorBodyLogPreview(bodyRaw: String?): String {
+    val normalized = bodyRaw
+        ?.replace(Regex("[\\r\\n\\t]+"), " ")
+        ?.trim()
+        .orEmpty()
+    if (normalized.isEmpty()) return "<empty>"
+    return normalized.take(MAX_ERROR_BODY_LOG_PREVIEW_LENGTH)
+}
+
+private fun parseJsonError(value: String): HttpException? {
+    return runCatching { Json.parseToJsonElement(value).parseErrorDetail() }.getOrNull()
+}
+
+private fun parseJsonSequenceError(bodyRaw: String): HttpException? {
+    val lines = bodyRaw.lineSequence()
         .map { it.trim().removePrefix("data:").trim() }
         .filter { it.isNotBlank() && it != "[DONE]" }
 
     var firstParsed: HttpException? = null
     for (line in lines) {
-        runCatching { Json.parseToJsonElement(line) }
-            .onSuccess { element ->
-                val detail = element.parseErrorDetail()
-                if (element is JsonObject && element.containsKey("error")) return detail
-                if (firstParsed == null) firstParsed = detail
+        val candidates = extractJsonValues(line).ifEmpty { listOf(line) }
+        for (candidate in candidates) {
+            val element = runCatching { Json.parseToJsonElement(candidate) }.getOrNull() ?: continue
+            val detail = element.parseErrorDetail()
+            if (element is JsonObject && element.containsKey("error")) return detail
+            if (firstParsed == null) firstParsed = detail
+        }
+    }
+    return firstParsed
+}
+
+private fun extractJsonValues(value: String): List<String> {
+    val values = mutableListOf<String>()
+    var start = -1
+    var depth = 0
+    var inString = false
+    var escaped = false
+
+    value.forEachIndexed { index, character ->
+        if (start < 0) {
+            if (character == '{' || character == '[') {
+                start = index
+                depth = 1
             }
+            return@forEachIndexed
+        }
+
+        if (inString) {
+            when {
+                escaped -> escaped = false
+                character == '\\' -> escaped = true
+                character == '"' -> inString = false
+            }
+            return@forEachIndexed
+        }
+
+        when (character) {
+            '"' -> inString = true
+            '{', '[' -> depth++
+            '}', ']' -> {
+                depth--
+                if (depth == 0) {
+                    values += value.substring(start, index + 1)
+                    start = -1
+                }
+            }
+        }
     }
 
-    return firstParsed ?: HttpException(trimmed.take(500))
+    return values
+}
+
+private fun isHtmlResponse(bodyRaw: String, contentType: String?): Boolean {
+    if (contentType?.contains("html", ignoreCase = true) == true) return true
+
+    val prefix = bodyRaw.take(512).lowercase()
+    return prefix.startsWith("<!doctype html") ||
+        prefix.startsWith("<html") ||
+        prefix.contains("<head") ||
+        prefix.contains("<body") ||
+        prefix.contains("<script") ||
+        prefix.contains("<style")
+}
+
+private fun formatHttpStatus(statusCode: Int, reasonPhrase: String?): String {
+    val reason = reasonPhrase
+        ?.trim()
+        ?.replace(Regex("\\s+"), " ")
+        ?.take(MAX_HTTP_REASON_LENGTH)
+        ?.takeIf { it.isNotEmpty() }
+    return if (reason == null) "HTTP $statusCode" else "HTTP $statusCode $reason"
+}
+
+private fun combineStatusAndDetail(status: String?, detail: HttpException): HttpException {
+    val detailMessage = detail.message?.trim().orEmpty()
+    if (status == null || detailMessage.isEmpty()) return detail
+    return HttpException("$status: $detailMessage")
+}
+
+private fun withStatus(status: String?, message: String): String {
+    return if (status == null) message else "$status: $message"
 }

@@ -48,11 +48,14 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.SSEEventSource
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
+import me.rerere.ai.util.errorBodyLogPreview
+import me.rerere.ai.util.httpStatusException
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
-import me.rerere.ai.util.parseErrorDetailFromResponseBody
+import me.rerere.ai.util.parseHttpErrorResponse
 import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
@@ -67,7 +70,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
@@ -309,19 +311,23 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 t?.printStackTrace()
                 println("[onFailure] 发生错误: ${t?.message}")
 
+                var bodyRaw: String? = null
                 try {
-                    if (t == null && response != null) {
-                        val bodyStr = response.body.stringSafe()
-                        if (!bodyStr.isNullOrEmpty()) {
-                            exception = parseErrorDetailFromResponseBody(bodyStr)
-                                ?: Exception("Unknown error")
-                        } else {
-                            exception = Exception("Unknown error: ${response.code}")
-                        }
+                    if (response != null && !response.isSuccessful) {
+                        bodyRaw = response.body.stringSafe()
+                        exception = parseHttpErrorResponse(response, bodyRaw)
+                        Log.w(
+                            TAG,
+                            "onFailure: HTTP ${response.code} " +
+                                "contentType=${errorBodyLogPreview(response.body.contentType()?.toString())} " +
+                                "body=${errorBodyLogPreview(bodyRaw)}"
+                        )
                     }
                 } catch (e: Throwable) {
-                    e.printStackTrace()
-                    exception = e
+                    Log.w(TAG, "onFailure: failed to parse body=${errorBodyLogPreview(bodyRaw)}", e)
+                    if (exception == null && response != null) {
+                        exception = httpStatusException(response.code, response.message)
+                    }
                 } finally {
                     close(exception ?: Exception("Stream failed"))
                 }
@@ -333,7 +339,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = SSEEventSource.factory(client)
                 .newEventSource(request, listener)
 
         awaitClose {

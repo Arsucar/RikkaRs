@@ -40,13 +40,15 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.SSEEventSource
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
+import me.rerere.ai.util.errorBodyLogPreview
+import me.rerere.ai.util.httpStatusException
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
-import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.parseErrorDetail
-import me.rerere.ai.util.parseErrorDetailFromResponseBody
+import me.rerere.ai.util.parseHttpErrorResponse
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -60,7 +62,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
@@ -161,15 +162,23 @@ class ResponseAPI(
                 t?.printStackTrace()
                 println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
 
-                val bodyRaw = response?.body?.stringSafe()
+                var bodyRaw: String? = null
                 try {
-                    if (!bodyRaw.isNullOrBlank()) {
-                        exception = parseErrorDetailFromResponseBody(bodyRaw) ?: exception
-                            ?: HttpException("Unknown error")
+                    if (response != null && !response.isSuccessful) {
+                        bodyRaw = response.body.stringSafe()
+                        exception = parseHttpErrorResponse(response, bodyRaw)
+                        Log.w(
+                            TAG,
+                            "onFailure: HTTP ${response.code} " +
+                                "contentType=${errorBodyLogPreview(response.body.contentType()?.toString())} " +
+                                "body=${errorBodyLogPreview(bodyRaw)}"
+                        )
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    Log.w(TAG, "onFailure: failed to parse body=${errorBodyLogPreview(bodyRaw)}", e)
+                    if (exception == null && response != null) {
+                        exception = httpStatusException(response.code, response.message)
+                    }
                 } finally {
                     close(exception)
                 }
@@ -180,7 +189,7 @@ class ResponseAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = SSEEventSource.factory(client)
             .newEventSource(request, listener)
 
         awaitClose {
