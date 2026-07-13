@@ -92,9 +92,15 @@ class AssistantDetailVM(
         )
 
     val memoryTableDocuments = memoryTableRepository
-        .getEffectiveDocumentsFlow(assistantId.toString())
+        .getAssistantMemoryDocumentsFlow(assistantId.toString())
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+        )
+
+    suspend fun getMemoryTableDocumentsForEditor(conversationId: String?): List<MemoryTableDocument> =
+        memoryTableRepository.getEffectiveDocuments(
+            assistantId = assistantId.toString(),
+            conversationId = conversationId,
         )
 
     val providers = settingsStore

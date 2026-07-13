@@ -82,24 +82,10 @@ fun AssistantMemoryTableDocumentEditorPage(
 ) {
     val vm: AssistantDetailVM = koinViewModel(parameters = { parametersOf(assistantId) })
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
-    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    var savedDocumentId by remember(documentId, templateId, assistantId, initialScopeType) {
-        mutableStateOf(documentId)
+    val editorScopeId = remember(initialScopeType, assistantId, conversationId) {
+        memoryTableEditorScopeId(initialScopeType, assistantId, conversationId)
     }
-    val matchingDocument = remember(memoryTableDocuments, documentId, templateId, assistantId, initialScopeType) {
-        if (documentId != null) {
-            null
-        } else {
-            memoryTableDocuments.firstOrNull {
-                it.templateId == templateId &&
-                    it.scopeType == initialScopeType &&
-                    it.scopeId == scopeIdFor(initialScopeType, assistantId, conversationId)
-            }
-        }
-    }
-    val effectiveDocumentId = savedDocumentId ?: documentId ?: matchingDocument?.id
-
     val resolvedTemplate = remember(memoryTableTemplates, templateId) {
         memoryTableTemplates.firstOrNull { it.id == templateId }
             ?: MemoryTableTemplate(
@@ -108,41 +94,43 @@ fun AssistantMemoryTableDocumentEditorPage(
                 schemaJson = DEFAULT_MEMORY_TABLE_SCHEMA_JSON,
             )
     }
-
-    var draft by remember(templateId, assistantId, initialScopeType) {
-        mutableStateOf<MemoryTableDocument?>(
-            if (effectiveDocumentId == null) {
-                MemoryTableDocument(
-                    templateId = templateId,
-                    scopeType = initialScopeType,
-                    scopeId = scopeIdFor(initialScopeType, assistantId, conversationId),
-                )
-            } else {
-                null
-            },
-        )
+    var draft by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        mutableStateOf<MemoryTableDocument?>(null)
+    }
+    var lookupComplete by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        mutableStateOf(false)
+    }
+    var isNewDocument by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        mutableStateOf(false)
     }
 
-    LaunchedEffect(effectiveDocumentId, memoryTableDocuments) {
-        if (effectiveDocumentId == null) return@LaunchedEffect
-        memoryTableDocuments.firstOrNull { it.id == effectiveDocumentId }?.let { loaded ->
-            if (draft == null || draft?.id != loaded.id || draft?.updatedAt != loaded.updatedAt) {
-                draft = loaded
-            }
-        } ?: run {
-            if (draft == null) {
-                draft = MemoryTableDocument(
-                    id = effectiveDocumentId,
-                    templateId = templateId,
-                    scopeType = initialScopeType,
-                    scopeId = scopeIdFor(initialScopeType, assistantId, conversationId),
-                )
-            }
+    LaunchedEffect(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        val scopeId = editorScopeId
+        if (scopeId == null) {
+            lookupComplete = true
+            navController.popBackStack()
+            return@LaunchedEffect
         }
+        val scopedDocuments = vm.getMemoryTableDocumentsForEditor(conversationId)
+        val resolution = resolveMemoryTableEditorDocument(
+            documents = scopedDocuments,
+            documentId = documentId,
+            templateId = templateId,
+            scopeType = initialScopeType,
+            scopeId = scopeId,
+        )
+        if (resolution == null) {
+            lookupComplete = true
+            navController.popBackStack()
+            return@LaunchedEffect
+        }
+        draft = resolution.document
+        isNewDocument = resolution.isNewDocument
+        lookupComplete = true
     }
 
     val document = draft
-    if (document == null) {
+    if (!lookupComplete || document == null) {
         Box(Modifier.fillMaxSize())
         return
     }
@@ -151,11 +139,10 @@ fun AssistantMemoryTableDocumentEditorPage(
         document = document,
         template = resolvedTemplate,
         assistantId = assistantId,
-        isNewDocument = effectiveDocumentId == null,
+        isNewDocument = isNewDocument,
         onDraftChange = { draft = it },
         onUpdateTemplate = { vm.upsertMemoryTableTemplate(it) },
         onSave = { saved ->
-            savedDocumentId = saved.id
             draft = saved
             vm.upsertMemoryTableDocument(saved)
             navController.popBackStack()
@@ -903,16 +890,57 @@ private fun TableCellTextField(
     )
 }
 
-private fun scopeIdFor(
+internal fun memoryTableEditorScopeId(
     scopeType: MemoryTableScopeType,
     assistantId: String,
     conversationId: String?,
-): String {
-    return when (scopeType) {
-        MemoryTableScopeType.GLOBAL -> MemoryRepository.GLOBAL_MEMORY_ID
-        MemoryTableScopeType.ASSISTANT -> assistantId
-        MemoryTableScopeType.CONVERSATION -> conversationId ?: assistantId
-    }
+): String? = when (scopeType) {
+    MemoryTableScopeType.GLOBAL -> MemoryRepository.GLOBAL_MEMORY_ID
+    MemoryTableScopeType.ASSISTANT -> assistantId
+    MemoryTableScopeType.CONVERSATION -> conversationId
+}
+
+internal fun findMemoryTableEditorDocument(
+    documents: List<MemoryTableDocument>,
+    documentId: String?,
+    templateId: String,
+    scopeType: MemoryTableScopeType,
+    scopeId: String,
+): MemoryTableDocument? = documents.firstOrNull { document ->
+    (documentId == null || document.id == documentId) &&
+        document.templateId == templateId &&
+        document.scopeType == scopeType &&
+        (scopeType == MemoryTableScopeType.GLOBAL || document.scopeId == scopeId)
+}
+
+internal data class MemoryTableEditorDocumentResolution(
+    val document: MemoryTableDocument,
+    val isNewDocument: Boolean,
+)
+
+internal fun resolveMemoryTableEditorDocument(
+    documents: List<MemoryTableDocument>,
+    documentId: String?,
+    templateId: String,
+    scopeType: MemoryTableScopeType,
+    scopeId: String,
+): MemoryTableEditorDocumentResolution? {
+    val matchingDocument = findMemoryTableEditorDocument(
+        documents = documents,
+        documentId = documentId,
+        templateId = templateId,
+        scopeType = scopeType,
+        scopeId = scopeId,
+    )
+    if (documentId != null && matchingDocument == null) return null
+    return MemoryTableEditorDocumentResolution(
+        document = matchingDocument ?: MemoryTableDocument(
+            templateId = templateId,
+            scopeType = scopeType,
+            scopeId = scopeId,
+        ),
+        isNewDocument = matchingDocument == null,
+    )
 }
 
 private fun editorFingerprint(

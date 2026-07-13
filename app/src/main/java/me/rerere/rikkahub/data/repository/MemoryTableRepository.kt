@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.decodeMemoryTableBundle
 import me.rerere.rikkahub.data.model.encodeMemoryTableBundle
+import me.rerere.rikkahub.data.model.isMemoryTableScopeEffective
 import me.rerere.rikkahub.data.model.resolveMemoryTableBundleImport
 import me.rerere.rikkahub.data.model.normalizeMemoryTablePayloadJson
 import me.rerere.rikkahub.data.model.normalizeMemoryTableSchemaJson
@@ -61,14 +62,23 @@ class MemoryTableRepository(
         assistantId: String,
         conversationId: String? = null,
     ): List<MemoryTableDocument> =
-        dao.getEffectiveDocuments(assistantId, conversationId).map { it.toModel() }
+        dao.getEffectiveDocuments(assistantId, conversationId)
+            .filter { it.isEffectiveFor(assistantId, conversationId) }
+            .map { it.toModel() }
 
     fun getEffectiveDocumentsFlow(
         assistantId: String,
         conversationId: String? = null,
     ): Flow<List<MemoryTableDocument>> =
         dao.getEffectiveDocumentsFlow(assistantId, conversationId)
-            .map { documents -> documents.map { it.toModel() } }
+            .map { documents ->
+                documents
+                    .filter { it.isEffectiveFor(assistantId, conversationId) }
+                    .map { it.toModel() }
+            }
+
+    fun getAssistantMemoryDocumentsFlow(assistantId: String): Flow<List<MemoryTableDocument>> =
+        getEffectiveDocumentsFlow(assistantId = assistantId, conversationId = null)
 
     suspend fun getEffectiveDocumentsIfEnabled(
         settingsEnabled: Boolean,
@@ -259,6 +269,16 @@ class MemoryTableRepository(
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
+
+    private fun MemoryTableDocumentEntity.isEffectiveFor(
+        assistantId: String,
+        conversationId: String?,
+    ): Boolean = isMemoryTableScopeEffective(
+        scopeType = scopeType,
+        scopeId = scopeId,
+        assistantId = assistantId,
+        conversationId = conversationId,
+    )
 
     private fun MemoryTableDocumentEntity.toModel(): MemoryTableDocument =
         MemoryTableDocument(

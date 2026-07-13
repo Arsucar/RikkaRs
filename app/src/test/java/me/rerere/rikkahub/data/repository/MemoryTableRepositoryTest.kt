@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.repository
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.dao.MemoryTableDAO
@@ -111,6 +112,39 @@ class MemoryTableRepositoryTest {
         )
 
         assertEquals(listOf("global", "assistant-a", "conversation-a"), documents.map { it.id })
+    }
+
+    @Test
+    fun effectiveDocumentsDefensivelyFilterPollutedSuspendAndFlowResults() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            documents = listOf(
+                doc("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID),
+                doc("assistant-a", "ASSISTANT", "assistant-a"),
+                doc("assistant-b", "ASSISTANT", "assistant-b"),
+                doc("conversation-a", "CONVERSATION", "conversation-a"),
+                doc("conversation-b", "CONVERSATION", "conversation-b"),
+                doc("unknown", "UNKNOWN", "assistant-a"),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val conversationSuspend = repository.getEffectiveDocuments(
+            assistantId = "assistant-a",
+            conversationId = "conversation-a",
+        )
+        val conversationFlow = repository.getEffectiveDocumentsFlow(
+            assistantId = "assistant-a",
+            conversationId = "conversation-a",
+        ).first()
+        val assistantSuspend = repository.getEffectiveDocuments(assistantId = "assistant-a")
+        val assistantFlow = repository.getAssistantMemoryDocumentsFlow(assistantId = "assistant-a").first()
+
+        val expectedConversationIds = listOf("global", "assistant-a", "conversation-a")
+        val expectedAssistantIds = listOf("global", "assistant-a")
+        assertEquals(expectedConversationIds, conversationSuspend.map { it.id })
+        assertEquals(expectedConversationIds, conversationFlow.map { it.id })
+        assertEquals(expectedAssistantIds, assistantSuspend.map { it.id })
+        assertEquals(expectedAssistantIds, assistantFlow.map { it.id })
     }
 
     @Test
@@ -302,22 +336,13 @@ class MemoryTableRepositoryTest {
             conversationId: String?,
         ): List<MemoryTableDocumentEntity> {
             effectiveDocumentReads++
-            return documents.filter {
-                it.scopeType == "GLOBAL" ||
-                    (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
-                    (conversationId != null && it.scopeType == "CONVERSATION" && it.scopeId == conversationId)
-            }
+            return documents.toList()
         }
 
         override fun getEffectiveDocumentsFlow(
             assistantId: String,
             conversationId: String?,
-        ): Flow<List<MemoryTableDocumentEntity>> =
-            flowOf(documents.filter {
-                it.scopeType == "GLOBAL" ||
-                    (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
-                    (conversationId != null && it.scopeType == "CONVERSATION" && it.scopeId == conversationId)
-            })
+        ): Flow<List<MemoryTableDocumentEntity>> = flowOf(documents.toList())
 
         override fun getDocumentsForScopeFlow(
             scopeType: String,

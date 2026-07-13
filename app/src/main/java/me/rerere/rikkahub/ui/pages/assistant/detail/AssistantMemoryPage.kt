@@ -50,6 +50,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.isEffectiveFor
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -529,6 +530,38 @@ private fun AssistantMemoryContent(
     )
 }
 
+internal data class AssistantMemoryTableDocumentSelection(
+    val visibleDocuments: List<MemoryTableDocument>,
+    val primaryDocumentsByTemplate: Map<String, MemoryTableDocument?>,
+    val extraDocuments: List<MemoryTableDocument>,
+)
+
+internal fun deriveAssistantMemoryTableDocuments(
+    templates: List<MemoryTableTemplate>,
+    documents: List<MemoryTableDocument>,
+    assistantId: String,
+): AssistantMemoryTableDocumentSelection {
+    val visibleDocuments = documents.filter { it.isEffectiveFor(assistantId = assistantId) }
+    val documentsByTemplate = visibleDocuments.groupBy { it.templateId }
+    val primaryDocumentsByTemplate = templates.associate { template ->
+        val documentsForTemplate = documentsByTemplate[template.id].orEmpty()
+        val primaryDocument = documentsForTemplate.firstOrNull {
+            it.scopeType == MemoryTableScopeType.ASSISTANT
+        } ?: documentsForTemplate.firstOrNull {
+            it.scopeType == MemoryTableScopeType.GLOBAL
+        }
+        template.id to primaryDocument
+    }
+    val primaryDocumentIds = primaryDocumentsByTemplate.values
+        .filterNotNull()
+        .mapTo(mutableSetOf()) { it.id }
+    return AssistantMemoryTableDocumentSelection(
+        visibleDocuments = visibleDocuments,
+        primaryDocumentsByTemplate = primaryDocumentsByTemplate,
+        extraDocuments = visibleDocuments.filter { it.id !in primaryDocumentIds },
+    )
+}
+
 @Composable
 private fun MemoryTableSection(
     settings: Settings,
@@ -542,22 +575,11 @@ private fun MemoryTableSection(
     onDeleteDocument: (MemoryTableDocument) -> Unit,
 ) {
     val enabled = settings.enableMemoryTable && assistant.enableMemoryTable
-    val documentsByTemplate = documents.groupBy { it.templateId }
-    val primaryDocumentsByTemplate = templates.associate { template ->
-        val document = documentsByTemplate[template.id]
-            ?.firstOrNull {
-                it.scopeType == MemoryTableScopeType.ASSISTANT &&
-                    it.scopeId == assistant.id.toString()
-            }
-            ?: documentsByTemplate[template.id]
-                ?.firstOrNull { it.scopeType == MemoryTableScopeType.GLOBAL }
-            ?: documentsByTemplate[template.id]?.firstOrNull()
-        template.id to document
-    }
-    val primaryDocumentIds = primaryDocumentsByTemplate.values
-        .filterNotNull()
-        .map { it.id }
-        .toSet()
+    val selection = deriveAssistantMemoryTableDocuments(
+        templates = templates,
+        documents = documents,
+        assistantId = assistant.id.toString(),
+    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -580,7 +602,7 @@ private fun MemoryTableSection(
     }
 
     templates.fastForEach { template ->
-        val document = primaryDocumentsByTemplate[template.id]
+        val document = selection.primaryDocumentsByTemplate[template.id]
         key(template.id) {
             MemoryTableTemplateItem(
                 template = template,
@@ -604,7 +626,7 @@ private fun MemoryTableSection(
         }
     }
 
-    documents.filter { it.id !in primaryDocumentIds }.fastForEach { document ->
+    selection.extraDocuments.fastForEach { document ->
         key(document.id) {
             MemoryTableDocumentItem(
                 document = document,

@@ -50,6 +50,28 @@ enum class MemoryTableScopeType {
     }
 }
 
+fun isMemoryTableScopeEffective(
+    scopeType: String,
+    scopeId: String,
+    assistantId: String,
+    conversationId: String? = null,
+): Boolean = when (scopeType) {
+    MemoryTableScopeType.GLOBAL.name -> true
+    MemoryTableScopeType.ASSISTANT.name -> scopeId == assistantId
+    MemoryTableScopeType.CONVERSATION.name -> conversationId != null && scopeId == conversationId
+    else -> false
+}
+
+fun MemoryTableDocument.isEffectiveFor(
+    assistantId: String,
+    conversationId: String? = null,
+): Boolean = isMemoryTableScopeEffective(
+    scopeType = scopeType.name,
+    scopeId = scopeId,
+    assistantId = assistantId,
+    conversationId = conversationId,
+)
+
 fun shouldEnableMemoryTable(settingsEnabled: Boolean, assistantEnabled: Boolean): Boolean {
     return settingsEnabled && assistantEnabled
 }
