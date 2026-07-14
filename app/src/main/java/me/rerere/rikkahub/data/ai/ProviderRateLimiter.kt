@@ -38,11 +38,17 @@ object ProviderRateLimiter {
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Int {
-        val promptChars = messages.sumOf { message ->
-            message.parts.filterIsInstance<UIMessagePart.Text>().sumOf { it.text.length }
-        }
-        return (promptChars / 4) + (params.maxTokens ?: 0)
+        return estimatePromptTokens(messages) + (params.maxTokens ?: 0)
     }
+}
+
+fun estimatePromptTokens(messages: List<UIMessage>): Int {
+    val promptChars = messages.fold(0L) { total, message ->
+        message.parts.filterIsInstance<UIMessagePart.Text>().fold(total) { messageTotal, part ->
+            (messageTotal + part.text.length.toLong()).coerceAtMost(Int.MAX_VALUE.toLong() * 4L)
+        }
+    }
+    return (promptChars / 4L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 }
 
 internal class ProviderRateLimiterStore(

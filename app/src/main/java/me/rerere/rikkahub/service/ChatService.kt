@@ -7,6 +7,7 @@ import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -25,7 +26,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.jsonObject
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -51,6 +53,7 @@ import me.rerere.rikkahub.data.ai.GenerationPreparationMode
 import me.rerere.rikkahub.data.ai.GenerationPreparationException
 import me.rerere.rikkahub.data.ai.PreparedProviderInput
 import me.rerere.rikkahub.data.ai.ProviderRateLimiter
+import me.rerere.rikkahub.data.ai.estimatePromptTokens
 import me.rerere.rikkahub.data.ai.currentToolCallId
 import me.rerere.rikkahub.data.ai.toContextPreview
 import kotlinx.serialization.builtins.ListSerializer
@@ -105,6 +108,7 @@ import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.event.NoticeKind
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -529,10 +533,12 @@ class ChatService(
 
                 // 开始补全
                 if (answer) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(conversationId, GenerationInvocationKind.NormalSend)
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
@@ -581,20 +587,26 @@ class ChatService(
                         messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
                     )
                     saveConversation(conversationId, newConversation)
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(conversationId, GenerationInvocationKind.Regenerate)
                 } else {
                     if (regenerateAssistantMsg) {
                         val node = conversation.getMessageNodeByMessage(message)
                         val visibleIndex = conversation.messageNodes
                             .filter { !it.hidden }
                             .indexOf(node)
-                        handleMessageComplete(conversationId, messageRange = 0..<visibleIndex)
+                        handleMessageComplete(
+                            conversationId = conversationId,
+                            invocationKind = GenerationInvocationKind.Regenerate,
+                            messageRange = 0..<visibleIndex,
+                        )
                     } else {
                         saveConversation(conversationId, conversation)
                     }
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
@@ -654,10 +666,12 @@ class ChatService(
 
                 // Only continue generation when all pending tools are handled
                 if (!hasPendingTools) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(conversationId, GenerationInvocationKind.ToolContinuation)
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
@@ -670,6 +684,7 @@ class ChatService(
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
+        invocationKind: GenerationInvocationKind,
         messageRange: ClosedRange<Int>? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
@@ -707,7 +722,7 @@ class ChatService(
                 updateConversation(conversationId, conversation)
             }
             val session = getOrCreateSession(conversationId)
-            val prepared = prepareGenerationRequest(
+            val preparedOriginal = prepareGenerationRequest(
                 settings = settings,
                 assistant = assistant,
                 model = model,
@@ -715,6 +730,12 @@ class ChatService(
                 messageRange = messageRange,
                 mode = GenerationPreparationMode.Send,
                 processingStatus = session.processingStatus,
+            )
+            val prepared = maybeAutoCompressBeforeSend(
+                conversationId = conversationId,
+                invocationKind = invocationKind,
+                preparedOriginal = preparedOriginal,
+                session = session,
             )
 
             // start generating
@@ -777,6 +798,7 @@ class ChatService(
                 }
             }
         }.onFailure {
+            if (it is CancellationException) throw it
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
@@ -801,6 +823,103 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
             cleanupStreamingSubagentMetadata(conversationId)
+        }
+    }
+
+    private suspend fun maybeAutoCompressBeforeSend(
+        conversationId: Uuid,
+        invocationKind: GenerationInvocationKind,
+        preparedOriginal: PreparedGenerationRequest,
+        session: ConversationSession,
+    ): PreparedGenerationRequest {
+        // The eligibility gate encloses every policy mutation and compression side effect.
+        return runAutoCompressionIfEligible(
+            invocationKind = invocationKind,
+            providerInputAvailable = preparedOriginal.providerInput != null,
+            preparedOriginal = preparedOriginal,
+        ) eligible@{
+            val providerInput = checkNotNull(preparedOriginal.providerInput)
+            val config = AutoCompressionConfig(
+                enabled = preparedOriginal.assistant.autoCompressEnabled,
+                thresholdTokens = preparedOriginal.assistant.autoCompressThresholdTokens,
+                targetTokens = preparedOriginal.settings.compressTargetTokens,
+                keepRecentMessages = preparedOriginal.assistant.autoCompressKeepRecentMessages,
+                identity = preparedOriginal.assistant.id.toString(),
+            )
+            val promptTokens = estimatePromptTokens(providerInput.messages)
+            val visibleMessageCount = preparedOriginal.conversation.currentMessages.size
+            val evaluation = session.evaluateAutoCompression(
+                AutoCompressionPolicyInput(
+                    config = config,
+                    invocationKind = invocationKind,
+                    providerInputAvailable = true,
+                    promptTokens = promptTokens,
+                    visibleMessageCount = visibleMessageCount,
+                    fingerprint = buildAutoCompressionFingerprint(preparedOriginal.conversation, config),
+                    busy = session.compressionCoordinator.isBusy,
+                )
+            )
+            if (evaluation.decision != AutoCompressionDecision.Trigger) return@eligible preparedOriginal
+
+            when (val result = session.compressionCoordinator.tryRun {
+                // Evaluation is optimistic. Disarm only after winning the per-conversation coordinator.
+                if (!session.commitAutoCompressionTrigger(evaluation)) return@tryRun preparedOriginal
+
+                resolveAfterAutoCompressionAttempt(
+                    preparedOriginal = preparedOriginal,
+                    compress = {
+                        compressConversationLocked(
+                            session = session,
+                            additionalPrompt = "",
+                            targetTokens = config.targetTokens,
+                            keepRecentMessages = config.keepRecentMessages,
+                        )
+                    },
+                    reload = {
+                        conversationRepo.getConversationById(conversationId)
+                            ?: throw IllegalStateException("Compressed conversation could not be reloaded")
+                        // A state update after atomic publication wins over the just-persisted snapshot.
+                        session.snapshotState().conversation
+                    },
+                    prepareReloaded = { refreshedConversation ->
+                        prepareGenerationRequest(
+                            settings = preparedOriginal.settings,
+                            assistant = preparedOriginal.assistant,
+                            model = preparedOriginal.model,
+                            conversation = refreshedConversation,
+                            messageRange = null,
+                            mode = GenerationPreparationMode.Send,
+                            processingStatus = session.processingStatus,
+                        )
+                    },
+                    onSuccess = { rebuilt ->
+                        rebuilt.providerInput?.let { rebuiltInput ->
+                            session.observeAutoCompressionPreparedInput(
+                                config = config,
+                                promptTokens = estimatePromptTokens(rebuiltInput.messages),
+                            )
+                        }
+                        appEventBus.tryEmit(
+                            AppEvent.Notice(
+                                message = context.getString(R.string.chat_auto_compress_success),
+                                kind = NoticeKind.Success,
+                            )
+                        )
+                    },
+                    onFailure = {
+                        session.recordAutoCompressionFailure(visibleMessageCount)
+                        appEventBus.tryEmit(
+                            AppEvent.Notice(
+                                message = context.getString(R.string.chat_auto_compress_failed),
+                                kind = NoticeKind.Error,
+                            )
+                        )
+                    },
+                )
+            }) {
+                CompressionLockResult.Busy -> preparedOriginal
+                is CompressionLockResult.Acquired -> result.value
+            }
         }
     }
 
@@ -1283,11 +1402,38 @@ class ChatService(
 
     suspend fun compressConversation(
         conversationId: Uuid,
-        conversation: Conversation,
         additionalPrompt: String,
         targetTokens: Int,
-        keepRecentMessages: Int = 32
-    ): Result<Unit> = runCatching {
+        keepRecentMessages: Int = 32,
+    ): Result<Unit> {
+        val session = getOrCreateSession(conversationId)
+        return try {
+            session.compressionCoordinator.tryRun {
+                compressConversationLocked(
+                    session = session,
+                    additionalPrompt = additionalPrompt,
+                    targetTokens = targetTokens,
+                    keepRecentMessages = keepRecentMessages,
+                )
+            }.toManualCompressionResult()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Result.failure(error)
+        }
+    }
+
+    private suspend fun compressConversationLocked(
+        session: ConversationSession,
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+    ) {
+        require(targetTokens >= 0) { "Compression target tokens must be nonnegative" }
+        require(keepRecentMessages >= 0) { "Compression keep-recent count must be nonnegative" }
+
+        val sourceSnapshot = session.snapshotState()
+        val conversation = sourceSnapshot.conversation
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
             ?: settings.getCurrentChatModel(conversation)
@@ -1296,7 +1442,6 @@ class ChatService(
             ?: throw IllegalStateException("Provider not found")
 
         val providerHandler = providerManager.getProviderByType(provider)
-
         val maxMessagesPerChunk = 256
         val allMessages = conversation.currentMessages
 
@@ -1304,10 +1449,8 @@ class ChatService(
             throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
         }
 
-        // Split messages into those to compress and those to keep
         val messagesToCompress: List<UIMessage>
         val messagesToKeep: List<UIMessage>
-
         if (keepRecentMessages > 0 && allMessages.size > keepRecentMessages) {
             messagesToCompress = allMessages.dropLast(keepRecentMessages)
             messagesToKeep = allMessages.takeLast(keepRecentMessages)
@@ -1321,9 +1464,7 @@ class ChatService(
         fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
             if (messages.size <= maxMessagesPerChunk) return listOf(messages)
             val mid = messages.size / 2
-            val left = splitMessages(messages.subList(0, mid))
-            val right = splitMessages(messages.subList(mid, messages.size))
-            return left + right
+            return splitMessages(messages.subList(0, mid)) + splitMessages(messages.subList(mid, messages.size))
         }
 
         suspend fun compressMessages(messages: List<UIMessage>): String {
@@ -1334,9 +1475,8 @@ class ChatService(
                 "additional_context" to if (additionalPrompt.isNotBlank()) {
                     "Additional instructions from user: $additionalPrompt"
                 } else "",
-                "locale" to Locale.getDefault().displayName
+                "locale" to Locale.getDefault().displayName,
             )
-
             val requestMessages = listOf(UIMessage.user(prompt))
             val params = backgroundTextGenerationParams(model)
             ProviderRateLimiter.await(provider = provider, messages = requestMessages, params = params)
@@ -1345,7 +1485,6 @@ class ChatService(
                 messages = requestMessages,
                 params = params,
             )
-
             return result.choices[0].message?.toText()?.trim()
                 ?: throw IllegalStateException("Failed to generate compressed summary")
         }
@@ -1367,29 +1506,71 @@ class ChatService(
                 node
             }
         }
-
         val summaryNodes = compressedSummaries.map { summary ->
             UIMessage.user(summary).toMessageNode().copy(
                 compressHiddenCount = hiddenCount.takeIf { it > 0 },
             )
         }
-
         val insertAt = nodesWithHidden.indexOfFirst { node ->
             !node.hidden && node.currentMessage.id in keepMessageIds
         }.let { if (it < 0) nodesWithHidden.size else it }
-
-        val newMessageNodes = buildList {
-            addAll(nodesWithHidden)
-            summaryNodes.forEachIndexed { offset, summaryNode ->
-                add(insertAt + offset, summaryNode)
-            }
-        }
-        val newConversation = conversation.copy(
-            messageNodes = newMessageNodes,
+        val compressedConversation = conversation.copy(
+            messageNodes = buildList {
+                addAll(nodesWithHidden)
+                summaryNodes.forEachIndexed { offset, summaryNode -> add(insertAt + offset, summaryNode) }
+            },
             chatSuggestions = emptyList(),
         )
 
-        saveConversation(conversationId, newConversation)
+        persistCompressedConversation(
+            session = session,
+            sourceSnapshot = sourceSnapshot,
+            compressedConversation = compressedConversation,
+        )
+    }
+
+    private suspend fun persistCompressedConversation(
+        session: ConversationSession,
+        sourceSnapshot: ConversationStateSnapshot,
+        compressedConversation: Conversation,
+    ) {
+        session.persistenceMutex.withLock {
+            if (!session.matchesSnapshot(sourceSnapshot)) throw CompressionSourceChangedException()
+
+            withContext(NonCancellable) {
+                var published = false
+                try {
+                    persistConversationOnly(compressedConversation)
+                    val persistedConversation = conversationRepo.getConversationById(compressedConversation.id)
+                        ?: throw IllegalStateException("Compressed conversation could not be reloaded")
+                    val previous = session.compareAndSetState(sourceSnapshot, persistedConversation)
+                        ?: throw CompressionSourceChangedException()
+                    published = true
+                    checkFilesDelete(persistedConversation, previous)
+                } catch (error: Throwable) {
+                    if (!published) {
+                        restoreLatestSessionState(session)
+                    }
+                    throw error
+                }
+            }
+        }
+    }
+
+    private suspend fun restoreLatestSessionState(session: ConversationSession) {
+        while (true) {
+            val latest = session.snapshotState()
+            persistConversationOnly(latest.conversation)
+            if (session.matchesSnapshot(latest)) return
+        }
+    }
+
+    private suspend fun persistConversationOnly(conversation: Conversation) {
+        if (conversationRepo.existsConversationById(conversation.id)) {
+            conversationRepo.updateConversation(conversation)
+        } else {
+            conversationRepo.insertConversation(conversation)
+        }
     }
 
     // ---- 对话状态更新 ----
@@ -1401,23 +1582,14 @@ class ChatService(
 
     private fun commitConversationState(conversationId: Uuid, newState: Conversation) {
         if (newState.id != conversationId) return
-        val session = getOrCreateSession(conversationId)
-        synchronized(session.stateLock) {
-            val prev = session.state.value
-            session.state.value = newState
-            checkFilesDelete(newState, prev)
-        }
+        val previous = getOrCreateSession(conversationId).replaceState(newState) ?: return
+        checkFilesDelete(newState, previous)
     }
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
-        val session = getOrCreateSession(conversationId)
-        synchronized(session.stateLock) {
-            val prev = session.state.value
-            val updated = update(prev)
-            if (updated.id != conversationId) return
-            session.state.value = updated
-            checkFilesDelete(updated, prev)
-        }
+        val result = getOrCreateSession(conversationId).updateState(update) ?: return
+        val (previous, updated) = result
+        checkFilesDelete(updated, previous)
     }
 
     private fun updateSubagentProgress(
@@ -1588,23 +1760,25 @@ class ChatService(
     }
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
-        val exists = conversationRepo.existsConversationById(conversation.id)
-        if (
-            !exists &&
-            conversation.title.isBlank() &&
-            conversation.messageNodes.isEmpty() &&
-            conversation.chatModelId == null
-        ) {
-            return // 新会话且为空时不保存
-        }
+        val session = getOrCreateSession(conversationId)
+        session.persistenceMutex.withLock {
+            val exists = conversationRepo.existsConversationById(conversation.id)
+            if (
+                !exists &&
+                conversation.title.isBlank() &&
+                conversation.messageNodes.isEmpty() &&
+                conversation.chatModelId == null
+            ) {
+                return@withLock // 新会话且为空时不保存
+            }
 
-        val updatedConversation = conversation.copy()
-        updateConversation(conversationId, updatedConversation)
-
-        if (!exists) {
-            conversationRepo.insertConversation(updatedConversation)
-        } else {
-            conversationRepo.updateConversation(updatedConversation)
+            val updatedConversation = conversation.copy()
+            updateConversation(conversationId, updatedConversation)
+            if (!exists) {
+                conversationRepo.insertConversation(updatedConversation)
+            } else {
+                conversationRepo.updateConversation(updatedConversation)
+            }
         }
     }
 

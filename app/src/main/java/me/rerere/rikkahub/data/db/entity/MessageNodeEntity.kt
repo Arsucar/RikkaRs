@@ -31,4 +31,6 @@ data class MessageNodeEntity(
     val selectIndex: Int,
     @ColumnInfo("hidden", defaultValue = "0")
     val hidden: Boolean = false,
+    @ColumnInfo("compress_hidden_count")
+    val compressHiddenCount: Int? = null,
 )

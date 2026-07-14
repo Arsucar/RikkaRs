@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.service
 
 import android.util.Log
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -8,12 +10,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import me.rerere.rikkahub.data.model.Conversation
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationSession"
 private const val IDLE_TIMEOUT_MS = 5_000L
+
+data class ConversationStateSnapshot(
+    val conversation: Conversation,
+    val revision: Long,
+)
 
 class ConversationSession(
     val id: Uuid,
@@ -21,25 +28,29 @@ class ConversationSession(
     private val scope: CoroutineScope,
     private val onIdle: (Uuid) -> Unit,
 ) {
-    // 会话状态
     val state = MutableStateFlow(initial)
 
-    /** Serializes read-modify-write on [state] (replaces CAS retry loops in ChatService). */
-    val stateLock = Any()
+    private val stateLock = Any()
+    private val stateRevision = AtomicLong(0L)
 
-    // 原子引用计数
+    /** Serializes durable conversation writes without blocking in-memory streaming updates. */
+    val persistenceMutex = Mutex()
+
+    /** Shared by manual and automatic compression for this conversation only. */
+    internal val compressionCoordinator = ConversationCompressionCoordinator()
+
+    private val autoCompressionLock = Any()
+    private var autoCompressionState = AutoCompressionRuntimeState()
+
     private val refCount = AtomicInteger(0)
 
-    // 处理状态（如 OCR 识别中）
     val processingStatus = MutableStateFlow<String?>(null)
 
-    // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
     val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
 
-    // 空闲检查任务
     private var idleCheckJob: Job? = null
 
     fun acquire(): Int = refCount.incrementAndGet().also {
@@ -52,7 +63,6 @@ class ConversationSession(
         if (it <= 0) scheduleIdleCheck()
     }
 
-    // 作用域 API - 短请求（REST）
     inline fun <T> withRef(block: () -> T): T {
         acquire()
         try {
@@ -62,7 +72,6 @@ class ConversationSession(
         }
     }
 
-    // 作用域 API - 长连接（SSE、挂起函数）
     suspend inline fun <T> withRefSuspend(block: () -> T): T {
         acquire()
         try {
@@ -73,17 +82,128 @@ class ConversationSession(
     }
 
     fun setJob(job: Job?) {
-        _generationJob.value?.cancel()
-        _generationJob.value = job
+        val previous = replaceGenerationJob(job)
         job?.invokeOnCompletion {
-            _generationJob.value = null
-            if (refCount.get() <= 0) {
+            if (_generationJob.compareAndSet(job, null) && refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
+        }
+        previous?.cancel()
+        if (job == null && refCount.get() <= 0) {
+            scheduleIdleCheck()
+        }
+    }
+
+    private fun replaceGenerationJob(job: Job?): Job? {
+        while (true) {
+            val previous = _generationJob.value
+            if (_generationJob.compareAndSet(previous, job)) return previous
         }
     }
 
     fun getJob(): Job? = _generationJob.value
+
+    fun snapshotState(): ConversationStateSnapshot = synchronized(stateLock) {
+        ConversationStateSnapshot(
+            conversation = state.value,
+            revision = stateRevision.get(),
+        )
+    }
+
+    fun replaceState(newState: Conversation): Conversation? = synchronized(stateLock) {
+        if (newState.id != id) return@synchronized null
+        val previous = state.value
+        state.value = newState
+        stateRevision.incrementAndGet()
+        previous
+    }
+
+    fun updateState(transform: (Conversation) -> Conversation): Pair<Conversation, Conversation>? =
+        synchronized(stateLock) {
+            val previous = state.value
+            val updated = transform(previous)
+            if (updated.id != id) return@synchronized null
+            state.value = updated
+            stateRevision.incrementAndGet()
+            previous to updated
+        }
+
+    fun matchesSnapshot(snapshot: ConversationStateSnapshot): Boolean = synchronized(stateLock) {
+        stateRevision.get() == snapshot.revision && state.value == snapshot.conversation
+    }
+
+    fun compareAndSetState(
+        snapshot: ConversationStateSnapshot,
+        newState: Conversation,
+    ): Conversation? = synchronized(stateLock) {
+        if (
+            newState.id != id ||
+            stateRevision.get() != snapshot.revision ||
+            state.value != snapshot.conversation
+        ) {
+            return@synchronized null
+        }
+        val previous = state.value
+        state.value = newState
+        stateRevision.incrementAndGet()
+        previous
+    }
+
+    fun evaluateAutoCompression(input: AutoCompressionPolicyInput): AutoCompressionEvaluation =
+        synchronized(autoCompressionLock) {
+            evaluateAutoCompression(input, autoCompressionState).also { evaluation ->
+                if (evaluation.decision != AutoCompressionDecision.Trigger) {
+                    autoCompressionState = evaluation.nextState
+                }
+            }
+        }
+
+    fun commitAutoCompressionTrigger(evaluation: AutoCompressionEvaluation): Boolean =
+        synchronized(autoCompressionLock) {
+            if (
+                evaluation.decision != AutoCompressionDecision.Trigger ||
+                autoCompressionState != evaluation.previousState
+            ) {
+                return@synchronized false
+            }
+            autoCompressionState = evaluation.nextState
+            true
+        }
+
+    fun recordAutoCompressionFailure(visibleMessageCount: Int) {
+        synchronized(autoCompressionLock) {
+            autoCompressionState = autoCompressionState.withFailureAt(visibleMessageCount)
+        }
+    }
+
+    fun observeAutoCompressionPreparedInput(
+        config: AutoCompressionConfig,
+        promptTokens: Int,
+    ) {
+        synchronized(autoCompressionLock) {
+            if (!config.enabled) {
+                autoCompressionState = AutoCompressionRuntimeState(configSignature = config.signature)
+                return@synchronized
+            }
+            val lowWatermark = calculateAutoCompressionLowWatermark(
+                thresholdTokens = config.thresholdTokens,
+                targetTokens = config.targetTokens,
+            ) ?: return@synchronized
+            if (autoCompressionState.configSignature != config.signature) {
+                autoCompressionState = AutoCompressionRuntimeState(configSignature = config.signature)
+            }
+            if (promptTokens <= lowWatermark) {
+                autoCompressionState = autoCompressionState.copy(
+                    armed = true,
+                    lastAttemptFingerprint = null,
+                    failedVisibleMessageCount = null,
+                )
+            }
+        }
+    }
+
+    internal fun autoCompressionStateForTest(): AutoCompressionRuntimeState =
+        synchronized(autoCompressionLock) { autoCompressionState }
 
     private fun scheduleIdleCheck() {
         idleCheckJob?.cancel()
@@ -101,9 +221,11 @@ class ConversationSession(
     }
 
     fun cleanup() {
-        _generationJob.value?.cancel()
-        _generationJob.value = null
+        replaceGenerationJob(null)?.cancel()
         idleCheckJob?.cancel()
         idleCheckJob = null
+        synchronized(autoCompressionLock) {
+            autoCompressionState = AutoCompressionRuntimeState()
+        }
     }
 }

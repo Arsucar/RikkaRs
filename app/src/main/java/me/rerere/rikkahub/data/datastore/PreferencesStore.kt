@@ -614,6 +614,16 @@ class SettingsStore(
         }
     }
 
+    suspend fun updateAssistantConfig(assistant: Assistant) {
+        val fallbackAssistants = settingsFlow.value.assistants
+        dataStore.edit { preferences ->
+            preferences.writeAssistantConfig(
+                assistant = assistant,
+                fallbackAssistants = fallbackAssistants,
+            )
+        }
+    }
+
     suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
         update { settings ->
             settings.copy(
@@ -678,6 +688,23 @@ class SettingsStore(
             )
         }
     }
+}
+
+internal fun MutablePreferences.writeAssistantConfig(
+    assistant: Assistant,
+    fallbackAssistants: List<Assistant>,
+) {
+    val assistants = this[SettingsStore.ASSISTANTS]?.let {
+        JsonInstant.decodeFromString<List<Assistant>>(it)
+    } ?: fallbackAssistants
+    if (assistants.none { it.id == assistant.id }) {
+        return
+    }
+    this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(
+        assistants.map { current ->
+            if (current.id == assistant.id) assistant else current
+        }
+    )
 }
 
 internal data class CompressionPreferences(

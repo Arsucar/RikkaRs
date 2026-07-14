@@ -262,11 +262,10 @@ class ChatVM(
     fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {
             val result = chatService.compressConversation(
-                _conversationId,
-                conversation.value,
-                additionalPrompt,
-                targetTokens,
-                keepRecentMessages
+                conversationId = _conversationId,
+                additionalPrompt = additionalPrompt,
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
             )
             handleManualCompressionResult(
                 result = result,

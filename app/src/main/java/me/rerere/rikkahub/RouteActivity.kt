@@ -56,6 +56,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
 import com.dokar.sonner.Toaster
+import com.dokar.sonner.ToastType
 import com.dokar.sonner.rememberToasterState
 import kotlinx.serialization.Serializable
 import me.rerere.highlight.Highlighter
@@ -65,6 +66,7 @@ import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.db.MigrationState
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.event.NoticeKind
 import me.rerere.rikkahub.ui.activity.SafeModeActivity
 import me.rerere.rikkahub.ui.components.ui.TTSController
 import me.rerere.rikkahub.ui.context.LocalASRState
@@ -260,6 +262,14 @@ class RouteActivity : ComponentActivity() {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
+                    is AppEvent.Notice -> toastState.show(
+                        message = event.message,
+                        type = when (event.kind) {
+                            NoticeKind.Normal -> ToastType.Normal
+                            NoticeKind.Success -> ToastType.Success
+                            NoticeKind.Error -> ToastType.Error
+                        },
+                    )
                     is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
                     is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                     is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费

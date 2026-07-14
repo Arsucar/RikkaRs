@@ -1604,4 +1604,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="context_inspector_error_assistant">会話のアシスタントを解決できません</string>
   <string name="context_inspector_error_model">コンテキストを確認する前にチャットモデルを選択してください</string>
   <string name="context_inspector_error_pending_tool">保留中のツール要求を処理してから、次のモデルコンテキストをプレビューしてください</string>
+  <string name="assistant_page_auto_compress">コンテキストを自動圧縮</string>
+  <string name="assistant_page_auto_compress_desc">送信前に長い会話を自動的に圧縮します。トークン数は概算です。</string>
+  <string name="assistant_page_auto_compress_threshold">圧縮しきい値（トークン）</string>
+  <string name="assistant_page_auto_compress_threshold_desc">概算トークン数がこの値以上になると自動圧縮を開始します。グローバル圧縮目標の %1$d トークンより大きい値にしてください。</string>
+  <string name="assistant_page_auto_compress_threshold_error">%1$d より大きい整数を入力してください。</string>
+  <string name="assistant_page_auto_compress_keep_recent">保持する直近のメッセージ</string>
+  <string name="assistant_page_auto_compress_keep_recent_desc">圧縮せずに保持する最新メッセージの数です。</string>
+  <string name="assistant_page_auto_compress_keep_recent_error">0 以上の整数を入力してください。</string>
+  <string name="chat_auto_compress_success">コンテキストを自動圧縮しました。</string>
+  <string name="chat_auto_compress_failed">コンテキストの自動圧縮に失敗しました。元のコンテキストで送信します。</string>
 </resources>

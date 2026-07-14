@@ -8,7 +8,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.rerere.ai.provider.ProviderRateLimit
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -122,6 +126,49 @@ class ProviderRateLimiterTest {
         now.set(100L)
         limiter.await(provider, estimatedTokens = 1)
         assertTrue(cancelled.isCancelled)
+    }
+
+    @Test
+    fun promptEstimatorHandlesEmptyTextBoundariesAndMultipleMessages() {
+        assertEquals(0, estimatePromptTokens(emptyList()))
+        assertEquals(0, estimatePromptTokens(listOf(UIMessage.user(""))))
+        assertEquals(0, estimatePromptTokens(listOf(UIMessage.user("abc"))))
+        assertEquals(1, estimatePromptTokens(listOf(UIMessage.user("abcd"))))
+        assertEquals(1, estimatePromptTokens(listOf(UIMessage.user("abcdefg"))))
+        assertEquals(2, estimatePromptTokens(listOf(UIMessage.user("abcdefgh"))))
+        assertEquals(3, estimatePromptTokens(listOf(UIMessage.user("abcdefgh"), UIMessage.user("abcd"))))
+    }
+
+    @Test
+    fun promptEstimatorIgnoresNonTextPartsAndCountsAllTextParts() {
+        val message = UIMessage(
+            role = me.rerere.ai.core.MessageRole.USER,
+            parts = listOf(
+                UIMessagePart.Image("data:image/png;base64," + "a".repeat(10_000)),
+                UIMessagePart.Text("1234"),
+                UIMessagePart.Document("file:///tmp/doc", "doc.txt"),
+                UIMessagePart.Text("5678"),
+            ),
+        )
+
+        assertEquals(2, estimatePromptTokens(listOf(message)))
+    }
+
+    @Test
+    fun limiterEstimateRetainsOutputReserveSemantics() {
+        val messages = listOf(UIMessage.user("12345678"))
+        assertEquals(7, ProviderRateLimiter.estimateTokens(
+            messages,
+            TextGenerationParams(model = Model("model"), maxTokens = 5),
+        ))
+        assertEquals(-3, ProviderRateLimiter.estimateTokens(
+            messages,
+            TextGenerationParams(model = Model("model"), maxTokens = -5),
+        ))
+        assertEquals(2, ProviderRateLimiter.estimateTokens(
+            messages,
+            TextGenerationParams(model = Model("model"), maxTokens = null),
+        ))
     }
 
     private fun provider(

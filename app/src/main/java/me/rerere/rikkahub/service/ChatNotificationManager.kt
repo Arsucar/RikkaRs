@@ -62,7 +62,11 @@ class ChatNotificationManager(
                 when (event) {
                     is AppEvent.ChatGenerationUpdate -> handleGenerationUpdate(event)
                     is AppEvent.ChatGenerationEnded -> handleGenerationEnded(event)
-                    else -> {}
+                    is AppEvent.Notice,
+                    is AppEvent.Speak,
+                    is AppEvent.OpenUsageAccessSettings,
+                    is AppEvent.McpOAuthCallback,
+                    -> Unit
                 }
             }
         }

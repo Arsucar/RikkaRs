@@ -63,6 +63,7 @@ fun AssistantBasicPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
@@ -90,6 +91,7 @@ fun AssistantBasicPage(id: String) {
             providers = providers,
             tags = tags,
             workspaces = workspaces,
+            compressTargetTokens = settings.compressTargetTokens,
             onUpdate = { vm.update(it) },
             vm = vm
         )
@@ -103,9 +105,22 @@ internal fun AssistantBasicContent(
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     tags: List<DataTag>,
     workspaces: List<WorkspaceEntity>,
+    compressTargetTokens: Int,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    var autoCompressThresholdInput by remember(assistant.id, assistant.autoCompressThresholdTokens) {
+        mutableStateOf(assistant.autoCompressThresholdTokens.toString())
+    }
+    var autoCompressKeepRecentInput by remember(assistant.id, assistant.autoCompressKeepRecentMessages) {
+        mutableStateOf(assistant.autoCompressKeepRecentMessages.toString())
+    }
+    val parsedAutoCompressThreshold = parseAutoCompressThresholdInput(
+        input = autoCompressThresholdInput,
+        compressTargetTokens = compressTargetTokens,
+    )
+    val parsedAutoCompressKeepRecent = parseAutoCompressKeepRecentInput(autoCompressKeepRecentInput)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -415,6 +430,94 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_auto_compress))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_auto_compress_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.autoCompressEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdate(assistant.copy(autoCompressEnabled = enabled))
+                        }
+                    )
+                }
+            )
+            if (assistant.autoCompressEnabled) {
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_auto_compress_threshold))
+                    },
+                    description = {
+                        Text(
+                            stringResource(
+                                R.string.assistant_page_auto_compress_threshold_desc,
+                                compressTargetTokens,
+                            )
+                        )
+                    },
+                ) {
+                    OutlinedTextField(
+                        value = autoCompressThresholdInput,
+                        onValueChange = { input ->
+                            autoCompressThresholdInput = input
+                            parseAutoCompressThresholdInput(input, compressTargetTokens).value?.let { value ->
+                                onUpdate(assistant.copy(autoCompressThresholdTokens = value))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = !parsedAutoCompressThreshold.isValid,
+                        supportingText = {
+                            if (!parsedAutoCompressThreshold.isValid) {
+                                Text(
+                                    stringResource(
+                                        R.string.assistant_page_auto_compress_threshold_error,
+                                        compressTargetTokens,
+                                    )
+                                )
+                            }
+                        },
+                    )
+                }
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_auto_compress_keep_recent))
+                    },
+                    description = {
+                        Text(stringResource(R.string.assistant_page_auto_compress_keep_recent_desc))
+                    },
+                ) {
+                    OutlinedTextField(
+                        value = autoCompressKeepRecentInput,
+                        onValueChange = { input ->
+                            autoCompressKeepRecentInput = input
+                            parseAutoCompressKeepRecentInput(input).value?.let { value ->
+                                onUpdate(assistant.copy(autoCompressKeepRecentMessages = value))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = !parsedAutoCompressKeepRecent.isValid,
+                        supportingText = {
+                            if (!parsedAutoCompressKeepRecent.isValid) {
+                                Text(stringResource(R.string.assistant_page_auto_compress_keep_recent_error))
+                            }
+                        },
+                    )
+                }
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_stream_output))
                 },
                 description = {
@@ -569,4 +672,31 @@ internal fun AssistantBasicContent(
             }
         }
     }
+}
+
+internal data class ParsedAutoCompressInput(
+    val value: Int?,
+    val isValid: Boolean,
+)
+
+internal fun parseAutoCompressThresholdInput(
+    input: String,
+    compressTargetTokens: Int,
+): ParsedAutoCompressInput {
+    val value = input.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }
+        ?.toIntOrNull()
+    val isValid = value != null && value > 0 && value.toLong() > compressTargetTokens.toLong()
+    return ParsedAutoCompressInput(
+        value = value?.takeIf { isValid },
+        isValid = isValid,
+    )
+}
+
+internal fun parseAutoCompressKeepRecentInput(input: String): ParsedAutoCompressInput {
+    val value = input.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }
+        ?.toIntOrNull()
+    return ParsedAutoCompressInput(
+        value = value,
+        isValid = value != null,
+    )
 }

@@ -1701,4 +1701,14 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="context_inspector_error_assistant">无法解析当前对话的助手</string>
   <string name="context_inspector_error_model">请先选择聊天模型再查看上下文</string>
   <string name="context_inspector_error_pending_tool">请先处理待确认的工具请求，再预览下一次模型上下文</string>
+  <string name="assistant_page_auto_compress">自动压缩上下文</string>
+  <string name="assistant_page_auto_compress_desc">发送前自动压缩过长的对话。Token 数量仅为粗略估算。</string>
+  <string name="assistant_page_auto_compress_threshold">压缩阈值（Token）</string>
+  <string name="assistant_page_auto_compress_threshold_desc">当粗略估算的 Token 数达到或超过此值时开始自动压缩。该值必须大于全局压缩目标 %1$d Token。</string>
+  <string name="assistant_page_auto_compress_threshold_error">请输入大于 %1$d 的整数。</string>
+  <string name="assistant_page_auto_compress_keep_recent">保留最近消息</string>
+  <string name="assistant_page_auto_compress_keep_recent_desc">压缩时保留的最新消息数量。</string>
+  <string name="assistant_page_auto_compress_keep_recent_error">请输入大于或等于 0 的整数。</string>
+  <string name="chat_auto_compress_success">已自动压缩上下文。</string>
+  <string name="chat_auto_compress_failed">自动压缩上下文失败，将使用原始上下文继续发送。</string>
 </resources>

@@ -1719,4 +1719,14 @@
   <string name="context_inspector_error_assistant">The conversation assistant could not be resolved</string>
   <string name="context_inspector_error_model">Select a chat model before inspecting context</string>
   <string name="context_inspector_error_pending_tool">A pending tool must be handled before the next provider context can be known</string>
+  <string name="assistant_page_auto_compress">Auto-compress Context</string>
+  <string name="assistant_page_auto_compress_desc">Automatically compress long conversations before sending. Token counts are rough estimates.</string>
+  <string name="assistant_page_auto_compress_threshold">Compression Threshold (Tokens)</string>
+  <string name="assistant_page_auto_compress_threshold_desc">Start auto-compression at or above this rough token estimate. Must be greater than the global compression target (%1$d).</string>
+  <string name="assistant_page_auto_compress_threshold_error">Enter a whole number greater than %1$d.</string>
+  <string name="assistant_page_auto_compress_keep_recent">Keep Recent Messages</string>
+  <string name="assistant_page_auto_compress_keep_recent_desc">Number of newest messages to keep uncompressed.</string>
+  <string name="assistant_page_auto_compress_keep_recent_error">Enter a whole number of 0 or more.</string>
+  <string name="chat_auto_compress_success">Context was automatically compressed.</string>
+  <string name="chat_auto_compress_failed">Automatic context compression failed. Sending with the original context.</string>
 </resources>

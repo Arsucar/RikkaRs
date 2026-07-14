@@ -557,15 +557,11 @@ class ConversationRepository(
                 }
                 if (page.isEmpty()) break
                 page.forEach { entity ->
-                    val messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages)
                     val nodeId = Uuid.parse(entity.id)
                     nodes.add(
-                        MessageNode(
-                            id = nodeId,
-                            messages = messages,
-                            selectIndex = entity.selectIndex,
-                            hidden = entity.hidden,
-                            isFavorite = favoriteNodeIds.contains(nodeId)
+                        messageNodeEntityToMessageNode(
+                            entity = entity,
+                            isFavorite = favoriteNodeIds.contains(nodeId),
                         )
                     )
                 }
@@ -577,13 +573,10 @@ class ConversationRepository(
 
     private suspend fun saveMessageNodes(conversationId: String, nodes: List<MessageNode>) {
         val entities = nodes.mapIndexed { index, node ->
-            MessageNodeEntity(
-                id = node.id.toString(),
+            messageNodeToEntity(
+                node = node,
                 conversationId = conversationId,
                 nodeIndex = index,
-                messages = JsonInstant.encodeToString(node.messages),
-                selectIndex = node.selectIndex,
-                hidden = node.hidden,
             )
         }
         messageNodeDAO.insertAll(entities)
@@ -598,18 +591,41 @@ class ConversationRepository(
         deleteIds.forEach { messageNodeDAO.deleteById(it) }
         upsertNodes.forEachIndexed { index, node ->
             messageNodeDAO.insert(
-                MessageNodeEntity(
-                    id = node.id.toString(),
+                messageNodeToEntity(
+                    node = node,
                     conversationId = conversationId,
                     nodeIndex = index,
-                    messages = JsonInstant.encodeToString(node.messages),
-                    selectIndex = node.selectIndex,
-                    hidden = node.hidden,
                 ),
             )
         }
     }
 }
+
+internal fun messageNodeToEntity(
+    node: MessageNode,
+    conversationId: String,
+    nodeIndex: Int,
+): MessageNodeEntity = MessageNodeEntity(
+    id = node.id.toString(),
+    conversationId = conversationId,
+    nodeIndex = nodeIndex,
+    messages = JsonInstant.encodeToString(node.messages),
+    selectIndex = node.selectIndex,
+    hidden = node.hidden,
+    compressHiddenCount = node.compressHiddenCount,
+)
+
+internal fun messageNodeEntityToMessageNode(
+    entity: MessageNodeEntity,
+    isFavorite: Boolean,
+): MessageNode = MessageNode(
+    id = Uuid.parse(entity.id),
+    messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages),
+    selectIndex = entity.selectIndex,
+    hidden = entity.hidden,
+    compressHiddenCount = entity.compressHiddenCount,
+    isFavorite = isFavorite,
+)
 
 /**
  * Pure diff for [ConversationRepository.syncMessageNodes]: orphan ids to delete and nodes to upsert (order preserved).

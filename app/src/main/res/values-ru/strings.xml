@@ -1604,4 +1604,14 @@
   <string name="context_inspector_error_assistant">Не удалось определить ассистента диалога</string>
   <string name="context_inspector_error_model">Выберите модель чата перед проверкой контекста</string>
   <string name="context_inspector_error_pending_tool">Обработайте ожидающий запрос инструмента перед просмотром следующего контекста модели</string>
+  <string name="assistant_page_auto_compress">Автосжатие контекста</string>
+  <string name="assistant_page_auto_compress_desc">Автоматически сжимать длинные диалоги перед отправкой. Количество токенов является приблизительной оценкой.</string>
+  <string name="assistant_page_auto_compress_threshold">Порог сжатия (токены)</string>
+  <string name="assistant_page_auto_compress_threshold_desc">Запускать автоматическое сжатие при достижении этой приблизительной оценки. Значение должно быть больше глобальной цели сжатия: %1$d токенов.</string>
+  <string name="assistant_page_auto_compress_threshold_error">Введите целое число больше %1$d.</string>
+  <string name="assistant_page_auto_compress_keep_recent">Сохранять последние сообщения</string>
+  <string name="assistant_page_auto_compress_keep_recent_desc">Количество последних сообщений, которые не нужно сжимать.</string>
+  <string name="assistant_page_auto_compress_keep_recent_error">Введите целое число не меньше 0.</string>
+  <string name="chat_auto_compress_success">Контекст автоматически сжат.</string>
+  <string name="chat_auto_compress_failed">Не удалось автоматически сжать контекст. Отправка продолжится с исходным контекстом.</string>
 </resources>

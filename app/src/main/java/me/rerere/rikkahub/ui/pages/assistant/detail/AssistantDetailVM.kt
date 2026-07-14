@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.pruneExtensionIds
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.files.FileUtils
@@ -189,18 +190,11 @@ class AssistantDetailVM(
         viewModelScope.launch {
             val settings = settings.value
             val prunedAssistant = assistant.pruneExtensionIds(settings)
-            settingsStore.update(
-                settings = settings.copy(
-                    assistants = settings.assistants.map {
-                        if (it.id == prunedAssistant.id) {
-                            checkAvatarDelete(old = it, new = prunedAssistant) // 删除旧头像
-                            checkBackgroundDelete(old = it, new = prunedAssistant) // 删除旧背景
-                            prunedAssistant
-                        } else {
-                            it
-                        }
-                    })
-            )
+            settings.getAssistantById(prunedAssistant.id)?.let { oldAssistant ->
+                checkAvatarDelete(old = oldAssistant, new = prunedAssistant) // 删除旧头像
+                checkBackgroundDelete(old = oldAssistant, new = prunedAssistant) // 删除旧背景
+            }
+            settingsStore.updateAssistantConfig(prunedAssistant)
         }
     }
 

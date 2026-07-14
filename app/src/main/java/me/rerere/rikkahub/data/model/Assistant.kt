@@ -25,6 +25,9 @@ data class Assistant(
     val temperature: Float? = null,
     val topP: Float? = null,
     val contextMessageSize: Int = 0,
+    val autoCompressEnabled: Boolean = false,
+    val autoCompressThresholdTokens: Int = 8000,
+    val autoCompressKeepRecentMessages: Int = 32,
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
