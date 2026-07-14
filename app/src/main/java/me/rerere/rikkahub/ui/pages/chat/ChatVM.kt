@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -161,6 +162,13 @@ class ChatVM(
     val settings: StateFlow<Settings> =
         settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
+    private val assistantSwitchCoordinator = AssistantSwitchCoordinator(
+        currentAssistantId = { settingsStore.settingsFlow.value.assistantId },
+        persistAssistant = ::persistSelectedAssistant,
+        getLatestActiveConversationId = conversationRepo::getLatestActiveConversationIdOfAssistant,
+        onError = { chatService.addError(it, _conversationId) },
+    )
+
     // 网络搜索
     val enableWebSearch = settings.map {
         it.enableWebSearch
@@ -209,6 +217,21 @@ class ChatVM(
             checkUserAvatarDelete(oldSettings, newSettings)
             settingsStore.update(newSettings)
         }
+    }
+
+    fun switchAssistant(
+        targetAssistantId: Uuid,
+        navigate: (Uuid) -> Unit,
+    ) {
+        val request = assistantSwitchCoordinator.requestSwitch(targetAssistantId)
+        viewModelScope.launch {
+            assistantSwitchCoordinator.executeSwitch(request, navigate)
+        }
+    }
+
+    private suspend fun persistSelectedAssistant(assistantId: Uuid) {
+        settingsStore.updateAssistant(assistantId)
+        settingsStore.settingsFlow.first { it.assistantId == assistantId }
     }
 
     // 检查用户头像删除

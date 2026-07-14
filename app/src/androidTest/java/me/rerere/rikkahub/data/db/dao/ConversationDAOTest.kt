@@ -61,6 +61,119 @@ class ConversationDAOTest {
     }
 
     @Test
+    fun getLatestActiveConversationIdOfAssistant_ignoresPinnedPriority() = runBlocking {
+        val assistantId = Uuid.random().toString()
+        val olderPinnedId = Uuid.random().toString()
+        val newerUnpinnedId = Uuid.random().toString()
+        val now = Instant.now().toEpochMilli()
+
+        dao.insert(
+            entity(
+                id = olderPinnedId,
+                assistantId = assistantId,
+                title = "Older pinned",
+                now = now,
+                updateAt = now - 1_000,
+                isPinned = true,
+            ),
+        )
+        dao.insert(
+            entity(
+                id = newerUnpinnedId,
+                assistantId = assistantId,
+                title = "Newer unpinned",
+                now = now,
+                updateAt = now,
+            ),
+        )
+
+        assertEquals(newerUnpinnedId, dao.getLatestActiveConversationIdOfAssistant(assistantId))
+    }
+
+    @Test
+    fun getLatestActiveConversationIdOfAssistant_excludesArchivedLatest() = runBlocking {
+        val assistantId = Uuid.random().toString()
+        val activeId = Uuid.random().toString()
+        val archivedId = Uuid.random().toString()
+        val now = Instant.now().toEpochMilli()
+
+        dao.insert(
+            entity(
+                id = activeId,
+                assistantId = assistantId,
+                title = "Active",
+                now = now,
+                updateAt = now - 1_000,
+            ),
+        )
+        dao.insert(
+            entity(
+                id = archivedId,
+                assistantId = assistantId,
+                title = "Archived latest",
+                now = now,
+                updateAt = now,
+                isArchived = true,
+                archivedAt = now,
+            ),
+        )
+
+        assertEquals(activeId, dao.getLatestActiveConversationIdOfAssistant(assistantId))
+    }
+
+    @Test
+    fun getLatestActiveConversationIdOfAssistant_isolatesAssistant() = runBlocking {
+        val targetAssistantId = Uuid.random().toString()
+        val otherAssistantId = Uuid.random().toString()
+        val targetConversationId = Uuid.random().toString()
+        val otherConversationId = Uuid.random().toString()
+        val now = Instant.now().toEpochMilli()
+
+        dao.insert(
+            entity(
+                id = targetConversationId,
+                assistantId = targetAssistantId,
+                title = "Target assistant",
+                now = now,
+                updateAt = now - 1_000,
+            ),
+        )
+        dao.insert(
+            entity(
+                id = otherConversationId,
+                assistantId = otherAssistantId,
+                title = "Other assistant latest",
+                now = now,
+                updateAt = now,
+            ),
+        )
+
+        assertEquals(
+            targetConversationId,
+            dao.getLatestActiveConversationIdOfAssistant(targetAssistantId),
+        )
+    }
+
+    @Test
+    fun getLatestActiveConversationIdOfAssistant_returnsNullWithoutActiveHistory() = runBlocking {
+        val assistantId = Uuid.random().toString()
+        val now = Instant.now().toEpochMilli()
+
+        dao.insert(
+            entity(
+                id = Uuid.random().toString(),
+                assistantId = assistantId,
+                title = "Archived only",
+                now = now,
+                isArchived = true,
+                archivedAt = now,
+            ),
+        )
+
+        assertEquals(null, dao.getLatestActiveConversationIdOfAssistant(assistantId))
+    }
+
+    @Test
     fun getArchivedConversations_ordersByArchivedAtDesc() = runBlocking {
         val assistantId = Uuid.random().toString()
         val now = Instant.now().toEpochMilli()
@@ -225,6 +338,7 @@ class ConversationDAOTest {
         assistantId: String,
         title: String,
         now: Long,
+        updateAt: Long = now,
         isPinned: Boolean = false,
         isArchived: Boolean = false,
         archivedAt: Long = 0L,
@@ -234,7 +348,7 @@ class ConversationDAOTest {
         title = title,
         nodes = "[]",
         createAt = now,
-        updateAt = now,
+        updateAt = updateAt,
         chatSuggestions = "[]",
         isPinned = isPinned,
         isArchived = isArchived,

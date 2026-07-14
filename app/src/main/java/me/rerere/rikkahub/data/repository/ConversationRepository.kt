@@ -49,6 +49,12 @@ class ConversationRepository(
         }
     }
 
+    suspend fun getLatestActiveConversationIdOfAssistant(assistantId: Uuid): Uuid? {
+        return conversationDAO
+            .getLatestActiveConversationIdOfAssistant(assistantId.toString())
+            ?.let(Uuid::parse)
+    }
+
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
         return conversationDAO
             .getConversationsOfAssistant(assistantId.toString())
