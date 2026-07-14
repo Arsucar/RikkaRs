@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
@@ -179,6 +180,27 @@ fun rememberModelListState(
     }
 }
 
+internal data class RecentChatModelItem(
+    val model: Model,
+    val provider: ProviderSetting,
+)
+
+internal fun resolveRecentChatModelItems(
+    recentChatModelIds: List<Uuid>,
+    providers: List<ProviderSetting>,
+    type: ModelType,
+): List<RecentChatModelItem> {
+    if (type != ModelType.CHAT) return emptyList()
+
+    return recentChatModelIds.mapNotNull { modelId ->
+        val model = providers.findModelById(modelId) ?: return@mapNotNull null
+        val provider = model.findProvider(providers = providers, checkOverwrite = false)
+            ?: return@mapNotNull null
+        if (!provider.enabled || model.type != ModelType.CHAT) return@mapNotNull null
+        RecentChatModelItem(model = model, provider = provider)
+    }
+}
+
 @Composable
 fun ModelSelector(
     modelId: Uuid?,
@@ -198,17 +220,11 @@ fun ModelSelector(
     )
     val model = state.currentModel
     val recentChatModels = remember(settings.recentChatModels, providers, type) {
-        if (type != ModelType.CHAT) {
-            emptyList()
-        } else {
-            settings.recentChatModels.mapNotNull { modelId ->
-                val recentModel = providers.findModelById(modelId) ?: return@mapNotNull null
-                val provider = recentModel.findProvider(providers = providers, checkOverwrite = false)
-                    ?: return@mapNotNull null
-                if (!provider.enabled || recentModel.type != ModelType.CHAT) return@mapNotNull null
-                recentModel
-            }
-        }
+        resolveRecentChatModelItems(
+            recentChatModelIds = settings.recentChatModels,
+            providers = providers,
+            type = type,
+        )
     }
     var recentMenuExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
@@ -287,31 +303,41 @@ fun ModelSelector(
                 DropdownMenu(
                     expanded = recentMenuExpanded,
                     onDismissRequest = { recentMenuExpanded = false },
+                    modifier = Modifier.widthIn(max = 280.dp),
                 ) {
-                    recentChatModels.forEach { recentModel ->
+                    recentChatModels.forEach { item ->
                         DropdownMenuItem(
                             text = {
-                                Text(
-                                    text = recentModel.displayName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (recentModel.id == modelId) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        Color.Unspecified
-                                    },
-                                )
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = item.model.displayName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (item.model.id == modelId) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            Color.Unspecified
+                                        },
+                                    )
+                                    Text(
+                                        text = item.provider.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             },
                             leadingIcon = {
                                 AutoAIIcon(
                                     modifier = Modifier.size(24.dp),
-                                    name = recentModel.modelId,
+                                    name = item.model.modelId,
                                     color = Color.Transparent,
                                 )
                             },
                             onClick = {
                                 recentMenuExpanded = false
-                                onSelect(recentModel)
+                                onSelect(item.model)
                             },
                         )
                     }
