@@ -44,7 +44,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -59,7 +58,6 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_SCHEMA_JSON
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
@@ -81,18 +79,15 @@ fun AssistantMemoryTableDocumentEditorPage(
     conversationId: String? = null,
 ) {
     val vm: AssistantDetailVM = koinViewModel(parameters = { parametersOf(assistantId) })
-    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val editorScopeId = remember(initialScopeType, assistantId, conversationId) {
         memoryTableEditorScopeId(initialScopeType, assistantId, conversationId)
     }
-    val resolvedTemplate = remember(memoryTableTemplates, templateId) {
-        memoryTableTemplates.firstOrNull { it.id == templateId }
-            ?: MemoryTableTemplate(
-                id = templateId,
-                name = templateId,
-                schemaJson = DEFAULT_MEMORY_TABLE_SCHEMA_JSON,
-            )
+    var resolvedTemplate by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        mutableStateOf<MemoryTableTemplate?>(null)
+    }
+    var templateLookupComplete by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
+        mutableStateOf(false)
     }
     var draft by remember(documentId, templateId, assistantId, initialScopeType, conversationId) {
         mutableStateOf<MemoryTableDocument?>(null)
@@ -108,6 +103,13 @@ fun AssistantMemoryTableDocumentEditorPage(
         val scopeId = editorScopeId
         if (scopeId == null) {
             lookupComplete = true
+            navController.popBackStack()
+            return@LaunchedEffect
+        }
+        val template = vm.getMemoryTableTemplateForEditor(templateId)
+        resolvedTemplate = template
+        templateLookupComplete = true
+        if (shouldCloseMemoryTableEditor(templateLookupComplete, template)) {
             navController.popBackStack()
             return@LaunchedEffect
         }
@@ -130,21 +132,22 @@ fun AssistantMemoryTableDocumentEditorPage(
     }
 
     val document = draft
-    if (!lookupComplete || document == null) {
+    val template = resolvedTemplate
+    if (!templateLookupComplete || !lookupComplete || document == null || template == null) {
         Box(Modifier.fillMaxSize())
         return
     }
 
     MemoryTableDocumentEditorScaffold(
         document = document,
-        template = resolvedTemplate,
+        template = template,
         assistantId = assistantId,
         isNewDocument = isNewDocument,
         onDraftChange = { draft = it },
         onUpdateTemplate = { vm.upsertMemoryTableTemplate(it) },
         onSave = { saved ->
             draft = saved
-            vm.upsertMemoryTableDocument(saved)
+            vm.upsertMemoryTableDocument(saved, conversationId = conversationId)
             navController.popBackStack()
         },
         onNavigateBack = { navController.popBackStack() },
@@ -283,6 +286,12 @@ private fun MemoryTableDocumentEditorScaffold(
     }
 
     fun persistDraft(): Boolean {
+        if (draft.scopeType == MemoryTableScopeType.GLOBAL &&
+            templateDraft.scopeType != MemoryTableScopeType.GLOBAL
+        ) {
+            editorError = "Assistant-scoped memory table templates cannot be saved as global documents"
+            return false
+        }
         validateMemoryTableSchemaJson(templateDraft.schemaJson)
             .onFailure {
                 editorError = it.message
@@ -432,6 +441,11 @@ private fun MemoryTableDocumentEditorScaffold(
                     Switch(
                         checked = draft.scopeType == MemoryTableScopeType.GLOBAL,
                         onCheckedChange = { enabled ->
+                            if (enabled && templateDraft.scopeType != MemoryTableScopeType.GLOBAL) {
+                                editorError =
+                                    "Assistant-scoped memory table templates cannot be saved as global documents"
+                                return@Switch
+                            }
                             val updated = draft.copy(
                                 scopeType = if (enabled) {
                                     MemoryTableScopeType.GLOBAL
@@ -447,7 +461,8 @@ private fun MemoryTableDocumentEditorScaffold(
                             draft = updated
                             onDraftChange(updated)
                         },
-                        enabled = draft.scopeType != MemoryTableScopeType.CONVERSATION,
+                        enabled = draft.scopeType != MemoryTableScopeType.CONVERSATION &&
+                            templateDraft.scopeType == MemoryTableScopeType.GLOBAL,
                     )
                 }
 
@@ -889,6 +904,11 @@ private fun TableCellTextField(
             .padding(horizontal = 8.dp, vertical = 6.dp),
     )
 }
+
+internal fun shouldCloseMemoryTableEditor(
+    templateLookupComplete: Boolean,
+    template: MemoryTableTemplate?,
+): Boolean = templateLookupComplete && template == null
 
 internal fun memoryTableEditorScopeId(
     scopeType: MemoryTableScopeType,

@@ -31,7 +31,7 @@
   <string name="subagent_delegate_only_title">仅委派</string>
   <string name="subagent_delegate_only_desc">根代理仅保留只读与委派工具；不含 skills、MCP、可写 workspace</string>
   <string name="subagent_parallel_execution_title">并行工具执行</string>
-  <string name="subagent_parallel_execution_desc">同一轮次并行执行多个工具调用</string>
+  <string name="subagent_parallel_execution_desc">同一轮次并行执行普通工具调用；子代理并发由上方设置独立控制。</string>
   <string name="subagent_profile_extra_local_tools_title">额外本地工具（继承时）</string>
   <string name="subagent_profile_extra_local_tools_desc">在继承的父本地工具之上追加</string>
   <string name="subagent_profiles_section">档案</string>
@@ -1711,4 +1711,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_auto_compress_keep_recent_error">请输入大于或等于 0 的整数。</string>
   <string name="chat_auto_compress_success">已自动压缩上下文。</string>
   <string name="chat_auto_compress_failed">自动压缩上下文失败，将使用原始上下文继续发送。</string>
+  <string name="assistant_page_active_assistants">使用中</string>
+  <string name="assistant_page_archived_assistants">已归档</string>
+  <string name="assistant_page_archive">归档助手</string>
+  <string name="assistant_page_restore">恢复助手</string>
+  <string name="assistant_page_no_active_assistants">没有符合当前筛选条件的使用中助手。</string>
+  <string name="assistant_page_no_archived_assistants">暂无已归档助手。</string>
+  <string name="assistant_page_last_active_error">至少需要保留一个使用中的助手。</string>
 </resources>

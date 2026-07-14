@@ -4,11 +4,26 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AssistantMemoryTableScopeTest {
+    @Test
+    fun editorWaitsForTemplateLookupBeforeClosing() {
+        val template = MemoryTableTemplate(
+            id = "template",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+        )
+
+        assertFalse(shouldCloseMemoryTableEditor(templateLookupComplete = false, template = null))
+        assertFalse(shouldCloseMemoryTableEditor(templateLookupComplete = true, template = template))
+        assertTrue(shouldCloseMemoryTableEditor(templateLookupComplete = true, template = null))
+    }
+
     @Test
     fun deriveDocumentsKeepsOnlyGlobalAndCurrentAssistantScopes() {
         val template = MemoryTableTemplate(id = "template")

@@ -337,8 +337,35 @@ class GenerationHandler(
                     }.awaitAll().filterNotNull()
                 }
             } else {
-                toolsToProcess.mapNotNull { tool ->
-                    executeSingleTool(tool, toolsInternal)
+                buildList {
+                    val subagentSemaphore = Semaphore(assistant.subagentMaxConcurrent.coerceIn(1, 5))
+                    groupToolsForSequentialExecution(toolsToProcess).forEach { group ->
+                        if (group.first().toolName != "spawn_subagent") {
+                            executeSingleTool(group.single(), toolsInternal)?.let(::add)
+                        } else {
+                            val groupResults = if (group.size > 1 && assistant.subagentMaxConcurrent > 1) {
+                                Log.i(
+                                    TAG,
+                                    "generateText: executing ${group.size} consecutive subagents concurrently " +
+                                        "(maxConcurrent=${assistant.subagentMaxConcurrent})",
+                                )
+                                coroutineScope {
+                                    group.map { spawnTool ->
+                                        async {
+                                            subagentSemaphore.withPermit {
+                                                executeSingleTool(spawnTool, toolsInternal)
+                                            }
+                                        }
+                                    }.awaitAll().filterNotNull()
+                                }
+                            } else {
+                                group.mapNotNull { spawnTool ->
+                                    executeSingleTool(spawnTool, toolsInternal)
+                                }
+                            }
+                            addAll(groupResults)
+                        }
+                    }
                 }
             }
 
@@ -488,11 +515,10 @@ class GenerationHandler(
         }
         Log.i(TAG, "generateInternal: build tools($assistant)")
         if (assistant.enableMemory) {
-            val defaultMemoryScope = if (assistant.useGlobalMemory) MemoryScope.GLOBAL else MemoryScope.ASSISTANT
             addAll(
                 buildMemoryTools(
                     json = json,
-                    defaultScope = defaultMemoryScope,
+                    defaultScope = MemoryScope.ASSISTANT,
                     onList = { memoryRepo.getEffectiveMemories(assistant.id.toString()) },
                     onCreation = { content, scope ->
                         memoryRepo.addMemory(assistant.id.toString(), content, scope)
@@ -501,11 +527,11 @@ class GenerationHandler(
                         memoryRepo.updateMemory(
                             id = id,
                             content = content,
+                            actorAssistantId = assistant.id.toString(),
                             scope = scope,
-                            assistantId = assistant.id.toString(),
                         )
                     },
-                    onDelete = { id -> memoryRepo.deleteMemory(id) },
+                    onDelete = { id -> memoryRepo.deleteMemory(id, assistant.id.toString()) },
                 ),
             )
         }
@@ -776,6 +802,23 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+}
+
+internal fun groupToolsForSequentialExecution(
+    tools: List<UIMessagePart.Tool>,
+): List<List<UIMessagePart.Tool>> = buildList {
+    var index = 0
+    while (index < tools.size) {
+        val tool = tools[index]
+        if (tool.toolName != "spawn_subagent") {
+            add(listOf(tool))
+            index++
+        } else {
+            val group = tools.drop(index).takeWhile { it.toolName == "spawn_subagent" }
+            add(group)
+            index += group.size
+        }
+    }
 }
 
 internal suspend fun <T : ProviderSetting, R> executePreparedProviderRequest(

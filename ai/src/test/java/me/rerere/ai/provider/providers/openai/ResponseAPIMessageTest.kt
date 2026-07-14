@@ -255,6 +255,26 @@ class ResponseAPIMessageTest {
     }
 
     @Test
+    fun `workspace image tool result is serialized as Responses input image`() {
+        val result = invokeBuildMessages(listOf(workspaceImageToolMessage()))
+        val output = result.single {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "function_call_output"
+        }.jsonObject.getValue("output").jsonArray
+        val image = output.first { it.jsonObject["type"]?.jsonPrimitive?.content == "input_image" }.jsonObject
+
+        assertEquals(
+            "data:image/png;base64,$WORKSPACE_IMAGE_BASE64",
+            image["image_url"]?.jsonPrimitive?.content,
+        )
+        assertTrue(
+            output.any {
+                it.jsonObject["type"]?.jsonPrimitive?.content == "input_text" &&
+                    it.jsonObject["text"]?.jsonPrimitive?.content?.contains("Image file read successfully") == true
+            }
+        )
+    }
+
+    @Test
     fun `complex multi-round scenario with text and tools interleaved`() {
         val messages = listOf(
             UIMessage.user("Execute a complex task"),
@@ -398,5 +418,24 @@ class ResponseAPIMessageTest {
             input = input,
             output = listOf(UIMessagePart.Text(output))
         )
+    }
+
+    private fun workspaceImageToolMessage() = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Tool(
+                toolCallId = "workspace-image",
+                toolName = "workspace_read_file",
+                input = """{"path":"/workspace/image.png"}""",
+                output = listOf(
+                    UIMessagePart.Image("data:image/png;base64,$WORKSPACE_IMAGE_BASE64"),
+                    UIMessagePart.Text("""{"description":"Image file read successfully"}"""),
+                ),
+            )
+        ),
+    )
+
+    private companion object {
+        const val WORKSPACE_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
     }
 }

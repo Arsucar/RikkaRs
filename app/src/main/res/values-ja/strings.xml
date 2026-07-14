@@ -1614,4 +1614,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_auto_compress_keep_recent_error">0 以上の整数を入力してください。</string>
   <string name="chat_auto_compress_success">コンテキストを自動圧縮しました。</string>
   <string name="chat_auto_compress_failed">コンテキストの自動圧縮に失敗しました。元のコンテキストで送信します。</string>
+  <string name="assistant_page_active_assistants">使用中</string>
+  <string name="assistant_page_archived_assistants">アーカイブ済み</string>
+  <string name="assistant_page_archive">アシスタントをアーカイブ</string>
+  <string name="assistant_page_restore">アシスタントを復元</string>
+  <string name="assistant_page_no_active_assistants">現在のフィルターに一致する使用中のアシスタントはありません。</string>
+  <string name="assistant_page_no_archived_assistants">アーカイブ済みのアシスタントはありません。</string>
+  <string name="assistant_page_last_active_error">少なくとも1つの使用中アシスタントを残す必要があります。</string>
 </resources>

@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.activeAssistants
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
@@ -188,8 +189,9 @@ private fun AssistantPickerSheet(
     val scope = rememberCoroutineScope()
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
     val filteredAssistants = remember(settings.assistants, selectedTagIds) {
-        if (selectedTagIds.isEmpty()) settings.assistants
-        else settings.assistants.filter { it.tags.any { id -> id in selectedTagIds } }
+        val activeAssistants = settings.activeAssistants()
+        if (selectedTagIds.isEmpty()) activeAssistants
+        else activeAssistants.filter { it.tags.any { id -> id in selectedTagIds } }
     }
 
     ModalBottomSheet(

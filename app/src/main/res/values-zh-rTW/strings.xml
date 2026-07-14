@@ -1595,4 +1595,11 @@
   <string name="assistant_page_auto_compress_keep_recent_error">請輸入大於或等於 0 的整數。</string>
   <string name="chat_auto_compress_success">已自動壓縮上下文。</string>
   <string name="chat_auto_compress_failed">自動壓縮上下文失敗，將使用原始上下文繼續傳送。</string>
+  <string name="assistant_page_active_assistants">使用中</string>
+  <string name="assistant_page_archived_assistants">已封存</string>
+  <string name="assistant_page_archive">封存助手</string>
+  <string name="assistant_page_restore">還原助手</string>
+  <string name="assistant_page_no_active_assistants">沒有符合目前篩選條件的使用中助手。</string>
+  <string name="assistant_page_no_archived_assistants">暫無已封存助手。</string>
+  <string name="assistant_page_last_active_error">至少需要保留一個使用中的助手。</string>
 </resources>

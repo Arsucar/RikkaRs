@@ -9,9 +9,21 @@ import me.rerere.workspace.MAX_WORKSPACE_CHANGED_FILES
 import me.rerere.workspace.WorkspaceCommandResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkspaceToolsTest {
+    @Test
+    fun imagePathDetectionMatchesFormatsSupportedByFileEncoder() {
+        listOf("png", "jpg", "jpeg", "gif", "webp").forEach { extension ->
+            assertTrue("/workspace/image.$extension".isImagePath())
+            assertTrue("/workspace/image.${extension.uppercase()}".isImagePath())
+        }
+        listOf("bmp", "svg", "txt", "").forEach { extension ->
+            assertFalse("/workspace/image.$extension".isImagePath())
+        }
+    }
+
     @Test
     fun shellResultKeepsChangedFilesOnlyInBoundedTypedMetadata() {
         val validPaths = (MAX_WORKSPACE_CHANGED_FILES downTo 0).map { index ->

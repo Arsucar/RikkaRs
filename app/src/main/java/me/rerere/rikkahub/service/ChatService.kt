@@ -956,16 +956,22 @@ class ChatService(
             settingsEnabled = settings.enableMemoryTable,
             assistantEnabled = assistant.enableMemoryTable,
         )
-        val memoryTableTemplates = if (memoryTableEnabled) memoryTableRepository.getTemplates() else emptyList()
+        val memoryTableTemplates = if (memoryTableEnabled) {
+            memoryTableRepository.getEffectiveTemplates(assistant.id.toString())
+        } else {
+            emptyList()
+        }
         val memoryTableDocuments = if (memoryTableEnabled) {
             memoryTableRepository.getEffectiveDocuments(
                 assistantId = assistant.id.toString(),
                 conversationId = conversation.id.toString(),
             ).let { documents ->
+                val visibleTemplateIds = memoryTableTemplates.mapTo(mutableSetOf()) { it.id }
+                val templateScopedDocuments = documents.filter { it.templateId in visibleTemplateIds }
                 if (conversation.memoryTableIsolation) {
-                    documents.filter { it.scopeType == MemoryTableScopeType.CONVERSATION }
+                    templateScopedDocuments.filter { it.scopeType == MemoryTableScopeType.CONVERSATION }
                 } else {
-                    documents
+                    templateScopedDocuments
                 }
             }
         } else {
@@ -1072,17 +1078,47 @@ class ChatService(
                 assistantId = assistant.id.toString(),
                 conversationId = conversation.id.toString(),
                 readDocuments = {
+                    val templates = memoryTableRepository.getEffectiveTemplates(assistant.id.toString())
+                    val visibleTemplateIds = templates.mapTo(mutableSetOf()) { it.id }
                     memoryTableRepository.getEffectiveDocuments(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    ).filter { it.templateId in visibleTemplateIds }
+                },
+                getDocument = { documentId ->
+                    memoryTableRepository.getEffectiveDocument(
+                        id = documentId,
                         assistantId = assistant.id.toString(),
                         conversationId = conversation.id.toString(),
                     )
                 },
-                getDocument = memoryTableRepository::getDocument,
-                upsertDocument = memoryTableRepository::upsertDocument,
-                deleteDocument = memoryTableRepository::deleteDocument,
-                readTemplates = memoryTableRepository::getTemplates,
-                upsertTemplate = memoryTableRepository::upsertTemplate,
-                deleteTemplate = memoryTableRepository::deleteTemplate,
+                upsertDocument = { document ->
+                    memoryTableRepository.upsertDocument(
+                        document = document,
+                        actorAssistantId = assistant.id.toString(),
+                        actorConversationId = conversation.id.toString(),
+                    )
+                },
+                deleteDocument = { documentId ->
+                    memoryTableRepository.deleteDocument(
+                        id = documentId,
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                },
+                readTemplates = { memoryTableRepository.getEffectiveTemplates(assistant.id.toString()) },
+                upsertTemplate = { template ->
+                    memoryTableRepository.upsertTemplate(
+                        template = template,
+                        actorAssistantId = assistant.id.toString(),
+                    )
+                },
+                deleteTemplate = { templateId ->
+                    memoryTableRepository.deleteTemplate(
+                        id = templateId,
+                        actorAssistantId = assistant.id.toString(),
+                    )
+                },
             ),
         )
         addAll(
@@ -2174,7 +2210,7 @@ class ChatService(
                 )
             },
             delegateOnly = delegateOnly && depth == 0,
-            parallelExecutionEnabled = assistant.parallelToolExecution,
+            parallelExecutionEnabled = assistant.enableSubagents && assistant.subagentMaxConcurrent > 1,
         )
         createManageSubagentTool(
             json = json,
@@ -2301,7 +2337,7 @@ class ChatService(
                             subagentHost.askBtw(q, live, parent, parentModel, workspaceCwd)
                         },
                         delegateOnly = false,
-                        parallelExecutionEnabled = assistant.parallelToolExecution,
+                        parallelExecutionEnabled = assistant.enableSubagents && assistant.subagentMaxConcurrent > 1,
                     ).first { it.name == "spawn_subagent" }
                 }
             } else {

@@ -415,6 +415,33 @@ class GoogleProviderMessageTest {
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
     }
 
+    @Test
+    fun `workspace image tool result is serialized as Google inline data`() {
+        val result = invokeBuildContents(listOf(workspaceImageToolMessage()))
+        val functionResponse = result
+            .flatMap { message -> message.jsonObject["parts"]?.jsonArray.orEmpty() }
+            .first { part -> part.jsonObject.containsKey("functionResponse") }
+            .jsonObject
+            .getValue("functionResponse")
+            .jsonObject
+        val inlineData = functionResponse.getValue("parts")
+            .jsonArray
+            .single()
+            .jsonObject
+            .getValue("inlineData")
+            .jsonObject
+
+        assertEquals("image/png", inlineData["mimeType"]?.jsonPrimitive?.content)
+        assertEquals(WORKSPACE_IMAGE_BASE64, inlineData["data"]?.jsonPrimitive?.content)
+        assertTrue(
+            functionResponse.getValue("response")
+                .jsonObject["result"]
+                ?.jsonPrimitive
+                ?.content
+                ?.contains("Image file read successfully") == true
+        )
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(
@@ -429,5 +456,24 @@ class GoogleProviderMessageTest {
             input = input,
             output = listOf(UIMessagePart.Text(output))
         )
+    }
+
+    private fun workspaceImageToolMessage() = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Tool(
+                toolCallId = "workspace-image",
+                toolName = "workspace_read_file",
+                input = """{"path":"/workspace/image.png"}""",
+                output = listOf(
+                    UIMessagePart.Image("data:image/png;base64,$WORKSPACE_IMAGE_BASE64"),
+                    UIMessagePart.Text("""{"description":"Image file read successfully"}"""),
+                ),
+            )
+        ),
+    )
+
+    private companion object {
+        const val WORKSPACE_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
     }
 }

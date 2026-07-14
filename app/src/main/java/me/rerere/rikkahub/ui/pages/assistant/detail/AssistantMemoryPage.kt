@@ -111,6 +111,7 @@ fun AssistantMemoryPage(id: String) {
             onUpdateMemory = { vm.updateMemory(it) },
             onUpsertMemoryTableTemplate = { vm.upsertMemoryTableTemplate(it) },
             onDeleteMemoryTableTemplate = { vm.deleteMemoryTableTemplate(it) },
+            onCopyGlobalMemoryTableTemplate = { vm.copyGlobalMemoryTableTemplate(it) },
             onDeleteMemoryTableDocument = { vm.deleteMemoryTableDocument(it) },
         )
     }
@@ -131,6 +132,7 @@ private fun AssistantMemoryContent(
     onDeleteMemory: (AssistantMemory) -> Unit,
     onUpsertMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
     onDeleteMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
+    onCopyGlobalMemoryTableTemplate: (MemoryTableTemplate) -> Unit,
     onDeleteMemoryTableDocument: (MemoryTableDocument) -> Unit,
 ) {
     val navController = LocalNavController.current
@@ -465,6 +467,7 @@ private fun AssistantMemoryContent(
                 )
             },
             onDeleteTemplate = { pendingDeleteMemoryTableTemplate = it },
+            onCopyGlobalTemplate = onCopyGlobalMemoryTableTemplate,
             onAddDocument = { template ->
                 navController.navigate(
                     Screen.AssistantMemoryTableDocumentEditor(
@@ -711,7 +714,10 @@ internal fun deriveAssistantMemoryTableDocuments(
     documents: List<MemoryTableDocument>,
     assistantId: String,
 ): AssistantMemoryTableDocumentSelection {
-    val visibleDocuments = documents.filter { it.isEffectiveFor(assistantId = assistantId) }
+    val visibleTemplateIds = templates.mapTo(mutableSetOf()) { it.id }
+    val visibleDocuments = documents.filter {
+        it.templateId in visibleTemplateIds && it.isEffectiveFor(assistantId = assistantId)
+    }
     val documentsByTemplate = visibleDocuments.groupBy { it.templateId }
     val primaryDocumentsByTemplate = templates.associate { template ->
         val documentsForTemplate = documentsByTemplate[template.id].orEmpty()
@@ -740,13 +746,15 @@ private fun MemoryTableSection(
     documents: List<MemoryTableDocument>,
     onAddTemplate: () -> Unit,
     onDeleteTemplate: (MemoryTableTemplate) -> Unit,
+    onCopyGlobalTemplate: (MemoryTableTemplate) -> Unit,
     onAddDocument: (MemoryTableTemplate) -> Unit,
     onEditDocument: (MemoryTableDocument) -> Unit,
     onDeleteDocument: (MemoryTableDocument) -> Unit,
 ) {
     val enabled = settings.enableMemoryTable && assistant.enableMemoryTable
+    val visibleTemplates = templates.filter { it.isEffectiveFor(assistant.id.toString()) }
     val selection = deriveAssistantMemoryTableDocuments(
-        templates = templates,
+        templates = visibleTemplates,
         documents = documents,
         assistantId = assistant.id.toString(),
     )
@@ -771,13 +779,18 @@ private fun MemoryTableSection(
         }
     }
 
-    templates.fastForEach { template ->
+    visibleTemplates.fastForEach { template ->
         val document = selection.primaryDocumentsByTemplate[template.id]
         key(template.id) {
             MemoryTableTemplateItem(
                 template = template,
                 document = document,
                 enabled = settings.enableMemoryTable,
+                onCopyGlobal = if (template.scopeType == MemoryTableScopeType.GLOBAL) {
+                    { onCopyGlobalTemplate(template) }
+                } else {
+                    null
+                },
                 onDelete = {
                     if (document != null) {
                         onDeleteDocument(document)
@@ -813,6 +826,7 @@ private fun MemoryTableTemplateItem(
     template: MemoryTableTemplate,
     document: MemoryTableDocument?,
     enabled: Boolean,
+    onCopyGlobal: (() -> Unit)?,
     onDelete: () -> Unit,
     onOpenDocument: () -> Unit,
 ) {
@@ -858,6 +872,13 @@ private fun MemoryTableTemplateItem(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                Text(
+                    text = "${template.scopeType.name}/${template.scopeId}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -865,6 +886,11 @@ private fun MemoryTableTemplateItem(
             ) {
                 IconButton(onClick = onOpenDocument, enabled = enabled) {
                     Icon(if (document == null) HugeIcons.Add01 else HugeIcons.PencilEdit01, null)
+                }
+                if (onCopyGlobal != null) {
+                    IconButton(onClick = onCopyGlobal, enabled = enabled) {
+                        Icon(HugeIcons.Add01, null)
+                    }
                 }
                 IconButton(onClick = onDelete, enabled = enabled) {
                     Icon(HugeIcons.Delete01, null)

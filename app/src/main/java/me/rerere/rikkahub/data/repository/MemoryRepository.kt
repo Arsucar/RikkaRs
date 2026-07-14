@@ -52,14 +52,15 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
     suspend fun updateMemory(
         id: Int,
         content: String,
+        actorAssistantId: String,
         scope: MemoryScope? = null,
-        assistantId: String? = null,
     ): AssistantMemory {
-        val old = memoryDAO.getMemoryById(id) ?: error("Memory record #$id not found")
+        val old = memoryDAO.getEffectiveMemoryById(id, actorAssistantId)
+            ?: error("Memory record #$id is not available to this assistant")
         val newScope = scope ?: MemoryScope.fromStorage(old.scope)
         val ownerAssistantId = when (newScope) {
             MemoryScope.GLOBAL -> GLOBAL_MEMORY_ID
-            MemoryScope.ASSISTANT -> assistantId ?: old.assistantId
+            MemoryScope.ASSISTANT -> actorAssistantId
         }
         val newMemory = old.copy(
             assistantId = ownerAssistantId,
@@ -70,8 +71,8 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         return newMemory.toAssistantMemory()
     }
 
-    suspend fun updateContent(id: Int, content: String): AssistantMemory {
-        return updateMemory(id = id, content = content)
+    suspend fun updateContent(id: Int, content: String, actorAssistantId: String): AssistantMemory {
+        return updateMemory(id = id, content = content, actorAssistantId = actorAssistantId)
     }
 
     suspend fun addMemory(
@@ -97,8 +98,10 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         return newMemory
     }
 
-    suspend fun deleteMemory(id: Int) {
+    suspend fun deleteMemory(id: Int, actorAssistantId: String): Boolean {
+        memoryDAO.getEffectiveMemoryById(id, actorAssistantId) ?: return false
         memoryDAO.deleteMemory(id)
+        return true
     }
 
     private fun MemoryEntity.toAssistantMemory(): AssistantMemory {

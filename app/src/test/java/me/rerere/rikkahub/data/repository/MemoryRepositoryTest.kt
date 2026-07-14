@@ -41,8 +41,8 @@ class MemoryRepositoryTest {
         val memory = repository.updateMemory(
             id = 7,
             content = "local",
+            actorAssistantId = "assistant-a",
             scope = MemoryScope.ASSISTANT,
-            assistantId = "assistant-a",
         )
 
         assertEquals(MemoryScope.ASSISTANT, memory.scope)
@@ -77,6 +77,31 @@ class MemoryRepositoryTest {
         val memories = repository.getEffectiveMemories("assistant-a")
 
         assertEquals(listOf(3, 1), memories.map { it.id })
+    }
+
+    @Test
+    fun assistantCannotUpdateOrDeleteAnotherAssistantsMemoryById() = runBlocking {
+        val original = MemoryEntity(
+            id = 9,
+            assistantId = "assistant-a",
+            content = "private a",
+            scope = MemoryScope.ASSISTANT.name,
+        )
+        val dao = FakeMemoryDAO(original)
+        val repository = MemoryRepository(dao)
+
+        val updateFailure = runCatching {
+            repository.updateMemory(
+                id = 9,
+                content = "stolen",
+                actorAssistantId = "assistant-b",
+            )
+        }
+        val deleted = repository.deleteMemory(9, "assistant-b")
+
+        assertEquals(true, updateFailure.isFailure)
+        assertEquals(false, deleted)
+        assertEquals(original, dao.memories.single())
     }
 
     private class FakeMemoryDAO(
@@ -116,6 +141,14 @@ class MemoryRepositoryTest {
         override suspend fun getAllMemories(): List<MemoryEntity> = memories
 
         override suspend fun getMemoryById(id: Int): MemoryEntity? = memories.firstOrNull { it.id == id }
+
+        override suspend fun getEffectiveMemoryById(id: Int, assistantId: String): MemoryEntity? =
+            memories.firstOrNull {
+                it.id == id && (
+                    it.scope == MemoryScope.GLOBAL.name ||
+                        (it.scope == MemoryScope.ASSISTANT.name && it.assistantId == assistantId)
+                    )
+            }
 
         override suspend fun insertMemory(memory: MemoryEntity): Long {
             val entity = memory.copy(id = nextId++)

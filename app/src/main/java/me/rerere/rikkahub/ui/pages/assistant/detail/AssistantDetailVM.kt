@@ -87,7 +87,7 @@ class AssistantDetailVM(
         )
 
     val memoryTableTemplates = memoryTableRepository
-        .getTemplatesFlow()
+        .getEffectiveTemplatesFlow(assistantId.toString())
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
@@ -274,15 +274,18 @@ class AssistantDetailVM(
             memoryRepository.updateMemory(
                 id = memory.id,
                 content = memory.content,
+                actorAssistantId = assistantId.toString(),
                 scope = memory.scope,
-                assistantId = assistantId.toString(),
             )
         }
     }
 
     fun deleteMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            memoryRepository.deleteMemory(id = memory.id)
+            memoryRepository.deleteMemory(
+                id = memory.id,
+                actorAssistantId = assistantId.toString(),
+            )
         }
     }
 
@@ -292,27 +295,47 @@ class AssistantDetailVM(
         }
     }
 
+    suspend fun getMemoryTableTemplateForEditor(templateId: String): MemoryTableTemplate? =
+        memoryTableRepository.getEffectiveTemplate(
+            id = templateId,
+            assistantId = assistantId.toString(),
+        )
+
     fun upsertMemoryTableTemplate(template: MemoryTableTemplate) {
         viewModelScope.launch {
-            memoryTableRepository.upsertTemplate(template)
+            memoryTableRepository.upsertTemplate(template, actorAssistantId = assistantId.toString())
         }
     }
 
     fun deleteMemoryTableTemplate(template: MemoryTableTemplate) {
         viewModelScope.launch {
-            memoryTableRepository.deleteTemplate(template.id)
+            memoryTableRepository.deleteTemplate(template.id, actorAssistantId = assistantId.toString())
         }
     }
 
-    fun upsertMemoryTableDocument(document: MemoryTableDocument) {
+    fun copyGlobalMemoryTableTemplate(template: MemoryTableTemplate) {
         viewModelScope.launch {
-            memoryTableRepository.upsertDocument(document)
+            memoryTableRepository.copyGlobalTemplateToAssistant(template.id, actorAssistantId = assistantId.toString())
         }
     }
 
-    fun deleteMemoryTableDocument(document: MemoryTableDocument) {
+    fun upsertMemoryTableDocument(document: MemoryTableDocument, conversationId: String? = null) {
         viewModelScope.launch {
-            memoryTableRepository.deleteDocument(document.id)
+            memoryTableRepository.upsertDocument(
+                document,
+                actorAssistantId = assistantId.toString(),
+                actorConversationId = conversationId,
+            )
+        }
+    }
+
+    fun deleteMemoryTableDocument(document: MemoryTableDocument, conversationId: String? = null) {
+        viewModelScope.launch {
+            memoryTableRepository.deleteDocument(
+                id = document.id,
+                assistantId = assistantId.toString(),
+                conversationId = conversationId,
+            )
         }
     }
 

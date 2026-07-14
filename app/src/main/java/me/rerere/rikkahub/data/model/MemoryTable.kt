@@ -17,6 +17,8 @@ data class MemoryTableTemplate(
     val name: String = "",
     val description: String = DEFAULT_MEMORY_TABLE_DESCRIPTION,
     val schemaJson: String = DEFAULT_MEMORY_TABLE_SCHEMA_JSON,
+    val scopeType: MemoryTableScopeType = MemoryTableScopeType.GLOBAL,
+    val scopeId: String = MEMORY_TABLE_GLOBAL_SCOPE_ID,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
 )
@@ -71,6 +73,23 @@ fun MemoryTableDocument.isEffectiveFor(
     assistantId = assistantId,
     conversationId = conversationId,
 )
+
+fun isMemoryTableTemplateScopeEffective(
+    scopeType: String,
+    scopeId: String,
+    assistantId: String,
+): Boolean = when (scopeType) {
+    MemoryTableScopeType.GLOBAL.name -> scopeId == MEMORY_TABLE_GLOBAL_SCOPE_ID
+    MemoryTableScopeType.ASSISTANT.name -> scopeId == assistantId
+    else -> false
+}
+
+fun MemoryTableTemplate.isEffectiveFor(assistantId: String): Boolean =
+    isMemoryTableTemplateScopeEffective(
+        scopeType = scopeType.name,
+        scopeId = scopeId,
+        assistantId = assistantId,
+    )
 
 fun shouldEnableMemoryTable(settingsEnabled: Boolean, assistantEnabled: Boolean): Boolean {
     return settingsEnabled && assistantEnabled
@@ -235,7 +254,7 @@ fun setMemoryTableInjectionEnabled(
 }
 
 // #100: versioned import/export bundle for memory table templates + documents.
-const val MEMORY_TABLE_BUNDLE_VERSION = 1
+const val MEMORY_TABLE_BUNDLE_VERSION = 2
 
 @Serializable
 data class MemoryTableBundle(
@@ -351,6 +370,8 @@ fun resolveMemoryTableBundleImport(
 
 const val DEFAULT_MEMORY_TABLE_DESCRIPTION =
     "Structured memory rows for durable user preferences, profile details, and facts. Keep key stable for merges."
+
+const val MEMORY_TABLE_GLOBAL_SCOPE_ID = "__global__"
 
 const val DEFAULT_MEMORY_TABLE_SCHEMA_JSON = """
 {

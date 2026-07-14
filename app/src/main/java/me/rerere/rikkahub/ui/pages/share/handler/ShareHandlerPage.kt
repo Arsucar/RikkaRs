@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.activeAssistants
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.navigateToChatPage
@@ -80,7 +81,7 @@ fun ShareHandlerPage(text: String, image: String?) {
                 }
             }
 
-            items(settings.assistants) { assistant ->
+            items(settings.activeAssistants()) { assistant ->
                 Surface(
                     onClick = {
                         scope.launch {

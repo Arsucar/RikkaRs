@@ -6,6 +6,9 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Archive
+import me.rerere.hugeicons.stroke.Refresh01
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +65,9 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
+import me.rerere.rikkahub.data.datastore.AssistantArchiveResult
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.reorderActiveAssistants
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -91,6 +97,8 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     }
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val context = LocalContext.current
+    val lastActiveError = stringResource(R.string.assistant_page_last_active_error)
 
     // 搜索关键词状态
     var searchQuery by remember { mutableStateOf("") }
@@ -98,15 +106,17 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
     // 操作菜单状态
     var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
+    var listMode by remember { mutableStateOf(AssistantListMode.ACTIVE) }
 
     // 根据搜索关键词和选中的标签过滤助手
-    val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
+    val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery, listMode) {
         settings.assistants.filter { assistant ->
+            val matchesMode = assistant.isArchived == (listMode == AssistantListMode.ARCHIVED)
             val matchesSearch = searchQuery.isBlank() ||
                 assistant.name.contains(searchQuery, ignoreCase = true)
             val matchesTags = selectedTagIds.isEmpty() ||
                 assistant.tags.any { tagId -> tagId in selectedTagIds }
-            matchesSearch && matchesTags
+            matchesMode && matchesSearch && matchesTags
         }
     }
 
@@ -143,12 +153,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val lazyListState = rememberLazyListState()
-            val isFiltering = selectedTagIds.isNotEmpty() || searchQuery.isNotBlank()
+            val isFiltering = selectedTagIds.isNotEmpty() || searchQuery.isNotBlank() ||
+                listMode == AssistantListMode.ARCHIVED
             val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
                 if (!isFiltering) {
-                    val newAssistants = settings.assistants.toMutableList().apply {
-                        add(to.index, removeAt(from.index))
-                    }
+                    val newAssistants = reorderActiveAssistants(settings.assistants, from.index, to.index)
                     vm.updateSettings(settings.copy(assistants = newAssistants))
                 }
             }
@@ -186,6 +195,22 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 }
             )
 
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = listMode == AssistantListMode.ACTIVE,
+                    onClick = { listMode = AssistantListMode.ACTIVE },
+                    label = { Text(stringResource(R.string.assistant_page_active_assistants)) },
+                )
+                FilterChip(
+                    selected = listMode == AssistantListMode.ARCHIVED,
+                    onClick = { listMode = AssistantListMode.ARCHIVED },
+                    label = { Text(stringResource(R.string.assistant_page_archived_assistants)) },
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -194,6 +219,21 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 state = lazyListState,
             ) {
+                if (filteredAssistants.isEmpty()) {
+                    item(key = "empty:${listMode.name}") {
+                        Text(
+                            text = stringResource(
+                                if (listMode == AssistantListMode.ACTIVE) {
+                                    R.string.assistant_page_no_active_assistants
+                                } else {
+                                    R.string.assistant_page_no_archived_assistants
+                                }
+                            ),
+                            modifier = Modifier.padding(vertical = 24.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
                         state = reorderableState,
@@ -251,10 +291,20 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             onDelete = {
                 vm.removeAssistant(assistant)
                 actionSheetAssistant = null
-            }
+            },
+            onArchiveRestore = {
+                vm.setAssistantArchived(assistant, archived = !assistant.isArchived) { result ->
+                    if (result == AssistantArchiveResult.LastActiveAssistant) {
+                        Toast.makeText(context, lastActiveError, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                actionSheetAssistant = null
+            },
         )
     }
 }
+
+private enum class AssistantListMode { ACTIVE, ARCHIVED }
 
 @Composable
 private fun AssistantTagsFilterRow(
@@ -485,7 +535,8 @@ private fun AssistantActionSheet(
     assistant: Assistant,
     onDismiss: () -> Unit,
     onCopy: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onArchiveRestore: () -> Unit,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -530,6 +581,26 @@ private fun AssistantActionSheet(
                 },
                 modifier = Modifier.onClick { onCopy() },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            ListItem(
+                headlineContent = {
+                    Text(
+                        stringResource(
+                            if (assistant.isArchived) R.string.assistant_page_restore
+                            else R.string.assistant_page_archive
+                        )
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        imageVector = if (assistant.isArchived) HugeIcons.Refresh01 else HugeIcons.Archive,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                modifier = Modifier.onClick(onClick = onArchiveRestore),
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             )
 
             // 删除选项（仅非默认助手显示）

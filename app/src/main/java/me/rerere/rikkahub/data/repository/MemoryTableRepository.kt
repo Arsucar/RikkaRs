@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.decodeMemoryTableBundle
 import me.rerere.rikkahub.data.model.encodeMemoryTableBundle
 import me.rerere.rikkahub.data.model.isMemoryTableScopeEffective
+import me.rerere.rikkahub.data.model.isMemoryTableTemplateScopeEffective
 import me.rerere.rikkahub.data.model.resolveMemoryTableBundleImport
 import me.rerere.rikkahub.data.model.normalizeMemoryTablePayloadJson
 import me.rerere.rikkahub.data.model.normalizeMemoryTableSchemaJson
@@ -31,6 +32,16 @@ class MemoryTableRepository(
     // without revision history (used by existing unit tests that don't wire it).
     private val snapshotDao: MemoryTableSnapshotDAO? = null,
 ) {
+    suspend fun deleteDataOwnedByAssistant(assistantId: String) {
+        val documentIds = dao.getDocumentIdsOwnedByAssistant(assistantId)
+        snapshotDao?.let { snapshots ->
+            documentIds.forEach { documentId ->
+                snapshots.deleteSnapshotsForDocument(documentId)
+            }
+        }
+        dao.deleteMemoryTableDataOwnedByAssistant(assistantId)
+    }
+
     fun getTemplatesFlow(): Flow<List<MemoryTableTemplate>> =
         dao.getTemplatesFlow().map { templates -> templates.map { it.toModel() } }
 
@@ -39,6 +50,24 @@ class MemoryTableRepository(
 
     suspend fun getTemplate(id: String): MemoryTableTemplate? =
         dao.getTemplate(id)?.toModel()
+
+    fun getEffectiveTemplatesFlow(assistantId: String): Flow<List<MemoryTableTemplate>> =
+        dao.getEffectiveTemplatesFlow(assistantId)
+            .map { templates ->
+                templates
+                    .filter { it.isEffectiveFor(assistantId) }
+                    .map { it.toModel() }
+            }
+
+    suspend fun getEffectiveTemplates(assistantId: String): List<MemoryTableTemplate> =
+        dao.getEffectiveTemplates(assistantId)
+            .filter { it.isEffectiveFor(assistantId) }
+            .map { it.toModel() }
+
+    suspend fun getEffectiveTemplate(id: String, assistantId: String): MemoryTableTemplate? =
+        dao.getEffectiveTemplate(id, assistantId)
+            ?.takeIf { it.isEffectiveFor(assistantId) }
+            ?.toModel()
 
     fun getDocumentsFlow(): Flow<List<MemoryTableDocument>> =
         dao.getDocumentsFlow().map { documents -> documents.map { it.toModel() } }
@@ -97,6 +126,8 @@ class MemoryTableRepository(
             name = template.name.ifBlank { "Default memory table" },
             description = template.description.trim(),
             schemaJson = normalizeMemoryTableSchemaJson(template.schemaJson),
+            scopeType = normalizeTemplateScopeType(template.scopeType),
+            scopeId = normalizeTemplateScopeId(template.scopeType, template.scopeId, null),
             createdAt = template.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
         )
@@ -105,10 +136,73 @@ class MemoryTableRepository(
         return normalized
     }
 
+    suspend fun upsertTemplate(
+        template: MemoryTableTemplate,
+        actorAssistantId: String,
+    ): MemoryTableTemplate {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val id = template.id.ifBlank { Uuid.random().toString() }
+        val existing = dao.getEffectiveTemplate(id, actorAssistantId)
+            ?.takeIf { it.isEffectiveFor(actorAssistantId) }
+        if (existing == null && id == template.id && dao.getTemplate(id) != null) {
+            error("memory table template not found or not authorized: $id")
+        }
+        val normalized = template.copy(
+            id = id,
+            name = template.name.ifBlank { "Default memory table" },
+            description = template.description.trim(),
+            schemaJson = normalizeMemoryTableSchemaJson(template.schemaJson),
+            scopeType = existing?.let { MemoryTableScopeType.fromStorage(it.scopeType) }
+                ?: MemoryTableScopeType.ASSISTANT,
+            scopeId = existing?.scopeId ?: actorAssistantId,
+            createdAt = existing?.createdAt ?: template.createdAt.takeIf { it > 0 } ?: now,
+            updatedAt = now,
+        )
+        validateMemoryTableSchemaJson(normalized.schemaJson)
+        if (existing == null) {
+            if (dao.insertTemplateIgnore(normalized.toEntity()) < 0) {
+                error("memory table template not found or not authorized: $id")
+            }
+        } else {
+            val updated = dao.updateEffectiveTemplateFields(
+                id = normalized.id,
+                assistantId = actorAssistantId,
+                name = normalized.name,
+                description = normalized.description,
+                schemaJson = normalized.schemaJson,
+                updatedAt = normalized.updatedAt,
+            )
+            if (updated <= 0) {
+                error("memory table template not found or not authorized: ${normalized.id}")
+            }
+        }
+        return normalized
+    }
+
     suspend fun deleteTemplate(id: String): Boolean {
         if (dao.getTemplate(id) == null) return false
         dao.deleteDocumentsByTemplate(id)
         return dao.deleteTemplate(id) > 0
+    }
+
+    suspend fun deleteTemplate(id: String, actorAssistantId: String): Boolean =
+        dao.deleteEffectiveTemplateAndDocuments(id, actorAssistantId) > 0
+
+    suspend fun copyGlobalTemplateToAssistant(templateId: String, actorAssistantId: String): MemoryTableTemplate {
+        val template = dao.getEffectiveTemplate(templateId, actorAssistantId)
+            ?.takeIf { it.scopeType == MemoryTableScopeType.GLOBAL.name }
+            ?.toModel()
+            ?: error("global memory table template not found: $templateId")
+        return upsertTemplate(
+            template.copy(
+                id = Uuid.random().toString(),
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = actorAssistantId,
+                createdAt = 0,
+                updatedAt = 0,
+            ),
+            actorAssistantId = actorAssistantId,
+        )
     }
 
     suspend fun upsertDocument(document: MemoryTableDocument): MemoryTableDocument {
@@ -150,6 +244,29 @@ class MemoryTableRepository(
         return normalized
     }
 
+    suspend fun upsertDocument(
+        document: MemoryTableDocument,
+        actorAssistantId: String,
+        actorConversationId: String? = null,
+    ): MemoryTableDocument {
+        val old = document.id
+            .takeIf { it.isNotBlank() }
+            ?.let { dao.getEffectiveDocument(it, actorAssistantId, actorConversationId) }
+        if (old == null && document.id.isNotBlank() && dao.getDocument(document.id) != null) {
+            error("memory table document not found or not authorized: ${document.id}")
+        }
+        val template = dao.getEffectiveTemplate(document.templateId, actorAssistantId)
+            ?.takeIf { it.isEffectiveFor(actorAssistantId) }
+            ?: error("memory table template not found or not authorized: ${document.templateId}")
+        ensureDocumentScopeAuthorized(
+            document = document,
+            template = template,
+            actorAssistantId = actorAssistantId,
+            actorConversationId = actorConversationId,
+        )
+        return upsertDocument(document)
+    }
+
     // #96: list stored revision snapshots for a document, newest revision first.
     suspend fun getDocumentSnapshots(documentId: String): List<MemoryTableDocumentSnapshot> =
         snapshotDao?.getSnapshotsForDocument(documentId)
@@ -171,8 +288,26 @@ class MemoryTableRepository(
     suspend fun getDocument(id: String): MemoryTableDocument? =
         dao.getDocument(id)?.toModel()
 
+    suspend fun getEffectiveDocument(
+        id: String,
+        assistantId: String,
+        conversationId: String? = null,
+    ): MemoryTableDocument? =
+        dao.getEffectiveDocument(id, assistantId, conversationId)
+            ?.takeIf { it.isEffectiveFor(assistantId, conversationId) }
+            ?.toModel()
+
     suspend fun deleteDocument(id: String) {
         dao.deleteDocument(id)
+    }
+
+    suspend fun deleteDocument(
+        id: String,
+        assistantId: String,
+        conversationId: String? = null,
+    ): Boolean {
+        getEffectiveDocument(id, assistantId, conversationId) ?: return false
+        return dao.deleteDocument(id) > 0
     }
 
     // #100: export all templates + documents as a versioned JSON bundle.
@@ -256,6 +391,8 @@ class MemoryTableRepository(
             name = name,
             description = description,
             schemaJson = schemaJson,
+            scopeType = MemoryTableScopeType.fromStorage(scopeType),
+            scopeId = scopeId,
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
@@ -266,9 +403,61 @@ class MemoryTableRepository(
             name = name,
             description = description,
             schemaJson = schemaJson,
+            scopeType = scopeType.name,
+            scopeId = scopeId,
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
+
+    private fun MemoryTableTemplateEntity.isEffectiveFor(assistantId: String): Boolean =
+        isMemoryTableTemplateScopeEffective(
+            scopeType = scopeType,
+            scopeId = scopeId,
+            assistantId = assistantId,
+        )
+
+    private fun normalizeTemplateScopeType(scopeType: MemoryTableScopeType): MemoryTableScopeType {
+        if (scopeType == MemoryTableScopeType.CONVERSATION) {
+            error("memory table templates cannot use CONVERSATION scope")
+        }
+        return scopeType
+    }
+
+    private fun normalizeTemplateScopeId(
+        scopeType: MemoryTableScopeType,
+        scopeId: String,
+        actorAssistantId: String?,
+    ): String {
+        return when (normalizeTemplateScopeType(scopeType)) {
+            MemoryTableScopeType.GLOBAL -> MemoryRepository.GLOBAL_MEMORY_ID
+            MemoryTableScopeType.ASSISTANT -> scopeId.ifBlank {
+                actorAssistantId ?: error("assistant-scoped memory table template requires an owner")
+            }
+            MemoryTableScopeType.CONVERSATION -> error("memory table templates cannot use CONVERSATION scope")
+        }
+    }
+
+    private fun ensureDocumentScopeAuthorized(
+        document: MemoryTableDocument,
+        template: MemoryTableTemplateEntity,
+        actorAssistantId: String,
+        actorConversationId: String?,
+    ) {
+        if (!isMemoryTableScopeEffective(
+                scopeType = document.scopeType.name,
+                scopeId = document.scopeId,
+                assistantId = actorAssistantId,
+                conversationId = actorConversationId,
+            )
+        ) {
+            error("memory table document scope is not authorized for this assistant")
+        }
+        if (document.scopeType == MemoryTableScopeType.GLOBAL &&
+            template.scopeType != MemoryTableScopeType.GLOBAL.name
+        ) {
+            error("assistant-scoped memory table templates cannot be used for global documents")
+        }
+    }
 
     private fun MemoryTableDocumentEntity.isEffectiveFor(
         assistantId: String,

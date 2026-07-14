@@ -201,6 +201,28 @@ internal fun resolveRecentChatModelItems(
     }
 }
 
+internal fun searchModelsByProvider(
+    providers: List<ProviderSetting>,
+    modelType: ModelType,
+    searchKeywords: String,
+): Map<Uuid, List<Model>> = providers.associate { provider ->
+    provider.id to provider.models.fastFilter { model ->
+        model.type == modelType && modelMatchesSearch(model, provider, searchKeywords)
+    }
+}
+
+internal fun resolveVisibleModelProviders(
+    providers: List<ProviderSetting>,
+    searchFilteredModelsByProvider: Map<Uuid, List<Model>>,
+    searchKeywords: String,
+): List<ProviderSetting> = if (searchKeywords.trim().isBlank()) {
+    providers
+} else {
+    providers.filter { provider ->
+        searchFilteredModelsByProvider[provider.id].orEmpty().isNotEmpty()
+    }
+}
+
 @Composable
 fun ModelSelector(
     modelId: Uuid?,
@@ -462,24 +484,22 @@ private fun ColumnScope.ModelList(
         else providers.filter { it.tags.contains(selectedModelListTag) }
     }
 
-    val typeFilteredModelsByProvider = remember(tagFilteredProviders, modelType) {
-        tagFilteredProviders.associate { provider ->
-            provider.id to provider.models.fastFilter { it.type == modelType }
-        }
+    val searchFilteredModelsByProvider = remember(tagFilteredProviders, modelType, searchKeywords) {
+        searchModelsByProvider(tagFilteredProviders, modelType, searchKeywords)
     }
 
-    val searchFilteredModelsByProvider = remember(tagFilteredProviders, modelType, searchKeywords) {
-        tagFilteredProviders.associate { provider ->
-            val providerMatches = provider.name.contains(searchKeywords.trim(), ignoreCase = true)
-            provider.id to provider.models.fastFilter { model ->
-                model.type == modelType &&
-                    (providerMatches || modelMatchesSearch(model, provider, searchKeywords))
-            }
-        }
+    val visibleProviders = remember(tagFilteredProviders, searchFilteredModelsByProvider, searchKeywords) {
+        resolveVisibleModelProviders(tagFilteredProviders, searchFilteredModelsByProvider, searchKeywords)
     }
 
     // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, tagFilteredProviders, searchFilteredModelsByProvider) {
+    val selectedModelPosition = remember(
+        currentModel,
+        favoriteModels,
+        visibleProviders,
+        searchFilteredModelsByProvider,
+        providerGroupExpanded.toMap(),
+    ) {
         if (currentModel == null) return@remember 0
 
         var position = 0
@@ -506,7 +526,7 @@ private fun ColumnScope.ModelList(
         }
 
         // 在providers中查找
-        for (provider in tagFilteredProviders) {
+        for (provider in visibleProviders) {
             val models = searchFilteredModelsByProvider[provider.id].orEmpty()
             val modelIndex = models.indexOfFirst { it.id == currentModel }
             val isExpanded = providerGroupExpanded[provider.id] != false
@@ -527,10 +547,10 @@ private fun ColumnScope.ModelList(
         initialFirstVisibleItemIndex = selectedModelPosition
     )
 
-    LaunchedEffect(currentModel, tagFilteredProviders, typeFilteredModelsByProvider) {
+    LaunchedEffect(currentModel, visibleProviders, searchFilteredModelsByProvider) {
         if (currentModel == null) return@LaunchedEffect
-        for (provider in tagFilteredProviders) {
-            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
+        for (provider in visibleProviders) {
+            val models = searchFilteredModelsByProvider[provider.id].orEmpty()
             if (models.any { it.id == currentModel }) {
                 if (providerGroupExpanded[provider.id] == false) {
                     providerGroupExpanded[provider.id] = true
@@ -575,7 +595,7 @@ private fun ColumnScope.ModelList(
     val haptic = LocalHapticFeedback.current
 
     val providerPositions = remember(
-        tagFilteredProviders,
+        visibleProviders,
         favoriteModels,
         favoriteCollapsed,
         searchFilteredModelsByProvider,
@@ -592,7 +612,7 @@ private fun ColumnScope.ModelList(
             }
         }
 
-        tagFilteredProviders.map { provider ->
+        visibleProviders.map { provider ->
             val position = currentIndex
             currentIndex += 1
             if (providerGroupExpanded[provider.id] != false) {
@@ -637,11 +657,11 @@ private fun ColumnScope.ModelList(
                 maxLines = 1,
             )
         }
-        val allCollapsed = tagFilteredProviders.all { providerGroupExpanded[it.id] == false } &&
+        val allCollapsed = visibleProviders.all { providerGroupExpanded[it.id] == false } &&
             favoriteCollapsed
         IconButton(
             onClick = {
-                tagFilteredProviders.forEach { provider ->
+                visibleProviders.forEach { provider ->
                     providerGroupExpanded[provider.id] = allCollapsed
                 }
                 favoriteCollapsed = !allCollapsed
@@ -824,7 +844,7 @@ private fun ColumnScope.ModelList(
             }
         }
 
-        tagFilteredProviders.fastForEach { providerSetting ->
+        visibleProviders.fastForEach { providerSetting ->
             val isProviderExpanded = providerGroupExpanded[providerSetting.id] != false
             stickyHeader(key = "header:${providerSetting.id}") {
                 val providerSectionDescription = stringResource(
@@ -928,7 +948,7 @@ private fun ColumnScope.ModelList(
 
     // 供应商Badge行
     val providerBadgeListState = rememberLazyListState()
-    LaunchedEffect(lazyListState) {
+    LaunchedEffect(lazyListState, providerPositions, visibleProviders) {
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .debounce(100)
@@ -937,7 +957,7 @@ private fun ColumnScope.ModelList(
                     val currentProvider = providerPositions.entries.findLast {
                         index > it.value
                     }
-                    val idx = tagFilteredProviders.indexOfFirst { it.id == currentProvider?.key }
+                    val idx = visibleProviders.indexOfFirst { it.id == currentProvider?.key }
                     if (idx >= 0) {
                         providerBadgeListState.animateScrollToItem(idx)
                     } else {
@@ -948,7 +968,7 @@ private fun ColumnScope.ModelList(
                 }
             }
     }
-    if (tagFilteredProviders.isNotEmpty()) {
+    if (visibleProviders.isNotEmpty()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -966,7 +986,7 @@ private fun ColumnScope.ModelList(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        tagFilteredProviders.forEach { provider ->
+                        visibleProviders.forEach { provider ->
                             val scrollToProviderDescription = stringResource(
                                 R.string.model_list_scroll_to_provider,
                                 provider.name,
@@ -998,7 +1018,7 @@ private fun ColumnScope.ModelList(
                     modifier = Modifier.weight(1f),
                     state = providerBadgeListState
                 ) {
-                    items(tagFilteredProviders, key = { it.id }) { provider ->
+                    items(visibleProviders, key = { it.id }) { provider ->
                         val scrollToProviderDescription = stringResource(
                             R.string.model_list_scroll_to_provider,
                             provider.name,

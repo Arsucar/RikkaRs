@@ -41,7 +41,8 @@ class ChatCompletionsAPIMessageTest {
     // Helper to invoke private buildMessages method via reflection
     private fun invokeBuildMessages(
         messages: List<UIMessage>,
-        includeHistoryReasoning: Boolean = true
+        includeHistoryReasoning: Boolean = true,
+        supportInputModalities: List<Modality> = listOf(Modality.TEXT, Modality.IMAGE),
     ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
@@ -54,7 +55,7 @@ class ChatCompletionsAPIMessageTest {
             api,
             messages,
             includeHistoryReasoning,
-            listOf(Modality.TEXT, Modality.IMAGE)
+            supportInputModalities,
         ) as JsonArray
     }
 
@@ -479,6 +480,46 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
+    fun `workspace image tool result is serialized as OpenAI image url content`() {
+        val result = invokeBuildMessages(listOf(workspaceImageToolMessage()))
+        val toolContent = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "tool" }
+            .jsonObject
+            .getValue("content")
+            .jsonArray
+        val imageUrl = toolContent.first { it.jsonObject["type"]?.jsonPrimitive?.content == "image_url" }
+            .jsonObject
+            .getValue("image_url")
+            .jsonObject
+            .getValue("url")
+            .jsonPrimitive
+            .content
+
+        assertEquals("data:image/png;base64,$WORKSPACE_IMAGE_BASE64", imageUrl)
+        assertTrue(
+            toolContent.any {
+                it.jsonObject["type"]?.jsonPrimitive?.content == "text" &&
+                    it.jsonObject["text"]?.jsonPrimitive?.content?.contains("Image file read successfully") == true
+            }
+        )
+    }
+
+    @Test
+    fun `workspace image tool result is explicitly omitted without image modality`() {
+        val result = invokeBuildMessages(
+            messages = listOf(workspaceImageToolMessage()),
+            supportInputModalities = listOf(Modality.TEXT),
+        )
+        val toolContent = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "tool" }
+            .jsonObject
+            .getValue("content")
+            .jsonPrimitive
+            .content
+
+        assertTrue(toolContent.contains("Image output omitted: current model does not support image input"))
+        assertTrue(toolContent.contains("Image file read successfully"))
+    }
+
+    @Test
     fun `tool with null parameters serializes empty object schema`() {
         val requestBody = invokeBuildChatCompletionRequest(
             providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
@@ -522,5 +563,24 @@ class ChatCompletionsAPIMessageTest {
             input = input,
             output = listOf(UIMessagePart.Text(output))
         )
+    }
+
+    private fun workspaceImageToolMessage() = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Tool(
+                toolCallId = "workspace-image",
+                toolName = "workspace_read_file",
+                input = """{"path":"/workspace/image.png"}""",
+                output = listOf(
+                    UIMessagePart.Image("data:image/png;base64,$WORKSPACE_IMAGE_BASE64"),
+                    UIMessagePart.Text("""{"description":"Image file read successfully"}"""),
+                ),
+            )
+        ),
+    )
+
+    private companion object {
+        const val WORKSPACE_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
     }
 }

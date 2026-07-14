@@ -31,7 +31,9 @@ fun Route.settingsRoutes(
             val request = call.receive<UpdateAssistantRequest>()
             val assistantId = request.assistantId.toUuid("assistantId")
 
-            settingsStore.updateAssistant(assistantId)
+            if (!settingsStore.updateAssistant(assistantId)) {
+                throw BadRequestException("Assistant is archived or does not exist")
+            }
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

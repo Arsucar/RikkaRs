@@ -126,31 +126,9 @@ object MemoryToolUI : ToolUIRenderer {
 
     @Composable
     override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
-        val memoryRepo: MemoryRepository = koinInject()
-        val scope = rememberCoroutineScope()
-        val memoryId = (context.content as? JsonObject)?.get("id")?.jsonPrimitiveOrNull?.intOrNull
-        DefaultToolPreview(
-            context = context,
-            headerActions = if (action(context) in listOf(ACTION_CREATE, ACTION_EDIT) && memoryId != null) {
-                {
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                memoryRepo.deleteMemory(memoryId)
-                                onDismissRequest()
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Delete01,
-                            contentDescription = stringResource(R.string.tool_ui_delete_memory)
-                        )
-                    }
-                }
-            } else {
-                null
-            },
-        )
+        // A historical tool result does not carry a trustworthy acting assistant id.
+        // Deletion remains available from the assistant memory page, where ownership is known.
+        DefaultToolPreview(context = context)
     }
 }
 

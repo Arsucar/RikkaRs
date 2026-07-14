@@ -363,6 +363,10 @@ class SettingsStore(
                     assistants.add(defaultAssistant.copy())
                 }
             }
+            val assistantLifecycle = normalizeAssistantLifecycle(
+                assistants = assistants,
+                selectedAssistantId = it.assistantId,
+            )
             val ttsProviders = it.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
             DEFAULT_TTS_PROVIDERS.forEach { defaultTTSProvider ->
                 if (ttsProviders.none { provider -> provider.id == defaultTTSProvider.id }) {
@@ -371,7 +375,8 @@ class SettingsStore(
             }
             it.copy(
                 providers = providers,
-                assistants = assistants,
+                assistants = assistantLifecycle.assistants,
+                assistantId = assistantLifecycle.selectedAssistantId,
                 ttsProviders = ttsProviders,
             )
         }
@@ -608,10 +613,33 @@ class SettingsStore(
         }
     }
 
-    suspend fun updateAssistant(assistantId: Uuid) {
+    suspend fun updateAssistant(assistantId: Uuid): Boolean {
+        val fallbackAssistants = settingsFlow.value.assistants
+        var selected = false
         dataStore.edit { preferences ->
-            preferences[SELECT_ASSISTANT] = assistantId.toString()
+            selected = preferences.selectActiveAssistant(
+                assistantId = assistantId,
+                fallbackAssistants = fallbackAssistants,
+            )
         }
+        return selected
+    }
+
+    suspend fun setAssistantArchived(
+        assistantId: Uuid,
+        archived: Boolean,
+    ): AssistantArchiveResult {
+        val fallbackSettings = settingsFlow.value
+        var result: AssistantArchiveResult = AssistantArchiveResult.AssistantNotFound
+        dataStore.edit { preferences ->
+            result = preferences.writeAssistantArchiveState(
+                assistantId = assistantId,
+                archived = archived,
+                fallbackAssistants = fallbackSettings.assistants,
+                fallbackSelectedAssistantId = fallbackSettings.assistantId,
+            )
+        }
+        return result
     }
 
     suspend fun updateAssistantConfig(assistant: Assistant) {
@@ -705,6 +733,49 @@ internal fun MutablePreferences.writeAssistantConfig(
             if (current.id == assistant.id) assistant else current
         }
     )
+}
+
+internal fun MutablePreferences.writeAssistantArchiveState(
+    assistantId: Uuid,
+    archived: Boolean,
+    fallbackAssistants: List<Assistant>,
+    fallbackSelectedAssistantId: Uuid,
+): AssistantArchiveResult {
+    val assistants = storedAssistantsWithFallback(fallbackAssistants)
+    val selectedAssistantId = this[SettingsStore.SELECT_ASSISTANT]
+        ?.let { storedId -> runCatching { Uuid.parse(storedId) }.getOrNull() }
+        ?: fallbackSelectedAssistantId
+    val (result, transition) = transitionAssistantArchive(
+        assistants = assistants,
+        selectedAssistantId = selectedAssistantId,
+        assistantId = assistantId,
+        archived = archived,
+    )
+    if (transition != null) {
+        this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(transition.assistants)
+        this[SettingsStore.SELECT_ASSISTANT] = transition.selectedAssistantId.toString()
+    }
+    return result
+}
+
+internal fun MutablePreferences.selectActiveAssistant(
+    assistantId: Uuid,
+    fallbackAssistants: List<Assistant>,
+): Boolean {
+    val target = storedAssistantsWithFallback(fallbackAssistants)
+        .firstOrNull { it.id == assistantId && !it.isArchived }
+        ?: return false
+    this[SettingsStore.SELECT_ASSISTANT] = target.id.toString()
+    return true
+}
+
+private fun Preferences.storedAssistantsWithFallback(fallbackAssistants: List<Assistant>): List<Assistant> {
+    val stored = this[SettingsStore.ASSISTANTS]?.let {
+        JsonInstant.decodeFromString<List<Assistant>>(it)
+    }.orEmpty()
+    if (stored.isEmpty()) return fallbackAssistants
+    val storedIds = stored.mapTo(mutableSetOf()) { it.id }
+    return stored + fallbackAssistants.filterNot { it.id in storedIds }
 }
 
 internal data class CompressionPreferences(
@@ -1055,7 +1126,8 @@ fun Settings.getCurrentChatModel(conversation: Conversation? = null): Model? {
 }
 
 fun Settings.getCurrentAssistant(): Assistant {
-    return this.assistants.find { it.id == assistantId } ?: this.assistants.first()
+    return this.assistants.find { it.id == assistantId && !it.isArchived }
+        ?: this.assistants.first { !it.isArchived }
 }
 
 fun Settings.getAssistantById(id: Uuid): Assistant? {

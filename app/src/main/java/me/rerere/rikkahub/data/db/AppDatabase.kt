@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.db.dao.MemoryTableDAO
 import me.rerere.rikkahub.data.db.dao.MemoryTableSnapshotDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
+import me.rerere.rikkahub.data.db.dao.SubagentContextDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.db.entity.FolderEntity
@@ -27,11 +28,11 @@ import me.rerere.rikkahub.data.db.entity.MemoryTableSnapshotEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableTemplateEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.db.entity.SubagentContextEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
-
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 
@@ -48,8 +49,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryTableTemplateEntity::class,
         MemoryTableDocumentEntity::class,
         MemoryTableSnapshotEntity::class,
+        SubagentContextEntity::class,
     ],
-    version = 35,
+    version = 37,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -92,6 +94,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDAO
 
     abstract fun memoryTableSnapshotDao(): MemoryTableSnapshotDAO
+
+    abstract fun subagentContextDao(): SubagentContextDAO
 }
 
 object TokenUsageConverter {

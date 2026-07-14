@@ -46,6 +46,7 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.activeAssistants
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -124,10 +125,11 @@ private fun AssistantPickerSheet(
 
     // 根据选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds) {
+        val activeAssistants = settings.activeAssistants()
         if (selectedTagIds.isEmpty()) {
-            settings.assistants
+            activeAssistants
         } else {
-            settings.assistants.filter { assistant ->
+            activeAssistants.filter { assistant ->
                 assistant.tags.any { tagId -> tagId in selectedTagIds }
             }
         }

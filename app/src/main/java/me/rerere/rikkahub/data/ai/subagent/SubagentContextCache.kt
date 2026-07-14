@@ -4,6 +4,10 @@ import android.util.Log
 import java.util.LinkedHashMap
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
@@ -22,6 +26,7 @@ enum class SubagentStatus {
     INTERRUPTED,
 }
 
+@Serializable
 data class SubagentContextScope(
     val conversationId: Uuid?,
     val parentAssistantId: Uuid,
@@ -43,6 +48,7 @@ data class SubagentContext(
     val status: SubagentStatus,
     val usage: TokenUsage? = null,
     val lastError: String? = null,
+    val revision: Long = 0,
 )
 
 enum class SubagentContextErrorCode {
@@ -62,10 +68,14 @@ class SubagentContextCache(
     private val ttlMillis: Long = DEFAULT_SUBAGENT_CONTEXT_TTL_MILLIS,
     private val maxEntries: Int = DEFAULT_SUBAGENT_CONTEXT_CACHE_SIZE,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val store: SubagentContextStore? = null,
+    private val persistenceScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val mutex = Mutex()
     private val contexts = LinkedHashMap<String, SubagentContext>(16, 0.75f, true)
     private val expiredContextIds = LinkedHashMap<String, Long>()
+    private val restoreMutex = Mutex()
+    @Volatile private var restored = store == null
 
     init {
         require(ttlMillis > 0) { "ttlMillis must be positive" }
@@ -75,7 +85,9 @@ class SubagentContextCache(
     suspend fun createAndAcquire(
         scope: SubagentContextScope,
         messages: List<UIMessage>,
-    ): SubagentContext = mutex.withLock {
+    ): SubagentContext {
+        ensureRestored()
+        val context = mutex.withLock {
         val now = nowMillis()
         pruneExpiredLocked(now)
         val context = SubagentContext(
@@ -86,18 +98,25 @@ class SubagentContextCache(
             lastAccessAtMillis = now,
             expiresAtMillis = now + ttlMillis,
             status = SubagentStatus.RUNNING,
+            revision = 1,
         )
         contexts[context.contextId] = context
         evictToLimitLocked()
         log("created context=${context.contextId} size=${contexts.size}")
-        context.snapshot()
+            context.snapshot()
+        }
+        persistAsync(context)
+        return context
     }
 
     suspend fun acquireForReuse(
         contextId: String,
         scope: SubagentContextScope,
         messagesToAppend: List<UIMessage> = emptyList(),
-    ): SubagentContext = mutex.withLock {
+    ): SubagentContext {
+        ensureRestored()
+        restoreByIdIfMissing(contextId)
+        val acquired = mutex.withLock {
         val now = nowMillis()
         pruneExpiredTombstonesLocked(now)
         val existing = contexts.entries.firstOrNull { it.key == contextId }?.value ?: throw SubagentContextException(
@@ -138,13 +157,18 @@ class SubagentContextCache(
                     mismatchedFields.joinToString(),
             )
         }
-        acquireLocked(existing, now, messagesToAppend)
+            acquireLocked(existing, now, messagesToAppend)
+        }
+        persistAsync(acquired)
+        return acquired
     }
 
     suspend fun acquireLatestCompleted(
         scope: SubagentContextScope,
         messagesToAppend: List<UIMessage> = emptyList(),
-    ): SubagentContext? = mutex.withLock {
+    ): SubagentContext? {
+        ensureRestored()
+        val acquired = mutex.withLock {
         val now = nowMillis()
         pruneExpiredLocked(now)
         val existing = contexts.values
@@ -163,19 +187,28 @@ class SubagentContextCache(
             ?: return@withLock null
 
         acquireLocked(existing, now, messagesToAppend)
+        }
+        acquired?.let(::persistAsync)
+        return acquired
     }
 
     suspend fun updateProgress(
         contextId: String,
         messages: List<UIMessage>,
         usage: TokenUsage? = null,
-    ) = mutex.withLock {
-        val existing = contexts[contextId] ?: return@withLock
-        val now = nowMillis()
-        contexts[contextId] = existing.touch(now).copy(
-            messages = snapshotMessages(messages),
-            usage = usage ?: existing.usage,
-        )
+    ) {
+        ensureRestored()
+        val updated: SubagentContext? = mutex.withLock {
+            val existing = contexts[contextId] ?: return@withLock null
+            val now = nowMillis()
+            contexts[contextId] = existing.touch(now).copy(
+                messages = snapshotMessages(messages),
+                usage = usage ?: existing.usage,
+                revision = existing.revision + 1,
+            )
+            contexts[contextId]?.snapshot()
+        }
+        updated?.let(::persistAsync)
     }
 
     suspend fun finish(
@@ -184,7 +217,9 @@ class SubagentContextCache(
         messages: List<UIMessage>? = null,
         usage: TokenUsage? = null,
         error: String? = null,
-    ): SubagentContext? = mutex.withLock {
+    ): SubagentContext? {
+        ensureRestored()
+        val finished = mutex.withLock {
         require(status != SubagentStatus.RUNNING) { "finish requires a terminal status" }
         val existing = contexts[contextId] ?: return@withLock null
         val now = nowMillis()
@@ -193,24 +228,34 @@ class SubagentContextCache(
             status = status,
             usage = usage ?: existing.usage,
             lastError = error,
+            revision = existing.revision + 1,
         )
         contexts[contextId] = finished
         pruneExpiredLocked(now)
         evictToLimitLocked()
         log("finished context=$contextId status=$status size=${contexts.size}")
-        contexts[contextId]?.snapshot()
+            contexts[contextId]?.snapshot()
+        }
+        if (finished != null) persistNow(finished)
+        return finished
     }
 
-    suspend fun snapshot(contextId: String): SubagentContext? = mutex.withLock {
+    suspend fun snapshot(contextId: String): SubagentContext? {
+        ensureRestored()
+        return mutex.withLock {
         val now = nowMillis()
         pruneExpiredLocked(now)
         val existing = contexts[contextId] ?: return@withLock null
         val touched = existing.touch(now)
         contexts[contextId] = touched
         touched.snapshot()
+        }
     }
 
-    suspend fun size(): Int = mutex.withLock { contexts.size }
+    suspend fun size(): Int {
+        ensureRestored()
+        return mutex.withLock { contexts.size }
+    }
 
     private fun acquireLocked(
         existing: SubagentContext,
@@ -221,6 +266,7 @@ class SubagentContextCache(
             messages = snapshotMessages(existing.messages + messagesToAppend),
             status = SubagentStatus.RUNNING,
             lastError = null,
+            revision = existing.revision + 1,
         )
         contexts[existing.contextId] = acquired
         log("reused context=${existing.contextId} size=${contexts.size}")
@@ -312,5 +358,71 @@ class SubagentContextCache(
 
     private fun log(message: String) {
         runCatching { Log.i(TAG, message) }
+    }
+
+    private suspend fun ensureRestored() {
+        if (restored) return
+        restoreMutex.withLock {
+            if (restored) return
+            val now = nowMillis()
+            val recovered = runCatching { store?.loadRestorable(now).orEmpty() }
+                .onFailure { log("restore failed: ${it.message}") }
+                .getOrDefault(emptyList())
+            val toPersist = mutableListOf<SubagentContext>()
+            mutex.withLock {
+                recovered.sortedBy { it.lastAccessAtMillis }.forEach { stored ->
+                    if (stored.expiresAtMillis <= now) return@forEach
+                    val normalized = if (stored.status == SubagentStatus.RUNNING) {
+                        stored.copy(
+                            status = SubagentStatus.INTERRUPTED,
+                            lastError = stored.lastError ?: "App process stopped before completion",
+                            revision = stored.revision + 1,
+                        ).also(toPersist::add)
+                    } else stored
+                    contexts[normalized.contextId] = normalized.snapshot()
+                }
+                evictToLimitLocked()
+            }
+            restored = true
+            toPersist.forEach { persistNow(it) }
+        }
+    }
+
+    private suspend fun restoreByIdIfMissing(contextId: String) {
+        val target = store ?: return
+        if (mutex.withLock { contextId in contexts }) return
+        val now = nowMillis()
+        val stored = runCatching { target.loadById(contextId) }
+            .onFailure { log("fallback load failed context=$contextId: ${it.message}") }
+            .getOrNull()
+            ?: return
+        if (stored.expiresAtMillis <= now) return
+        val normalized = if (stored.status == SubagentStatus.RUNNING) {
+            stored.copy(
+                status = SubagentStatus.INTERRUPTED,
+                lastError = stored.lastError ?: "App process stopped before completion",
+                revision = stored.revision + 1,
+            )
+        } else stored
+        if (normalized !== stored) persistNow(normalized)
+        mutex.withLock {
+            contexts.putIfAbsent(contextId, normalized.snapshot())
+            evictToLimitLocked()
+        }
+    }
+
+    private fun persistAsync(context: SubagentContext) {
+        val target = store ?: return
+        val snapshot = context.snapshot()
+        persistenceScope.launch {
+            runCatching { target.save(snapshot) }
+                .onFailure { log("persist failed context=${snapshot.contextId}: ${it.message}") }
+        }
+    }
+
+    private suspend fun persistNow(context: SubagentContext) {
+        val target = store ?: return
+        runCatching { target.save(context.snapshot()) }
+            .onFailure { log("persist failed context=${context.contextId}: ${it.message}") }
     }
 }

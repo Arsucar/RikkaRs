@@ -1614,4 +1614,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_auto_compress_keep_recent_error">0 이상의 정수를 입력하세요.</string>
   <string name="chat_auto_compress_success">컨텍스트를 자동으로 압축했습니다.</string>
   <string name="chat_auto_compress_failed">컨텍스트 자동 압축에 실패했습니다. 원래 컨텍스트로 전송합니다.</string>
+  <string name="assistant_page_active_assistants">사용 중</string>
+  <string name="assistant_page_archived_assistants">보관됨</string>
+  <string name="assistant_page_archive">어시스턴트 보관</string>
+  <string name="assistant_page_restore">어시스턴트 복원</string>
+  <string name="assistant_page_no_active_assistants">현재 필터와 일치하는 사용 중 어시스턴트가 없습니다.</string>
+  <string name="assistant_page_no_archived_assistants">보관된 어시스턴트가 없습니다.</string>
+  <string name="assistant_page_last_active_error">사용 중인 어시스턴트를 하나 이상 유지해야 합니다.</string>
 </resources>

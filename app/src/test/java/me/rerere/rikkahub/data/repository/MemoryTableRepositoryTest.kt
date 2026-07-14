@@ -75,6 +75,8 @@ class MemoryTableRepositoryTest {
             name = "Template",
             description = "",
             schemaJson = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}""",
+            scopeType = "GLOBAL",
+            scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
             createdAt = 1,
             updatedAt = 1,
         )
@@ -281,19 +283,207 @@ class MemoryTableRepositoryTest {
         assertTrue(dao.documents.single().payloadJson.contains("Alice"))
     }
 
+    @Test
+    fun effectiveTemplatesReturnGlobalAndCurrentAssistantOnly() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID),
+                templateEntity("assistant-a", "ASSISTANT", "assistant-a"),
+                templateEntity("assistant-b", "ASSISTANT", "assistant-b"),
+                templateEntity("conversation", "CONVERSATION", "conversation-a"),
+            )
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val templates = repository.getEffectiveTemplates("assistant-a")
+        val flowTemplates = repository.getEffectiveTemplatesFlow("assistant-a").first()
+
+        assertEquals(listOf("global", "assistant-a"), templates.map { it.id })
+        assertEquals(listOf("global", "assistant-a"), flowTemplates.map { it.id })
+    }
+
+    @Test
+    fun scopedTemplateCreateDefaultsToActorAndAllowsSameNamePerAssistant() = runBlocking {
+        val dao = FakeMemoryTableDAO()
+        val repository = MemoryTableRepository(dao)
+
+        val a = repository.upsertTemplate(
+            MemoryTableTemplate(name = "Shared"),
+            actorAssistantId = "assistant-a",
+        )
+        val b = repository.upsertTemplate(
+            MemoryTableTemplate(name = "Shared"),
+            actorAssistantId = "assistant-b",
+        )
+
+        assertEquals(MemoryTableScopeType.ASSISTANT, a.scopeType)
+        assertEquals("assistant-a", a.scopeId)
+        assertEquals(MemoryTableScopeType.ASSISTANT, b.scopeType)
+        assertEquals("assistant-b", b.scopeId)
+        assertEquals(
+            listOf(a.id),
+            repository.getEffectiveTemplates("assistant-a").filter { it.name == "Shared" }.map { it.id },
+        )
+        assertEquals(
+            listOf(b.id),
+            repository.getEffectiveTemplates("assistant-b").filter { it.name == "Shared" }.map { it.id },
+        )
+    }
+
+    @Test
+    fun scopedTemplateUpdateAndDeleteRejectKnownForeignId() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
+            documents = listOf(doc("doc-a", "ASSISTANT", "assistant-a")),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    MemoryTableTemplate(id = "template-a", name = "stolen"),
+                    actorAssistantId = "assistant-b",
+                )
+            }
+        }
+        val deleted = repository.deleteTemplate("template-a", actorAssistantId = "assistant-b")
+
+        assertFalse(deleted)
+        assertEquals("Template template-a", dao.templates.single().name)
+        assertEquals(listOf("doc-a"), dao.documents.map { it.id })
+    }
+
+    @Test
+    fun scopedTemplateReadAndDeleteRejectMalformedGlobalOwner() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("malformed-global", "GLOBAL", "other")),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        assertEquals(null, repository.getEffectiveTemplate("malformed-global", "assistant-a"))
+        assertFalse(repository.deleteTemplate("malformed-global", actorAssistantId = "assistant-a"))
+        assertEquals(listOf("malformed-global"), dao.templates.map { it.id })
+    }
+
+    @Test
+    fun scopedTemplateUpdateCannotChangeExistingOwnership() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val updated = repository.upsertTemplate(
+            MemoryTableTemplate(
+                id = "template-a",
+                name = "Updated",
+                scopeType = MemoryTableScopeType.GLOBAL,
+                scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+            ),
+            actorAssistantId = "assistant-a",
+        )
+
+        assertEquals(MemoryTableScopeType.ASSISTANT, updated.scopeType)
+        assertEquals("assistant-a", updated.scopeId)
+        assertEquals("ASSISTANT", dao.templates.single().scopeType)
+        assertEquals("assistant-a", dao.templates.single().scopeId)
+    }
+
+    @Test
+    fun scopedDocumentMutationRejectsForeignKnownIdAndPrivateTemplateGlobalDocument() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
+            documents = listOf(doc("doc-a", "ASSISTANT", "assistant-a")),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        assertEquals(
+            null,
+            repository.getEffectiveDocument("doc-a", assistantId = "assistant-b"),
+        )
+        assertFalse(repository.deleteDocument("doc-a", assistantId = "assistant-b"))
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.upsertDocument(
+                    MemoryTableDocument(
+                        id = "doc-a",
+                        templateId = "template-a",
+                        scopeType = MemoryTableScopeType.ASSISTANT,
+                        scopeId = "assistant-b",
+                    ),
+                    actorAssistantId = "assistant-b",
+                )
+            }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.upsertDocument(
+                    MemoryTableDocument(
+                        templateId = "template-a",
+                        scopeType = MemoryTableScopeType.GLOBAL,
+                        scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                    ),
+                    actorAssistantId = "assistant-a",
+                )
+            }
+        }
+
+        assertEquals(listOf("doc-a"), dao.documents.map { it.id })
+    }
+
+    @Test
+    fun copyGlobalTemplateCreatesAssistantPrivateTemplateWithNewId() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID)),
+            documents = listOf(
+                doc(
+                    id = "global-doc",
+                    scopeType = "GLOBAL",
+                    scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                    templateId = "global",
+                )
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val copy = repository.copyGlobalTemplateToAssistant("global", actorAssistantId = "assistant-a")
+
+        assertTrue(copy.id != "global")
+        assertEquals(MemoryTableScopeType.ASSISTANT, copy.scopeType)
+        assertEquals("assistant-a", copy.scopeId)
+        assertEquals(setOf("global", copy.id), dao.templates.map { it.id }.toSet())
+        assertEquals(listOf("global-doc"), dao.documents.map { it.id })
+        assertEquals("global", dao.documents.single().templateId)
+    }
+
     private fun doc(
         id: String,
         scopeType: String,
         scopeId: String,
         payloadJson: String = "{}",
         revision: Int = 0,
+        templateId: String = "template",
     ) = MemoryTableDocumentEntity(
         id = id,
-        templateId = "template",
+        templateId = templateId,
         scopeType = scopeType,
         scopeId = scopeId,
         payloadJson = payloadJson,
         revision = revision,
+        createdAt = 1,
+        updatedAt = 1,
+    )
+
+    private fun templateEntity(
+        id: String,
+        scopeType: String,
+        scopeId: String,
+    ) = MemoryTableTemplateEntity(
+        id = id,
+        name = "Template $id",
+        description = "",
+        schemaJson = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}""",
+        scopeType = scopeType,
+        scopeId = scopeId,
         createdAt = 1,
         updatedAt = 1,
     )
@@ -315,10 +505,54 @@ class MemoryTableRepositoryTest {
         override suspend fun getTemplate(id: String): MemoryTableTemplateEntity? =
             templates.firstOrNull { it.id == id }
 
+        override fun getEffectiveTemplatesFlow(assistantId: String): Flow<List<MemoryTableTemplateEntity>> =
+            flowOf(templates.toList())
+
+        override suspend fun getEffectiveTemplates(assistantId: String): List<MemoryTableTemplateEntity> =
+            templates.toList()
+
+        override suspend fun getEffectiveTemplate(id: String, assistantId: String): MemoryTableTemplateEntity? =
+            templates.firstOrNull {
+                it.id == id && (
+                    (it.scopeType == "GLOBAL" && it.scopeId == MemoryRepository.GLOBAL_MEMORY_ID) ||
+                        (it.scopeType == "ASSISTANT" && it.scopeId == assistantId)
+                    )
+            }
+
         override suspend fun upsertTemplate(template: MemoryTableTemplateEntity) {
             templateUpserts++
             templates.removeAll { it.id == template.id }
             templates += template
+        }
+
+        override suspend fun insertTemplateIgnore(template: MemoryTableTemplateEntity): Long {
+            if (templates.any { it.id == template.id }) return -1
+            templates += template
+            return 1
+        }
+
+        override suspend fun updateEffectiveTemplateFields(
+            id: String,
+            assistantId: String,
+            name: String,
+            description: String,
+            schemaJson: String,
+            updatedAt: Long,
+        ): Int {
+            val index = templates.indexOfFirst {
+                it.id == id && (
+                    (it.scopeType == "GLOBAL" && it.scopeId == MemoryRepository.GLOBAL_MEMORY_ID) ||
+                        (it.scopeType == "ASSISTANT" && it.scopeId == assistantId)
+                    )
+            }
+            if (index < 0) return 0
+            templates[index] = templates[index].copy(
+                name = name,
+                description = description,
+                schemaJson = schemaJson,
+                updatedAt = updatedAt,
+            )
+            return 1
         }
 
         override suspend fun deleteTemplate(id: String): Int {
@@ -359,6 +593,19 @@ class MemoryTableRepositoryTest {
         override suspend fun getDocument(id: String): MemoryTableDocumentEntity? =
             documents.firstOrNull { it.id == id }
 
+        override suspend fun getEffectiveDocument(
+            id: String,
+            assistantId: String,
+            conversationId: String?,
+        ): MemoryTableDocumentEntity? =
+            documents.firstOrNull {
+                it.id == id && (
+                    it.scopeType == "GLOBAL" ||
+                        (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                        (conversationId != null && it.scopeType == "CONVERSATION" && it.scopeId == conversationId)
+                    )
+            }
+
         override suspend fun upsertDocument(document: MemoryTableDocumentEntity) {
             documentUpserts++
             documents.removeAll { it.id == document.id }
@@ -375,6 +622,34 @@ class MemoryTableRepositoryTest {
             val before = documents.size
             documents.removeAll { it.templateId == templateId }
             return before - documents.size
+        }
+
+        override suspend fun getDocumentIdsOwnedByAssistant(assistantId: String): List<String> {
+            val ownedTemplateIds = templates
+                .filter { it.scopeType == "ASSISTANT" && it.scopeId == assistantId }
+                .mapTo(mutableSetOf()) { it.id }
+            return documents.filter {
+                (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    it.templateId in ownedTemplateIds
+            }.map { it.id }
+        }
+
+        override suspend fun deleteDocumentsOwnedByAssistant(assistantId: String): Int {
+            val ownedTemplateIds = templates
+                .filter { it.scopeType == "ASSISTANT" && it.scopeId == assistantId }
+                .mapTo(mutableSetOf()) { it.id }
+            val before = documents.size
+            documents.removeAll {
+                (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    it.templateId in ownedTemplateIds
+            }
+            return before - documents.size
+        }
+
+        override suspend fun deleteTemplatesOwnedByAssistant(assistantId: String): Int {
+            val before = templates.size
+            templates.removeAll { it.scopeType == "ASSISTANT" && it.scopeId == assistantId }
+            return before - templates.size
         }
     }
 

@@ -16,6 +16,14 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.27 之后）
 
+- **助手与记忆隔离完善** — 记忆表模板和搜索沉淀记忆严格按助手隔离；新增助手归档/恢复，并保留配置、对话与记忆。（#122、#125、#126）
+  **Assistant lifecycle and memory isolation** — Memory-table templates and search-derived memories are now strictly isolated per assistant; assistants can also be archived and restored without losing configuration, conversations, or memories. (#122, #125, #126)
+- **模型与 Skill 列表体验修复** — Skill frontmatter 多行描述可正确解析；模型搜索隐藏无命中的供应商分组并同步快捷导航。（#123、#124）
+  **Model and Skill list fixes** — Multi-line Skill frontmatter descriptions now parse correctly, and model search hides unmatched provider groups while keeping quick navigation in sync. (#123, #124)
+- **子代理恢复与并发解耦** — 子代理完整上下文持久化到 Room，可在进程重启后恢复；普通工具并行关闭时，多子代理仍按独立并发上限运行。（#127、#128）
+  **Subagent recovery and concurrency separation** — Full subagent contexts are persisted in Room for process-restart recovery, while multiple subagents can still honor their own concurrency limit when ordinary tool parallelism is disabled. (#127, #128)
+- **工作区图片识别链路回归保护** — 工作区读取的 JPG/PNG 等图片会作为多模态工具结果传给 Claude、OpenAI Chat/Responses 与 Google，并为非视觉模型提供明确降级。（#129、#130）
+  **Workspace image recognition regression coverage** — Workspace JPG/PNG reads are delivered as multimodal tool results to Claude, OpenAI Chat/Responses, and Google, with an explicit fallback for non-vision models. (#129, #130)
 - **最近模型菜单显示提供商** — 在最近使用的模型菜单中显示模型提供商，便于快速区分同名模型。
   **Show providers in recent-model menu** — Recent-model entries now include the provider for easier identification. 
 - **聊天体验与上下文压缩改进** — 重新打开最近助手会话；支持自动压缩过大上下文并记住压缩偏好；编辑模式粘贴文本保持行内显示。

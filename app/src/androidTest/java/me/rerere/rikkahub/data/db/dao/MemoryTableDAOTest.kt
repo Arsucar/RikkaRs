@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.entity.MemoryTableDocumentEntity
+import me.rerere.rikkahub.data.db.entity.MemoryTableTemplateEntity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -65,18 +66,101 @@ class MemoryTableDAOTest {
         )
     }
 
+    @Test
+    fun effectiveTemplateQueriesIsolateAssistantOwnersAndGlobal() = runBlocking {
+        listOf(
+            template("global", "GLOBAL", "__global__", updatedAt = 60),
+            template("malformed-global", "GLOBAL", "other", updatedAt = 55),
+            template("assistant-a", "ASSISTANT", "assistant-a", updatedAt = 50),
+            template("assistant-b", "ASSISTANT", "assistant-b", updatedAt = 40),
+            template("conversation", "CONVERSATION", "conversation-a", updatedAt = 30),
+        ).forEach { dao.upsertTemplate(it) }
+
+        assertEquals(
+            listOf("global", "assistant-a"),
+            dao.getEffectiveTemplates("assistant-a").map { it.id },
+        )
+        assertEquals(
+            listOf("global", "assistant-a"),
+            dao.getEffectiveTemplatesFlow("assistant-a").first().map { it.id },
+        )
+        assertEquals("assistant-a", dao.getEffectiveTemplate("assistant-a", "assistant-a")?.id)
+        assertEquals(null, dao.getEffectiveTemplate("assistant-a", "assistant-b"))
+        assertEquals(null, dao.getEffectiveTemplate("malformed-global", "assistant-a"))
+    }
+
+    @Test
+    fun effectiveTemplateDeleteIsAtomicAndRejectsForeignOrMalformedOwners() = runBlocking {
+        dao.upsertTemplate(template("assistant-a", "ASSISTANT", "assistant-a", updatedAt = 30))
+        dao.upsertTemplate(template("malformed-global", "GLOBAL", "other", updatedAt = 20))
+        dao.upsertDocument(
+            document(
+                id = "assistant-a-doc",
+                scopeType = "ASSISTANT",
+                scopeId = "assistant-a",
+                updatedAt = 30,
+                templateId = "assistant-a",
+            )
+        )
+        dao.upsertDocument(
+            document(
+                id = "malformed-global-doc",
+                scopeType = "GLOBAL",
+                scopeId = "global",
+                updatedAt = 20,
+                templateId = "malformed-global",
+            )
+        )
+
+        assertEquals(0, dao.deleteEffectiveTemplateAndDocuments("assistant-a", "assistant-b"))
+        assertEquals(0, dao.deleteEffectiveTemplateAndDocuments("malformed-global", "assistant-a"))
+        assertEquals("assistant-a", dao.getTemplate("assistant-a")?.id)
+        assertEquals("assistant-a-doc", dao.getDocument("assistant-a-doc")?.id)
+        assertEquals("malformed-global", dao.getTemplate("malformed-global")?.id)
+        assertEquals("malformed-global-doc", dao.getDocument("malformed-global-doc")?.id)
+
+        assertEquals(1, dao.deleteEffectiveTemplateAndDocuments("assistant-a", "assistant-a"))
+        assertEquals(null, dao.getTemplate("assistant-a"))
+        assertEquals(null, dao.getDocument("assistant-a-doc"))
+    }
+
+    @Test
+    fun effectiveDocumentByIdRejectsKnownForeignId() = runBlocking {
+        dao.upsertDocument(document("doc-a", "ASSISTANT", "assistant-a", updatedAt = 10))
+
+        assertEquals("doc-a", dao.getEffectiveDocument("doc-a", "assistant-a", null)?.id)
+        assertEquals(null, dao.getEffectiveDocument("doc-a", "assistant-b", null))
+    }
+
     private fun document(
         id: String,
         scopeType: String,
         scopeId: String,
         updatedAt: Long,
+        templateId: String = "template",
     ) = MemoryTableDocumentEntity(
         id = id,
-        templateId = "template",
+        templateId = templateId,
         scopeType = scopeType,
         scopeId = scopeId,
         payloadJson = "{}",
         revision = 0,
+        createdAt = 1,
+        updatedAt = updatedAt,
+    )
+
+    private fun template(
+        id: String,
+        scopeType: String,
+        scopeId: String,
+        updatedAt: Long,
+    ) = MemoryTableTemplateEntity(
+        id = id,
+        name = id,
+        description = "",
+        schemaJson = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}""",
+        scopeType = scopeType,
+        scopeId = scopeId,
         createdAt = 1,
         updatedAt = updatedAt,
     )

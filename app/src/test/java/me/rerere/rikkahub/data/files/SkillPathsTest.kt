@@ -26,6 +26,86 @@ class SkillPathsTest {
     }
 
     @Test
+    fun `parse preserves literal block scalar newlines and colons`() {
+        val content = """
+            ---
+            name: literal-skill
+            description: |-
+              First line: with a colon
+              第二行
+            compatibility: Android
+            ---
+            body
+        """.trimIndent()
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertEquals("First line: with a colon\n第二行", frontmatter["description"])
+        assertEquals("Android", frontmatter["compatibility"])
+        assertEquals("body", SkillFrontmatterParser.extractBody(content))
+    }
+
+    @Test
+    fun `parse folds adjacent lines and preserves blank line paragraphs`() {
+        val content = """
+            ---
+            name: folded-skill
+            description: >-
+              First line
+              continues here
+
+              New paragraph
+            allowed-tools: Read Write
+            ---
+        """.trimIndent()
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertEquals("First line continues here\nNew paragraph", frontmatter["description"])
+        assertEquals("Read Write", frontmatter["allowed-tools"])
+    }
+
+    @Test
+    fun `parse applies clip strip and keep chomping`() {
+        fun description(marker: String): String? = SkillFrontmatterParser.parse(
+            "---\ndescription: $marker\n  line\n\n---\n"
+        )["description"]
+
+        assertEquals("line\n", description("|"))
+        assertEquals("line", description("|-"))
+        assertEquals("line\n\n", description("|+"))
+    }
+
+    @Test
+    fun `parse supports CRLF folded block without consuming following key`() {
+        val content = "---\r\nname: crlf-skill\r\ndescription: >-\r\n  first\r\n  second: value\r\ncompatibility: JVM\r\n---\r\nbody"
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertEquals("first second: value", frontmatter["description"])
+        assertEquals("JVM", frontmatter["compatibility"])
+    }
+
+    @Test
+    fun `parse keeps single line and quoted block markers compatible`() {
+        val plain = SkillFrontmatterParser.parse("---\ndescription: plain text\n---\n")
+        val quoted = SkillFrontmatterParser.parse("---\ndescription: \"|\"\n---\n")
+
+        assertEquals("plain text", plain["description"])
+        assertEquals("|", quoted["description"])
+    }
+
+    @Test
+    fun `parse honors explicit block indentation`() {
+        val content = "---\ndescription: |2-\n    indented content\nnext: value\n---\n"
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertEquals("  indented content", frontmatter["description"])
+        assertEquals("value", frontmatter["next"])
+    }
+
+    @Test
     fun `resolve skill dir rejects traversal and nested names`() {
         val skillsRoot = Files.createTempDirectory("skills-root").toFile()
 

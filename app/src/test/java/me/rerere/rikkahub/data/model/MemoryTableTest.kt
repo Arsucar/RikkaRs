@@ -16,6 +16,76 @@ class MemoryTableTest {
     }
 
     @Test
+    fun templateScopeVisibilityAllowsOnlyGlobalAndCurrentAssistant() {
+        assertTrue(
+            MemoryTableTemplate(
+                scopeType = MemoryTableScopeType.GLOBAL,
+                scopeId = MEMORY_TABLE_GLOBAL_SCOPE_ID,
+            ).isEffectiveFor("assistant-a")
+        )
+        assertTrue(
+            MemoryTableTemplate(
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = "assistant-a",
+            ).isEffectiveFor("assistant-a")
+        )
+        assertFalse(
+            MemoryTableTemplate(
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = "assistant-b",
+            ).isEffectiveFor("assistant-a")
+        )
+        assertFalse(
+            MemoryTableTemplate(
+                scopeType = MemoryTableScopeType.CONVERSATION,
+                scopeId = "conversation-a",
+            ).isEffectiveFor("assistant-a")
+        )
+    }
+
+    @Test
+    fun bundleV1TemplatesDecodeAsGlobalAndV2PreservesAssistantOwner() {
+        val v1 = """
+            {
+              "version": 1,
+              "templates": [
+                {
+                  "id": "legacy",
+                  "name": "Legacy",
+                  "description": "",
+                  "schemaJson": "{\"tables\":[{\"name\":\"facts\",\"columns\":[{\"name\":\"key\"}]}]}",
+                  "createdAt": 1,
+                  "updatedAt": 1
+                }
+              ],
+              "documents": []
+            }
+        """.trimIndent()
+
+        val legacy = decodeMemoryTableBundle(v1).templates.single()
+
+        assertEquals(MemoryTableScopeType.GLOBAL, legacy.scopeType)
+        assertEquals(MEMORY_TABLE_GLOBAL_SCOPE_ID, legacy.scopeId)
+
+        val assistantTemplate = MemoryTableTemplate(
+            id = "assistant-template",
+            name = "Assistant",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "unknown-assistant",
+        )
+        val roundTrip = decodeMemoryTableBundle(
+            encodeMemoryTableBundle(
+                templates = listOf(assistantTemplate),
+                documents = emptyList(),
+            )
+        ).templates.single()
+
+        assertEquals(2, MEMORY_TABLE_BUNDLE_VERSION)
+        assertEquals(MemoryTableScopeType.ASSISTANT, roundTrip.scopeType)
+        assertEquals("unknown-assistant", roundTrip.scopeId)
+    }
+
+    @Test
     fun schemaValidationAcceptsInjectPolicyObject() {
         // Default schema ships an injectPolicy object; it must validate cleanly.
         validateMemoryTableSchemaJson(DEFAULT_MEMORY_TABLE_SCHEMA_JSON)

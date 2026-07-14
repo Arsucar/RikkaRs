@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.datastore.AssistantArchiveResult
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
@@ -14,10 +15,12 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 
 class AssistantVM(
     private val settingsStore: SettingsStore,
     private val memoryRepository: MemoryRepository,
+    private val memoryTableRepository: MemoryTableRepository,
     private val conversationRepo: ConversationRepository,
     private val filesManager: FilesManager,
 ) : ViewModel() {
@@ -35,9 +38,19 @@ class AssistantVM(
             val settings = settings.value
             settingsStore.update(
                 settings.copy(
-                    assistants = settings.assistants.plus(assistant)
+                    assistants = settings.assistants.plus(assistant.copy(isArchived = false))
                 )
             )
+        }
+    }
+
+    fun setAssistantArchived(
+        assistant: Assistant,
+        archived: Boolean,
+        onResult: (AssistantArchiveResult) -> Unit,
+    ) {
+        viewModelScope.launch {
+            onResult(settingsStore.setAssistantArchived(assistant.id, archived))
         }
     }
 
@@ -52,6 +65,7 @@ class AssistantVM(
                 )
             )
             memoryRepository.deleteMemoriesOfAssistant(assistant.id.toString())
+            memoryTableRepository.deleteDataOwnedByAssistant(assistant.id.toString())
             conversationRepo.deleteConversationOfAssistant(assistant.id)
         }
     }
@@ -70,11 +84,7 @@ class AssistantVM(
     fun copyAssistant(assistant: Assistant) {
         viewModelScope.launch {
             val settings = settings.value
-            val copiedAssistant = assistant.copy(
-                id = kotlin.uuid.Uuid.random(),
-                name = "${assistant.name} (Clone)",
-                avatar = if(assistant.avatar is Avatar.Image) Avatar.Dummy else assistant.avatar,
-            )
+            val copiedAssistant = assistant.copyAsActiveClone()
             settingsStore.update(
                 settings.copy(
                     assistants = settings.assistants.plus(copiedAssistant)
@@ -86,3 +96,10 @@ class AssistantVM(
     fun getMemories(assistant: Assistant) =
         memoryRepository.getEffectiveMemoriesFlow(assistant.id.toString())
 }
+
+internal fun Assistant.copyAsActiveClone(): Assistant = copy(
+    id = kotlin.uuid.Uuid.random(),
+    name = "$name (Clone)",
+    isArchived = false,
+    avatar = if (avatar is Avatar.Image) Avatar.Dummy else avatar,
+)

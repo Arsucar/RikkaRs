@@ -180,8 +180,11 @@ class ChatVM(
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     // #89: 对话可见的记忆表模板（用于新建对话级文档时选择模板）
-    val memoryTableTemplates: StateFlow<List<MemoryTableTemplate>> = memoryTableRepository
-        .getTemplatesFlow()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val memoryTableTemplates: StateFlow<List<MemoryTableTemplate>> = conversation
+        .flatMapLatest { conv ->
+            memoryTableRepository.getEffectiveTemplatesFlow(conv.assistantId.toString())
+        }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // #89: 当前对话生效的记忆表文档（CONVERSATION + 继承的 ASSISTANT/GLOBAL），
@@ -479,7 +482,9 @@ class ChatVM(
                     document.copy(
                         scopeType = MemoryTableScopeType.CONVERSATION,
                         scopeId = _conversationId.toString(),
-                    )
+                    ),
+                    actorAssistantId = conversation.value.assistantId.toString(),
+                    actorConversationId = _conversationId.toString(),
                 )
             }
             onDone(result)
@@ -511,7 +516,11 @@ class ChatVM(
                     sourceDocumentId = source.id,
                     followSource = true,
                 )
-                memoryTableRepository.upsertDocument(target)
+                memoryTableRepository.upsertDocument(
+                    target,
+                    actorAssistantId = conversation.value.assistantId.toString(),
+                    actorConversationId = _conversationId.toString(),
+                )
             }
             onDone(result)
         }
@@ -526,9 +535,17 @@ class ChatVM(
     ) {
         viewModelScope.launch {
             val result = runCatching {
-                val doc = memoryTableRepository.getDocument(documentId)
+                val doc = memoryTableRepository.getEffectiveDocument(
+                    id = documentId,
+                    assistantId = conversation.value.assistantId.toString(),
+                    conversationId = _conversationId.toString(),
+                )
                     ?: error("Memory table document not found: $documentId")
-                memoryTableRepository.upsertDocument(doc.copy(followSource = follow))
+                memoryTableRepository.upsertDocument(
+                    doc.copy(followSource = follow),
+                    actorAssistantId = conversation.value.assistantId.toString(),
+                    actorConversationId = _conversationId.toString(),
+                )
             }
             onDone(result)
         }
@@ -540,7 +557,13 @@ class ChatVM(
         onDone: (Result<Unit>) -> Unit = {},
     ) {
         viewModelScope.launch {
-            val result = runCatching { memoryTableRepository.deleteDocument(documentId) }
+            val result = runCatching {
+                memoryTableRepository.deleteDocument(
+                    id = documentId,
+                    assistantId = conversation.value.assistantId.toString(),
+                    conversationId = _conversationId.toString(),
+                )
+            }.map { Unit }
             onDone(result)
         }
     }

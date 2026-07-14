@@ -50,6 +50,15 @@ interface MemoryDAO {
     @Query("SELECT * FROM memoryentity WHERE id = :id")
     suspend fun getMemoryById(id: Int): MemoryEntity?
 
+    @Query(
+        """
+        SELECT * FROM memoryentity
+        WHERE id = :id
+          AND (scope = 'GLOBAL' OR (scope = 'ASSISTANT' AND assistant_id = :assistantId))
+        """
+    )
+    suspend fun getEffectiveMemoryById(id: Int, assistantId: String): MemoryEntity?
+
     @Insert
     suspend fun insertMemory(memory: MemoryEntity): Long
 
