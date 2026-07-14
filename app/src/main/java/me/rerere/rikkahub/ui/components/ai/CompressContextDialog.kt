@@ -42,7 +42,38 @@ import kotlinx.coroutines.Job
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES
+import me.rerere.rikkahub.data.datastore.DEFAULT_COMPRESS_TARGET_TOKENS
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
+
+internal val COMPRESS_TARGET_TOKEN_OPTIONS = listOf(500, 1000, 2000, 4000)
+internal val COMPRESS_KEEP_RECENT_OPTIONS = listOf(0, 16, 32, 64)
+
+internal data class CompressionNumberSelectorState(
+    val selectedOption: Int,
+    val customText: String,
+    val isCustom: Boolean,
+)
+
+internal fun initialCompressionNumberSelectorState(
+    initialValue: Int,
+    options: List<Int>,
+): CompressionNumberSelectorState = CompressionNumberSelectorState(
+    selectedOption = initialValue,
+    customText = initialValue.takeIf { it !in options }?.toString().orEmpty(),
+    isCustom = initialValue !in options,
+)
+
+internal fun resolveCompressionNumber(
+    isCustom: Boolean,
+    customText: String,
+    selectedOption: Int,
+    fallbackValue: Int,
+): Int = if (isCustom) {
+    customText.toIntOrNull() ?: fallbackValue
+} else {
+    selectedOption
+}
 
 @Composable
 private fun CustomNumberSelector(
@@ -173,20 +204,27 @@ private fun CustomNumberSelector(
 
 @Composable
 fun CompressContextDialog(
+    initialTargetTokens: Int,
+    initialKeepRecentMessages: Int,
     onDismiss: () -> Unit,
-    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job
+    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
 ) {
+    // Capture persisted values once per dialog instance so recomposition does not reset active edits.
+    val initialTokenState = remember {
+        initialCompressionNumberSelectorState(initialTargetTokens, COMPRESS_TARGET_TOKEN_OPTIONS)
+    }
+    val initialKeepRecentState = remember {
+        initialCompressionNumberSelectorState(initialKeepRecentMessages, COMPRESS_KEEP_RECENT_OPTIONS)
+    }
     var additionalPrompt by remember { mutableStateOf("") }
-    var selectedTokens by remember { mutableIntStateOf(2000) }
-    var keepRecentMessages by remember { mutableIntStateOf(32) }
-    var customTokenText by remember { mutableStateOf("") }
-    var customKeepRecentText by remember { mutableStateOf("") }
-    var isCustomTokens by remember { mutableStateOf(false) }
-    var isCustomKeepRecent by remember { mutableStateOf(false) }
+    var selectedTokens by remember { mutableIntStateOf(initialTokenState.selectedOption) }
+    var keepRecentMessages by remember { mutableIntStateOf(initialKeepRecentState.selectedOption) }
+    var customTokenText by remember { mutableStateOf(initialTokenState.customText) }
+    var customKeepRecentText by remember { mutableStateOf(initialKeepRecentState.customText) }
+    var isCustomTokens by remember { mutableStateOf(initialTokenState.isCustom) }
+    var isCustomKeepRecent by remember { mutableStateOf(initialKeepRecentState.isCustom) }
     val customTokenFocusRequester = remember { FocusRequester() }
     val customKeepRecentFocusRequester = remember { FocusRequester() }
-    val tokenOptions = listOf(500, 1000, 2000, 4000)
-    val keepRecentOptions = listOf(0, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
 
@@ -228,27 +266,27 @@ fun CompressContextDialog(
 
                     CustomNumberSelector(
                         label = stringResource(R.string.chat_page_compress_target_tokens),
-                        options = tokenOptions,
+                        options = COMPRESS_TARGET_TOKEN_OPTIONS,
                         selectedOption = selectedTokens,
                         onOptionSelected = { selectedTokens = it },
                         customText = customTokenText,
                         onCustomTextChange = { customTokenText = it },
                         isCustom = isCustomTokens,
                         onIsCustomChange = { isCustomTokens = it },
-                        defaultCustomValue = 2000,
+                        defaultCustomValue = DEFAULT_COMPRESS_TARGET_TOKENS,
                         focusRequester = customTokenFocusRequester
                     )
 
                     CustomNumberSelector(
                         label = stringResource(R.string.chat_page_compress_keep_recent),
-                        options = keepRecentOptions,
+                        options = COMPRESS_KEEP_RECENT_OPTIONS,
                         selectedOption = keepRecentMessages,
                         onOptionSelected = { keepRecentMessages = it },
                         customText = customKeepRecentText,
                         onCustomTextChange = { customKeepRecentText = it },
                         isCustom = isCustomKeepRecent,
                         onIsCustomChange = { isCustomKeepRecent = it },
-                        defaultCustomValue = 32,
+                        defaultCustomValue = DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
                         focusRequester = customKeepRecentFocusRequester
                     )
 
@@ -283,16 +321,18 @@ fun CompressContextDialog(
                 }
             } else {
                 TextButton(onClick = {
-                    val resolvedTokens = if (isCustomTokens) {
-                        customTokenText.toIntOrNull() ?: 2000
-                    } else {
-                        selectedTokens
-                    }
-                    val resolvedKeepRecent = if (isCustomKeepRecent) {
-                        customKeepRecentText.toIntOrNull() ?: 32
-                    } else {
-                        keepRecentMessages
-                    }
+                    val resolvedTokens = resolveCompressionNumber(
+                        isCustom = isCustomTokens,
+                        customText = customTokenText,
+                        selectedOption = selectedTokens,
+                        fallbackValue = DEFAULT_COMPRESS_TARGET_TOKENS,
+                    )
+                    val resolvedKeepRecent = resolveCompressionNumber(
+                        isCustom = isCustomKeepRecent,
+                        customText = customKeepRecentText,
+                        selectedOption = keepRecentMessages,
+                        fallbackValue = DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
+                    )
                     currentJob = onConfirm(additionalPrompt, resolvedTokens, resolvedKeepRecent)
                 }) {
                     Text(stringResource(R.string.confirm))

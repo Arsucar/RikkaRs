@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +56,32 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatVM"
+
+internal suspend fun handleManualCompressionResult(
+    result: Result<Unit>,
+    targetTokens: Int,
+    keepRecentMessages: Int,
+    persistPreferences: suspend (targetTokens: Int, keepRecentMessages: Int) -> Unit,
+    onCompressionFailure: (Throwable) -> Unit,
+    onPreferencePersistenceFailure: (Throwable) -> Unit,
+) {
+    val compressionFailure = result.exceptionOrNull()
+    if (compressionFailure != null) {
+        if (compressionFailure is CancellationException) {
+            throw compressionFailure
+        }
+        onCompressionFailure(compressionFailure)
+        return
+    }
+
+    try {
+        persistPreferences(targetTokens, keepRecentMessages)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        onPreferencePersistenceFailure(error)
+    }
+}
 
 class ChatVM(
     id: String,
@@ -234,15 +261,28 @@ class ChatVM(
 
     fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {
-            chatService.compressConversation(
+            val result = chatService.compressConversation(
                 _conversationId,
                 conversation.value,
                 additionalPrompt,
                 targetTokens,
                 keepRecentMessages
-            ).onFailure {
-                chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
-            }
+            )
+            handleManualCompressionResult(
+                result = result,
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
+                persistPreferences = settingsStore::updateCompressionPreferences,
+                onCompressionFailure = {
+                    chatService.addError(
+                        it,
+                        title = context.getString(R.string.error_title_compress_conversation),
+                    )
+                },
+                onPreferencePersistenceFailure = {
+                    Log.e(TAG, "Failed to persist compression preferences", it)
+                },
+            )
         }
     }
 

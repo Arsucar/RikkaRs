@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -74,6 +76,8 @@ private const val MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL = -1
 const val RECENT_CHAT_MODELS_LIMIT = 8
 const val IMAGE_GALLERY_MIN_COLUMNS = 1
 const val IMAGE_GALLERY_MAX_COLUMNS = 6
+const val DEFAULT_COMPRESS_TARGET_TOKENS = 2000
+const val DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES = 32
 
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
@@ -122,6 +126,8 @@ class SettingsStore(
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
+        val COMPRESS_TARGET_TOKENS = intPreferencesKey("compress_target_tokens")
+        val COMPRESS_KEEP_RECENT_MESSAGES = intPreferencesKey("compress_keep_recent_messages")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
@@ -201,6 +207,7 @@ class SettingsStore(
                 throw exception
             }
         }.map { preferences ->
+            val compressionPreferences = preferences.compressionPreferences()
             Settings(
                 enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
                 favoriteModels = preferences[FAVORITE_MODELS]?.let {
@@ -227,6 +234,8 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
+                compressTargetTokens = compressionPreferences.targetTokens,
+                compressKeepRecentMessages = compressionPreferences.keepRecentMessages,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -525,6 +534,10 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
+            preferences.writeCompressionPreferences(
+                targetTokens = settings.compressTargetTokens,
+                keepRecentMessages = settings.compressKeepRecentMessages,
+            )
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[PROVIDER_TAG_ORDER] = JsonInstant.encodeToString(settings.providerTagOrder)
@@ -584,6 +597,15 @@ class SettingsStore(
 
     suspend fun update(fn: (Settings) -> Settings) {
         update(fn(settingsFlow.value))
+    }
+
+    suspend fun updateCompressionPreferences(targetTokens: Int, keepRecentMessages: Int) {
+        dataStore.edit { preferences ->
+            preferences.writeCompressionPreferences(
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
+            )
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
@@ -658,6 +680,25 @@ class SettingsStore(
     }
 }
 
+internal data class CompressionPreferences(
+    val targetTokens: Int,
+    val keepRecentMessages: Int,
+)
+
+internal fun Preferences.compressionPreferences(): CompressionPreferences = CompressionPreferences(
+    targetTokens = this[SettingsStore.COMPRESS_TARGET_TOKENS] ?: DEFAULT_COMPRESS_TARGET_TOKENS,
+    keepRecentMessages = this[SettingsStore.COMPRESS_KEEP_RECENT_MESSAGES]
+        ?: DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
+)
+
+internal fun MutablePreferences.writeCompressionPreferences(
+    targetTokens: Int,
+    keepRecentMessages: Int,
+) {
+    this[SettingsStore.COMPRESS_TARGET_TOKENS] = targetTokens
+    this[SettingsStore.COMPRESS_KEEP_RECENT_MESSAGES] = keepRecentMessages
+}
+
 internal fun decodeMemoryTableBudget(storedValue: Int?, defaultValue: Int): Int? = when {
     storedValue == null -> defaultValue
     storedValue == MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL -> null
@@ -696,6 +737,8 @@ data class Settings(
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
+    val compressTargetTokens: Int = DEFAULT_COMPRESS_TARGET_TOKENS,
+    val compressKeepRecentMessages: Int = DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val providerTagOrder: List<String> = emptyList(),
