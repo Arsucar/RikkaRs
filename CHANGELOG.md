@@ -12,6 +12,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.28
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.27 之后）
+
+- **最近模型菜单显示提供商** — 在最近使用的模型菜单中显示模型提供商，便于快速区分同名模型。
+  **Show providers in recent-model menu** — Recent-model entries now include the provider for easier identification. 
+- **聊天体验与上下文压缩改进** — 重新打开最近助手会话；支持自动压缩过大上下文并记住压缩偏好；编辑模式粘贴文本保持行内显示。
+  **Chat and context improvements** — Reopen the latest assistant conversation; automatically compress oversized contexts and remember preferences; keep pasted text inline in edit mode.
+- **AI 与子代理稳定性增强** — 清理流式 HTTP 错误，强化文档/工具负载解析，并串行化子代理限制以复用上下文。
+  **AI and subagent reliability** — Sanitize streaming HTTP errors, harden document/tool payload parsing, and serialize subagent limits for context reuse.
+- **记忆隔离与注入预算** — 按助手隔离记忆表，并支持配置记忆注入预算。
+  **Memory isolation and injection budgets** — Isolate memory tables per assistant and add configurable injection budgets.
+
 ## v2.3.27
 
 ### 新功能 / Features（本 Fork，v2.3.26 之后）
