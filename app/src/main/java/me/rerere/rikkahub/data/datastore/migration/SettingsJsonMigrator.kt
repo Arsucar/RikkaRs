@@ -3,6 +3,8 @@ package me.rerere.rikkahub.data.datastore.migration
 import android.util.Log
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.utils.JsonInstant
 
@@ -36,6 +38,16 @@ object SettingsJsonMigrator {
                 val migrated = migrateAssistantsJson(JsonInstant.encodeToString(element))
                 root["assistants"] = JsonInstant.parseToJsonElement(migrated)
             }
+
+            // V4: legacy root search flag becomes an Assistant-level setting.
+            root["assistants"]?.let { element ->
+                val legacyEnabled = (root["enableWebSearch"] as? JsonPrimitive)
+                    ?.booleanOrNull ?: false
+                root["assistants"] = JsonInstant.parseToJsonElement(
+                    migrateAssistantWebSearch(JsonInstant.encodeToString(element), legacyEnabled)
+                )
+            }
+            root.remove("enableWebSearch")
 
             // V3: 将 assistants 中内嵌的 quickMessages 提取为全局 quickMessages
             root["assistants"]?.let { element ->

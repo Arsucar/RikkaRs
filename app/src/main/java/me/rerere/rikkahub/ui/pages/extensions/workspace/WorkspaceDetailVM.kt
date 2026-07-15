@@ -99,11 +99,13 @@ class WorkspaceDetailVM(
     }
 
     fun delete(entry: WorkspaceFileEntry) {
+        val area = state.value.area
+        if (area == WorkspaceStorageArea.LINUX) return
         viewModelScope.launch {
             runCatching {
                 repository.deleteFile(
                     id = id,
-                    area = state.value.area,
+                    area = area,
                     path = entry.path,
                     recursive = entry.isDirectory,
                 )
@@ -116,11 +118,16 @@ class WorkspaceDetailVM(
     }
 
     fun importFile(inputStream: InputStream, fileName: String) {
+        val area = state.value.area
+        if (area == WorkspaceStorageArea.LINUX) {
+            inputStream.close()
+            return
+        }
         viewModelScope.launch {
             runCatching {
                 repository.importFile(
                     id = id,
-                    area = state.value.area,
+                    area = area,
                     destinationPath = state.value.path,
                     fileName = fileName,
                     inputStream = inputStream,
@@ -134,11 +141,12 @@ class WorkspaceDetailVM(
     }
 
     fun exportFile(entry: WorkspaceFileEntry, outputStream: OutputStream) {
+        val area = state.value.area
         viewModelScope.launch {
             runCatching {
                 repository.exportFile(
                     id = id,
-                    area = state.value.area,
+                    area = area,
                     path = entry.path,
                     outputStream = outputStream,
                 )
@@ -149,22 +157,39 @@ class WorkspaceDetailVM(
     }
 
     fun shareFile(entry: WorkspaceFileEntry, cacheDir: File, onReady: (File) -> Unit) {
+        prepareFile(entry, cacheDir, "workspace_share", onReady)
+    }
+
+    fun prepareMediaFile(entry: WorkspaceFileEntry, cacheDir: File, onResult: (Result<File>) -> Unit) {
+        prepareFile(entry, cacheDir, "workspace_preview", onResult = onResult)
+    }
+
+    private fun prepareFile(
+        entry: WorkspaceFileEntry,
+        cacheDir: File,
+        directoryName: String,
+        onReady: ((File) -> Unit)? = null,
+        onResult: ((Result<File>) -> Unit)? = null,
+    ) {
+        val area = state.value.area
         viewModelScope.launch {
-            runCatching {
-                val dir = File(cacheDir, "workspace_share").apply { mkdirs() }
-                val file = File(dir, entry.name)
+            val result = runCatching {
+                val dir = File(cacheDir, directoryName).apply { mkdirs() }
+                val file = File(dir, File(entry.name).name)
                 file.outputStream().use { output ->
                     repository.exportFile(
                         id = id,
-                        area = state.value.area,
+                        area = area,
                         path = entry.path,
                         outputStream = output,
                     )
                 }
                 file
-            }.onSuccess(onReady).onFailure { error ->
+            }
+            result.onSuccess { onReady?.invoke(it) }.onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "分享文件失败") }
             }
+            onResult?.invoke(result)
         }
     }
 

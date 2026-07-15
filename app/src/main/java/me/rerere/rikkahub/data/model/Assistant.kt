@@ -30,6 +30,7 @@ data class Assistant(
     val autoCompressThresholdTokens: Int = 8000,
     val autoCompressKeepRecentMessages: Int = 32,
     val streamOutput: Boolean = true,
+    val enableWebSearch: Boolean = false,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableMemoryTable: Boolean = false,

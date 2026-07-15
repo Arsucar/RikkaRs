@@ -1825,4 +1825,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="hook_error_conversation_not_found">找不到会话</string>
   <string name="hook_error_source_message_not_active">源消息已不再处于活动状态</string>
   <string name="hook_error_action_failed">Hook 操作失败</string>
+  <string name="workspace_media_file_missing">文件已不存在</string>
+  <string name="workspace_media_image_decode_failed">无法解码此图片</string>
+  <string name="workspace_media_no_viewer">没有应用可以打开此文件</string>
+  <string name="workspace_media_open_failed">无法安全地打开此文件</string>
 </resources>

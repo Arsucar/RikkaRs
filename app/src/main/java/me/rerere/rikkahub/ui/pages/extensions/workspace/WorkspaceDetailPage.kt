@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,6 +84,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.FullScreenMarkdownViewer
 import me.rerere.rikkahub.ui.components.ui.FullScreenTextEditor
+import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -113,6 +117,7 @@ fun WorkspaceDetailPage(id: String) {
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var textDialogState by remember { mutableStateOf<WorkspaceTextDialogState?>(null) }
+    var imagePreviewPath by remember { mutableStateOf<String?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -175,6 +180,7 @@ fun WorkspaceDetailPage(id: String) {
     }
 
     fun saveTextFile(target: WorkspaceTextDialogState, text: String) {
+        if (target.area == WorkspaceStorageArea.LINUX) return
         textDialogState = target.copy(text = text, busy = true, error = null)
         scope.launch {
             runCatching {
@@ -197,6 +203,58 @@ fun WorkspaceDetailPage(id: String) {
         }
     }
 
+    fun showFeedback(messageRes: Int) {
+        Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
+    }
+
+    fun openWorkspaceFile(entry: WorkspaceFileEntry) {
+        when (classifyWorkspaceFile(entry.name)) {
+            WorkspaceFileKind.TEXT -> openTextFile(entry, state.area, readOnly = true)
+            WorkspaceFileKind.IMAGE,
+            WorkspaceFileKind.OTHER,
+            -> vm.prepareMediaFile(entry, context.cacheDir) { result ->
+                val file = result.getOrElse {
+                    showFeedback(R.string.workspace_media_open_failed)
+                    return@prepareMediaFile
+                }
+                if (!file.isFile) {
+                    showFeedback(R.string.workspace_media_file_missing)
+                    return@prepareMediaFile
+                }
+                if (classifyWorkspaceFile(entry.name) == WorkspaceFileKind.IMAGE) {
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                    if (options.outWidth <= 0 || options.outHeight <= 0) {
+                        showFeedback(R.string.workspace_media_image_decode_failed)
+                    } else {
+                        imagePreviewPath = file.absolutePath
+                    }
+                    return@prepareMediaFile
+                }
+                runCatching {
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file,
+                    )
+                    val intent = buildWorkspaceViewIntent(uri, workspaceMimeType(entry.name))
+                    if (intent.resolveActivity(context.packageManager) == null) {
+                        showFeedback(R.string.workspace_media_no_viewer)
+                    } else {
+                        context.startActivity(intent)
+                    }
+                }.onFailure { error ->
+                    when (error) {
+                        is ActivityNotFoundException -> showFeedback(R.string.workspace_media_no_viewer)
+                        is SecurityException, is IllegalArgumentException ->
+                            showFeedback(R.string.workspace_media_open_failed)
+                        else -> showFeedback(R.string.workspace_media_open_failed)
+                    }
+                }
+            }
+        }
+    }
+
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
         vm.goUp()
     }
@@ -213,7 +271,7 @@ fun WorkspaceDetailPage(id: String) {
                 },
                 navigationIcon = { BackButton() },
                 actions = {
-                    if (pagerState.currentPage == 1) {
+                    if (pagerState.currentPage == 1 && state.area != WorkspaceStorageArea.LINUX) {
                         IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
                             Icon(
                                 HugeIcons.FileImport,
@@ -272,6 +330,7 @@ fun WorkspaceDetailPage(id: String) {
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
                     onOpen = vm::open,
+                    onOpenFile = ::openWorkspaceFile,
                     onDelete = { deleteTarget = it },
                     onExport = { entry ->
                         exportTarget = entry
@@ -319,6 +378,14 @@ fun WorkspaceDetailPage(id: String) {
                 onDismiss = { if (!target.busy) textDialogState = null },
             )
         }
+    }
+
+
+    imagePreviewPath?.let { path ->
+        ImagePreviewDialog(
+            images = listOf(path),
+            onDismissRequest = { imagePreviewPath = null },
+        )
     }
 
     state.workspace?.let { workspace ->
@@ -649,6 +716,7 @@ private fun WorkspaceFilesPage(
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
     onOpen: (WorkspaceFileEntry) -> Unit,
+    onOpenFile: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
     onViewText: (WorkspaceFileEntry) -> Unit,
@@ -691,6 +759,8 @@ private fun WorkspaceFilesPage(
             WorkspaceFileCard(
                 entry = entry,
                 onOpen = { onOpen(entry) },
+                onOpenFile = { onOpenFile(entry) },
+                readOnlyArea = state.area == WorkspaceStorageArea.LINUX,
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onViewText = { onViewText(entry) },
@@ -755,6 +825,8 @@ private fun WorkspacePathBar(
 private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
+    onOpenFile: () -> Unit,
+    readOnlyArea: Boolean,
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onViewText: () -> Unit,
@@ -767,7 +839,7 @@ private fun WorkspaceFileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (entry.isDirectory) Modifier.clickable(onClick = onOpen) else Modifier),
+            .then(Modifier.clickable(onClick = if (entry.isDirectory) onOpen else onOpenFile)),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Row(
@@ -829,17 +901,30 @@ private fun WorkspaceFileCard(
                                     onViewText()
                                 },
                             )
+                            if (!readOnlyArea) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.common_edit)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = HugeIcons.FileEdit,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onEditText()
+                                    },
+                                )
+                            }
+                        } else {
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.common_edit)) },
+                                text = { Text(stringResource(R.string.common_view)) },
                                 leadingIcon = {
-                                    Icon(
-                                        imageVector = HugeIcons.FileEdit,
-                                        contentDescription = null,
-                                    )
+                                    Icon(HugeIcons.FileView, contentDescription = null)
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    onEditText()
+                                    onOpenFile()
                                 },
                             )
                         }
@@ -870,20 +955,22 @@ private fun WorkspaceFileCard(
                             },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = HugeIcons.Delete01,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                    )
+                    if (!readOnlyArea) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.Delete01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
                 }
             }
         }

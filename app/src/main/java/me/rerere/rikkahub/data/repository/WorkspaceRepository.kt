@@ -171,6 +171,7 @@ class WorkspaceRepository(
         overwrite: Boolean,
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
     ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        requireWritableArea(area)
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
         manager.writeText(root = workspace.root, path = path, text = text, overwrite = overwrite, area = area)
@@ -183,6 +184,7 @@ class WorkspaceRepository(
         fileName: String,
         inputStream: InputStream,
     ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        requireWritableArea(area)
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
         manager.importFile(workspace.root, destinationPath, area, fileName, inputStream)
@@ -214,6 +216,7 @@ class WorkspaceRepository(
         path: String,
         recursive: Boolean,
     ): Boolean {
+        requireWritableArea(area)
         val deleted = withContext(Dispatchers.IO) {
             val workspace = dao.getById(id) ?: return@withContext false
             manager.deleteFile(workspace.root, path, recursive, area)
@@ -295,4 +298,8 @@ class WorkspaceRepository(
     companion object {
         private const val TAG = "WorkspaceRepository"
     }
+}
+
+internal fun requireWritableArea(area: WorkspaceStorageArea) {
+    require(area != WorkspaceStorageArea.LINUX) { "LINUX workspace area is read-only" }
 }

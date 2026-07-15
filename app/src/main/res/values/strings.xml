@@ -1843,4 +1843,8 @@
   <string name="hook_error_conversation_not_found">Conversation not found</string>
   <string name="hook_error_source_message_not_active">Source message is no longer active</string>
   <string name="hook_error_action_failed">Hook action failed</string>
+  <string name="workspace_media_file_missing">The file no longer exists</string>
+  <string name="workspace_media_image_decode_failed">This image could not be decoded</string>
+  <string name="workspace_media_no_viewer">No app can open this file</string>
+  <string name="workspace_media_open_failed">Unable to open this file securely</string>
 </resources>

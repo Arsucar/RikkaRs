@@ -12,6 +12,8 @@
 | [Android Backup Rules](./android-backup-rules.md) | Backup allow-list contracts for app-owned user files |
 | [Conversation Tags and Hooks](./conversation-tags-and-hooks.md) | Global conversation-tag relations and assistant Hook execution contracts |
 | [UI Localization](./ui-localization.md) | Android UI string-resource and Simplified Chinese delivery contract |
+| [Assistant Web Search](./assistant-web-search.md) | Assistant-level search persistence, migration, request wiring, and Web API contracts |
+| [Workspace Media Preview](./workspace-media-preview.md) | Workspace file viewing, FileProvider handoff, and LINUX read-only contracts |
 
 ## Pre-Development Checklist
 
@@ -19,6 +21,8 @@
 - Check whether a field controls the main agent, subagents, or both before wiring it into generic generation code.
 - For skills, distinguish global skill storage from assistant-private storage before exposing files to tools or workspace mounts.
 - For conversation tags or Hooks, keep relationship writes outside whole-Conversation saves and preserve the logical-turn/lease state machine.
+- For Assistant-level settings migrated from a global preference, migrate DataStore and restored backup JSON together; runtime reads must use the conversation Assistant.
+- For Workspace file actions, preserve `TextFileUtil` text/Markdown ownership, use cache + FileProvider for external viewing, and enforce LINUX read-only below the UI.
 - For every new or changed user-visible UI string, provide a string resource and a real Simplified Chinese translation before delivery.
 
 ## Quality Check
@@ -26,4 +30,6 @@
 - Verify subagent field changes with focused unit tests under `app/src/test/.../subagent/`.
 - Verify skill path changes with focused tests for normal reads, traversal rejection, symlink allowlists, and private-skill visibility.
 - For app module runtime changes, run `.\gradlew :app:compileDebugKotlin --no-daemon`.
+- For Assistant search changes, run migration/backup/targeted-update tests and verify Android plus Web clients use the Assistant ID.
+- For Workspace media changes, test file classification/MIME fallback and LINUX write rejection, then run device installation when available.
 - For backup XML-only changes, run `.\gradlew :app:processDebugResources --no-daemon --no-configuration-cache --console=plain`.

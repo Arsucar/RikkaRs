@@ -76,4 +76,21 @@ class AssistantConfigPersistenceTest {
         assertEquals(listOf("After"), assistants.map { it.name })
         assertFalse(assistants.single().autoCompressEnabled)
     }
+
+    @Test
+    fun assistantConfigWriterUpdatesSearchForOnlyTheTargetAssistant() {
+        val target = Assistant(id = Uuid.random(), enableWebSearch = false)
+        val untouched = Assistant(id = Uuid.random(), enableWebSearch = false)
+        val preferences = mutablePreferencesOf(
+            SettingsStore.ASSISTANTS to JsonInstant.encodeToString(listOf(target, untouched)),
+        )
+
+        preferences.writeAssistantConfig(target.copy(enableWebSearch = true), emptyList())
+
+        val assistants = JsonInstant.decodeFromString<List<Assistant>>(
+            checkNotNull(preferences[SettingsStore.ASSISTANTS])
+        )
+        assertTrue(assistants.first { it.id == target.id }.enableWebSearch)
+        assertFalse(assistants.first { it.id == untouched.id }.enableWebSearch)
+    }
 }

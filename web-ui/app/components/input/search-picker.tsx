@@ -111,7 +111,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   const { error, setError, popoverProps } = usePickerPopover(canUse);
 
   const builtInSearchEnabled = hasBuiltInSearch(currentModel?.tools);
-  const searchEnabled = settings?.enableWebSearch ?? false;
+  const searchEnabled = currentAssistant?.enableWebSearch ?? false;
   const currentService = settings?.searchServices?.[settings.searchServiceSelected] ?? null;
   const checked = searchEnabled || builtInSearchEnabled;
 
@@ -122,8 +122,11 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   }, [canUse]);
 
   const toggleSearchEnabledMutation = useMutation({
-    mutationFn: ({ enabled }: { enabled: boolean }) =>
-      api.post<{ status: string }>("settings/search/enabled", { enabled }),
+    mutationFn: ({ assistantId, enabled }: { assistantId: string; enabled: boolean }) =>
+      api.post<{ status: string }>("settings/search/enabled", {
+        assistantId,
+        enabled,
+      }),
     onError: (toggleError) => {
       setError(extractErrorMessage(toggleError, t("search.update_search_failed")));
     },
@@ -236,8 +239,11 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                   checked={searchEnabled}
                   disabled={disabled || loading}
                   onCheckedChange={(nextChecked) => {
-                    if (!canUse) return;
-                    toggleSearchEnabledMutation.mutate({ enabled: nextChecked });
+                    if (!canUse || !currentAssistant) return;
+                    toggleSearchEnabledMutation.mutate({
+                      assistantId: currentAssistant.id,
+                      enabled: nextChecked,
+                    });
                   }}
                 />
               </div>

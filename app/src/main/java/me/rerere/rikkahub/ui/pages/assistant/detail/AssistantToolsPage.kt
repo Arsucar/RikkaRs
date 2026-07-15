@@ -105,7 +105,8 @@ private val ALL_TOOL_GROUPS = listOf(
  */
 fun empowermentToolStats(assistant: Assistant): Pair<Int, Int> {
     val total = ALL_TOOL_GROUPS.sumOf { it.size }
-    var enabled = SEARCH_TOOLS.size + FINISH_TOOLS.size
+    var enabled = FINISH_TOOLS.size
+    if (assistant.enableWebSearch) enabled += SEARCH_TOOLS.size
     if (assistant.workspaceId != null) enabled += WORKSPACE_TOOLS.size
     if (assistant.enableMemory) enabled += MEMORY_TOOLS.size
     if (assistant.enableMemoryTable) enabled += MEMORY_TABLE_TOOLS.size
@@ -199,8 +200,9 @@ private fun AssistantToolsContent(
             title = "搜索",
             icon = HugeIcons.Search01,
             tools = SEARCH_TOOLS,
-            enabled = true,
-            controlKind = ToolControlKind.ALWAYS_ON,
+            enabled = assistant.enableWebSearch,
+            controlKind = ToolControlKind.TOGGLE,
+            onToggle = { on -> onUpdate(assistant.copy(enableWebSearch = on)) },
         ),
         ToolGroupUi(
             title = "对话",

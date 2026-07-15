@@ -745,7 +745,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -1181,7 +1181,7 @@ class ChatService(
         mode: GenerationPreparationMode,
     ): List<Tool> = buildList {
         val delegateOnly = assistant.enableSubagents && assistant.subagentDelegateOnly
-        if (settings.enableWebSearch) addAll(createSearchTools(settings))
+        if (assistant.enableWebSearch) addAll(createSearchTools(settings))
         addAll(
             localTools.getTools(
                 if (delegateOnly) assistant.localTools.filter { it in DELEGATE_ALLOWED_LOCAL_TOOLS }

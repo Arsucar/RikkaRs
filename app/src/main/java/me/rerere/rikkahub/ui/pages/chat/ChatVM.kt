@@ -186,9 +186,16 @@ class ChatVM(
     )
 
     // 网络搜索
-    val enableWebSearch = settings.map {
-        it.enableWebSearch
+    val enableWebSearch = combine(settings, conversation) { settings, conversation ->
+        settings.assistants.firstOrNull { it.id == conversation.assistantId }?.enableWebSearch ?: false
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun toggleWebSearch() {
+        val assistantId = conversation.value.assistantId
+        viewModelScope.launch {
+            settingsStore.updateAssistantWebSearch(assistantId, !enableWebSearch.value)
+        }
+    }
 
     // 当前模型
     val currentChatModel = combine(settings, conversation) { settings, conversation ->

@@ -74,6 +74,7 @@ export interface AssistantProfile {
   useAssistantAvatar?: boolean;
   tags: string[];
   quickMessageIds?: string[];
+  enableWebSearch?: boolean;
   [key: string]: unknown;
 }
 
@@ -143,7 +144,6 @@ export interface Settings {
   themeId: string;
   developerMode: boolean;
   displaySetting: DisplaySetting;
-  enableWebSearch: boolean;
   favoriteModels: string[];
   chatModelId: string;
   assistantId: string;

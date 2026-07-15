@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/app/index.md", "reason": "App runtime and Compose pre-development contracts"}
+{"file": ".trellis/spec/app/ui-localization.md", "reason": "New Assistant and Workspace UI strings must follow localization contract"}
+{"file": ".trellis/spec/workspace/index.md", "reason": "Workspace module boundary and storage contracts"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Assistant setting and Workspace media flow cross multiple layers"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing TextFileUtil, ImagePreviewDialog, FileProvider, and export paths"}
+{"file": ".trellis/spec/app/assistant-web-search.md", "reason": "Executable Assistant search migration and cross-client contract learned in this task"}
+{"file": ".trellis/spec/app/workspace-media-preview.md", "reason": "Executable Workspace media/FileProvider/LINUX read-only contract learned in this task"}

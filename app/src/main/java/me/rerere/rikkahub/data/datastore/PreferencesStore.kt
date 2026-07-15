@@ -46,6 +46,7 @@ import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
@@ -85,7 +86,8 @@ private val Context.settingsStore by preferencesDataStore(
         listOf(
             PreferenceStoreV1Migration(),
             PreferenceStoreV2Migration(),
-            PreferenceStoreV3Migration()
+            PreferenceStoreV3Migration(),
+            PreferenceStoreV4Migration()
         )
     }
 )
@@ -209,7 +211,6 @@ class SettingsStore(
         }.map { preferences ->
             val compressionPreferences = preferences.compressionPreferences()
             Settings(
-                enableWebSearch = preferences[ENABLE_WEB_SEARCH] == true,
                 favoriteModels = preferences[FAVORITE_MODELS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -517,7 +518,6 @@ class SettingsStore(
             preferences[REQUEST_LOGGING_ENABLED] = settings.requestLoggingEnabled
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
-            preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
             preferences[RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
             preferences[SELECT_MODEL] = settings.chatModelId.toString()
@@ -650,6 +650,11 @@ class SettingsStore(
                 fallbackAssistants = fallbackAssistants,
             )
         }
+    }
+
+    suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
+        val assistant = settingsFlow.value.assistants.firstOrNull { it.id == assistantId } ?: return
+        updateAssistantConfig(assistant.copy(enableWebSearch = enabled))
     }
 
     suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
@@ -817,7 +822,6 @@ data class Settings(
     val developerMode: Boolean = false,
     val requestLoggingEnabled: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
-    val enableWebSearch: Boolean = false,
     val favoriteModels: List<Uuid> = emptyList(),
     val recentChatModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
