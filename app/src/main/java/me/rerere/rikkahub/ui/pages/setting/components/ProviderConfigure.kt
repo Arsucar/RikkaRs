@@ -291,7 +291,10 @@ private fun ProviderConfigureOpenAI(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(R.string.setting_provider_page_enable))
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable),
+            modifier = Modifier.weight(1f),
+        )
         Switch(
             checked = provider.enabled,
             onCheckedChange = { onEdit(provider.copy(enabled = it)) }
@@ -304,7 +307,10 @@ private fun ProviderConfigureOpenAI(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(R.string.setting_provider_page_response_api))
+        Text(
+            text = stringResource(R.string.setting_provider_page_response_api),
+            modifier = Modifier.weight(1f),
+        )
         Switch(
             checked = provider.useResponseApi,
             onCheckedChange = {
@@ -321,7 +327,10 @@ private fun ProviderConfigureOpenAI(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(R.string.setting_provider_page_include_history_reasoning))
+        Text(
+            text = stringResource(R.string.setting_provider_page_include_history_reasoning),
+            modifier = Modifier.weight(1f),
+        )
         Switch(
             checked = provider.includeHistoryReasoning,
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }

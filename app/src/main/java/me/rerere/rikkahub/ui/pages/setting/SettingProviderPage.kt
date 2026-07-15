@@ -25,10 +25,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -65,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -909,6 +913,8 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
     }
 
     if (dialogState.isEditing) {
+        val configuration = LocalConfiguration.current
+        val formMaxHeight = (configuration.screenHeightDp * 0.6f).dp
         AlertDialog(
             onDismissRequest = {
                 dialogState.dismiss()
@@ -917,9 +923,16 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
                 Text(stringResource(R.string.setting_provider_page_add_provider))
             },
             text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = formMaxHeight)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    dialogState.currentState?.let {
+                        ProviderConfigure(it) { newState ->
+                            dialogState.currentState = newState
+                        }
                     }
                 }
             },
