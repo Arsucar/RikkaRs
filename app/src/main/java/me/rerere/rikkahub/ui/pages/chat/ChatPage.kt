@@ -146,6 +146,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
     val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
+    val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
+    val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
+    val configuredHooks = remember(setting.assistants) { setting.assistants.flatMap { it.hooks } }
+    val modelNames = remember(setting.providers) {
+        setting.providers.flatMap { it.models }.associate { model ->
+            model.id to (model.displayName.ifBlank { model.modelId })
+        }
+    }
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
@@ -355,6 +363,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             contextPreviewState = contextPreviewState,
                             onLoadContextPreview = vm::loadContextPreview,
                             onClearContextPreview = vm::clearContextPreview,
+                            hookHistoryState = hookHistoryState,
+                            hooks = configuredHooks,
+                            conversationTags = conversationTags,
+                            modelNames = modelNames,
                         )
                     }
                 }

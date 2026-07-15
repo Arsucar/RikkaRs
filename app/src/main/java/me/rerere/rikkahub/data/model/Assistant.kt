@@ -65,6 +65,7 @@ data class Assistant(
     val disabledBuiltinSubagents: Set<String> = emptySet(),
     val disabledGlobalSubagents: Set<String> = emptySet(),
     val stepsCountdownThreshold: Int? = null,
+    val hooks: List<ConversationHook> = emptyList(),
 )
 
 @Serializable

@@ -28,11 +28,13 @@ import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.ConversationHook
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
+import me.rerere.rikkahub.data.repository.ConversationTagRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillFileImportReader
 import kotlin.uuid.Uuid
@@ -47,6 +49,7 @@ class AssistantDetailVM(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
+    conversationTagRepository: ConversationTagRepository,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
 
@@ -119,6 +122,9 @@ class AssistantDetailVM(
         }.stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
+
+    val conversationTags = conversationTagRepository.observeTags()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val workspaces: StateFlow<List<WorkspaceEntity>> = workspaceRepository
         .listFlow()
@@ -292,6 +298,65 @@ class AssistantDetailVM(
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {
             settingsStore.update(settings)
+        }
+    }
+
+    fun upsertHook(hook: ConversationHook) {
+        mutateHooks { hooks ->
+            val existing = hooks.firstOrNull { it.id == hook.id }
+            if (existing == null) {
+                hooks + hook.copy(configVersion = 1)
+            } else {
+                hooks.map { current ->
+                    if (current.id == hook.id) {
+                        hook.copy(configVersion = existing.configVersion + 1)
+                    } else {
+                        current
+                    }
+                }
+            }
+        }
+    }
+
+    fun setHookEnabled(hookId: Uuid, enabled: Boolean) {
+        mutateHooks { hooks ->
+            hooks.map { hook ->
+                if (hook.id == hookId && hook.enabled != enabled) {
+                    hook.copy(enabled = enabled, configVersion = hook.configVersion + 1)
+                } else {
+                    hook
+                }
+            }
+        }
+    }
+
+    fun moveHook(fromIndex: Int, toIndex: Int) {
+        mutateHooks { hooks ->
+            if (fromIndex !in hooks.indices || toIndex !in hooks.indices || fromIndex == toIndex) {
+                hooks
+            } else {
+                hooks.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+            }
+        }
+    }
+
+    fun deleteHook(hookId: Uuid) {
+        mutateHooks { hooks -> hooks.filterNot { it.id == hookId } }
+    }
+
+    private fun mutateHooks(transform: (List<ConversationHook>) -> List<ConversationHook>) {
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(
+                    assistants = settings.assistants.map { assistant ->
+                        if (assistant.id == assistantId) {
+                            assistant.copy(hooks = transform(assistant.hooks))
+                        } else {
+                            assistant
+                        }
+                    }
+                )
+            }
         }
     }
 

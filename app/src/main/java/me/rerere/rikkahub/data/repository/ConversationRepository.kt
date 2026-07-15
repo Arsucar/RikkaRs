@@ -7,6 +7,7 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
 import androidx.room.withTransaction
+import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -297,6 +298,35 @@ class ConversationRepository(
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
+    }
+
+    fun getConversationsPaging(filter: ConversationFilter): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false,
+        ),
+        pagingSourceFactory = {
+            conversationDAO.getConversationsPaging(buildConversationFilterQuery(filter))
+        },
+    ).flow.map { pagingData ->
+        pagingData.map(::conversationSummaryToConversation)
+    }
+
+    /**
+     * Persists a fork and copies all source tag relations in the same Room transaction.
+     * Relations remain independent after this transaction because only their tag ids are copied.
+     */
+    suspend fun insertForkConversation(sourceConversationId: Uuid, fork: Conversation) {
+        database.withTransaction {
+            conversationDAO.insert(conversationToConversationEntity(fork))
+            saveMessageNodes(fork.id.toString(), fork.messageNodes)
+            database.conversationTagDao().copyRelationsForFork(
+                sourceConversationId = sourceConversationId.toString(),
+                targetConversationId = fork.id.toString(),
+            )
+        }
+        messageFtsManager.indexConversation(fork)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
@@ -663,3 +693,70 @@ data class ConversationPageResult(
     val items: List<Conversation>,
     val nextOffset: Int?,
 )
+
+data class ConversationFilter(
+    val assistantId: Uuid? = null,
+    val folderId: Uuid? = null,
+    val unfiledOnly: Boolean = false,
+    val archived: Boolean = false,
+    val searchText: String = "",
+    val tagIds: Set<Uuid> = emptySet(),
+) {
+    init {
+        require(folderId == null || !unfiledOnly) {
+            "folderId and unfiledOnly cannot be used together"
+        }
+    }
+}
+
+internal fun buildConversationFilterQuery(filter: ConversationFilter): SimpleSQLiteQuery {
+    val conditions = mutableListOf("c.is_archived = ?")
+    val arguments = mutableListOf<Any>(if (filter.archived) 1 else 0)
+
+    filter.assistantId?.let { assistantId ->
+        conditions += "c.assistant_id = ?"
+        arguments += assistantId.toString()
+    }
+    filter.folderId?.let { folderId ->
+        conditions += "c.folder_id = ?"
+        arguments += folderId.toString()
+    }
+    if (filter.unfiledOnly) {
+        conditions += "c.folder_id = ''"
+    }
+    if (filter.searchText.isNotEmpty()) {
+        conditions += "c.title LIKE '%' || ? || '%'"
+        arguments += filter.searchText
+    }
+
+    val tagIds = filter.tagIds.map { it.toString() }.sorted()
+    if (tagIds.isNotEmpty()) {
+        val placeholders = List(tagIds.size) { "?" }.joinToString(", ")
+        conditions +=
+            "EXISTS (SELECT 1 FROM conversation_tag_cross_ref AS tag_filter " +
+            "WHERE tag_filter.conversation_id = c.id AND tag_filter.tag_id IN ($placeholders))"
+        arguments.addAll(tagIds)
+    }
+
+    val orderBy = if (filter.archived) {
+        "c.archived_at DESC, c.id DESC"
+    } else {
+        "c.is_pinned DESC, c.update_at DESC, c.id DESC"
+    }
+    val sql =
+        """
+        SELECT
+            c.id,
+            c.assistant_id AS assistantId,
+            c.chat_model_id AS chatModelId,
+            c.title,
+            c.is_pinned AS isPinned,
+            c.create_at AS createAt,
+            c.update_at AS updateAt,
+            c.folder_id AS folderId
+        FROM ConversationEntity AS c
+        WHERE ${conditions.joinToString(" AND ")}
+        ORDER BY $orderBy
+        """.trimIndent()
+    return SimpleSQLiteQuery(sql, arguments.toTypedArray())
+}

@@ -62,6 +62,7 @@ import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
+import me.rerere.hugeicons.stroke.Tags
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -254,6 +255,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_data_settings)) },
                 ) {
+                    item(
+                        onClick = { navController.navigate(Screen.SettingConversationTags) },
+                        leadingContent = { Icon(HugeIcons.Tags, null) },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_conversation_tags_desc))
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_conversation_tags)) },
+                    )
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
                         leadingContent = { Icon(HugeIcons.Database02, null) },

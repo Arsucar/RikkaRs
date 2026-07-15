@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.migration.SettingsJsonMigrator
+import me.rerere.rikkahub.data.db.validateRestoredDatabaseForeignKeys
 import me.rerere.rikkahub.data.sync.s3.S3Client
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -192,6 +193,7 @@ class S3Sync(
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: S3Config) = withContext(Dispatchers.IO) {
         Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
+        var databaseRestored = false
 
         ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
             var entry: ZipEntry?
@@ -244,6 +246,9 @@ class S3Sync(
                                         TAG,
                                         "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
                                     )
+                                    if (zipEntry.name == "rikka_hub.db") {
+                                        databaseRestored = true
+                                    }
                                 }
                             }
                         }
@@ -307,6 +312,11 @@ class S3Sync(
                     zipIn.closeEntry()
                 }
             }
+        }
+
+        if (databaseRestored) {
+            validateRestoredDatabaseForeignKeys(context.getDatabasePath("rikka_hub"))
+            Log.i(TAG, "restoreFromBackupFile: Foreign-key integrity check passed")
         }
 
         Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")

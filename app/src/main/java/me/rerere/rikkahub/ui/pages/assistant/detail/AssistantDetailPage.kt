@@ -11,6 +11,7 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Connect
+import me.rerere.hugeicons.stroke.Webhook
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -159,6 +160,15 @@ fun AssistantDetailPage(id: String) {
                         leadingContent = { Icon(HugeIcons.Connect, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_subagent_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_subagent)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantHooks(id)) },
+                        leadingContent = { Icon(HugeIcons.Webhook, null) },
+                        supportingContent = {
+                            Text(stringResource(R.string.assistant_hook_settings_description))
+                        },
+                        headlineContent = { Text(stringResource(R.string.assistant_hook_settings_title)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }

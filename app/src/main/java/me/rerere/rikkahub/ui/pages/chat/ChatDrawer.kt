@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +59,7 @@ import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Archive
 import me.rerere.hugeicons.stroke.ChartColumn
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.FolderAdd
@@ -69,19 +72,23 @@ import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.TransactionHistory
+import me.rerere.hugeicons.stroke.Tags
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.activeAssistants
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationTagRules
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.ConversationTagLabel
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
+import me.rerere.rikkahub.ui.components.ui.conversationTagErrorMessage
 import androidx.compose.ui.draw.clip
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -112,6 +119,11 @@ fun ChatDrawerContent(
     val conversations = drawerVm.conversations.collectAsLazyPagingItems()
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
+    val tags by drawerVm.tags.collectAsStateWithLifecycle()
+    val tagsLoaded by drawerVm.tagsLoaded.collectAsStateWithLifecycle()
+    val selectedTagIds by drawerVm.selectedTagIds.collectAsStateWithLifecycle()
+    val tagsByConversation by drawerVm.tagsByConversation.collectAsStateWithLifecycle()
+    val tagOperationError by drawerVm.tagOperationError.collectAsStateWithLifecycle()
     val conversationListState = rememberLazyListState(
         initialFirstVisibleItemIndex = drawerVm.scrollIndex,
         initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
@@ -156,8 +168,19 @@ fun ChatDrawerContent(
     var folderToRename by remember { mutableStateOf<Folder?>(null) }
     var folderToDelete by remember { mutableStateOf<Folder?>(null) }
 
+    var showTagFilterSheet by remember { mutableStateOf(false) }
+    var conversationToManageTags by remember { mutableStateOf<Conversation?>(null) }
+
     // Menu popup 状态
     var showMenuPopup by remember { mutableStateOf(false) }
+
+    val tagErrorMessage = tagOperationError?.let { conversationTagErrorMessage(it) }
+    LaunchedEffect(tagErrorMessage) {
+        if (tagErrorMessage != null) {
+            toaster.show(tagErrorMessage, type = ToastType.Error)
+            drawerVm.clearTagOperationError()
+        }
+    }
 
     ModalDrawerSheet(
         modifier = Modifier.width(300.dp)
@@ -248,10 +271,17 @@ fun ChatDrawerContent(
                 onDelete = { folderToDelete = it },
             )
 
+            TagFilterControl(
+                selectedCount = selectedTagIds.size,
+                onClick = { showTagFilterSheet = true },
+                onClear = drawerVm::clearTagFilters,
+            )
+
             ConversationList(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
+                tagsByConversation = tagsByConversation,
                 listState = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -286,7 +316,8 @@ fun ChatDrawerContent(
                 onMoveToFolder = {
                     conversationToMoveFolder = it
                     showMoveToFolderSheet = true
-                }
+                },
+                onManageTags = { conversationToManageTags = it },
             )
 
             // 助手选择器
@@ -398,6 +429,47 @@ fun ChatDrawerContent(
                 )
             }
         }
+    }
+
+    if (showTagFilterSheet) {
+        ConversationTagSelectionSheet(
+            title = stringResource(R.string.conversation_tag_filter_title),
+            tagsLoaded = tagsLoaded,
+            tags = tags,
+            selectedIds = selectedTagIds,
+            emptyText = stringResource(R.string.conversation_tag_empty_filter),
+            onToggle = drawerVm::toggleTagFilter,
+            onClear = drawerVm::clearTagFilters,
+            onOpenSettings = {
+                showTagFilterSheet = false
+                navController.navigate(Screen.SettingConversationTags)
+            },
+            onDismiss = { showTagFilterSheet = false },
+        )
+    }
+
+    conversationToManageTags?.let { conversation ->
+        val conversationTags = tagsByConversation[conversation.id].orEmpty()
+        ConversationTagSelectionSheet(
+            title = stringResource(R.string.conversation_tag_manage_title, conversation.title),
+            tagsLoaded = tagsLoaded,
+            tags = tags,
+            selectedIds = conversationTags.mapTo(mutableSetOf()) { it.id },
+            emptyText = stringResource(R.string.conversation_tag_empty_manage),
+            selectionLimitReached = conversationTags.size >= ConversationTagRules.MAX_TAGS_PER_CONVERSATION,
+            onToggle = { tagId ->
+                drawerVm.setConversationTag(
+                    conversationId = conversation.id,
+                    tagId = tagId,
+                    selected = tagId !in conversationTags.mapTo(mutableSetOf()) { it.id },
+                )
+            },
+            onOpenSettings = {
+                conversationToManageTags = null
+                navController.navigate(Screen.SettingConversationTags)
+            },
+            onDismiss = { conversationToManageTags = null },
+        )
     }
 
     // 昵称编辑对话框
@@ -668,6 +740,125 @@ fun ChatDrawerContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TagFilterControl(
+    selectedCount: Int,
+    onClick: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(HugeIcons.Tags, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(
+                text = if (selectedCount == 0) {
+                    stringResource(R.string.conversation_tag_filter_action)
+                } else {
+                    stringResource(R.string.conversation_tag_filter_selected, selectedCount)
+                },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (selectedCount > 0) {
+                Icon(
+                    imageVector = HugeIcons.Cancel01,
+                    contentDescription = stringResource(R.string.conversation_tag_filter_clear),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onClear)
+                        .padding(6.dp)
+                        .size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConversationTagSelectionSheet(
+    title: String,
+    tagsLoaded: Boolean,
+    tags: List<me.rerere.rikkahub.data.model.ConversationTag>,
+    selectedIds: Set<Uuid>,
+    emptyText: String,
+    onToggle: (Uuid) -> Unit,
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onClear: (() -> Unit)? = null,
+    selectionLimitReached: Boolean = false,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 480.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                if (onClear != null && selectedIds.isNotEmpty()) {
+                    TextButton(onClick = onClear) {
+                        Text(stringResource(R.string.conversation_tag_filter_clear))
+                    }
+                }
+            }
+            if (!tagsLoaded) {
+                Text(
+                    text = stringResource(R.string.conversation_tag_loading),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (tags.isEmpty()) {
+                Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onOpenSettings) {
+                    Text(stringResource(R.string.conversation_tag_create_first))
+                }
+            } else {
+                if (selectionLimitReached) {
+                    Text(
+                        text = stringResource(
+                            R.string.conversation_tag_conversation_limit_hint,
+                            ConversationTagRules.MAX_TAGS_PER_CONVERSATION,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    tags.forEach { tag ->
+                        val selected = tag.id in selectedIds
+                        FilterChip(
+                            selected = selected,
+                            enabled = selected || !selectionLimitReached,
+                            onClick = { onToggle(tag.id) },
+                            label = {
+                                ConversationTagLabel(tag.displayName, tag.colorKey)
+                            },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.size(8.dp))
         }
     }
 }

@@ -5,13 +5,19 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
+import me.rerere.rikkahub.data.db.entity.ConversationTagCrossRef
 import me.rerere.rikkahub.data.repository.LightConversationEntity
 
 @Dao
 interface ConversationDAO {
+    @RawQuery(observedEntities = [ConversationEntity::class, ConversationTagCrossRef::class])
+    fun getConversationsPaging(query: SupportSQLiteQuery): PagingSource<Int, LightConversationEntity>
+
     @Query("SELECT * FROM conversationentity WHERE is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
     fun getAll(): Flow<List<ConversationEntity>>
 

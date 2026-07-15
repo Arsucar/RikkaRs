@@ -43,6 +43,8 @@ import me.rerere.rikkahub.data.db.migrations.Migration_33_34
 import me.rerere.rikkahub.data.db.migrations.Migration_34_35
 import me.rerere.rikkahub.data.db.migrations.Migration_35_36
 import me.rerere.rikkahub.data.db.migrations.Migration_36_37
+import me.rerere.rikkahub.data.db.migrations.Migration_37_38
+import me.rerere.rikkahub.data.db.migrations.Migration_38_39
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
@@ -84,6 +86,8 @@ val dataSourceModule = module {
                 Migration_34_35,
                 Migration_35_36,
                 Migration_36_37,
+                Migration_37_38,
+                Migration_38_39,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -113,6 +117,62 @@ val dataSourceModule = module {
                             tokenize = 'simple'
                         )
                         """.trimIndent()
+                    )
+                    val interruptedAt = System.currentTimeMillis()
+                    db.execSQL(
+                        """
+                        UPDATE hook_executions SET
+                            status = 'INTERRUPTED',
+                            ended_at = ?,
+                            duration_ms = CASE
+                                WHEN started_at IS NULL THEN NULL
+                                ELSE MAX(0, ? - started_at)
+                            END,
+                            lease_token = lease_token + 1
+                        WHERE status IN ('QUEUED', 'RUNNING')
+                        """.trimIndent(),
+                        arrayOf(interruptedAt, interruptedAt),
+                    )
+                    db.execSQL(
+                        """
+                        UPDATE generation_logical_turns SET
+                            status = 'INTERRUPTED',
+                            updated_at = ?,
+                            completed_at = ?
+                        WHERE status IN ('ACTIVE', 'WAITING_FOR_TOOL')
+                        """.trimIndent(),
+                        arrayOf(interruptedAt, interruptedAt),
+                    )
+                    db.execSQL(
+                        """
+                        UPDATE hook_runs SET
+                            status = CASE
+                                WHEN EXISTS (
+                                    SELECT 1 FROM hook_executions e
+                                    WHERE e.run_id = hook_runs.run_id AND e.status = 'FAILED'
+                                ) THEN 'FAILED'
+                                WHEN EXISTS (
+                                    SELECT 1 FROM hook_executions e
+                                    WHERE e.run_id = hook_runs.run_id AND e.status = 'INTERRUPTED'
+                                ) THEN 'INTERRUPTED'
+                                WHEN EXISTS (
+                                    SELECT 1 FROM hook_executions e
+                                    WHERE e.run_id = hook_runs.run_id AND e.status = 'CANCELLED'
+                                ) THEN 'CANCELLED'
+                                WHEN EXISTS (
+                                    SELECT 1 FROM hook_executions e
+                                    WHERE e.run_id = hook_runs.run_id AND e.status = 'SUCCESS'
+                                ) THEN 'SUCCESS'
+                                ELSE 'SKIPPED'
+                            END,
+                            failure_count = (
+                                SELECT COUNT(*) FROM hook_executions e
+                                WHERE e.run_id = hook_runs.run_id AND e.status = 'FAILED'
+                            ),
+                            ended_at = ?
+                        WHERE status IN ('QUEUED', 'RUNNING')
+                        """.trimIndent(),
+                        arrayOf(interruptedAt),
                     )
                 }
             })
@@ -148,6 +208,14 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().conversationDao()
+    }
+
+    single {
+        get<AppDatabase>().conversationTagDao()
+    }
+
+    single {
+        get<AppDatabase>().hookDao()
     }
 
     single {

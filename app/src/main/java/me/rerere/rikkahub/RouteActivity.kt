@@ -86,6 +86,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantHookEditorPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantHooksPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantToolsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
@@ -122,6 +124,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
+import me.rerere.rikkahub.ui.pages.setting.SettingConversationTagsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
@@ -428,6 +431,14 @@ class RouteActivity : ComponentActivity() {
                                 AssistantSubagentPage(key.id)
                             }
 
+                            entry<Screen.AssistantHooks> { key ->
+                                AssistantHooksPage(key.id)
+                            }
+
+                            entry<Screen.AssistantHookEditor> { key ->
+                                AssistantHookEditorPage(key.id, key.hookId)
+                            }
+
                             entry<Screen.AssistantSubagentProfile> { key ->
                                 AssistantSubagentProfilePage(key.id, key.profileName, key.createMode)
                             }
@@ -454,6 +465,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingTheme> {
                                 SettingThemePage()
+                            }
+
+                            entry<Screen.SettingConversationTags> {
+                                SettingConversationTagsPage()
                             }
 
                             entry<Screen.SettingPreferences> {
@@ -691,6 +706,12 @@ sealed interface Screen : NavKey {
     data class AssistantSubagent(val id: String) : Screen
 
     @Serializable
+    data class AssistantHooks(val id: String) : Screen
+
+    @Serializable
+    data class AssistantHookEditor(val id: String, val hookId: String? = null) : Screen
+
+    @Serializable
     data class AssistantSubagentProfile(
         val id: String,
         val profileName: String,
@@ -714,6 +735,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingTheme : Screen
+
+    @Serializable
+    data object SettingConversationTags : Screen
 
     @Serializable
     data object SettingPreferences : Screen

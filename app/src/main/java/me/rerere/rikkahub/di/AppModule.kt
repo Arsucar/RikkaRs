@@ -7,6 +7,12 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.data.model.HookActionType
+import me.rerere.rikkahub.service.hooks.AddConversationTagHookAction
+import me.rerere.rikkahub.service.hooks.HookActionRegistry
+import me.rerere.rikkahub.service.hooks.HookDispatcher
+import me.rerere.rikkahub.service.hooks.HookExecutionLeaseGuard
+import me.rerere.rikkahub.service.hooks.ProviderHookModelExecutor
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenSession
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -18,6 +24,30 @@ import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
 val appModule = module {
+    single { ProviderHookModelExecutor(settingsStore = get(), providerManager = get()) }
+    single<HookExecutionLeaseGuard> {
+        val repository: me.rerere.rikkahub.data.repository.HookRepository = get()
+        HookExecutionLeaseGuard(repository::isLeaseActive)
+    }
+    single {
+        HookActionRegistry(
+            mapOf(
+                HookActionType.ADD_CONVERSATION_TAG to AddConversationTagHookAction(
+                    conversationRepository = get(),
+                    tagRepository = get(),
+                    leaseGuard = get(),
+                    database = get(),
+                )
+            )
+        )
+    }
+    single {
+        HookDispatcher(
+            hookRepository = get(),
+            modelExecutor = get<ProviderHookModelExecutor>(),
+            actionRegistry = get(),
+        )
+    }
     single<Json> { JsonInstant }
 
     single {
@@ -82,7 +112,10 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            hookRepository = get(),
+            hookDispatcher = get(),
+            conversationTagRepository = get(),
         )
     }
 

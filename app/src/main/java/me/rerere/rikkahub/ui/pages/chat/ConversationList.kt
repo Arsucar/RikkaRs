@@ -6,6 +6,7 @@ import me.rerere.hugeicons.stroke.Forward02
 import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Tags
 import me.rerere.hugeicons.stroke.Archive
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.animation.AnimatedVisibility
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +54,8 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationTag
+import me.rerere.rikkahub.ui.components.ui.ConversationTagLabel
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -77,6 +81,7 @@ fun ColumnScope.ConversationList(
     current: Conversation,
     conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
+    tagsByConversation: Map<Uuid, List<ConversationTag>>,
     listState: LazyListState,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
@@ -86,6 +91,7 @@ fun ColumnScope.ConversationList(
     onMoveToAssistant: (Conversation) -> Unit = {},
     onArchive: (Conversation) -> Unit = {},
     onMoveToFolder: (Conversation) -> Unit = {},
+    onManageTags: (Conversation) -> Unit = {},
 ) {
     var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
 
@@ -156,6 +162,7 @@ fun ColumnScope.ConversationList(
                         conversation = item.conversation,
                         selected = item.conversation.id == current.id,
                         loading = item.conversation.id in conversationJobs,
+                        tags = tagsByConversation[item.conversation.id].orEmpty(),
                         onClick = onClick,
                         onDelete = onDelete,
                         onRegenerateTitle = onRegenerateTitle,
@@ -163,6 +170,7 @@ fun ColumnScope.ConversationList(
                         onMoveToAssistant = onMoveToAssistant,
                         onArchive = onArchive,
                         onMoveToFolder = onMoveToFolder,
+                        onManageTags = onManageTags,
                         modifier = Modifier.animateItem()
                     )
                 }
@@ -228,6 +236,7 @@ private fun ConversationItem(
     conversation: Conversation,
     selected: Boolean,
     loading: Boolean,
+    tags: List<ConversationTag>,
     modifier: Modifier = Modifier,
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
@@ -235,6 +244,7 @@ private fun ConversationItem(
     onMoveToAssistant: (Conversation) -> Unit = {},
     onArchive: (Conversation) -> Unit = {},
     onMoveToFolder: (Conversation) -> Unit = {},
+    onManageTags: (Conversation) -> Unit = {},
     onClick: (Conversation) -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -265,12 +275,44 @@ private fun ConversationItem(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = conversation.title.ifBlank { stringResource(id = R.string.chat_page_new_message) },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.weight(1f))
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = conversation.title.ifBlank { stringResource(id = R.string.chat_page_new_message) },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                tags.firstOrNull()?.let { tag ->
+                    Surface(
+                        modifier = Modifier
+                            .widthIn(max = 72.dp)
+                            .semantics {
+                                contentDescription = tag.displayName
+                            },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ) {
+                        ConversationTagLabel(
+                            name = tag.displayName,
+                            colorKey = tag.colorKey,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                if (tags.size > 1) {
+                    Text(
+                        text = "+${tags.size - 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.size(6.dp))
 
             // 置顶图标
             AnimatedVisibility(conversation.isPinned) {
@@ -363,6 +405,19 @@ private fun ConversationItem(
                     },
                     leadingIcon = {
                         Icon(HugeIcons.Folder01, null)
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(stringResource(R.string.conversation_tag_manage_for_conversation))
+                    },
+                    onClick = {
+                        onManageTags(conversation)
+                        showDropdownMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(HugeIcons.Tags, null)
                     }
                 )
 

@@ -3,16 +3,21 @@ package me.rerere.rikkahub.ui.pages.chat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,10 +64,21 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.ConversationHook
+import me.rerere.rikkahub.data.model.ConversationTag
+import me.rerere.rikkahub.data.model.HookDecision
+import me.rerere.rikkahub.data.model.HookExecutionStatus
+import me.rerere.rikkahub.data.model.HookRunHistory
+import me.rerere.rikkahub.data.model.HookRunStatus
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.toLocalString
+import java.time.ZoneId
+import kotlin.uuid.Uuid
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.WorkHistory
 
 // #89: 对话级记忆表右侧抽屉。
 // - 查看当前对话生效的记忆表（CONVERSATION 及继承的 ASSISTANT/GLOBAL）
@@ -170,6 +186,7 @@ private enum class ConversationDrawerScreen {
     Menu,
     MemoryTable,
     ContextInspector,
+    HookHistory,
 }
 
 /**
@@ -199,6 +216,10 @@ fun ConversationDrawerContent(
     contextPreviewState: UiState<ContextPreview>,
     onLoadContextPreview: () -> Unit,
     onClearContextPreview: () -> Unit,
+    hookHistoryState: UiState<List<HookRunHistory>>,
+    hooks: List<ConversationHook>,
+    conversationTags: List<ConversationTag>,
+    modelNames: Map<Uuid, String>,
 ) {
     // onDismiss 已由中转菜单移除（不再有关闭按钮），关闭统一走遮罩点击/返回键。
     var screen by remember { mutableStateOf(ConversationDrawerScreen.Menu) }
@@ -214,6 +235,7 @@ fun ConversationDrawerContent(
     when (screen) {
         ConversationDrawerScreen.Menu -> ConversationDrawerMenu(
             onOpenMemoryTable = { screen = ConversationDrawerScreen.MemoryTable },
+            onOpenHookHistory = { screen = ConversationDrawerScreen.HookHistory },
             onOpenContextInspector = {
                 screen = ConversationDrawerScreen.ContextInspector
                 onLoadContextPreview()
@@ -243,7 +265,289 @@ fun ConversationDrawerContent(
             },
             onRefresh = onLoadContextPreview,
         )
+
+        ConversationDrawerScreen.HookHistory -> ConversationHookHistory(
+            state = hookHistoryState,
+            hooks = hooks,
+            conversationTags = conversationTags,
+            modelNames = modelNames,
+            onBack = { screen = ConversationDrawerScreen.Menu },
+        )
     }
+}
+
+@Composable
+private fun ConversationHookHistory(
+    state: UiState<List<HookRunHistory>>,
+    hooks: List<ConversationHook>,
+    conversationTags: List<ConversationTag>,
+    modelNames: Map<Uuid, String>,
+    onBack: () -> Unit,
+) {
+    val hooksById = remember(hooks) { hooks.associateBy { it.id } }
+    val tagsById = remember(conversationTags) { conversationTags.associateBy { it.id } }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Lucide.ArrowLeft, stringResource(R.string.context_inspector_back))
+            }
+            Text(stringResource(R.string.hook_history_title), style = MaterialTheme.typography.titleLarge)
+        }
+        when (state) {
+            UiState.Idle,
+            UiState.Loading,
+            -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+
+            is UiState.Error -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(R.string.hook_history_error),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            is UiState.Success -> {
+                if (state.data.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(HugeIcons.WorkHistory, null, modifier = Modifier.size(36.dp))
+                            Text(stringResource(R.string.hook_history_empty_title))
+                            Text(
+                                stringResource(R.string.hook_history_empty_description),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(state.data, key = { it.run.runId }) { history ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                history.run.startedAt.atZone(ZoneId.systemDefault())
+                                                    .toLocalDateTime().toLocalString(),
+                                                style = MaterialTheme.typography.titleSmall,
+                                            )
+                                            Text(
+                                                stringResource(
+                                                    R.string.hook_history_execution_count,
+                                                    history.executions.size,
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        HookStatusLabel(
+                                            hookRunStatusLabel(history.run.status),
+                                            history.run.status.isFailure(),
+                                        )
+                                    }
+                                    history.executions.forEach { execution ->
+                                        HorizontalDivider()
+                                        val hookName = hooksById[execution.hookId]?.name
+                                            ?.takeIf { it.isNotBlank() }
+                                            ?: stringResource(R.string.hook_history_deleted_hook)
+                                        val modelName = modelNames[execution.modelId]
+                                            ?: stringResource(R.string.hook_history_deleted_model)
+                                        val tagName = execution.tagId?.let { tagsById[it]?.displayName }
+                                            ?: if (execution.tagId != null) {
+                                                stringResource(R.string.hook_history_deleted_tag)
+                                            } else {
+                                                null
+                                            }
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    hookName,
+                                                    modifier = Modifier.weight(1f),
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                HookStatusLabel(
+                                                    hookExecutionStatusLabel(execution.status),
+                                                    execution.status.isFailure(),
+                                                )
+                                            }
+                                            Text(
+                                                modelName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            execution.decision?.let { decision ->
+                                                Text(
+                                                    stringResource(
+                                                        R.string.hook_history_decision,
+                                                        hookDecisionLabel(decision),
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                            }
+                                            tagName?.let {
+                                                Text(
+                                                    stringResource(R.string.hook_history_tag, it),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                            }
+                                            execution.reason?.takeIf { it.isNotBlank() }?.let { reason ->
+                                                Text(reason, style = MaterialTheme.typography.bodySmall)
+                                                if (execution.reasonTruncated) {
+                                                    Text(
+                                                        stringResource(R.string.hook_history_reason_truncated),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.tertiary,
+                                                    )
+                                                }
+                                            }
+                                            execution.errorCode?.let { errorCode ->
+                                                Text(
+                                                    stringResource(
+                                                        R.string.hook_history_error_detail,
+                                                        errorCode.name,
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                )
+                                            }
+                                            execution.sanitizedError?.takeIf { it.isNotBlank() }?.let { error ->
+                                                Text(
+                                                    error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                )
+                                            }
+                                            execution.duration?.let { duration ->
+                                                Text(
+                                                    stringResource(
+                                                        R.string.hook_history_duration_ms,
+                                                        duration.toMillis(),
+                                                    ),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HookStatusLabel(label: String, failure: Boolean) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (failure) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (failure) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+        )
+    }
+}
+
+@Composable
+private fun hookRunStatusLabel(status: HookRunStatus): String = stringResource(
+    when (status) {
+        HookRunStatus.QUEUED -> R.string.hook_status_queued
+        HookRunStatus.RUNNING -> R.string.hook_status_running
+        HookRunStatus.SUCCESS -> R.string.hook_status_success
+        HookRunStatus.SKIPPED -> R.string.hook_status_skipped
+        HookRunStatus.FAILED -> R.string.hook_status_failed
+        HookRunStatus.CANCELLED -> R.string.hook_status_cancelled
+        HookRunStatus.INTERRUPTED -> R.string.hook_status_interrupted
+    }
+)
+
+@Composable
+private fun hookExecutionStatusLabel(status: HookExecutionStatus): String = stringResource(
+    when (status) {
+        HookExecutionStatus.QUEUED -> R.string.hook_status_queued
+        HookExecutionStatus.RUNNING -> R.string.hook_status_running
+        HookExecutionStatus.SUCCESS -> R.string.hook_status_success
+        HookExecutionStatus.SKIPPED -> R.string.hook_status_skipped
+        HookExecutionStatus.FAILED -> R.string.hook_status_failed
+        HookExecutionStatus.CANCELLED -> R.string.hook_status_cancelled
+        HookExecutionStatus.INTERRUPTED -> R.string.hook_status_interrupted
+    }
+)
+
+@Composable
+private fun hookDecisionLabel(decision: HookDecision): String = stringResource(
+    when (decision) {
+        HookDecision.APPLY -> R.string.hook_decision_apply
+        HookDecision.SKIP -> R.string.hook_decision_skip
+    }
+)
+
+private fun HookRunStatus.isFailure(): Boolean = when (this) {
+    HookRunStatus.FAILED,
+    HookRunStatus.CANCELLED,
+    HookRunStatus.INTERRUPTED,
+    -> true
+    else -> false
+}
+
+private fun HookExecutionStatus.isFailure(): Boolean = when (this) {
+    HookExecutionStatus.FAILED,
+    HookExecutionStatus.CANCELLED,
+    HookExecutionStatus.INTERRUPTED,
+    -> true
+    else -> false
 }
 
 // #89: 中转导航菜单。列出抽屉内可进入的功能入口，后续拓展在此追加条目即可。
@@ -251,6 +555,7 @@ fun ConversationDrawerContent(
 private fun ConversationDrawerMenu(
     onOpenMemoryTable: () -> Unit,
     onOpenContextInspector: () -> Unit,
+    onOpenHookHistory: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -269,6 +574,12 @@ private fun ConversationDrawerMenu(
             title = stringResource(R.string.context_inspector_menu_title),
             subtitle = stringResource(R.string.context_inspector_menu_subtitle),
             onClick = onOpenContextInspector,
+        )
+        ConversationDrawerMenuItem(
+            icon = HugeIcons.WorkHistory,
+            title = stringResource(R.string.hook_history_menu_title),
+            subtitle = stringResource(R.string.hook_history_menu_subtitle),
+            onClick = onOpenHookHistory,
         )
     }
 }

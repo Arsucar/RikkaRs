@@ -129,6 +129,19 @@ import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
+import me.rerere.rikkahub.data.repository.HookRepository
+import me.rerere.rikkahub.data.repository.ConversationTagRepository
+import me.rerere.rikkahub.data.model.HookActionConfig
+import me.rerere.rikkahub.data.model.HookDispatchPersistenceResult
+import me.rerere.rikkahub.data.model.HookExecutionMetadata
+import me.rerere.rikkahub.data.model.HookTrigger
+import me.rerere.rikkahub.data.model.actionType
+import me.rerere.rikkahub.data.model.configurationHash
+import me.rerere.rikkahub.service.hooks.FrozenHookExecution
+import me.rerere.rikkahub.service.hooks.FrozenHookModelRequest
+import me.rerere.rikkahub.service.hooks.HookActionContext
+import me.rerere.rikkahub.service.hooks.HookDispatcher
+import me.rerere.rikkahub.service.hooks.evaluateHookFinalSuccess
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -345,6 +358,9 @@ class ChatService(
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val hookRepository: HookRepository,
+    private val hookDispatcher: HookDispatcher,
+    private val conversationTagRepository: ConversationTagRepository,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -666,7 +682,14 @@ class ChatService(
 
                 // Only continue generation when all pending tools are handled
                 if (!hasPendingTools) {
-                    handleMessageComplete(conversationId, GenerationInvocationKind.ToolContinuation)
+                    val logicalTurnId = hookRepository
+                        .findActiveTurnByPendingToolCall(toolCallId)
+                        ?.logicalTurnId
+                    handleMessageComplete(
+                        conversationId,
+                        GenerationInvocationKind.ToolContinuation,
+                        logicalTurnId = logicalTurnId,
+                    )
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -686,12 +709,28 @@ class ChatService(
         conversationId: Uuid,
         invocationKind: GenerationInvocationKind,
         messageRange: ClosedRange<Int>? = null,
+        logicalTurnId: Uuid? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
         val target = settings.resolveGenerationTarget(initialConversation) ?: return
         val assistant = target.assistant
         val model = target.model
+        val sourceNode = initialConversation.messageNodes.lastOrNull { !it.hidden }
+        val sourceMessage = sourceNode?.messages?.getOrNull(sourceNode.selectIndex)
+        val activeLogicalTurnId = logicalTurnId
+            ?: if (invocationKind == GenerationInvocationKind.ToolContinuation) {
+                hookRepository.findActiveTurnByConversation(conversationId)?.logicalTurnId
+            } else {
+                null
+            }
+            ?: hookRepository.createLogicalTurn(
+                conversationId = conversationId,
+                assistantId = assistant.id,
+                sourceNodeId = sourceNode?.id,
+                sourceMessageId = sourceMessage?.id,
+                invocationKind = invocationKind.name,
+            )
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -798,7 +837,11 @@ class ChatService(
                 }
             }
         }.onFailure {
-            if (it is CancellationException) throw it
+            if (it is CancellationException) {
+                hookRepository.markTurnCancelled(activeLogicalTurnId)
+                throw it
+            }
+            hookRepository.markTurnFailed(activeLogicalTurnId)
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
@@ -816,6 +859,12 @@ class ChatService(
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
 
+            dispatchFinalResponseHooks(
+                logicalTurnId = activeLogicalTurnId,
+                conversation = finalConversation,
+                assistant = assistant,
+            )
+
             launchWithConversationReference(conversationId) {
                 generateTitle(conversationId, finalConversation)
             }
@@ -823,6 +872,77 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
             cleanupStreamingSubagentMetadata(conversationId)
+        }
+    }
+
+    private suspend fun dispatchFinalResponseHooks(
+        logicalTurnId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+    ) {
+        val pendingToolIds = conversation.currentMessages
+            .flatMap { it.parts.filterIsInstance<UIMessagePart.Tool>() }
+            .filter { it.isPending || !it.isExecuted }
+            .mapTo(linkedSetOf()) { it.toolCallId }
+        if (pendingToolIds.isNotEmpty()) {
+            hookRepository.updatePendingTools(logicalTurnId, pendingToolIds)
+            return
+        }
+        val snapshot = evaluateHookFinalSuccess(conversation)
+        if (snapshot == null) {
+            hookRepository.markTurnFailed(logicalTurnId)
+            return
+        }
+        val hooks = assistant.hooks.filter {
+            it.enabled && it.trigger == HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS
+        }
+        val metadata = hooks.mapIndexed { index, hook ->
+            HookExecutionMetadata(
+                hookId = hook.id,
+                hookOrder = index,
+                hookConfigVersion = hook.configVersion,
+                hookConfigHash = hook.configurationHash(),
+                modelId = hook.modelId,
+                actionType = hook.actionConfig.actionType,
+            )
+        }
+        val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
+            logicalTurnId = logicalTurnId,
+            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            nodeId = snapshot.nodeId,
+            messageId = snapshot.messageId,
+            messageModelId = snapshot.messageModelId,
+            hooks = metadata,
+        )
+        if (persistence !is HookDispatchPersistenceResult.Created) return
+
+        val frozenExecutions = hooks.zip(metadata).map { (hook, execution) ->
+            val allowedTagIds = (hook.actionConfig as HookActionConfig.AddConversationTag).allowedTagIds
+            val allowedTags = allowedTagIds.mapNotNull { tagId ->
+                conversationTagRepository.getTag(tagId)?.let { tagId to it.displayName }
+            }.toMap()
+            FrozenHookExecution(
+                executionId = execution.executionId,
+                hook = hook,
+                request = FrozenHookModelRequest(
+                    modelId = hook.modelId,
+                    prompt = hook.prompt,
+                    messageTextSnapshot = snapshot.text,
+                    allowedTags = allowedTags,
+                ),
+                actionContext = HookActionContext(
+                    conversationId = conversation.id,
+                    sourceNodeId = snapshot.nodeId,
+                    sourceMessageId = snapshot.messageId,
+                    executionId = execution.executionId,
+                    leaseToken = 0,
+                    allowedTagIds = allowedTagIds,
+                ),
+            )
+        }
+        appScope.launch {
+            hookDispatcher.dispatch(persistence.runId, frozenExecutions)
+            runCatching { hookRepository.cleanupHistory(conversation.id) }
         }
     }
 
@@ -1955,7 +2075,11 @@ class ChatService(
             lorebookIds = currentConversation.lorebookIds,
         )
 
-        saveConversation(forkConversation.id, forkConversation)
+        conversationRepo.insertForkConversation(
+            sourceConversationId = conversationId,
+            fork = forkConversation,
+        )
+        updateConversation(forkConversation.id, forkConversation)
 
         // #89: fork 时把源会话的对话级记忆表文档复制到新会话，复制失败不影响 fork 本身。
         runCatching {
