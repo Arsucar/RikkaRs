@@ -12,6 +12,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.30
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.29 之后）
+
+- **助手级网络搜索与 Workspace 媒体预览** — 网络搜索开关迁移到 Assistant 并保留旧配置的一次性迁移；Workspace 支持图片预览、视频及其他文件安全外部打开，并让 LINUX 区保持只读。（#135）
+  **Assistant-level web search and Workspace media preview** — Web search settings are now persisted per Assistant with a one-time migration of legacy preferences; Workspace adds image preview, safe external opening for videos and other files, and read-only behavior for the LINUX area. (#135)
+- **普通聊天文件类型白名单恢复** — 普通文件附件恢复 MIME/扩展名校验，不支持的媒体、压缩包和未知二进制不会进入文档附件链路。（#134）
+  **Restore the regular-chat file type allowlist** — MIME/extension validation is restored for document attachments so unsupported media, archives, and unknown binaries stay out of the document flow. (#134)
+- **会话标签与 Assistant Hooks** — 支持会话标签管理及 Assistant 级 Hook 配置与执行，保持对话关系和运行状态隔离。（#132、#133）
+  **Conversation tags and Assistant Hooks** — Add conversation tag management and Assistant-level Hook configuration/execution while preserving isolated conversation relationships and runtime state. (#132, #133)
+- **Provider 对话框布局修复** — 优化 Provider 配置对话框布局，改善小屏幕下的可用性。（#131）
+  **Provider dialog layout fix** — Improve the Provider configuration dialog layout for better usability on small screens. (#131)
+
 ## v2.3.29
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.28 之后）
