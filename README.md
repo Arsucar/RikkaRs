@@ -1,133 +1,137 @@
 <div align="center">
-  <img src="docs/icon.png" alt="RikkaRs App Icon" width="100" />
-  <h1>RikkaRs</h1>
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
-[![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
-
-A native Android LLM chat client forked from RikkaHub, tuned for agent workflows,
-local workspaces, and multi-provider conversations.
-
-[简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
+  <img src="docs/icon.png" alt="RikkaRs 应用图标" width="100" />
 </div>
+
+# RikkaRs
+
+RikkaRs 是源自 RikkaHub、由 Arsucar 独立维护和发布的原生 Android LLM 客户端，专注智能体工作流、本地工作区与多 Provider 对话。
+
+[English](README_EN.md) | **简体中文** | [繁體中文](README_ZH_TW.md)
+
+[![最新版本](https://img.shields.io/github/v/release/Arsucar/RikkaRs?label=release)](https://github.com/Arsucar/RikkaRs/releases/latest)
+[![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](app/build.gradle.kts)
+[![ABI arm64-v8a](https://img.shields.io/badge/ABI-arm64--v8a-blue)](app/build.gradle.kts)
+[![分段双重许可](https://img.shields.io/badge/license-segmented%20dual-orange)](LICENSE)
+
+**[下载最新稳定版](https://github.com/Arsucar/RikkaRs/releases/latest)**
 
 <div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
+  <img src="docs/img/chat.png" alt="聊天界面" width="150" />
+  <img src="docs/img/desktop.png" alt="模型选择器" width="450" />
 </div>
 
-## About This Fork
+## 关于 RikkaRs
 
-This repository is a downstream fork of [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
-It tracks upstream while publishing an independent Android build named **RikkaRs** from
-[Arsucar/rikkahub](https://github.com/Arsucar/rikkahub).
+RikkaRs 的代码源自 [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)，由 Arsucar 在独立仓库 [Arsucar/RikkaRs](https://github.com/Arsucar/RikkaRs) 中独立维护和发布。项目按需同步有价值的上游变更，同时遵循自己的产品路线和发布节奏。
 
-RikkaRs is not the official upstream build. Use upstream RikkaHub if you need upstream release
-channels, package identity, or support.
+RikkaRs 是非官方发行版，与 RikkaHub 项目及其维护者不存在隶属、关联或背书关系。独立 Release 包名 `me.arsucar.rikka` 使其可与官方 RikkaHub 共存；项目已移除 Firebase，不需要 `google-services.json`。
 
-## RikkaHub vs RikkaRs
+## 功能特色
 
-| Area | Upstream RikkaHub (`rikkahub/rikkahub`) | This fork RikkaRs (`Arsucar/rikkahub`) |
-|------|-----------------------------------------|----------------------------------------|
-| Release package | `me.rerere.rikkahub` | `me.arsucar.rikka`; debug uses `me.arsucar.rikka.debug` |
-| Kotlin namespace | `me.rerere.rikkahub` | Keeps `me.rerere.rikkahub` to reduce upstream merge friction |
-| App name | RikkaHub | RikkaRs |
-| Release channel | Website and Google Play | GitHub Releases from this fork |
-| Firebase | Upstream may use Firebase services | Firebase removed; no `google-services.json` needed |
-| CI and releases | Upstream workflow | `Release APK (arm64)` only; arm64 APK, no Firebase, pnpm-backed web build |
-| Subagents | Upstream agent/tool behavior | Parallel, queued, delegated subagents with depth/concurrency controls, transcript cards, cancellation, and `finish_work` for subagents |
-| Skills | Global skill support | Global and assistant-private Skills, private copy management, safer file scope, slash completion, and richer directory cards |
-| Memory | ChatGPT-like memory | Assistant/global memory scopes plus disabled-by-default memory tables with templates, documents, and scope control |
-| Workspace | Proot-based workspace | External app-specific workspace storage, full-screen text editing, Markdown read-only preview, dotfile/config detection, and `/tmp` write convenience |
-| NewAPI import | Provider QR/import flow | NewAPI `newapi_channel_conn` JSON import alongside QR/provider share payloads |
-| Logs and `get_logs` | App logging UI | Logs page export, long-press selective export, AI `get_logs` tool, truncation, and tool-friendly summaries |
-| Redacted export | Not a fork focus | Authorization, API keys, cookies, URL secrets, and request-body secrets are redacted for export and `get_logs` |
-| Conversation archive | Upstream-supported after merge | Archive support retained with archive-aware search/list behavior |
-| Conversation folders | Upstream-supported after merge | Per-assistant folders retained for grouping conversations in the drawer |
-| Web access | Embedded web service | Defaults to localhost-only and warns before LAN exposure without JWT |
-| Screen time and calendar | Not a core upstream fork focus | Optional local tools for screen usage stats and querying/creating calendar events after permission grants |
-| Provider tags | Basic provider settings | `provider.tags` plus provider-setting tag filtering |
-| Model picker | Standard model selection | Provider-group collapse, favorite section collapse, expand/collapse all, provider tag filtering, and favorite model grouping |
-| Hidden context | Delete/compact behavior | Hide messages as soft deletion; hidden nodes stay visible as excluded context, and compression hides instead of hard-deleting old messages |
-| Conversation model override | Assistant model defaults | Per-conversation model override with one-tap clear; new conversations do not inherit old overrides |
-| Favorites | Message/favorite foundation | Model favorites, image-generation favorites, favorite collections, and grouped/collapsible favorite views |
-| Web localhost + JWT | Configurable web auth | Localhost default plus explicit JWT safety prompts for remote access |
-| Engineering notes | Upstream conventions | See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md) for fork package, CI, release, and Firebase decisions |
+### 子代理
 
-## 🚀 Download
+- 委托子代理并行执行或排队运行，可分别限制并发数与调用深度，并可随时取消运行。
+- 向子代理传入所需上下文并查看完整 transcript；实时观察 token 用量、工具调用和运行状态。
+- 子代理通过专用 `finish_work` 信号明确完成工作，主代理可据此可靠收尾。
+- 子代理档案可独立配置模型、工作目录（CWD）、工具权限，以及 token、工具调用、耗时、深度和并发等预算。
+- 在兼容的 scope 下续接原有历史；完整上下文会持久化，并可在应用或进程重启后基于持久化上下文继续未完成工作。
 
-🔗 [Download RikkaRs from GitHub Releases](https://github.com/Arsucar/rikkahub/releases)
+### Skills
 
-🔗 Upstream official downloads: [Website](https://rikka-ai.com/download) / [Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+- 管理全局与助手私有 Skills，并按作用域安全地向工作区和子代理提供所需 Skill。
+- 通过斜杠补全从对话中显式启用 Skill，浏览更清晰的 Skill 目录卡片。
+- 助手可在确认后创建或更新 Skill；私有副本与文件访问边界保持隔离。
 
-## 💖 Sponsors
+### 记忆
 
-|                                         Sponsor                                         | Description                                                                                                                                                                                                                                         |
-|:---------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img src="docs/sponsors/aihubmix.png" alt="Aihubmix" width="50" /><br /><b>Aihubmix</b> | Thanks to <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more). |
-| <img src="docs/sponsors/suixiang.jpg" alt="随想AI中转" width="50" /><br /><b>随想AI中转</b> | 感谢随想AI中转对本项目的赞助！随想AI中转 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。99.9% 可用性，关键调用从不掉队。 |
+- 记忆支持全局、助手和对话三种 scope，可同步、跟随或解除关联，避免不同使用场景互相污染。
+- 同时支持普通记忆与结构化表格记忆；表格可定义模板，并按需创建和维护文档及数据行。
+- 可设置总注入预算、仅注入相关行，并为每张表选择独立的检索与注入策略。
+- 支持写入控制、快照与回滚、导入与导出；未注入的记忆仍可由工具按需检索。
 
-## ✨ Features
+### 上下文控制
 
-This list is aligned with this fork's CHANGELOG through **v2.3.19**.
+- 隐藏消息采用软删除：旧消息从模型上下文排除但仍保留在会话树中，可查看和恢复。
+- 支持手动压缩与超限自动压缩；压缩会隐藏并保留旧消息，而不是硬删除。
+- 可配置保留的最近消息数量与压缩偏好，并在后续会话中沿用。
+- 发送前可用只读的最终上下文检查器核对完成组装、注入和转换后的实际消息。
+- 支持会话级模型覆盖，以及最近模型和提示词预设的快速切换；新会话不会误继承旧会话覆盖。
 
-- 🎨 Material You design, predictive back, and dark mode
-- 🔄 Multiple provider support with custom API hosts, URLs, headers, request bodies, and model lists
-- 🧩 Provider tags, provider tag filtering, NewAPI channel JSON import, and QR provider import/export
-- ⭐ Collapsible model picker with provider groups, favorite models, favorite section, expand/collapse all, and tag filters
-- 🖼️ Multimodal chat input for images, documents, PDF, DOCX, and common text files
-- 📝 Markdown rendering with code highlighting, LaTeX formulas, tables, Mermaid, bold fixes, and rendered read-only Markdown workspace preview
-- 🪾 Message branching, message hiding, hidden-context compression, archive, folders, and per-conversation model override
-- 📦 Proot workspace with shell/file tools, external workspace storage, full-screen text editor, safer shell policy, and clearer shell transcripts
-- 🤖 Agent customization plus subagents with delegation, parallel/queued execution, limits, transcript preview, cancellation, and `finish_work`
-- 🛠️ MCP support including OAuth 2.1, token refresh, and reconnect behavior
-- 🧠 Memory with assistant/global scopes and disabled-by-default memory tables
-- 🧠 Skills library with slash completion, global/private copies, safer file access, and improved Skills directory cards
-- 🔍 Search capabilities with Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, and search-result images
-- 🖥️ Embedded web access with localhost-only default and JWT warnings for LAN exposure
-- 📊 Local diagnostics: Logs page, selective redacted export, and AI-readable `get_logs`
-- 📱 Optional local tools for screen time and calendar events after Android permissions are granted
-- 📝 AI translation, prompt variables, SillyTavern character card import, assistant avatar crop, and image-generation favorites/collections
+### 工作区与文件
 
-## ✨ Contributing
+- 使用统一的 **PRoot** 工作区，内置 Shell 与文件工具；也可选择应用专属的外部工作区。
+- 外部工作区可通过系统文件管理器访问，便于经 USB 或 PC 管理和交换文件。
+- 支持全屏文本编辑、Markdown 渲染预览，并可把任意类型文件作为对话附件。
+- 工作区图片可作为多模态工具结果回传；非视觉模型会得到明确的降级说明。
+- Shell 与子代理改动过的文件会以 chip 显示在消息下方，方便打开、追踪和继续处理。
 
-This project is developed using [Android Studio](https://developer.android.com/studio). PRs are
-welcome!
+### Provider 与模型
 
-Technology stack documentation:
+- 为多个 Provider 配置自定义 Host、URL、Header、Body 和模型列表。
+- 用标签组织和筛选 Provider；模型选择器支持按 Provider 分组、搜索、折叠、收藏及一键展开/收起。
+- 可为每个 Provider 分别设置本地 RPM/TPM，在触发服务端限制前控制请求节奏。
+- 支持导入 NewAPI 渠道 JSON，以及导入和导出**兼容的 Provider 分享二维码**。
+- 可集中整理多渠道与公益站配置，同时保留清晰的 Provider 边界和筛选能力。
 
-- [Kotlin](https://kotlinlang.org/) (Development language)
-- [Koin](https://insert-koin.io/) (Dependency Injection)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI framework)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) (Preference data
-  storage)
-- [Room](https://developer.android.com/training/data-storage/room) (Database)
-- [Coil](https://coil-kt.github.io/coil/) (Image loading)
-- [Material You](https://m3.material.io/) (UI design)
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (Navigation)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP client)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
+### 预设与扩展
 
-> [!TIP]
-> **RikkaRs fork:** Firebase has been removed; you do **not** need `google-services.json`. See [docs/RIKKA_ARSUCAR_FORK_AND_CI.md](docs/RIKKA_ARSUCAR_FORK_AND_CI.md).
+- 将多个提示词条目组合为提示词预设，并用预设级 `ModeInjection` 隔离不同模式的注入内容。
+- 为助手与子代理档案关联合适的预设，按任务定向注入指令。
+- 连接 MCP 服务器时支持 OAuth 2.1、PKCE、动态客户端注册、令牌刷新与断线重连。
 
-> [!IMPORTANT]
-> The following PRs will be rejected:
-> 1. Translation related changes, such as adding new languages or updating existing translations
-> 2. Adding new features, this project is opinionated and will not accept pull requests for new features
-> 3. Large-scale refactoring and changes generated by AI
+### 对话与界面
 
-## 💰 Donate
+- 支持会话归档和文件夹整理；助手可归档、恢复，并能接上其最近会话继续工作。
+- 多选分享采用紧凑布局，长消息正文可折叠，便于检查和分享较长选择。
+- 支持多模态输入与显示，以及 Markdown、LaTeX 和 Mermaid 渲染。
+- 提供消息分支、搜索集成、图片生成、TTS、模型与图片生成收藏等日常能力。
 
-* [Patreon](https://patreon.com/rikkahub)
-* [爱发电](https://afdian.com/a/reovo)
+### 本地工具与 Web
 
-## ⭐ Star History
+- 日志诊断会对 Authorization、API Key、Cookie、URL 与请求体中的敏感信息脱敏，并支持多选导出和 AI 可读的 `get_logs`。
+- 经 Android 权限授权后，本地工具可读取屏幕使用时间，并查询或创建日历事件。
+- 内置本地 Web UI 默认仅监听 `localhost`；开放局域网访问时应启用 JWT，界面会明确提示未鉴权风险。
 
-If you like RikkaRs, please give this fork a star ⭐
+## 独立发行
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Arsucar/rikkahub&type=Date)](https://star-history.com/#Arsucar/rikkahub&Date)
+| 维度 | RikkaRs |
+| --- | --- |
+| 维护方式 | 独立仓库、产品路线与发布节奏；按需同步上游变更 |
+| Android 身份 | 应用名 **RikkaRs**，Release 包名 `me.arsucar.rikka`，可与官方 RikkaHub 共存 |
+| 发布渠道 | 由 Arsucar 在 [RikkaRs Releases](https://github.com/Arsucar/RikkaRs/releases) 独立维护和发布稳定版 |
+| 服务依赖 | 已移除 Firebase，无需 `google-services.json` |
+| 演进重点 | 智能体编排、持久记忆、上下文控制、本地工作区、Provider/模型管理与扩展能力 |
 
-## 📄 License
+实现与上游同步规则见[工程指南](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)。
 
-[License](LICENSE)
+## 下载与安装
+
+- **稳定版：**[GitHub Releases — 最新版](https://github.com/Arsucar/RikkaRs/releases/latest)
+- **最低系统：**Android 8.0（API 26）
+- **支持 ABI：**`arm64-v8a`
+- **Release 包名：**`me.arsucar.rikka`
+
+独立包名让 RikkaRs 可与官方 RikkaHub 安装在同一设备上。升级或切换构建版本前，请先备份重要数据。
+
+## 构建与贡献
+
+使用 [Android Studio](https://developer.android.com/studio) 和 JDK 17 打开项目。Android 应用采用 Kotlin、Jetpack Compose、Koin、DataStore、Room、Coil、Material You、Navigation 3、OkHttp 和 kotlinx.serialization。项目不使用 Firebase，因此无需 `google-services.json`。包名、CI、发版和上游同步细节见[工程指南](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)。
+
+适合提交的贡献包括聚焦的缺陷修复、文档修正和可维护性改进；开始较大工作前请先创建 Issue。项目不接受仅涉及翻译的改动、未经讨论的功能实现，以及大规模或由 AI 生成的重构。
+
+## 许可证
+
+RikkaRs 采用 [LICENSE](LICENSE) 规定的用户分段双重许可：符合任一条件——严格非商业用途、个人/教育/研究用途，或个人及组织总用户数不超过 10 人——可按 GNU AGPL v3 免费使用，并须履行该许可证包括公开源代码在内的义务。
+
+商业用途（直接或间接产生商业利益）、总用户数超过 10 人，或希望免除 AGPL v3 义务时，必须事先取得商业许可证；请联系 `re_dev@qq.com`。项目维护者保留更新许可政策的权利，并会通过官方渠道通知。
+
+以上仅为摘要，任何情况下均以 [LICENSE 原文](LICENSE) 为最终效力依据。使用、修改或分发本软件前，请完整阅读许可条款。
+
+## 相关链接
+
+- [RikkaRs 独立仓库](https://github.com/Arsucar/RikkaRs)
+- [最新稳定版](https://github.com/Arsucar/RikkaRs/releases/latest)
+- [全部 Releases](https://github.com/Arsucar/RikkaRs/releases)
+- [更新日志](CHANGELOG.md)
+- [工程指南](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)
+- [上游 RikkaHub](https://github.com/rikkahub/rikkahub)
