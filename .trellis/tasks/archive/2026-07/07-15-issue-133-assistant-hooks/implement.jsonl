@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/app/index.md", "reason": "App runtime and build conventions"}
+{"file": ".trellis/spec/app/conversation-model-resolution.md", "reason": "Conversation/model lookup compatibility"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Generation-to-Room-to-UI contract"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse provider and state helpers"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "Cancellation, token races, and UI state"}
