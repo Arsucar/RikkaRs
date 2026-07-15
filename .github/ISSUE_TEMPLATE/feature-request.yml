@@ -11,6 +11,8 @@ body:
         >
         > 请注意，功能请求是否被采纳取决于其必要性、实现成本与维护负担，并非所有请求都会被接受，感谢理解。
         > Please note that whether a request is adopted depends on its necessity, implementation cost, and maintenance burden — not all requests will be accepted. Thanks for understanding.
+        >
+        > **面向 Agent（自动化提 Issue 流程）**：提交前请先确认本功能是否包含 UI 界面（见下方「是否包含 UI 界面？」）。逻辑与数据流必须清晰描述，避免实现时缺逻辑或漏 UI。
 
   - type: textarea
     id: description
@@ -27,6 +29,82 @@ body:
       description: 这个功能在什么场景下使用？它能解决什么问题？ / Describe the scenario in which this feature would be used and how it would help you.
     validations:
       required: true
+
+  - type: dropdown
+    id: has_ui
+    attributes:
+      label: 是否包含 UI 界面？ | Does this feature have a UI?
+      description: Agent 请先确认该功能是否涉及界面/交互。选择「否」时，下方「UI/UX 要求」请填写 N/A 并说明功能类型。
+      options:
+        - "是 - 包含界面/交互"
+        - "否 - 纯逻辑/后台/API/CLI 等"
+    validations:
+      required: true
+
+  - type: textarea
+    id: ui_spec
+    attributes:
+      label: UI/UX 要求 | UI/UX Specification
+      description: |
+        若上方选择「否 - 纯逻辑…」，请填写：N/A（纯逻辑功能，无界面）并简述功能类型。
+        若选择「是」，必须补全：目标屏幕/入口位置、布局与交互、所有 UI 状态（Loading/Success/Error/Empty/Offline/无权限等）、导航变更（来源/去向/Deep link）、设计系统一致性（Theme/Dark Mode/本地化/可访问性）、动画与反馈、Analytics 事件。
+      placeholder: |
+        目标屏幕/入口：
+        布局与交互：
+        UI 状态：Loading / Success / Error / Empty / Offline / 无权限
+        导航变更：
+        设计一致性（Theme/Dark Mode/A11y/本地化）：
+        动画与反馈：
+    validations:
+      required: true
+
+  - type: textarea
+    id: logic_spec
+    attributes:
+      label: 业务逻辑 & 数据流 | Business Logic & Data Flow
+      description: |
+        必须描述：核心流程（推荐附 Mermaid 图或步骤）、输入/输出与数据模型变更（新 Entity/DTO）、数据来源与转换（Remote/Local/Mapper/Cache）、以及所有边缘案例与错误处理（网络失败/空数据/权限/并发/数据无效等，须逐条列出）。
+      placeholder: |
+        核心流程：
+        数据模型变更（Entity/DTO）：
+        数据来源与转换：
+        边缘案例与错误处理（逐条）：
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: 验收条件 | Acceptance Criteria
+      description: 明确「做完了」的标准，建议逐条列出可验证的 AC（As a ... I want ... so that ...）。
+      placeholder: |
+        - [ ] AC1
+        - [ ] AC2
+    validations:
+      required: false
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: 实现 Checklist | Implementation Checklist
+      description: PR 阶段分层打勾驱动，覆盖 Presentation/UI、Domain、Data、Cross-cutting、测试与文档。
+      placeholder: |
+        Presentation/UI：
+        - [ ] Compose Screen + ViewModel(UiState/Events)
+        - [ ] Navigation 更新 + Previews + 截图/UI 测试
+        - [ ] 所有状态 UI、一致性、A11y、本地化
+        Domain：
+        - [ ] UseCase（纯 Kotlin、可单测）
+        Data：
+        - [ ] Repository/DataSource/Mapper/Cache
+        Cross-cutting：
+        - [ ] Hilt Module / 权限 / 埋点 / 日志
+        测试：
+        - [ ] Unit/UI Tests 覆盖 AC 与边缘案例
+        文档：
+        - [ ] KDoc / PR 描述(含截图) / 更新 README
+    validations:
+      required: false
 
   - type: textarea
     id: alternatives
