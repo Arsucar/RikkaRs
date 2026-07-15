@@ -52,6 +52,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -110,6 +111,7 @@ import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.resolveChatFileUploadMetadata
+import me.rerere.rikkahub.utils.isAllowedFileType
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -739,6 +741,7 @@ private fun ChatFilesPickerSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
     var showInjectionSheet by remember { mutableStateOf(false) }
@@ -864,6 +867,16 @@ private fun ChatFilesPickerSheet(
                         fileName = filesManager.getFileNameFromUri(uri),
                         mimeType = filesManager.getFileMimeType(uri),
                     )
+                    if (!isAllowedFileType(metadata.fileName, metadata.mimeType)) {
+                        toaster.show(
+                            resources.getString(
+                                R.string.chat_input_unsupported_file_type,
+                                metadata.fileName,
+                            ),
+                            type = ToastType.Error,
+                        )
+                        return@mapNotNull null
+                    }
                     val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
                         ?: run {
                             toaster.show(
