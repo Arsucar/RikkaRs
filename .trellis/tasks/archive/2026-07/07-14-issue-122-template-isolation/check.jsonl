@@ -1,0 +1,4 @@
+{"file":".trellis/tasks/07-14-issue-122-template-isolation/research/issue-122-template-ownership.md","reason":"Review every identified unscoped consumer and compatibility contract."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check end-to-end actor/scope propagation and by-ID authorization boundaries."}
+{"file":".trellis/spec/guides/repository-hygiene.md","reason":"Prevent generated schemas, device artifacts, and broad staging mistakes."}
+{"file":".trellis/spec/app/index.md","reason":"Apply app compile, test, and runtime quality checks."}

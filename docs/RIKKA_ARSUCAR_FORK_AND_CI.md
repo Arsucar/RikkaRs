@@ -521,7 +521,7 @@ jobs:
   将 `CompressContextDialog.kt` 的保留消息数改为纯手动输入；本 fork 合并时 **以 fork 为准**，
   保留 `CustomNumberSelector` 的 `0/16/32/64 + 自定义` 分段选数。冲突可 `checkout --ours`
   或手工保留 fork 版本，合并后回归压缩上下文对话框的目标 token、保留条数、确认/取消与加载态。
-- Trellis 文件在 fork 公开无妨，但 **upstream PR diff 不要包含** `.trellis/`、`.codex/` 等（见 `AGENTS.md`）。
+- 本项目不向 upstream 仓库提交 PR；`.trellis/tasks/` 任务产物可以随对应工作提交并推送到自己的 `origin`。本地代理配置（如 `.codex/`）仍默认只保留在工作区。
 - Deep link `rikkahub://` scheme 与上游相同**不阻止共存**（按包名区分应用）；若日后要做品牌隔离可再改 scheme。
 
 ---

@@ -1,0 +1,4 @@
+{"file":".trellis/tasks/07-14-issue-122-template-isolation/research/issue-122-template-ownership.md","reason":"Authoritative code-path, migration, compatibility, and test research for the implementation."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Ownership must remain consistent across Room, repository, runtime, tools, and Compose UI."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Use shared visibility/authorization predicates rather than divergent per-caller checks."}
+{"file":".trellis/spec/app/index.md","reason":"App-layer runtime and validation conventions."}
