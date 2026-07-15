@@ -980,3 +980,39 @@ Completed and closed issues #122-#130: assistant memory isolation/archive, skill
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: Complete GitHub issues 131 through 134
+
+**Date**: 2026-07-16
+**Task**: Complete GitHub issues 131 through 134
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Closed issues #131-#134: verified provider dialog layout fix, added global conversation tags and filtering, added assistant multi-Hook runtime/history, and restored chat document file-type whitelist. Kotlin compile and focused tests passed; AndroidTest sources compiled. Device install was not run because ADB endpoint was unreachable; full lint remains blocked by pre-existing debt.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e5a0737` | (see git log) |
+| `1dba4b9b` | (see git log) |
+| `5bc0294d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
