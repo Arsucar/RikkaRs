@@ -1,0 +1,31 @@
+{
+  "id": "github-issues-131-133",
+  "name": "github-issues-131-133",
+  "title": "处理 GitHub Issues #131-#133",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-15",
+  "completedAt": "2026-07-16",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-15-issue-131-provider-dialog",
+    "07-15-issue-132-conversation-tags",
+    "07-15-issue-133-assistant-hooks",
+    "07-16-issue-134-file-type-whitelist"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
