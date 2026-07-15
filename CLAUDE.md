@@ -100,11 +100,12 @@ Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）�
 
 用户说「装到手机/设备」「真机验证」「改完安装」，或完成 **app 模块**功能改动且未明确只要编译时，助手应执行安装验收（Windows 下同样用 `.\gradlew`）：
 
-1. 确认设备：`adb devices`（至少一台状态为 `device`；无设备则说明情况并只做编译）。
-2. 默认：`.\gradlew --no-daemon :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
+1. 确认设备：先执行 `adb devices`；若没有状态为 `device` 的设备，先执行 `adb connect 100.99.129.110:5555`，再重新执行 `adb devices`。
+2. 连接后仍没有状态为 `device` 的设备：说明情况并只做编译，不执行安装。
 3. 用户只要快速编译、不要装包：`.\gradlew --no-daemon :app:compileDebugKotlin`。
-4. 安装失败时先执行 `adb connect 100.99.129.110:5555` 重新连接固定端口，再重试 `.\gradlew --no-daemon :app:installDebug` 一次。
-5. 重试仍失败：汇报 Gradle/adb 末尾错误；常见为无设备、签名冲突、需先卸载旧包。
+4. 有可用设备时默认执行：`.\gradlew --no-daemon :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
+5. 安装失败时先执行 `adb connect 100.99.129.110:5555` 重新连接固定端口，再重试 `.\gradlew --no-daemon :app:installDebug` 一次。
+6. 重试仍失败：汇报 Gradle/adb 末尾错误；常见为无设备、签名冲突、需先卸载旧包。
 
 不要默认跑 `connectedDebugAndroidTest`。
 
@@ -158,25 +159,12 @@ Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）�
   Russian(ru) are supported.
 - When localization is needed, use the `locale-tui-localization` skill for managing string resources.
 
-## Git Commit and Upstream PR Rules
+## Git Commit and Remote Rules
 
-- Keep `master` clean and aligned with `origin/master` for upstream contributions.
-- Do not open an upstream PR from local setup branches such as `local/agent-trellis-setup`.
-- Local agent/Trellis files are for this workspace only unless the user explicitly asks to contribute them upstream:
-  `.agents/`, `.codex/`, `.omc/`, `.trellis/`, `README_FOR_AGENT.md`, and Trellis-only changes in `AGENTS.md`.
-- When preparing an upstream PR, start from a clean upstream base:
-  ```bash
-  git switch master
-  git pull --ff-only
-  git switch -c feat/<change-name>
-  ```
-- Before pushing or opening a PR, verify the PR diff does not include local tooling files:
-  ```bash
-  git diff --name-only origin/master...HEAD
-  git diff --stat origin/master...HEAD
-  ```
-- If local agent setup needs to be saved, commit it only on a dedicated local branch and do not push that branch unless
-  the user explicitly confirms it is intended for the remote.
+- Do not open pull requests to the upstream repository. Development for this fork is pushed to the user's own `origin`.
+- Trellis task artifacts under `.trellis/tasks/` may be committed and pushed to `origin` with the work they document.
+- Local agent setup files remain workspace-only unless the user explicitly asks to push them:
+  `.agents/`, `.codex/`, `.omc/`, `README_FOR_AGENT.md`, and agent-only changes in `AGENTS.md`.
 
 ## Rikka-arsucar：提交与发包
 
@@ -211,6 +199,16 @@ gh workflow run "Release APK (arm64)" --ref release/rikka-arsucar
 重打标签：先 `git push origin :refs/tags/vX.Y.Z` 删远程标签，再重新 `tag` + `push`。
 
 本机已配置 **`gh`（GitHub CLI）**，可用其操作 Actions / Release 等；关 issue / 评论请用终端 `gh issue close` / `gh issue comment`，勿依赖 MCP 的 `github_*` 工具（token 常无 issue 写权限）。
+
+### GitHub Issue 关闭评论规范
+
+- 关闭 issue 前，必须发布完整中文交付评论，至少包含 `解决点`、`验证`、`定位`、`已知边界`。
+- 中文评论必须写明目标分支、修复提交、正式版本（若已发布），以及实际执行的测试、编译或安装结果。
+- 不得使用一份通用验证模板批量覆盖不同 issue；每条评论必须对应其真实实现、验证证据和边界。
+- 中文评论后必须另发一条独立英文版，且事实、提交、版本、验证结果和已知边界与中文版一致。
+- 重复 issue 也必须说明主 issue、共享修复提交、验证结果和后续追踪边界。
+- 未执行或未通过的安装、测试、lint 必须如实说明，不得描述为成功。
+- 使用 `gh issue comment` / `gh api` 操作；完成后重新读取 issue 评论，确认中文评论已更新且英文评论已单独发布。
 
 更多见 `docs/RIKKA_ARSUCAR_FORK_AND_CI.md`。
 

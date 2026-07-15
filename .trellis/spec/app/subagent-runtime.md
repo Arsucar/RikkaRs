@@ -22,12 +22,12 @@
 
 ### 3. Contracts
 
-- `parallelToolExecution` is a subagent control-page setting. Root chat generation must keep the main agent's tool execution default/serial and must not use this field to parallelize main-agent tools.
+- `parallelToolExecution` controls ordinary same-turn tool calls. Root chat generation must keep the main agent's tool execution default/serial. Within a subagent, disabling it keeps ordinary tools serial but consecutive `spawn_subagent` calls may still run concurrently under `subagentMaxConcurrent`.
 - `SubagentHost.buildChildAssistant()` must pass subagent control fields from the parent assistant into the child assistant used for subagent generation.
 - `stepsCountdownThreshold == null` means automatic countdown threshold for subagents.
 - `stepsCountdownThreshold == 0` means countdown reminders are disabled.
 - Positive `stepsCountdownThreshold` values are clamped to the effective subagent `maxToolCalls`.
-- `createSubagentTools()` should only mention same-response parallel `spawn_subagent` behavior when the receiving agent will actually run tools in parallel.
+- `createSubagentTools()` mentions same-response parallel spawn behavior when subagents are enabled and `subagentMaxConcurrent > 1`; this guidance is independent of ordinary-tool parallel execution.
 - When `GenerationHandler.generateText()` receives `stepsCountdownTotal`, countdown reminders are for the explicit budget total and must subtract executed `UIMessagePart.Tool` parts, not generation-loop step indexes.
 - `manage_subagent_profile` is an execution-time allowlist. The tool may only patch `description`, `system_prompt`, `model_id`, `max_tool_calls`, and `disable_tool_budget_stop`; schema-hidden advanced fields must be ignored even if present in hand-written JSON args.
 - When a subagent run is stopped by `maxToolCalls`, `SubagentHost` must request a no-tool final budget summary even if the budget-exhausting assistant message already contains text. Text emitted before or beside a tool call is not a final post-tool summary.
@@ -52,7 +52,8 @@
 ### 4. Validation & Error Matrix
 
 - Main agent has `parallelToolExecution = true` -> root `ChatService` still calls `generateText` with a serial assistant copy.
-- Child subagent has `parallelToolExecution = false` -> `GenerationHandler` executes that subagent's tool calls sequentially.
+- Child subagent has `parallelToolExecution = false` -> `GenerationHandler` executes ordinary tool calls sequentially.
+- Child has `parallelToolExecution = false`, maxConcurrent=3, and emits two consecutive spawn calls -> spawn calls overlap, peak <=3; ordinary tools before/after remain ordered.
 - Child subagent has `parallelToolExecution = true` -> `GenerationHandler` may execute that subagent's same-turn tool calls concurrently.
 - Countdown threshold `null` -> inject automatic countdown reminders near the subagent tool budget.
 - Countdown threshold `0` -> do not inject countdown reminders.
@@ -88,8 +89,8 @@
 
 ### 6. Tests Required
 
-- Unit test that disabled subagent parallel execution does not inject parallel guidance into `spawn_subagent` prompt/schema text.
-- Unit test that enabled subagent parallel execution does inject parallel guidance.
+- Unit test that maxConcurrent=1 omits parallel spawn guidance and maxConcurrent>1 includes it.
+- Unit test that consecutive spawn calls form one concurrent group while ordinary tools remain ordered singleton groups.
 - Unit test that countdown threshold `null` resolves to automatic and `0` resolves to disabled.
 - Unit test that countdown remaining uses executed tool calls when `stepsCountdownTotal` is present.
 - Unit test that `manage_subagent_profile` ignores schema-hidden advanced fields.
@@ -125,6 +126,61 @@ generationHandler.generateText(
 ```
 
 Subagent runtime then receives the persisted control fields through `SubagentHost.buildChildAssistant()`.
+
+## Scenario: Persistent Subagent Context Recovery
+
+### 1. Scope / Trigger
+
+- Trigger: changing `SubagentContext`, cache retention, Room schema, process-restart recovery, or acquire fallback.
+
+### 2. Signatures
+
+- DB table: `subagent_contexts(context_id PK, scope_json, status, messages_json, usage_json, created_at, updated_at, expires_at, revision, ...)`.
+- `SubagentContextStore.loadRestorable(nowMillis)`, `loadById(contextId)`, `save(context)`, `delete(contextId)`.
+- `SubagentContextCache(store = ...)` restores once before create/acquire/snapshot operations.
+
+### 3. Contracts
+
+- Memory cache remains the hot path; Room is the cold recovery source.
+- Each mutation increments `revision`; storage accepts only a newer revision so delayed progress cannot overwrite a terminal snapshot.
+- Terminal finish/failure awaits persistence. Progress persistence may run asynchronously and must never fail generation.
+- Restored `RUNNING` becomes `INTERRUPTED` and is written back before reuse.
+- Recovery preserves complete `List<UIMessage>`, TTL, LRU capacity, running-entry overflow, and full scope authorization.
+
+### 4. Validation & Error Matrix
+
+- Corrupt row -> log and skip only that row.
+- Expired terminal row -> delete/ignore; explicit acquire returns expired/not-found under existing cache semantics.
+- Room write failure -> memory-only continuation, no generation exception.
+- Scope mismatch after fallback -> `CONTEXT_SCOPE_MISMATCH`, no content exposure.
+
+### 5. Good/Base/Bad Cases
+
+- Good: revision 8 terminal save wins even if revision 7 progress completes later.
+- Base: cold start restores completed contexts and downgrades abandoned running contexts.
+- Bad: fire-and-forget `@Upsert` without revision ordering; stale chunks can resurrect RUNNING state.
+
+### 6. Tests Required
+
+- Migration 36→37 validates the table and indices.
+- Unit tests cover cold restore, RUNNING downgrade, explicit by-id fallback, scope mismatch, TTL/LRU, write failure, and terminal ordering.
+- Compile `:app:compileDebugKotlin` and `:app:compileDebugAndroidTestKotlin` with `--no-daemon`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+scope.launch { dao.upsert(snapshot) }
+```
+
+#### Correct
+
+```kotlin
+dao.upsertIfNewer(snapshot.copy(revision = nextRevision))
+```
+
+Revision-guarded writes make asynchronous snapshot completion order harmless.
 
 #### Wrong
 
