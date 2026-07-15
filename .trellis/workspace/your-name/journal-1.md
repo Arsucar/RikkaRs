@@ -1050,3 +1050,38 @@ Translated all 86 newly added UI keys to real Simplified Chinese, localized tag 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: Release v2.3.30 for issue #135
+
+**Date**: 2026-07-16
+**Task**: Release v2.3.30 for issue #135
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented issue #135 assistant-level web search migration and Workspace media preview/read-only behavior; verified tests, compile, web typecheck, and device install; pushed release/rikka-arsucar and tag v2.3.30, with Release APK (arm64) workflow running.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f4a459b` | (see git log) |
+| `43862465` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
