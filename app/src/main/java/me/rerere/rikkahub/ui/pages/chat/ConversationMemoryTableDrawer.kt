@@ -67,6 +67,7 @@ import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.ConversationHook
 import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookDecision
+import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookRunHistory
 import me.rerere.rikkahub.data.model.HookRunStatus
@@ -442,7 +443,7 @@ private fun ConversationHookHistory(
                                                 Text(
                                                     stringResource(
                                                         R.string.hook_history_error_detail,
-                                                        errorCode.name,
+                                                        hookErrorMessage(errorCode),
                                                     ),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.error,
@@ -475,6 +476,21 @@ private fun ConversationHookHistory(
             }
         }
     }
+}
+
+@Composable
+private fun hookErrorMessage(errorCode: HookErrorCode): String = when (errorCode) {
+    HookErrorCode.MODEL_NOT_FOUND -> stringResource(R.string.hook_error_model_not_found)
+    HookErrorCode.PROVIDER_NOT_FOUND -> stringResource(R.string.hook_error_provider_not_found)
+    HookErrorCode.MODEL_REQUEST_FAILED -> stringResource(R.string.hook_error_model_request_failed)
+    HookErrorCode.HOOK_TIMEOUT -> stringResource(R.string.hook_error_hook_timeout)
+    HookErrorCode.INVALID_JSON -> stringResource(R.string.hook_error_invalid_json)
+    HookErrorCode.SCHEMA_MISMATCH -> stringResource(R.string.hook_error_schema_mismatch)
+    HookErrorCode.TAG_NOT_ALLOWED -> stringResource(R.string.hook_error_tag_not_allowed)
+    HookErrorCode.TAG_NOT_FOUND -> stringResource(R.string.hook_error_tag_not_found)
+    HookErrorCode.CONVERSATION_NOT_FOUND -> stringResource(R.string.hook_error_conversation_not_found)
+    HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE -> stringResource(R.string.hook_error_source_message_not_active)
+    HookErrorCode.ACTION_FAILED -> stringResource(R.string.hook_error_action_failed)
 }
 
 @Composable

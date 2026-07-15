@@ -378,12 +378,27 @@ private fun ConversationTagColorOptions(selectedColor: String, onSelect: (String
                                 .size(12.dp)
                                 .background(conversationTagColor(colorKey), CircleShape)
                         )
-                        Text(colorKey)
+                        Text(conversationTagColorName(colorKey))
                     }
                 },
             )
         }
     }
+}
+
+@Composable
+private fun conversationTagColorName(colorKey: String): String = when (colorKey) {
+    "red" -> stringResource(R.string.conversation_tag_color_red)
+    "orange" -> stringResource(R.string.conversation_tag_color_orange)
+    "amber" -> stringResource(R.string.conversation_tag_color_amber)
+    "green" -> stringResource(R.string.conversation_tag_color_green)
+    "teal" -> stringResource(R.string.conversation_tag_color_teal)
+    "blue" -> stringResource(R.string.conversation_tag_color_blue)
+    "indigo" -> stringResource(R.string.conversation_tag_color_indigo)
+    "purple" -> stringResource(R.string.conversation_tag_color_purple)
+    "pink" -> stringResource(R.string.conversation_tag_color_pink)
+    "gray" -> stringResource(R.string.conversation_tag_color_gray)
+    else -> colorKey
 }
 
 @Composable

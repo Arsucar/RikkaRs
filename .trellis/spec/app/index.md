@@ -11,6 +11,7 @@
 | [Conversation Model Resolution](./conversation-model-resolution.md) | Conversation-level chat model override and fallback contracts |
 | [Android Backup Rules](./android-backup-rules.md) | Backup allow-list contracts for app-owned user files |
 | [Conversation Tags and Hooks](./conversation-tags-and-hooks.md) | Global conversation-tag relations and assistant Hook execution contracts |
+| [UI Localization](./ui-localization.md) | Android UI string-resource and Simplified Chinese delivery contract |
 
 ## Pre-Development Checklist
 
@@ -18,6 +19,7 @@
 - Check whether a field controls the main agent, subagents, or both before wiring it into generic generation code.
 - For skills, distinguish global skill storage from assistant-private storage before exposing files to tools or workspace mounts.
 - For conversation tags or Hooks, keep relationship writes outside whole-Conversation saves and preserve the logical-turn/lease state machine.
+- For every new or changed user-visible UI string, provide a string resource and a real Simplified Chinese translation before delivery.
 
 ## Quality Check
 

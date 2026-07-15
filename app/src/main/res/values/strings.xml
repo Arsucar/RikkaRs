@@ -1822,4 +1822,25 @@
   <string name="hook_status_interrupted">Interrupted</string>
   <string name="hook_decision_apply">Apply</string>
   <string name="hook_decision_skip">Skip</string>
+  <string name="conversation_tag_color_red">Red</string>
+  <string name="conversation_tag_color_orange">Orange</string>
+  <string name="conversation_tag_color_amber">Amber</string>
+  <string name="conversation_tag_color_green">Green</string>
+  <string name="conversation_tag_color_teal">Teal</string>
+  <string name="conversation_tag_color_blue">Blue</string>
+  <string name="conversation_tag_color_indigo">Indigo</string>
+  <string name="conversation_tag_color_purple">Purple</string>
+  <string name="conversation_tag_color_pink">Pink</string>
+  <string name="conversation_tag_color_gray">Gray</string>
+  <string name="hook_error_model_not_found">Evaluation model not found</string>
+  <string name="hook_error_provider_not_found">Model provider not found</string>
+  <string name="hook_error_model_request_failed">Model request failed</string>
+  <string name="hook_error_hook_timeout">Hook timed out</string>
+  <string name="hook_error_invalid_json">Invalid JSON response</string>
+  <string name="hook_error_schema_mismatch">Response schema mismatch</string>
+  <string name="hook_error_tag_not_allowed">Tag is not allowed</string>
+  <string name="hook_error_tag_not_found">Tag not found</string>
+  <string name="hook_error_conversation_not_found">Conversation not found</string>
+  <string name="hook_error_source_message_not_active">Source message is no longer active</string>
+  <string name="hook_error_action_failed">Hook action failed</string>
 </resources>
