@@ -1085,3 +1085,38 @@ Implemented issue #135 assistant-level web search migration and Workspace media 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: Resolve issues 140 and 141
+
+**Date**: 2026-07-16
+**Task**: Resolve issues 140 and 141
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented document-first assistant memory tables for #140 and reorganized assistant Hook settings for #141; focused tests and compilation passed, and debug APK installed successfully on the connected device. #136 remained excluded as already handled locally.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d0609c28` | (see git log) |
+| `c73080bd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
