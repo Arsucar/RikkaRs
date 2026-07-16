@@ -1,0 +1,29 @@
+{
+  "id": "resolve-all-open-issues",
+  "name": "resolve-all-open-issues",
+  "title": "处理所有开放 GitHub Issues",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": "app",
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-16-issue-136-remove-conversation-archive",
+    "07-16-issue-137-independent-memory-toggles"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

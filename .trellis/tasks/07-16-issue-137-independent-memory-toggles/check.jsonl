@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"核对 app runtime/UI 编译、测试和安装要求。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"核对新增/修改 UI 文案的默认语言与简体中文。"}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"核对四组合、持久化与生成/Preview 门控契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对四组合在读取、注入、工具和 UI 中一致。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"核对 capability 只有单一规则且无遗留交叉门控。"}

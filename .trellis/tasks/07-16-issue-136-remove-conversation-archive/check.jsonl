@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/index.md","reason":"核对 app 编译、测试和设备验收要求。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"核对只删除会话归档文案且保留助手归档资源。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 schema→查询→UI 的完整数据流与边界。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"最终残留搜索与相似归档概念误删审计。"}

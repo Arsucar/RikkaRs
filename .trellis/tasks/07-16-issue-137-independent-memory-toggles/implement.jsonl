@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"App 生成运行时、设置 UI 与质量门槛索引。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"AssistantToolsPage 与门控原因的字符串资源契约。"}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"普通记忆与记忆表格的独立持久化、运行时和 UI 门控契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Settings/Assistant→capability→Repository/Transformer/tools→UI 的跨层数据流。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"集中 capability 判定，避免多个入口重复组合布尔条件。"}

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/index.md","reason":"App 模块开发与质量门槛索引。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"删除会话归档资源时保护默认语言与简体中文契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"数据库迁移、DAO、Repository、FTS、导航与 UI 跨层一致性。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复用现有 Room DeleteColumn 迁移与查询模式，防止遗漏残留。"}
