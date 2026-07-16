@@ -1786,7 +1786,7 @@
   <string name="assistant_hook_allowed_tags">Allowed conversation tags</string>
   <string name="assistant_hook_allowed_tags_description">The hook may only select an existing tag from this frozen allowlist.</string>
   <string name="assistant_hook_no_tags">No conversation tags are available.</string>
-  <string name="assistant_hook_action_add_tag">Action: add an existing conversation tag</string>
+  <string name="assistant_hook_action_add_tag">Add conversation tag</string>
   <string name="hook_history_menu_title">Hook history</string>
   <string name="hook_history_menu_subtitle">Review recent hook runs and decisions for this conversation</string>
   <string name="hook_history_title">Hook history</string>
@@ -1867,4 +1867,15 @@
   <string name="assistant_page_memory_table_create_global">Create global</string>
   <string name="assistant_page_memory_table_create_failed">Could not create the memory table. Try again.</string>
   <string name="assistant_page_memory_table_scope_conversation">Conversation</string>
+  <string name="assistant_hook_section_basic">Basic</string>
+  <string name="assistant_hook_section_runtime">Runtime</string>
+  <string name="assistant_hook_section_rules">Rules</string>
+  <string name="assistant_hook_section_action">Action</string>
+  <string name="assistant_hook_error_name_required">Enter a hook name.</string>
+  <string name="assistant_hook_error_model_required">Select an available chat model.</string>
+  <string name="assistant_hook_error_trigger_unsupported">This trigger is not supported by the editor.</string>
+  <string name="assistant_hook_error_prompt_required">Enter an evaluation prompt.</string>
+  <string name="assistant_hook_error_tag_required">Select at least one conversation tag.</string>
+  <string name="assistant_hook_error_tag_unavailable">Remove unavailable tags before saving.</string>
+  <string name="assistant_hook_remove_unavailable_tags">Remove unavailable tags</string>
 </resources>

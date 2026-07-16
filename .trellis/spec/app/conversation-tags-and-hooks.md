@@ -77,4 +77,82 @@ conversationTagRepository.addTag(conversationId, existingTagId)
 hookRepository.finalizeAndCreateRunExactlyOnce(logicalTurnId, trigger, metadata)
 ```
 
+## Scenario: Assistant Hook configuration UI
+
+### 1. Scope / Trigger
+
+Use this contract when changing the assistant Hook list, editor validation,
+action presentation, or destructive configuration actions.
+
+### 2. Signatures
+
+- `validateHookDraft(...) -> HookDraftValidation` is the single editor
+  validation projection and owns `canSave`.
+- `hookActionLabelRes(HookActionType) -> StringRes` maps domain action types to
+  localized presentation.
+- `HookActionEditor(actionConfig, ...)` dispatches UI through an exhaustive
+  sealed-type `when` boundary.
+
+### 3. Contracts
+
+- A Hook card opens the editor as a whole-card action. The enabled Switch has
+  its own handler and remains the primary always-visible state control.
+- Delete lives behind an overflow action and confirmation; unnamed legacy Hooks
+  use the same localized fallback in the list and confirmation.
+- Supporting text is `model · action type`; action labels come from
+  `HookActionConfig.actionType`, not a hard-coded current subtype.
+- The editor exposes Basic, Runtime, Rules, and Action sections. Invalid name,
+  model, trigger, prompt, or action state must show visible field/section errors.
+- Prompt editors must have a bounded visible height while retaining multiline
+  scrolling. UI changes must not modify Hook execution, lease, or exactly-once
+  persistence contracts.
+
+### 4. Validation & Error Matrix
+
+- Blank name -> name error; save disabled.
+- Missing/non-CHAT model -> model error; save disabled.
+- Unsupported trigger -> trigger error; save disabled.
+- Blank prompt -> prompt error; save disabled.
+- No available action target -> action error; save disabled.
+- Deleted/stale tag IDs -> unavailable-target error with an explicit cleanup
+  action; never silently persist an invisible target set.
+
+### 5. Good/Base/Bad Cases
+
+- Good: derive all errors once and bind both field messages and save enabled
+  state to the same validation object.
+- Base: `AddConversationTag` renders through the sealed action editor and saves
+  the same serialized subtype as before.
+- Bad: `canSave = name.isNotBlank()` while fields apply separate rules.
+- Bad: render `assistant_hook_action_add_tag` directly in every list row.
+- Bad: place edit and destructive delete icon buttons together as permanent
+  trailing actions.
+
+### 6. Tests Required
+
+- JVM tests for valid draft, each required-field error, stale tag targets, and
+  action-type label mapping.
+- Compile resources and Kotlin after resource/UI changes.
+- When Compose UI test infrastructure is available, assert Switch/overflow
+  interaction does not trigger the parent card navigation.
+- Existing Hook serialization, parser, final-success gate, and lease tests
+  remain green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+val canSave = name.isNotBlank() && prompt.isNotBlank()
+Text(stringResource(R.string.assistant_hook_action_add_tag))
+```
+
+#### Correct
+
+```kotlin
+val validation = validateHookDraft(name, model, trigger, prompt, action, tags)
+Text(stringResource(hookActionLabelRes(action.actionType)))
+SaveButton(enabled = validation.canSave)
+```
+
 Relationship writes remain atomic, and Hook execution starts only from the persisted logical-turn gate.

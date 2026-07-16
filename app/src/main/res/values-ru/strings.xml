@@ -1682,7 +1682,7 @@
   <string name="assistant_hook_allowed_tags">Allowed conversation tags</string>
   <string name="assistant_hook_allowed_tags_description">The hook may only select an existing tag from this frozen allowlist.</string>
   <string name="assistant_hook_no_tags">No conversation tags are available.</string>
-  <string name="assistant_hook_action_add_tag">Action: add an existing conversation tag</string>
+  <string name="assistant_hook_action_add_tag">Добавить тег беседы</string>
   <string name="hook_history_menu_title">Hook history</string>
   <string name="hook_history_menu_subtitle">Review recent hook runs and decisions for this conversation</string>
   <string name="hook_history_title">Hook history</string>

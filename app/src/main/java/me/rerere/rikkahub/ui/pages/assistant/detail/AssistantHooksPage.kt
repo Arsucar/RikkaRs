@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,13 +52,17 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.DragDropVertical
-import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Webhook
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.ConversationHook
+import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookActionConfig
+import me.rerere.rikkahub.data.model.HookActionType
+import me.rerere.rikkahub.data.model.HookTrigger
+import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ConversationTagLabel
@@ -82,6 +88,7 @@ fun AssistantHooksPage(id: String) {
     }
     val haptic = LocalHapticFeedback.current
     var hookToDelete by remember { mutableStateOf<ConversationHook?>(null) }
+    var expandedHookMenuId by remember { mutableStateOf<Uuid?>(null) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -134,7 +141,14 @@ fun AssistantHooksPage(id: String) {
                     ReorderableItem(reorderableState, key = hook.id) { isDragging ->
                         val modelName = settings.providers.findModelById(hook.modelId)?.displayName
                             ?: stringResource(R.string.assistant_hook_deleted_model)
+                        val actionName = stringResource(hookActionLabelRes(hook.actionConfig.actionType))
+                        val hookDisplayName = hook.name.ifBlank {
+                            stringResource(R.string.assistant_hook_unnamed)
+                        }
                         Card(
+                            onClick = {
+                                nav.navigate(Screen.AssistantHookEditor(id, hook.id.toString()))
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .scale(if (isDragging) 0.98f else 1f)
@@ -162,16 +176,17 @@ fun AssistantHooksPage(id: String) {
                                 },
                                 headlineContent = {
                                     Text(
-                                        hook.name.ifBlank { stringResource(R.string.assistant_hook_unnamed) },
+                                        hookDisplayName,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 },
                                 supportingContent = {
-                                    Column {
-                                        Text(modelName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(stringResource(R.string.assistant_hook_action_add_tag))
-                                    }
+                                    Text(
+                                        text = "$modelName · $actionName",
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 },
                                 trailingContent = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,18 +194,33 @@ fun AssistantHooksPage(id: String) {
                                             checked = hook.enabled,
                                             onCheckedChange = { vm.setHookEnabled(hook.id, it) },
                                             modifier = Modifier.semantics {
-                                                contentDescription = hook.name
+                                                contentDescription = hookDisplayName
                                             },
                                         )
-                                        IconButton(
-                                            onClick = {
-                                                nav.navigate(Screen.AssistantHookEditor(id, hook.id.toString()))
+                                        Box {
+                                            IconButton(onClick = { expandedHookMenuId = hook.id }) {
+                                                Icon(
+                                                    HugeIcons.MoreVertical,
+                                                    stringResource(R.string.more_options),
+                                                )
                                             }
-                                        ) {
-                                            Icon(HugeIcons.PencilEdit01, stringResource(R.string.assistant_hook_edit))
-                                        }
-                                        IconButton(onClick = { hookToDelete = hook }) {
-                                            Icon(HugeIcons.Delete01, stringResource(R.string.assistant_hook_delete))
+                                            DropdownMenu(
+                                                expanded = expandedHookMenuId == hook.id,
+                                                onDismissRequest = { expandedHookMenuId = null },
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(stringResource(R.string.assistant_hook_delete))
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(HugeIcons.Delete01, contentDescription = null)
+                                                    },
+                                                    onClick = {
+                                                        expandedHookMenuId = null
+                                                        hookToDelete = hook
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 },
@@ -203,10 +233,13 @@ fun AssistantHooksPage(id: String) {
     }
 
     hookToDelete?.let { hook ->
+        val hookDisplayName = hook.name.ifBlank {
+            stringResource(R.string.assistant_hook_unnamed)
+        }
         AlertDialog(
             onDismissRequest = { hookToDelete = null },
             title = { Text(stringResource(R.string.assistant_hook_delete_title)) },
-            text = { Text(stringResource(R.string.assistant_hook_delete_confirm, hook.name)) },
+            text = { Text(stringResource(R.string.assistant_hook_delete_confirm, hookDisplayName)) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteHook(hook.id)
@@ -233,17 +266,28 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
     }
     var name by remember(hookId, existing?.configVersion) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(hookId, existing?.configVersion) { mutableStateOf(existing?.enabled ?: true) }
-    var modelId by remember(hookId, existing?.configVersion) {
-        mutableStateOf(existing?.modelId ?: assistant.chatModelId ?: settings.chatModelId)
+    val initialModelId = existing?.modelId ?: assistant.chatModelId ?: settings.chatModelId
+    var modelId by remember(hookId, existing?.configVersion, initialModelId) {
+        mutableStateOf(initialModelId)
     }
     var prompt by remember(hookId, existing?.configVersion) { mutableStateOf(existing?.prompt.orEmpty()) }
-    var allowedTagIds by remember(hookId, existing?.configVersion) {
+    val trigger by remember(hookId, existing?.configVersion) {
+        mutableStateOf(existing?.trigger ?: HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS)
+    }
+    var actionConfig by remember(hookId, existing?.configVersion) {
         mutableStateOf(
-            (existing?.actionConfig as? HookActionConfig.AddConversationTag)?.allowedTagIds.orEmpty()
+            existing?.actionConfig ?: HookActionConfig.AddConversationTag()
         )
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val canSave = name.isNotBlank() && prompt.isNotBlank() && allowedTagIds.isNotEmpty()
+    val validation = validateHookEditor(
+        name = name,
+        modelIsValid = settings.providers.findModelById(modelId)?.type == ModelType.CHAT,
+        trigger = trigger,
+        prompt = prompt,
+        actionConfig = actionConfig,
+        availableTagIds = tags.mapTo(mutableSetOf()) { it.id },
+    )
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -259,16 +303,17 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
                 navigationIcon = { BackButton() },
                 actions = {
                     TextButton(
-                        enabled = canSave,
+                        enabled = validation.canSave,
                         onClick = {
                             vm.upsertHook(
                                 ConversationHook(
                                     id = existing?.id ?: Uuid.random(),
                                     name = name.trim(),
                                     enabled = enabled,
+                                    trigger = trigger,
                                     modelId = modelId,
                                     prompt = prompt,
-                                    actionConfig = HookActionConfig.AddConversationTag(allowedTagIds),
+                                    actionConfig = actionConfig,
                                     configVersion = existing?.configVersion ?: 1,
                                 )
                             )
@@ -288,12 +333,19 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
+                HookEditorSectionHeader(stringResource(R.string.assistant_hook_section_basic))
+            }
+            item {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_hook_name)) },
                     singleLine = true,
+                    isError = validation.nameError != null,
+                    supportingText = validation.nameError?.let { error ->
+                        { Text(stringResource(error.stringRes)) }
+                    },
                 )
             }
             item {
@@ -308,12 +360,18 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
                 }
             }
             item {
+                HookEditorSectionHeader(stringResource(R.string.assistant_hook_section_runtime))
+            }
+            item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.assistant_hook_trigger), style = MaterialTheme.typography.titleSmall)
                     Text(
                         stringResource(R.string.assistant_hook_trigger_final_success),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    validation.triggerError?.let {
+                        HookEditorErrorText(stringResource(it.stringRes))
+                    }
                 }
             }
             item {
@@ -326,7 +384,13 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
                         modifier = Modifier.fillMaxWidth(),
                         onSelect = { modelId = it.id },
                     )
+                    validation.modelError?.let {
+                        HookEditorErrorText(stringResource(it.stringRes))
+                    }
                 }
+            }
+            item {
+                HookEditorSectionHeader(stringResource(R.string.assistant_hook_section_rules))
             }
             item {
                 OutlinedTextField(
@@ -334,48 +398,166 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
                     onValueChange = { prompt = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_hook_prompt)) },
-                    supportingText = { Text(stringResource(R.string.assistant_hook_prompt_description)) },
+                    supportingText = {
+                        Text(
+                            stringResource(
+                                validation.promptError?.stringRes
+                                    ?: R.string.assistant_hook_prompt_description
+                            )
+                        )
+                    },
+                    isError = validation.promptError != null,
                     minLines = 6,
+                    maxLines = 10,
                 )
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(R.string.assistant_hook_allowed_tags),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        stringResource(R.string.assistant_hook_allowed_tags_description),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (tags.isEmpty()) {
-                        Text(stringResource(R.string.assistant_hook_no_tags))
-                        TextButton(onClick = { nav.navigate(Screen.SettingConversationTags) }) {
-                            Text(stringResource(R.string.conversation_tag_create_first))
-                        }
-                    } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            tags.forEach { tag ->
-                                val selected = tag.id in allowedTagIds
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        allowedTagIds = if (selected) {
-                                            allowedTagIds - tag.id
-                                        } else {
-                                            allowedTagIds + tag.id
-                                        }
-                                    },
-                                    label = { ConversationTagLabel(tag.displayName, tag.colorKey) },
-                                )
-                            }
-                        }
-                    }
-                }
+                HookEditorSectionHeader(stringResource(R.string.assistant_hook_section_action))
+            }
+            item {
+                HookActionEditor(
+                    actionConfig = actionConfig,
+                    tags = tags,
+                    error = validation.actionError,
+                    onActionConfigChange = { actionConfig = it },
+                    onCreateFirstTag = { nav.navigate(Screen.SettingConversationTags) },
+                )
             }
         }
     }
+}
+
+@Composable
+private fun HookEditorSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun HookEditorErrorText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+@Composable
+private fun HookActionEditor(
+    actionConfig: HookActionConfig,
+    tags: List<ConversationTag>,
+    error: HookEditorFieldError?,
+    onActionConfigChange: (HookActionConfig) -> Unit,
+    onCreateFirstTag: () -> Unit,
+) {
+    when (actionConfig) {
+        is HookActionConfig.AddConversationTag -> {
+            val availableTagIds = tags.mapTo(mutableSetOf()) { it.id }
+            val unavailableTagIds = actionConfig.allowedTagIds - availableTagIds
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(hookActionLabelRes(actionConfig.actionType)),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    stringResource(R.string.assistant_hook_allowed_tags_description),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (tags.isEmpty()) {
+                    Text(stringResource(R.string.assistant_hook_no_tags))
+                    TextButton(onClick = onCreateFirstTag) {
+                        Text(stringResource(R.string.conversation_tag_create_first))
+                    }
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        tags.forEach { tag ->
+                            val selected = tag.id in actionConfig.allowedTagIds
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    val currentIds = actionConfig.allowedTagIds intersect availableTagIds
+                                    val updatedIds = if (selected) currentIds - tag.id else currentIds + tag.id
+                                    onActionConfigChange(
+                                        HookActionConfig.AddConversationTag(updatedIds)
+                                    )
+                                },
+                                label = { ConversationTagLabel(tag.displayName, tag.colorKey) },
+                            )
+                        }
+                    }
+                }
+                if (unavailableTagIds.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            onActionConfigChange(
+                                HookActionConfig.AddConversationTag(
+                                    actionConfig.allowedTagIds intersect availableTagIds
+                                )
+                            )
+                        },
+                    ) {
+                        Text(stringResource(R.string.assistant_hook_remove_unavailable_tags))
+                    }
+                }
+                error?.let { HookEditorErrorText(stringResource(it.stringRes)) }
+            }
+        }
+    }
+}
+
+internal data class HookEditorValidation(
+    val nameError: HookEditorFieldError? = null,
+    val modelError: HookEditorFieldError? = null,
+    val triggerError: HookEditorFieldError? = null,
+    val promptError: HookEditorFieldError? = null,
+    val actionError: HookEditorFieldError? = null,
+) {
+    val canSave: Boolean
+        get() = nameError == null && modelError == null && triggerError == null &&
+            promptError == null && actionError == null
+}
+
+internal enum class HookEditorFieldError(val stringRes: Int) {
+    NAME_REQUIRED(R.string.assistant_hook_error_name_required),
+    MODEL_REQUIRED(R.string.assistant_hook_error_model_required),
+    TRIGGER_UNSUPPORTED(R.string.assistant_hook_error_trigger_unsupported),
+    PROMPT_REQUIRED(R.string.assistant_hook_error_prompt_required),
+    TAG_REQUIRED(R.string.assistant_hook_error_tag_required),
+    TAG_UNAVAILABLE(R.string.assistant_hook_error_tag_unavailable),
+}
+
+internal fun validateHookEditor(
+    name: String,
+    modelIsValid: Boolean,
+    trigger: HookTrigger,
+    prompt: String,
+    actionConfig: HookActionConfig,
+    availableTagIds: Set<Uuid>,
+): HookEditorValidation {
+    val actionError = when (actionConfig) {
+        is HookActionConfig.AddConversationTag -> when {
+            actionConfig.allowedTagIds.isEmpty() -> HookEditorFieldError.TAG_REQUIRED
+            !availableTagIds.containsAll(actionConfig.allowedTagIds) -> HookEditorFieldError.TAG_UNAVAILABLE
+            else -> null
+        }
+    }
+    return HookEditorValidation(
+        nameError = HookEditorFieldError.NAME_REQUIRED.takeIf { name.isBlank() },
+        modelError = HookEditorFieldError.MODEL_REQUIRED.takeUnless { modelIsValid },
+        triggerError = HookEditorFieldError.TRIGGER_UNSUPPORTED.takeUnless {
+            trigger == HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS
+        },
+        promptError = HookEditorFieldError.PROMPT_REQUIRED.takeIf { prompt.isBlank() },
+        actionError = actionError,
+    )
+}
+
+internal fun hookActionLabelRes(actionType: HookActionType): Int = when (actionType) {
+    HookActionType.ADD_CONVERSATION_TAG -> R.string.assistant_hook_action_add_tag
 }
