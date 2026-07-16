@@ -1707,4 +1707,27 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="hook_status_interrupted">Interrupted</string>
   <string name="hook_decision_apply">Apply</string>
   <string name="hook_decision_skip">Skip</string>
+  <string name="assistant_page_memory_table_disabled_global">이 어시스턴트 설정을 사용하려면 메모리 테이블을 전역으로 활성화하세요.</string>
+  <string name="assistant_tools_title">어시스턴트 도구</string>
+  <string name="assistant_tools_title_with_count">어시스턴트 도구(%1$d/%2$d)</string>
+  <string name="assistant_tools_enabled_count">%1$d/%2$d 활성화됨</string>
+  <string name="assistant_tools_tool_count">도구: %1$d</string>
+  <string name="assistant_tools_always_enabled">항상 활성화</string>
+  <string name="assistant_tools_group_conversations">대화</string>
+  <string name="assistant_tools_group_finish">완료</string>
+  <string name="assistant_tools_workspace_read_file_desc">워크스페이스 파일 읽기</string>
+  <string name="assistant_tools_workspace_write_file_desc">워크스페이스 파일 쓰기</string>
+  <string name="assistant_tools_workspace_edit_file_desc">파일 정밀 편집</string>
+  <string name="assistant_tools_workspace_shell_desc">셸 명령 실행</string>
+  <string name="assistant_tools_memory_desc">장기 기억 생성, 편집 또는 삭제</string>
+  <string name="assistant_tools_memory_table_desc">구조화된 메모리 테이블과 템플릿 읽기 및 업데이트</string>
+  <string name="assistant_tools_search_web_desc">웹 검색</string>
+  <string name="assistant_tools_scrape_web_desc">웹페이지 내용 가져오기</string>
+  <string name="assistant_tools_recent_chats_desc">최근 대화 참조</string>
+  <string name="assistant_tools_conversation_search_desc">대화 기록 검색</string>
+  <string name="assistant_tools_use_skill_desc">스킬 불러오기 및 적용</string>
+  <string name="assistant_tools_spawn_subagent_desc">하위 에이전트에 작업 위임</string>
+  <string name="assistant_tools_ask_btw_desc">하위 에이전트에게 질문</string>
+  <string name="assistant_tools_manage_subagent_profile_desc">하위 에이전트 프로필 관리</string>
+  <string name="assistant_tools_finish_work_desc">작업을 완료로 표시</string>
 </resources>

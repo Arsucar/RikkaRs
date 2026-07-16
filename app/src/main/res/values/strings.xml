@@ -1847,4 +1847,27 @@
   <string name="workspace_media_image_decode_failed">This image could not be decoded</string>
   <string name="workspace_media_no_viewer">No app can open this file</string>
   <string name="workspace_media_open_failed">Unable to open this file securely</string>
+  <string name="assistant_page_memory_table_disabled_global">Enable memory tables globally to use this assistant setting.</string>
+  <string name="assistant_tools_title">Assistant tools</string>
+  <string name="assistant_tools_title_with_count">Assistant tools (%1$d/%2$d)</string>
+  <string name="assistant_tools_enabled_count">%1$d/%2$d enabled</string>
+  <string name="assistant_tools_tool_count">Tools: %1$d</string>
+  <string name="assistant_tools_always_enabled">Always enabled</string>
+  <string name="assistant_tools_group_conversations">Conversations</string>
+  <string name="assistant_tools_group_finish">Finish</string>
+  <string name="assistant_tools_workspace_read_file_desc">Read workspace files</string>
+  <string name="assistant_tools_workspace_write_file_desc">Write workspace files</string>
+  <string name="assistant_tools_workspace_edit_file_desc">Apply precise edits to files</string>
+  <string name="assistant_tools_workspace_shell_desc">Run shell commands</string>
+  <string name="assistant_tools_memory_desc">Create, edit, or delete long-term memories</string>
+  <string name="assistant_tools_memory_table_desc">Read and update structured memory tables and templates</string>
+  <string name="assistant_tools_search_web_desc">Search the web</string>
+  <string name="assistant_tools_scrape_web_desc">Fetch webpage content</string>
+  <string name="assistant_tools_recent_chats_desc">Reference recent conversations</string>
+  <string name="assistant_tools_conversation_search_desc">Search conversation history</string>
+  <string name="assistant_tools_use_skill_desc">Load and apply skills</string>
+  <string name="assistant_tools_spawn_subagent_desc">Delegate tasks to subagents</string>
+  <string name="assistant_tools_ask_btw_desc">Ask a subagent a side question</string>
+  <string name="assistant_tools_manage_subagent_profile_desc">Manage subagent profiles</string>
+  <string name="assistant_tools_finish_work_desc">Mark the task as complete</string>
 </resources>

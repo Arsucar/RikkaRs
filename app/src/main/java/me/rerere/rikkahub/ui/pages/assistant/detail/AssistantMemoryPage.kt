@@ -106,6 +106,8 @@ fun AssistantMemoryPage(id: String) {
             memoryTableDocuments = memoryTableDocuments,
             onUpdateSettings = { vm.updateSettings(it) },
             onUpdateAssistant = { vm.update(it) },
+            onSetMemoryEnabled = { vm.setMemoryEnabled(it) },
+            onSetMemoryTableEnabled = { vm.setMemoryTableEnabled(it) },
             onDeleteMemory = { vm.deleteMemory(it) },
             onAddMemory = { vm.addMemory(it) },
             onUpdateMemory = { vm.updateMemory(it) },
@@ -127,6 +129,8 @@ private fun AssistantMemoryContent(
     memoryTableDocuments: List<MemoryTableDocument>,
     onUpdateSettings: (Settings) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
+    onSetMemoryEnabled: (Boolean) -> Unit,
+    onSetMemoryTableEnabled: (Boolean) -> Unit,
     onAddMemory: (AssistantMemory) -> Unit,
     onUpdateMemory: (AssistantMemory) -> Unit,
     onDeleteMemory: (AssistantMemory) -> Unit,
@@ -301,13 +305,7 @@ private fun AssistantMemoryContent(
                 trailingContent = {
                     Switch(
                         checked = assistant.enableMemory,
-                        onCheckedChange = {
-                            onUpdateAssistant(
-                                assistant.copy(
-                                    enableMemory = it
-                                )
-                            )
-                        }
+                        onCheckedChange = onSetMemoryEnabled,
                     )
                 }
             )
@@ -323,7 +321,6 @@ private fun AssistantMemoryContent(
                             onUpdateSettings(
                                 settings.copy(
                                     enableMemoryTable = it,
-                                    memoryTableAutoSyncEnabled = false,
                                 )
                             )
                         }
@@ -364,18 +361,21 @@ private fun AssistantMemoryContent(
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_assistant)) },
                 supportingContent = {
-                    Text(stringResource(R.string.assistant_page_memory_table_assistant_desc))
+                    Column {
+                        Text(stringResource(R.string.assistant_page_memory_table_assistant_desc))
+                        if (!settings.enableMemoryTable) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_table_disabled_global),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 },
                 trailingContent = {
                     Switch(
                         checked = assistant.enableMemoryTable,
-                        onCheckedChange = {
-                            onUpdateAssistant(
-                                assistant.copy(
-                                    enableMemoryTable = it
-                                )
-                            )
-                        },
+                        onCheckedChange = onSetMemoryTableEnabled,
                         enabled = settings.enableMemoryTable,
                     )
                 }
@@ -387,7 +387,7 @@ private fun AssistantMemoryContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = false,
+                        checked = settings.memoryTableAutoSyncEnabled,
                         onCheckedChange = {},
                         enabled = false,
                     )

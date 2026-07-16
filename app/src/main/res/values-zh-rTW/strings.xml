@@ -1688,4 +1688,27 @@
   <string name="hook_status_interrupted">Interrupted</string>
   <string name="hook_decision_apply">Apply</string>
   <string name="hook_decision_skip">Skip</string>
+  <string name="assistant_page_memory_table_disabled_global">請先在全域設定中啟用記憶表格，才能使用此助手設定。</string>
+  <string name="assistant_tools_title">賦能工具</string>
+  <string name="assistant_tools_title_with_count">賦能工具（%1$d/%2$d）</string>
+  <string name="assistant_tools_enabled_count">%1$d/%2$d 已啟用</string>
+  <string name="assistant_tools_tool_count">工具：%1$d</string>
+  <string name="assistant_tools_always_enabled">始終啟用</string>
+  <string name="assistant_tools_group_conversations">對話</string>
+  <string name="assistant_tools_group_finish">完成</string>
+  <string name="assistant_tools_workspace_read_file_desc">讀取工作區檔案</string>
+  <string name="assistant_tools_workspace_write_file_desc">寫入工作區檔案</string>
+  <string name="assistant_tools_workspace_edit_file_desc">精確編輯檔案</string>
+  <string name="assistant_tools_workspace_shell_desc">執行 shell 命令</string>
+  <string name="assistant_tools_memory_desc">建立、編輯或刪除長期記憶</string>
+  <string name="assistant_tools_memory_table_desc">讀寫結構化記憶表格與範本</string>
+  <string name="assistant_tools_search_web_desc">網路搜尋</string>
+  <string name="assistant_tools_scrape_web_desc">抓取網頁內容</string>
+  <string name="assistant_tools_recent_chats_desc">引用最近對話</string>
+  <string name="assistant_tools_conversation_search_desc">搜尋對話歷史</string>
+  <string name="assistant_tools_use_skill_desc">載入並套用技能</string>
+  <string name="assistant_tools_spawn_subagent_desc">派發子代理執行工作</string>
+  <string name="assistant_tools_ask_btw_desc">向子代理提出側邊問題</string>
+  <string name="assistant_tools_manage_subagent_profile_desc">管理子代理設定檔</string>
+  <string name="assistant_tools_finish_work_desc">標記工作完成</string>
 </resources>

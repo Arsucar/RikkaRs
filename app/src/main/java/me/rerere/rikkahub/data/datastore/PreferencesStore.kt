@@ -255,7 +255,7 @@ class SettingsStore(
                     storedValue = preferences[MEMORY_TABLE_MAX_INJECT_CHARS],
                     defaultValue = DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS,
                 ),
-                memoryTableAutoSyncEnabled = false,
+                memoryTableAutoSyncEnabled = preferences.readMemoryTableAutoSyncEnabled(),
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
                 providerTagOrder = preferences[PROVIDER_TAG_ORDER]?.let {
                     JsonInstant.decodeFromString(it)
@@ -561,7 +561,7 @@ class SettingsStore(
             preferences[MEMORY_TABLE_MAX_INJECT_CHARS] = encodeMemoryTableBudget(
                 settings.memoryTableMaxInjectChars
             )
-            preferences[MEMORY_TABLE_AUTO_SYNC_ENABLED] = false
+            preferences.writeMemoryTableAutoSyncEnabled(settings.memoryTableAutoSyncEnabled)
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
@@ -793,6 +793,13 @@ internal fun Preferences.compressionPreferences(): CompressionPreferences = Comp
     keepRecentMessages = this[SettingsStore.COMPRESS_KEEP_RECENT_MESSAGES]
         ?: DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
 )
+
+internal fun Preferences.readMemoryTableAutoSyncEnabled(): Boolean =
+    this[SettingsStore.MEMORY_TABLE_AUTO_SYNC_ENABLED] == true
+
+internal fun MutablePreferences.writeMemoryTableAutoSyncEnabled(enabled: Boolean) {
+    this[SettingsStore.MEMORY_TABLE_AUTO_SYNC_ENABLED] = enabled
+}
 
 internal fun MutablePreferences.writeCompressionPreferences(
     targetTokens: Int,

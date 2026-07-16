@@ -14,6 +14,7 @@
 | [UI Localization](./ui-localization.md) | Android UI string-resource and Simplified Chinese delivery contract |
 | [Assistant Web Search](./assistant-web-search.md) | Assistant-level search persistence, migration, request wiring, and Web API contracts |
 | [Workspace Media Preview](./workspace-media-preview.md) | Workspace file viewing, FileProvider handoff, and LINUX read-only contracts |
+| [Memory Capabilities](./memory-capabilities.md) | Independent normal-memory and memory-table persistence, runtime gates, and UI contracts |
 
 ## Pre-Development Checklist
 
@@ -23,6 +24,7 @@
 - For conversation tags or Hooks, keep relationship writes outside whole-Conversation saves and preserve the logical-turn/lease state machine.
 - For Assistant-level settings migrated from a global preference, migrate DataStore and restored backup JSON together; runtime reads must use the conversation Assistant.
 - For Workspace file actions, preserve `TextFileUtil` text/Markdown ownership, use cache + FileProvider for external viewing, and enforce LINUX read-only below the UI.
+- For memory settings, resolve normal memory and memory-table capabilities independently; never wrap table loading, injection, or tools in `Assistant.enableMemory`.
 - For every new or changed user-visible UI string, provide a string resource and a real Simplified Chinese translation before delivery.
 
 ## Quality Check
@@ -32,4 +34,5 @@
 - For app module runtime changes, run `.\gradlew :app:compileDebugKotlin --no-daemon`.
 - For Assistant search changes, run migration/backup/targeted-update tests and verify Android plus Web clients use the Assistant ID.
 - For Workspace media changes, test file classification/MIME fallback and LINUX write rejection, then run device installation when available.
+- For memory capability changes, parameterize all four normal/table combinations and verify Preview and real generation share the same prepared request path.
 - For backup XML-only changes, run `.\gradlew :app:processDebugResources --no-daemon --no-configuration-cache --console=plain`.

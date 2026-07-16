@@ -1,15 +1,43 @@
 package me.rerere.rikkahub.data.datastore
 
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MemoryTableBudgetSettingsTest {
+    @Test
+    fun memoryTableAutoSyncReadsStoredPreference() {
+        assertTrue(
+            mutablePreferencesOf(
+                SettingsStore.MEMORY_TABLE_AUTO_SYNC_ENABLED to true,
+            ).readMemoryTableAutoSyncEnabled()
+        )
+        assertFalse(
+            mutablePreferencesOf(
+                SettingsStore.MEMORY_TABLE_AUTO_SYNC_ENABLED to false,
+            ).readMemoryTableAutoSyncEnabled()
+        )
+        assertFalse(mutablePreferencesOf().readMemoryTableAutoSyncEnabled())
+    }
+
+    @Test
+    fun memoryTableAutoSyncWriterPersistsBothValues() {
+        val preferences = mutablePreferencesOf()
+
+        preferences.writeMemoryTableAutoSyncEnabled(true)
+        assertTrue(preferences.readMemoryTableAutoSyncEnabled())
+
+        preferences.writeMemoryTableAutoSyncEnabled(false)
+        assertFalse(preferences.readMemoryTableAutoSyncEnabled())
+    }
+
     @Test
     fun missingPreferenceUsesDefaultBudget() {
         assertEquals(
@@ -86,5 +114,14 @@ class MemoryTableBudgetSettingsTest {
         assertNull(decoded.memoryTableMaxInjectDocuments)
         assertNull(decoded.memoryTableMaxInjectTokens)
         assertNull(decoded.memoryTableMaxInjectChars)
+    }
+
+    @Test
+    fun memoryTableAutoSyncPreferenceSurvivesSettingsJsonRoundTrip() {
+        val original = Settings(memoryTableAutoSyncEnabled = true)
+
+        val decoded = JsonInstant.decodeFromString<Settings>(JsonInstant.encodeToString(original))
+
+        assertTrue(decoded.memoryTableAutoSyncEnabled)
     }
 }

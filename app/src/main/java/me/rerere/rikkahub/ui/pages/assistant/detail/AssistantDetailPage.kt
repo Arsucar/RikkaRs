@@ -42,6 +42,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -57,6 +58,7 @@ fun AssistantDetailPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -142,10 +144,13 @@ fun AssistantDetailPage(id: String) {
                         onClick = { navController.navigate(Screen.AssistantTools(id)) },
                         leadingContent = { Icon(HugeIcons.Tools, null) },
                         supportingContent = {
-                            val (enabled, total) = empowermentToolStats(assistant)
-                            Text("$enabled/$total 已启用")
+                            val (enabled, total) = empowermentToolStats(
+                                assistant = assistant,
+                                memoryTableGloballyEnabled = settings.enableMemoryTable,
+                            )
+                            Text(stringResource(R.string.assistant_tools_enabled_count, enabled, total))
                         },
-                        headlineContent = { Text("赋能工具") },
+                        headlineContent = { Text(stringResource(R.string.assistant_tools_title)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(

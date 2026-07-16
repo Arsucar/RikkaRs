@@ -19,7 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -31,31 +33,37 @@ import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Tick02
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
 /** 单个赋能工具（工具名 + 简述）。 */
-private data class ToolInfo(val name: String, val description: String)
+private data class ToolInfo(@StringRes val descriptionRes: Int, val name: String)
 
 /** 分类头行状态控件类型。 */
 private enum class ToolControlKind { TOGGLE, ALWAYS_ON, NAVIGATE }
 
 /** 页面渲染用的分类模型。 */
 private data class ToolGroupUi(
-    val title: String,
+    @StringRes val titleRes: Int,
     val icon: ImageVector,
     val tools: List<ToolInfo>,
     val enabled: Boolean,
+    val checked: Boolean = enabled,
+    val controlEnabled: Boolean = true,
+    val disabledReason: String? = null,
     val controlKind: ToolControlKind,
     val onToggle: ((Boolean) -> Unit)? = null,
     val badge: String? = null,
@@ -63,35 +71,35 @@ private data class ToolGroupUi(
 )
 
 private val WORKSPACE_TOOLS = listOf(
-    ToolInfo("workspace_read_file", "读取工作区文件"),
-    ToolInfo("workspace_write_file", "写入工作区文件"),
-    ToolInfo("workspace_edit_file", "精确编辑文件"),
-    ToolInfo("workspace_shell", "执行 shell 命令"),
+    ToolInfo(R.string.assistant_tools_workspace_read_file_desc, "workspace_read_file"),
+    ToolInfo(R.string.assistant_tools_workspace_write_file_desc, "workspace_write_file"),
+    ToolInfo(R.string.assistant_tools_workspace_edit_file_desc, "workspace_edit_file"),
+    ToolInfo(R.string.assistant_tools_workspace_shell_desc, "workspace_shell"),
 )
 private val MEMORY_TOOLS = listOf(
-    ToolInfo("memory_tool", "创建/编辑/删除长期记忆"),
+    ToolInfo(R.string.assistant_tools_memory_desc, "memory_tool"),
 )
 private val MEMORY_TABLE_TOOLS = listOf(
-    ToolInfo("memory_table_tool", "读写结构化记忆表格与模板"),
+    ToolInfo(R.string.assistant_tools_memory_table_desc, "memory_table_tool"),
 )
 private val SEARCH_TOOLS = listOf(
-    ToolInfo("search_web", "联网搜索"),
-    ToolInfo("scrape_web", "抓取网页内容"),
+    ToolInfo(R.string.assistant_tools_search_web_desc, "search_web"),
+    ToolInfo(R.string.assistant_tools_scrape_web_desc, "scrape_web"),
 )
 private val CONVERSATION_TOOLS = listOf(
-    ToolInfo("recent_chats", "引用最近对话"),
-    ToolInfo("conversation_search", "搜索历史对话"),
+    ToolInfo(R.string.assistant_tools_recent_chats_desc, "recent_chats"),
+    ToolInfo(R.string.assistant_tools_conversation_search_desc, "conversation_search"),
 )
 private val SKILL_TOOLS = listOf(
-    ToolInfo("use_skill", "加载并应用技能"),
+    ToolInfo(R.string.assistant_tools_use_skill_desc, "use_skill"),
 )
 private val SUBAGENT_TOOLS = listOf(
-    ToolInfo("spawn_subagent", "派发子代理执行任务"),
-    ToolInfo("ask_btw", "侧问子代理"),
-    ToolInfo("manage_subagent_profile", "管理子代理配置"),
+    ToolInfo(R.string.assistant_tools_spawn_subagent_desc, "spawn_subagent"),
+    ToolInfo(R.string.assistant_tools_ask_btw_desc, "ask_btw"),
+    ToolInfo(R.string.assistant_tools_manage_subagent_profile_desc, "manage_subagent_profile"),
 )
 private val FINISH_TOOLS = listOf(
-    ToolInfo("finish_work", "标记任务完成"),
+    ToolInfo(R.string.assistant_tools_finish_work_desc, "finish_work"),
 )
 
 private val ALL_TOOL_GROUPS = listOf(
@@ -103,17 +111,47 @@ private val ALL_TOOL_GROUPS = listOf(
  * 统计助手当前启用的赋能工具数量与总数，供助手配置页入口卡片显示 `已启用/总数`。
  * 搜索与完成工具始终启用。
  */
-fun empowermentToolStats(assistant: Assistant): Pair<Int, Int> {
+fun empowermentToolStats(
+    assistant: Assistant,
+    memoryTableGloballyEnabled: Boolean = true,
+): Pair<Int, Int> {
     val total = ALL_TOOL_GROUPS.sumOf { it.size }
     var enabled = FINISH_TOOLS.size
+    val memoryCapabilities = resolveMemoryCapabilities(
+        normalMemoryEnabled = assistant.enableMemory,
+        settingsMemoryTableEnabled = memoryTableGloballyEnabled,
+        assistantMemoryTableEnabled = assistant.enableMemoryTable,
+    )
     if (assistant.enableWebSearch) enabled += SEARCH_TOOLS.size
     if (assistant.workspaceId != null) enabled += WORKSPACE_TOOLS.size
-    if (assistant.enableMemory) enabled += MEMORY_TOOLS.size
-    if (assistant.enableMemoryTable) enabled += MEMORY_TABLE_TOOLS.size
+    if (memoryCapabilities.normalMemoryEnabled) enabled += MEMORY_TOOLS.size
+    if (memoryCapabilities.memoryTableEnabled) enabled += MEMORY_TABLE_TOOLS.size
     if (assistant.enableRecentChatsReference) enabled += CONVERSATION_TOOLS.size
     if (assistant.enabledSkills.isNotEmpty()) enabled += SKILL_TOOLS.size
     if (assistant.enableSubagents) enabled += SUBAGENT_TOOLS.size
     return enabled to total
+}
+
+internal data class MemoryTableToolUiState(
+    val checked: Boolean,
+    val active: Boolean,
+    val controlEnabled: Boolean,
+)
+
+internal fun memoryTableToolUiState(
+    memoryTableGloballyEnabled: Boolean,
+    assistantMemoryTableEnabled: Boolean,
+): MemoryTableToolUiState {
+    val capabilities = resolveMemoryCapabilities(
+        normalMemoryEnabled = false,
+        settingsMemoryTableEnabled = memoryTableGloballyEnabled,
+        assistantMemoryTableEnabled = assistantMemoryTableEnabled,
+    )
+    return MemoryTableToolUiState(
+        checked = assistantMemoryTableEnabled,
+        active = capabilities.memoryTableEnabled,
+        controlEnabled = memoryTableGloballyEnabled,
+    )
 }
 
 @Composable
@@ -126,14 +164,18 @@ fun AssistantToolsPage(id: String) {
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    val (enabled, total) = empowermentToolStats(assistant)
-                    Text("赋能工具（$enabled/$total）")
+                    val (enabled, total) = empowermentToolStats(
+                        assistant = assistant,
+                        memoryTableGloballyEnabled = settings.enableMemoryTable,
+                    )
+                    Text(stringResource(R.string.assistant_tools_title_with_count, enabled, total))
                 },
                 navigationIcon = {
                     BackButton()
@@ -150,6 +192,12 @@ fun AssistantToolsPage(id: String) {
             assistant = assistant,
             workspaces = workspaces,
             onUpdate = { vm.update(it) },
+            onSetMemoryEnabled = { vm.setMemoryEnabled(it) },
+            onSetMemoryTableEnabled = { vm.setMemoryTableEnabled(it) },
+            memoryTableGloballyEnabled = settings.enableMemoryTable,
+            memoryTableDisabledReason = stringResource(
+                R.string.assistant_page_memory_table_disabled_global
+            ),
             onNavigateSkills = { navController.navigate(Screen.AssistantInjections(id)) },
         )
     }
@@ -161,11 +209,19 @@ private fun AssistantToolsContent(
     assistant: Assistant,
     workspaces: List<WorkspaceEntity>,
     onUpdate: (Assistant) -> Unit,
+    onSetMemoryEnabled: (Boolean) -> Unit,
+    onSetMemoryTableEnabled: (Boolean) -> Unit,
+    memoryTableGloballyEnabled: Boolean,
+    memoryTableDisabledReason: String,
     onNavigateSkills: () -> Unit,
 ) {
+    val memoryTableState = memoryTableToolUiState(
+        memoryTableGloballyEnabled = memoryTableGloballyEnabled,
+        assistantMemoryTableEnabled = assistant.enableMemoryTable,
+    )
     val groups = listOf(
         ToolGroupUi(
-            title = "工作区",
+            titleRes = R.string.assistant_page_workspace,
             icon = HugeIcons.Folder01,
             tools = WORKSPACE_TOOLS,
             enabled = assistant.workspaceId != null,
@@ -181,23 +237,26 @@ private fun AssistantToolsContent(
             },
         ),
         ToolGroupUi(
-            title = "记忆",
+            titleRes = R.string.assistant_page_memory,
             icon = HugeIcons.Brain02,
             tools = MEMORY_TOOLS,
             enabled = assistant.enableMemory,
             controlKind = ToolControlKind.TOGGLE,
-            onToggle = { on -> onUpdate(assistant.copy(enableMemory = on)) },
+            onToggle = onSetMemoryEnabled,
         ),
         ToolGroupUi(
-            title = "记忆表",
+            titleRes = R.string.assistant_page_memory_table_title,
             icon = HugeIcons.Database02,
             tools = MEMORY_TABLE_TOOLS,
-            enabled = assistant.enableMemoryTable,
+            enabled = memoryTableState.active,
+            checked = memoryTableState.checked,
+            controlEnabled = memoryTableState.controlEnabled,
+            disabledReason = if (memoryTableState.controlEnabled) null else memoryTableDisabledReason,
             controlKind = ToolControlKind.TOGGLE,
-            onToggle = { on -> onUpdate(assistant.copy(enableMemoryTable = on)) },
+            onToggle = onSetMemoryTableEnabled,
         ),
         ToolGroupUi(
-            title = "搜索",
+            titleRes = R.string.common_search,
             icon = HugeIcons.Search01,
             tools = SEARCH_TOOLS,
             enabled = assistant.enableWebSearch,
@@ -205,7 +264,7 @@ private fun AssistantToolsContent(
             onToggle = { on -> onUpdate(assistant.copy(enableWebSearch = on)) },
         ),
         ToolGroupUi(
-            title = "对话",
+            titleRes = R.string.assistant_tools_group_conversations,
             icon = HugeIcons.Message02,
             tools = CONVERSATION_TOOLS,
             enabled = assistant.enableRecentChatsReference,
@@ -213,7 +272,7 @@ private fun AssistantToolsContent(
             onToggle = { on -> onUpdate(assistant.copy(enableRecentChatsReference = on)) },
         ),
         ToolGroupUi(
-            title = "技能",
+            titleRes = R.string.assistant_extensions_page_tab_skills,
             icon = HugeIcons.Puzzle,
             tools = SKILL_TOOLS,
             enabled = assistant.enabledSkills.isNotEmpty(),
@@ -222,7 +281,7 @@ private fun AssistantToolsContent(
             onNavigate = onNavigateSkills,
         ),
         ToolGroupUi(
-            title = "子代理",
+            titleRes = R.string.assistant_page_tab_subagent,
             icon = HugeIcons.Connect,
             tools = SUBAGENT_TOOLS,
             enabled = assistant.enableSubagents,
@@ -230,7 +289,7 @@ private fun AssistantToolsContent(
             onToggle = { on -> onUpdate(assistant.copy(enableSubagents = on)) },
         ),
         ToolGroupUi(
-            title = "完成",
+            titleRes = R.string.assistant_tools_group_finish,
             icon = HugeIcons.Tick02,
             tools = FINISH_TOOLS,
             enabled = true,
@@ -254,23 +313,29 @@ private fun AssistantToolsContent(
 @Composable
 private fun ToolGroupCard(group: ToolGroupUi) {
     CardGroup(
-        title = { Text(group.title) },
+        title = { Text(stringResource(group.titleRes)) },
     ) {
         // 分类头行：图标 + 名称 + 状态控件
         item(
             onClick = group.onNavigate,
             leadingContent = { Icon(group.icon, null) },
-            headlineContent = { Text(group.title) },
-            supportingContent = { Text("${group.tools.size} 个工具") },
+            headlineContent = { Text(stringResource(group.titleRes)) },
+            supportingContent = {
+                Text(
+                    group.disabledReason
+                        ?: stringResource(R.string.assistant_tools_tool_count, group.tools.size)
+                )
+            },
             trailingContent = {
                 when (group.controlKind) {
                     ToolControlKind.TOGGLE -> Switch(
-                        checked = group.enabled,
+                        checked = group.checked,
                         onCheckedChange = group.onToggle,
+                        enabled = group.controlEnabled,
                     )
 
                     ToolControlKind.ALWAYS_ON -> Tag(type = TagType.INFO) {
-                        Text("始终启用")
+                        Text(stringResource(R.string.assistant_tools_always_enabled))
                     }
 
                     ToolControlKind.NAVIGATE -> {
@@ -295,7 +360,7 @@ private fun ToolGroupCard(group: ToolGroupUi) {
                         Text(tool.name, style = MaterialTheme.typography.bodyMedium)
                     },
                     supportingContent = {
-                        Text(tool.description, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(tool.descriptionRes), style = MaterialTheme.typography.bodySmall)
                     },
                 )
             }

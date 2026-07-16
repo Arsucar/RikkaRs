@@ -122,7 +122,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.AssistantAffectScope
-import me.rerere.rikkahub.data.model.shouldEnableMemoryTable
+import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
@@ -1072,10 +1072,13 @@ class ChatService(
         val workspace = assistant.workspaceId
             ?.toString()
             ?.let { workspaceRepository.getById(it) }
-        val memoryTableEnabled = shouldEnableMemoryTable(
-            settingsEnabled = settings.enableMemoryTable,
-            assistantEnabled = assistant.enableMemoryTable,
+        val memoryCapabilities = resolveMemoryCapabilities(
+            normalMemoryEnabled = assistant.enableMemory,
+            settingsMemoryTableEnabled = settings.enableMemoryTable,
+            assistantMemoryTableEnabled = assistant.enableMemoryTable,
         )
+        val memoryPlan = memoryCapabilities.toGenerationMemoryPlan()
+        val memoryTableEnabled = memoryPlan.memoryTableTransformerEnabled
         val memoryTableTemplates = if (memoryTableEnabled) {
             memoryTableRepository.getEffectiveTemplates(assistant.id.toString())
         } else {
@@ -1129,12 +1132,14 @@ class ChatService(
             assistant = assistant,
             model = model,
             conversation = conversation,
-            memoryTableEnabled = memoryTableEnabled,
+            memoryTableEnabled = memoryPlan.memoryTableToolsEnabled,
             effectiveWorkspaceCwd = effectiveWorkspaceCwd,
             workspace = workspace,
             mode = mode,
         )
-        val memories = memoryRepository.getEffectiveMemories(assistant.id.toString())
+        val memories = memoryPlan.readOrdinaryMemories {
+            memoryRepository.getEffectiveMemories(assistant.id.toString())
+        }
         val providerInput = if (hasResumablePendingTool) {
             // The send loop must execute the approved/denied/answered tool first. Its output changes
             // the next provider input, so preparing/transformation here would be both stale and unsafe.

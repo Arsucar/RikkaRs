@@ -204,6 +204,26 @@ class AssistantDetailVM(
         }
     }
 
+    fun setMemoryEnabled(enabled: Boolean) {
+        updateMemoryCapabilities { assistant -> assistant.copy(enableMemory = enabled) }
+    }
+
+    fun setMemoryTableEnabled(enabled: Boolean) {
+        updateMemoryCapabilities { assistant -> assistant.copy(enableMemoryTable = enabled) }
+    }
+
+    private fun updateMemoryCapabilities(transform: (Assistant) -> Assistant) {
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(
+                    assistants = settings.assistants.map { assistant ->
+                        if (assistant.id == assistantId) transform(assistant) else assistant
+                    }
+                )
+            }
+        }
+    }
+
     fun reloadSkills() {
         viewModelScope.launch(Dispatchers.IO) {
             loadSkillsNow()

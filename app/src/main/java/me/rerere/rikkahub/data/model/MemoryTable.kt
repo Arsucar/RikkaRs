@@ -91,9 +91,26 @@ fun MemoryTableTemplate.isEffectiveFor(assistantId: String): Boolean =
         assistantId = assistantId,
     )
 
-fun shouldEnableMemoryTable(settingsEnabled: Boolean, assistantEnabled: Boolean): Boolean {
-    return settingsEnabled && assistantEnabled
-}
+data class MemoryCapabilities(
+    val normalMemoryEnabled: Boolean,
+    val memoryTableEnabled: Boolean,
+)
+
+fun resolveMemoryCapabilities(
+    normalMemoryEnabled: Boolean,
+    settingsMemoryTableEnabled: Boolean,
+    assistantMemoryTableEnabled: Boolean,
+): MemoryCapabilities = MemoryCapabilities(
+    normalMemoryEnabled = normalMemoryEnabled,
+    memoryTableEnabled = settingsMemoryTableEnabled && assistantMemoryTableEnabled,
+)
+
+fun shouldEnableMemoryTable(settingsEnabled: Boolean, assistantEnabled: Boolean): Boolean =
+    resolveMemoryCapabilities(
+        normalMemoryEnabled = false,
+        settingsMemoryTableEnabled = settingsEnabled,
+        assistantMemoryTableEnabled = assistantEnabled,
+    ).memoryTableEnabled
 
 fun normalizeMemoryTableSchemaJson(schemaJson: String): String =
     schemaJson.trim().ifBlank { DEFAULT_MEMORY_TABLE_SCHEMA_JSON.trimIndent() }

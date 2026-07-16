@@ -8,6 +8,36 @@ import org.junit.Test
 
 class MemoryTableTest {
     @Test
+    fun memoryCapabilitiesKeepNormalMemoryAndMemoryTablesIndependent() {
+        val combinations = listOf(
+            Triple(false, false, MemoryCapabilities(false, false)),
+            Triple(true, false, MemoryCapabilities(true, false)),
+            Triple(false, true, MemoryCapabilities(false, true)),
+            Triple(true, true, MemoryCapabilities(true, true)),
+        )
+
+        combinations.forEach { (normalEnabled, tableEnabled, expected) ->
+            assertEquals(
+                expected,
+                resolveMemoryCapabilities(
+                    normalMemoryEnabled = normalEnabled,
+                    settingsMemoryTableEnabled = tableEnabled,
+                    assistantMemoryTableEnabled = tableEnabled,
+                )
+            )
+        }
+
+        assertEquals(
+            MemoryCapabilities(normalMemoryEnabled = false, memoryTableEnabled = false),
+            resolveMemoryCapabilities(
+                normalMemoryEnabled = false,
+                settingsMemoryTableEnabled = false,
+                assistantMemoryTableEnabled = true,
+            )
+        )
+    }
+
+    @Test
     fun memoryTableRequiresGlobalAndAssistantGate() {
         assertFalse(shouldEnableMemoryTable(settingsEnabled = false, assistantEnabled = false))
         assertFalse(shouldEnableMemoryTable(settingsEnabled = true, assistantEnabled = false))
