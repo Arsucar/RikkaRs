@@ -409,12 +409,6 @@ class ChatVM(
         }
     }
 
-    fun archiveConversation(conversation: Conversation) {
-        viewModelScope.launch {
-            conversationRepo.archiveConversation(conversation.id)
-        }
-    }
-
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
             // #89: 下沉到 ChatService，内部改 assistantId+folderId 并重绑 followSource 的对话级记忆文档。

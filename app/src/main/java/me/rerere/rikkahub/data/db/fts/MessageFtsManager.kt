@@ -65,19 +65,7 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun search(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ): List<MessageSearchResult> = searchWithArchiveFilter(keyword, sort, archivedOnly = false)
-
-    suspend fun searchArchived(
-        keyword: String,
-        sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ): List<MessageSearchResult> = searchWithArchiveFilter(keyword, sort, archivedOnly = true)
-
-    private suspend fun searchWithArchiveFilter(
-        keyword: String,
-        sort: MessageSearchSort,
-        archivedOnly: Boolean,
     ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
-        val archiveClause = if (archivedOnly) "c.is_archived = 1" else "c.is_archived = 0"
         val results = mutableListOf<MessageSearchResult>()
         val cursor = db.query(
             """
@@ -85,13 +73,13 @@ class MessageFtsManager(private val database: AppDatabase) {
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts m
             INNER JOIN conversationentity c ON c.id = m.conversation_id
-            WHERE m.text MATCH jieba_query(?) AND $archiveClause
+            WHERE m.text MATCH jieba_query(?)
             ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
             arrayOf(keyword)
         )
-        Log.i(TAG, "search (archivedOnly=$archivedOnly): $keyword")
+        Log.i(TAG, "search: $keyword")
         cursor.use {
             while (it.moveToNext()) {
                 results.add(

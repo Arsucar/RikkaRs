@@ -32,10 +32,6 @@ data class ConversationEntity(
     val lorebookIds: String = "[]",
     @ColumnInfo("workspace_cwd", defaultValue = "")
     val workspaceCwd: String = "",
-    @ColumnInfo("is_archived", defaultValue = "0")
-    val isArchived: Boolean = false,
-    @ColumnInfo("archived_at", defaultValue = "0")
-    val archivedAt: Long = 0,
     @ColumnInfo("folder_id", defaultValue = "")
     val folderId: String = "",
     @ColumnInfo("memory_table_isolation", defaultValue = "0")

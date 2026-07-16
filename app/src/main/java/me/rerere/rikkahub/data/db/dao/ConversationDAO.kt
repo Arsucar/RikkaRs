@@ -18,62 +18,45 @@ interface ConversationDAO {
     @RawQuery(observedEntities = [ConversationEntity::class, ConversationTagCrossRef::class])
     fun getConversationsPaging(query: SupportSQLiteQuery): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT * FROM conversationentity ORDER BY is_pinned DESC, update_at DESC")
     fun getAll(): Flow<List<ConversationEntity>>
 
-    @Query("SELECT * FROM conversationentity WHERE is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT * FROM conversationentity ORDER BY is_pinned DESC, update_at DESC")
     fun getAllPaging(): PagingSource<Int, ConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId ORDER BY is_pinned DESC, update_at DESC")
     fun getConversationsOfAssistant(assistantId: String): Flow<List<ConversationEntity>>
 
     @Query(
         "SELECT id FROM conversationentity " +
-            "WHERE assistant_id = :assistantId AND is_archived = 0 " +
+            "WHERE assistant_id = :assistantId " +
             "ORDER BY update_at DESC LIMIT 1"
     )
     suspend fun getLatestActiveConversationIdOfAssistant(assistantId: String): String?
 
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId ORDER BY is_pinned DESC, update_at DESC")
     fun getConversationsOfAssistantPaging(assistantId: String): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 AND folder_id = '' ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND folder_id = '' ORDER BY is_pinned DESC, update_at DESC")
     fun getUnfiledConversationsOfAssistantPaging(assistantId: String): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE folder_id = :folderId AND is_archived = 0 ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE folder_id = :folderId ORDER BY is_pinned DESC, update_at DESC")
     fun getConversationsOfFolderPaging(folderId: String): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 ORDER BY is_pinned DESC, update_at DESC LIMIT :limit")
+    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId ORDER BY is_pinned DESC, update_at DESC LIMIT :limit")
     suspend fun getRecentConversationsOfAssistant(assistantId: String, limit: Int): List<ConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE is_archived = 0 AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT * FROM conversationentity WHERE title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversations(searchText: String): Flow<List<ConversationEntity>>
 
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE is_archived = 0 AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsPaging(searchText: String): PagingSource<Int, LightConversationEntity>
 
-    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsOfAssistant(assistantId: String, searchText: String): Flow<List<ConversationEntity>>
 
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 0 AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
+    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsOfAssistantPaging(assistantId: String, searchText: String): PagingSource<Int, LightConversationEntity>
-
-    @Query("SELECT * FROM conversationentity WHERE is_archived = 1 ORDER BY archived_at DESC")
-    fun getArchivedConversations(): Flow<List<ConversationEntity>>
-
-    @Query("SELECT COUNT(*) FROM conversationentity WHERE is_archived = 1")
-    fun getArchivedCount(): Flow<Int>
-
-    @Query(
-        "SELECT * FROM conversationentity WHERE is_archived = 1 AND title LIKE '%' || :query || '%' ORDER BY archived_at DESC"
-    )
-    fun searchArchivedConversations(query: String): Flow<List<ConversationEntity>>
-
-    @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY archived_at DESC")
-    fun getArchivedConversationsOfAssistant(assistantId: String): Flow<List<ConversationEntity>>
-
-    @Query("SELECT id, assistant_id as assistantId, chat_model_id as chatModelId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND is_archived = 1 ORDER BY archived_at DESC")
-    fun getArchivedConversationsOfAssistantPaging(assistantId: String): PagingSource<Int, LightConversationEntity>
 
     @Query("SELECT * FROM conversationentity WHERE id = :id")
     fun getConversationFlowById(id: String): Flow<ConversationEntity?>
@@ -105,20 +88,11 @@ interface ConversationDAO {
     @Query("DELETE FROM conversationentity")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM conversationentity WHERE is_pinned = 1 AND is_archived = 0 ORDER BY update_at DESC")
+    @Query("SELECT * FROM conversationentity WHERE is_pinned = 1 ORDER BY update_at DESC")
     fun getPinnedConversations(): Flow<List<ConversationEntity>>
 
     @Query("UPDATE conversationentity SET is_pinned = :isPinned WHERE id = :id")
     suspend fun updatePinStatus(id: String, isPinned: Boolean)
-
-    @Query("UPDATE conversationentity SET is_archived = :archived, archived_at = :archivedAt WHERE id = :id")
-    suspend fun updateArchiveStatus(id: String, archived: Boolean, archivedAt: Long)
-
-    @Query("UPDATE conversationentity SET is_archived = 0, archived_at = 0 WHERE is_archived = 1")
-    suspend fun unarchiveAll()
-
-    @Query("SELECT id FROM conversationentity WHERE is_archived = 1")
-    suspend fun getArchivedConversationIds(): List<String>
 
     @Query("UPDATE conversationentity SET folder_id = :folderId WHERE id = :id")
     suspend fun updateFolderId(id: String, folderId: String)
@@ -126,14 +100,14 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId")
     suspend fun clearFolder(folderId: String)
 
-    @Query("SELECT COUNT(*) FROM conversationentity WHERE is_archived = 0")
+    @Query("SELECT COUNT(*) FROM conversationentity")
     suspend fun countAll(): Int
 
     @Query(
         "SELECT strftime('%Y-%m-%d', create_at/1000, 'unixepoch', 'localtime') AS day, " +
             "COUNT(*) AS count " +
             "FROM conversationentity " +
-            "WHERE create_at >= :startMillis AND is_archived = 0 " +
+            "WHERE create_at >= :startMillis " +
             "GROUP BY day"
     )
     suspend fun getConversationCountPerDay(startMillis: Long): List<ConversationDayCount>

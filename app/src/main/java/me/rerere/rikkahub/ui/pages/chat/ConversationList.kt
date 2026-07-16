@@ -7,7 +7,6 @@ import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Tags
-import me.rerere.hugeicons.stroke.Archive
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.LocalIndication
@@ -89,7 +88,6 @@ fun ColumnScope.ConversationList(
     onRegenerateTitle: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {},
-    onArchive: (Conversation) -> Unit = {},
     onMoveToFolder: (Conversation) -> Unit = {},
     onManageTags: (Conversation) -> Unit = {},
 ) {
@@ -168,7 +166,6 @@ fun ColumnScope.ConversationList(
                         onRegenerateTitle = onRegenerateTitle,
                         onPin = onPin,
                         onMoveToAssistant = onMoveToAssistant,
-                        onArchive = onArchive,
                         onMoveToFolder = onMoveToFolder,
                         onManageTags = onManageTags,
                         modifier = Modifier.animateItem()
@@ -242,7 +239,6 @@ private fun ConversationItem(
     onRegenerateTitle: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {},
-    onArchive: (Conversation) -> Unit = {},
     onMoveToFolder: (Conversation) -> Unit = {},
     onManageTags: (Conversation) -> Unit = {},
     onClick: (Conversation) -> Unit
@@ -379,19 +375,6 @@ private fun ConversationItem(
                     },
                     leadingIcon = {
                         Icon(HugeIcons.Forward02, null)
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(stringResource(R.string.conversation_archive))
-                    },
-                    onClick = {
-                        onArchive(conversation)
-                        showDropdownMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(HugeIcons.Archive, null)
                     }
                 )
 

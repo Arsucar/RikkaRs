@@ -330,23 +330,13 @@ class ConversationRepository(
     }
 
     suspend fun updateConversation(conversation: Conversation) {
-        val existing = getConversationById(conversation.id)
-        val toPersist = if (
-            existing != null &&
-            existing.isArchived &&
-            existing.messageNodes != conversation.messageNodes
-        ) {
-            conversation.copy(isArchived = false, archivedAt = null)
-        } else {
-            conversation
-        }
         database.withTransaction {
             conversationDAO.update(
-                conversationToConversationEntity(toPersist)
+                conversationToConversationEntity(conversation)
             )
-            syncMessageNodes(toPersist.id.toString(), toPersist.messageNodes)
+            syncMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
-        messageFtsManager.indexConversation(toPersist)
+        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -370,11 +360,6 @@ class ConversationRepository(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
     ) = messageFtsManager.search(keyword, sort)
-
-    suspend fun searchArchivedMessages(
-        keyword: String,
-        sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ) = messageFtsManager.searchArchived(keyword, sort)
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
@@ -407,8 +392,6 @@ class ConversationRepository(
             chatModelId = conversation.chatModelId?.toString() ?: "",
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned,
-            isArchived = conversation.isArchived,
-            archivedAt = conversation.archivedAt?.toEpochMilli() ?: 0L,
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
@@ -432,8 +415,6 @@ class ConversationRepository(
             chatModelId = conversationEntity.chatModelId.ifEmpty { null }?.let { Uuid.parse(it) },
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
-            isArchived = conversationEntity.isArchived,
-            archivedAt = conversationEntity.archivedAt.takeIf { it != 0L }?.let { Instant.ofEpochMilli(it) },
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             modeInjectionIds = JsonInstant.decodeFromString(conversationEntity.modeInjectionIds),
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
@@ -458,91 +439,6 @@ class ConversationRepository(
             id = conversationId.toString(),
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
         )
-    }
-
-    suspend fun updateArchiveStatus(conversationId: Uuid, archived: Boolean) {
-        val archivedAt = if (archived) System.currentTimeMillis() else 0L
-        conversationDAO.updateArchiveStatus(
-            id = conversationId.toString(),
-            archived = archived,
-            archivedAt = archivedAt,
-        )
-    }
-
-    suspend fun archiveConversation(id: Uuid) {
-        conversationDAO.updateArchiveStatus(
-            id = id.toString(),
-            archived = true,
-            archivedAt = System.currentTimeMillis(),
-        )
-    }
-
-    suspend fun unarchiveConversation(id: Uuid) {
-        conversationDAO.updateArchiveStatus(
-            id = id.toString(),
-            archived = false,
-            archivedAt = 0L,
-        )
-    }
-
-    suspend fun unarchiveAll() {
-        conversationDAO.unarchiveAll()
-    }
-
-    suspend fun deleteAllArchived() {
-        val ids = conversationDAO.getArchivedConversationIds()
-        ids.forEach { id ->
-            val uuid = Uuid.parse(id)
-            val conversation = getConversationById(uuid) ?: return@forEach
-            deleteConversation(conversation)
-        }
-    }
-
-    fun getArchivedConversations(): Flow<List<Conversation>> {
-        return conversationDAO
-            .getArchivedConversations()
-            .map { flow ->
-                flow.map { entity ->
-                    conversationEntityToConversation(entity, emptyList())
-                }
-            }
-    }
-
-    fun getArchivedCount(): Flow<Int> = conversationDAO.getArchivedCount()
-
-    fun searchArchivedConversations(query: String): Flow<List<Conversation>> {
-        return conversationDAO
-            .searchArchivedConversations(query)
-            .map { flow ->
-                flow.map { entity ->
-                    conversationEntityToConversation(entity, emptyList())
-                }
-            }
-    }
-
-    fun getArchivedConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
-        return conversationDAO
-            .getArchivedConversationsOfAssistant(assistantId.toString())
-            .map { flow ->
-                flow.map { entity ->
-                    conversationEntityToConversation(entity, emptyList())
-                }
-            }
-    }
-
-    fun getArchivedConversationsOfAssistantPaging(assistantId: Uuid): Flow<PagingData<Conversation>> = Pager(
-        config = PagingConfig(
-            pageSize = PAGE_SIZE,
-            initialLoadSize = INITIAL_LOAD_SIZE,
-            enablePlaceholders = false,
-        ),
-        pagingSourceFactory = {
-            conversationDAO.getArchivedConversationsOfAssistantPaging(assistantId.toString())
-        },
-    ).flow.map { pagingData ->
-        pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
-        }
     }
 
     /**
@@ -698,7 +594,6 @@ data class ConversationFilter(
     val assistantId: Uuid? = null,
     val folderId: Uuid? = null,
     val unfiledOnly: Boolean = false,
-    val archived: Boolean = false,
     val searchText: String = "",
     val tagIds: Set<Uuid> = emptySet(),
 ) {
@@ -710,8 +605,8 @@ data class ConversationFilter(
 }
 
 internal fun buildConversationFilterQuery(filter: ConversationFilter): SimpleSQLiteQuery {
-    val conditions = mutableListOf("c.is_archived = ?")
-    val arguments = mutableListOf<Any>(if (filter.archived) 1 else 0)
+    val conditions = mutableListOf<String>()
+    val arguments = mutableListOf<Any>()
 
     filter.assistantId?.let { assistantId ->
         conditions += "c.assistant_id = ?"
@@ -738,11 +633,7 @@ internal fun buildConversationFilterQuery(filter: ConversationFilter): SimpleSQL
         arguments.addAll(tagIds)
     }
 
-    val orderBy = if (filter.archived) {
-        "c.archived_at DESC, c.id DESC"
-    } else {
-        "c.is_pinned DESC, c.update_at DESC, c.id DESC"
-    }
+    val orderBy = "c.is_pinned DESC, c.update_at DESC, c.id DESC"
     val sql =
         """
         SELECT
@@ -755,7 +646,7 @@ internal fun buildConversationFilterQuery(filter: ConversationFilter): SimpleSQL
             c.update_at AS updateAt,
             c.folder_id AS folderId
         FROM ConversationEntity AS c
-        WHERE ${conditions.joinToString(" AND ")}
+        ${if (conditions.isEmpty()) "" else "WHERE ${conditions.joinToString(" AND ")}"}
         ORDER BY $orderBy
         """.trimIndent()
     return SimpleSQLiteQuery(sql, arguments.toTypedArray())

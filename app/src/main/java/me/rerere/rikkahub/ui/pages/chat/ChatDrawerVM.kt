@@ -91,7 +91,6 @@ class ChatDrawerVM(
                 assistantId = assistantId,
                 folderId = folderId,
                 unfiledOnly = folderId == null,
-                archived = false,
                 tagIds = tagIds,
             )
         }
@@ -150,9 +149,6 @@ class ChatDrawerVM(
                     }
             }
             .cachedIn(viewModelScope)
-
-    val archivedCount = conversationRepo.getArchivedCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val scrollIndex: Int get() = savedStateHandle["scrollIndex"] ?: 0
     val scrollOffset: Int get() = savedStateHandle["scrollOffset"] ?: 0

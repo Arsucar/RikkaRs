@@ -20,8 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -57,7 +55,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Archive
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
@@ -255,12 +252,7 @@ fun ChatDrawerContent(
                 }
             }
 
-            val archivedCount by drawerVm.archivedCount.collectAsStateWithLifecycle()
-
-            DrawerActions(
-                navController = navController,
-                archivedCount = archivedCount,
-            )
+            DrawerActions(navController = navController)
 
             FolderBar(
                 folders = folders,
@@ -308,10 +300,6 @@ fun ChatDrawerContent(
                 onMoveToAssistant = {
                     conversationToMove = it
                     showMoveToAssistantSheet = true
-                },
-                onArchive = {
-                    vm.archiveConversation(it)
-                    conversations.refresh()
                 },
                 onMoveToFolder = {
                     conversationToMoveFolder = it
@@ -866,39 +854,23 @@ private fun ConversationTagSelectionSheet(
 @Composable
 private fun DrawerActions(
     navController: Navigator,
-    archivedCount: Int,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            DrawerActionTile(
-                modifier = Modifier.weight(1f),
-                onClick = { navController.navigate(Screen.MessageSearch) },
-                icon = HugeIcons.Search01,
-                text = stringResource(R.string.chat_page_search_chats),
-            )
-            DrawerActionTile(
-                modifier = Modifier.weight(1f),
-                onClick = { navController.navigate(Screen.History) },
-                icon = HugeIcons.TransactionHistory,
-                text = stringResource(R.string.chat_page_history),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            DrawerActionTile(
-                modifier = Modifier.weight(1f),
-                onClick = { navController.navigate(Screen.Archive) },
-                icon = HugeIcons.Archive,
-                text = stringResource(R.string.archive_title),
-                badgeCount = archivedCount,
-            )
-            Spacer(Modifier.weight(1f))
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DrawerActionTile(
+            modifier = Modifier.weight(1f),
+            onClick = { navController.navigate(Screen.MessageSearch) },
+            icon = HugeIcons.Search01,
+            text = stringResource(R.string.chat_page_search_chats),
+        )
+        DrawerActionTile(
+            modifier = Modifier.weight(1f),
+            onClick = { navController.navigate(Screen.History) },
+            icon = HugeIcons.TransactionHistory,
+            text = stringResource(R.string.chat_page_history),
+        )
     }
 }
 
@@ -908,41 +880,33 @@ private fun DrawerActionTile(
     icon: ImageVector,
     text: String,
     modifier: Modifier = Modifier,
-    badgeCount: Int = 0,
 ) {
-    BadgedBox(
-        modifier = modifier.padding(horizontal = 4.dp),
-        badge = {
-            if (badgeCount > 0) {
-                Badge { Text(badgeCount.toString()) }
-            }
-        },
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .padding(horizontal = 4.dp)
+            .fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
