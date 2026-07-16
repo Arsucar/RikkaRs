@@ -1,0 +1,3 @@
+{"file":".trellis/spec/app/conversation-tags-and-hooks.md","reason":"Verify UI changes do not alter Hook execution semantics or serialized contracts."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Audit click/switch gesture ownership and derived validation state."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Verify resource and Simplified Chinese coverage."}

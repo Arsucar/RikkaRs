@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.ConversationHook
 import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -392,6 +393,68 @@ class AssistantDetailVM(
         }
     }
 
+    fun createMemoryTableDocument(
+        template: MemoryTableTemplate,
+        onDone: (Result<MemoryTableDocument>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            onDone(
+                runCatching {
+                    persistMemoryTableCreation(
+                        template = template,
+                        persistTemplate = null,
+                        persistDocument = { persistedTemplate ->
+                            memoryTableRepository.upsertDocument(
+                                MemoryTableDocument(
+                                    templateId = persistedTemplate.id,
+                                    scopeType = MemoryTableScopeType.ASSISTANT,
+                                    scopeId = assistantId.toString(),
+                                ),
+                                actorAssistantId = assistantId.toString(),
+                            )
+                        },
+                    )
+                }
+            )
+        }
+    }
+
+    fun createMemoryTableTemplateAndDocument(
+        template: MemoryTableTemplate,
+        scopeType: MemoryTableScopeType,
+        onDone: (Result<MemoryTableDocument>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            onDone(
+                runCatching {
+                    persistMemoryTableCreation(
+                        template = template.copy(scopeType = scopeType),
+                        persistTemplate = { draft ->
+                            if (scopeType == MemoryTableScopeType.GLOBAL) {
+                                memoryTableRepository.upsertTemplate(draft)
+                            } else {
+                                memoryTableRepository.upsertTemplate(
+                                    draft,
+                                    actorAssistantId = assistantId.toString(),
+                                )
+                            }
+                        },
+                        persistDocument = { persistedTemplate ->
+                            memoryTableRepository.upsertDocument(
+                                MemoryTableDocument(
+                                    templateId = persistedTemplate.id,
+                                    scopeType = MemoryTableScopeType.ASSISTANT,
+                                    scopeId = assistantId.toString(),
+                                ),
+                                actorAssistantId = assistantId.toString(),
+                            )
+                        },
+                    )
+                }
+            )
+        }
+    }
+
     fun deleteMemoryTableTemplate(template: MemoryTableTemplate) {
         viewModelScope.launch {
             memoryTableRepository.deleteTemplate(template.id, actorAssistantId = assistantId.toString())
@@ -445,4 +508,13 @@ class AssistantDetailVM(
             }
         }
     }
+}
+
+internal suspend fun persistMemoryTableCreation(
+    template: MemoryTableTemplate,
+    persistTemplate: (suspend (MemoryTableTemplate) -> MemoryTableTemplate)?,
+    persistDocument: suspend (MemoryTableTemplate) -> MemoryTableDocument,
+): MemoryTableDocument {
+    val persistedTemplate = persistTemplate?.invoke(template) ?: template
+    return persistDocument(persistedTemplate)
 }

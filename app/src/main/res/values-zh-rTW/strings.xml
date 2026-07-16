@@ -1711,4 +1711,12 @@
   <string name="assistant_tools_ask_btw_desc">向子代理提出側邊問題</string>
   <string name="assistant_tools_manage_subagent_profile_desc">管理子代理設定檔</string>
   <string name="assistant_tools_finish_work_desc">標記工作完成</string>
+  <string name="assistant_page_memory_table_no_documents">尚無記憶表格文件。</string>
+  <string name="assistant_page_memory_table_add_title">新增記憶表格</string>
+  <string name="assistant_page_memory_table_choose_template">選擇現有範本</string>
+  <string name="assistant_page_memory_table_create_template">或建立新範本</string>
+  <string name="assistant_page_memory_table_create_private">建立私有範本</string>
+  <string name="assistant_page_memory_table_create_global">建立全域範本</string>
+  <string name="assistant_page_memory_table_create_failed">無法建立記憶表格，請再試一次。</string>
+  <string name="assistant_page_memory_table_scope_conversation">對話</string>
 </resources>

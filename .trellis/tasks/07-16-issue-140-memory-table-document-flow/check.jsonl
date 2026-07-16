@@ -1,0 +1,3 @@
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Check list projection and persistence changes do not couple normal memory and table capability flags."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Review state/event ordering and remembered Compose dependencies."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Audit all new user-visible strings and translations."}

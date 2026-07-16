@@ -1730,4 +1730,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_tools_ask_btw_desc">サブエージェントに質問</string>
   <string name="assistant_tools_manage_subagent_profile_desc">サブエージェントのプロファイルを管理</string>
   <string name="assistant_tools_finish_work_desc">作業を完了としてマーク</string>
+  <string name="assistant_page_memory_table_no_documents">メモリーテーブル文書はまだありません。</string>
+  <string name="assistant_page_memory_table_add_title">メモリーテーブルを追加</string>
+  <string name="assistant_page_memory_table_choose_template">既存のテンプレートを選択</string>
+  <string name="assistant_page_memory_table_create_template">または新しいテンプレートを作成</string>
+  <string name="assistant_page_memory_table_create_private">プライベートを作成</string>
+  <string name="assistant_page_memory_table_create_global">グローバルを作成</string>
+  <string name="assistant_page_memory_table_create_failed">メモリーテーブルを作成できませんでした。もう一度お試しください。</string>
+  <string name="assistant_page_memory_table_scope_conversation">会話</string>
 </resources>

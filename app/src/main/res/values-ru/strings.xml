@@ -1730,4 +1730,12 @@
   <string name="assistant_tools_ask_btw_desc">Задать субагенту дополнительный вопрос</string>
   <string name="assistant_tools_manage_subagent_profile_desc">Управлять профилями субагентов</string>
   <string name="assistant_tools_finish_work_desc">Отметить задачу выполненной</string>
+  <string name="assistant_page_memory_table_no_documents">Документов таблиц памяти пока нет.</string>
+  <string name="assistant_page_memory_table_add_title">Добавить таблицу памяти</string>
+  <string name="assistant_page_memory_table_choose_template">Выберите существующий шаблон</string>
+  <string name="assistant_page_memory_table_create_template">Или создайте новый шаблон</string>
+  <string name="assistant_page_memory_table_create_private">Создать личный</string>
+  <string name="assistant_page_memory_table_create_global">Создать глобальный</string>
+  <string name="assistant_page_memory_table_create_failed">Не удалось создать таблицу памяти. Повторите попытку.</string>
+  <string name="assistant_page_memory_table_scope_conversation">Диалог</string>
 </resources>

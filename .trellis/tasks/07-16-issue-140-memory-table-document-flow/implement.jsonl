@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Memory-table persistence and UI must preserve independent capability and repository contracts."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Compose state, remember keys, and coroutine success-before-navigation patterns apply."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"New memory-page strings require resource and Simplified Chinese coverage."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The flow crosses Compose, VM, repository, and route boundaries."}

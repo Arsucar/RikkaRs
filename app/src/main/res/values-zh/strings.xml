@@ -1819,6 +1819,14 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_media_no_viewer">没有应用可以打开此文件</string>
   <string name="workspace_media_open_failed">无法安全地打开此文件</string>
   <string name="assistant_page_memory_table_disabled_global">请先在全局设置中启用记忆表格，才能使用此助手设置。</string>
+  <string name="assistant_page_memory_table_no_documents">暂无记忆表格文档。</string>
+  <string name="assistant_page_memory_table_add_title">新增记忆表格</string>
+  <string name="assistant_page_memory_table_choose_template">选择已有模板</string>
+  <string name="assistant_page_memory_table_create_template">或创建新模板</string>
+  <string name="assistant_page_memory_table_create_private">创建私有模板</string>
+  <string name="assistant_page_memory_table_create_global">创建全局模板</string>
+  <string name="assistant_page_memory_table_create_failed">无法创建记忆表格，请重试。</string>
+  <string name="assistant_page_memory_table_scope_conversation">会话</string>
   <string name="assistant_tools_title">赋能工具</string>
   <string name="assistant_tools_title_with_count">赋能工具（%1$d/%2$d）</string>
   <string name="assistant_tools_enabled_count">%1$d/%2$d 已启用</string>

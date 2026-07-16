@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"Verify app-layer quality checklist and compile expectations."}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Check memory capability independence and table behavior."}
+{"file":".trellis/spec/app/conversation-tags-and-hooks.md","reason":"Check Hook contracts remain unchanged."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Audit resource and Simplified Chinese coverage."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Review Compose state and coroutine race hazards."}

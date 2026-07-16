@@ -9,8 +9,64 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class AssistantMemoryTableScopeTest {
+    @Test
+    fun creationPersistsTemplateBeforeDocument() = runBlocking {
+        val events = mutableListOf<String>()
+        val draft = MemoryTableTemplate(id = "draft")
+
+        val document = persistMemoryTableCreation(
+            template = draft,
+            persistTemplate = {
+                events += "template"
+                it.copy(id = "persisted")
+            },
+            persistDocument = {
+                events += "document:${it.id}"
+                MemoryTableDocument(templateId = it.id, scopeId = "assistant")
+            },
+        )
+
+        assertEquals(listOf("template", "document:persisted"), events)
+        assertEquals("persisted", document.templateId)
+    }
+
+    @Test
+    fun templateFailurePreventsDocumentPersistence() = runBlocking {
+        var documentPersisted = false
+
+        val result = runCatching {
+            persistMemoryTableCreation(
+                template = MemoryTableTemplate(),
+                persistTemplate = { error("template failed") },
+                persistDocument = {
+                    documentPersisted = true
+                    MemoryTableDocument(templateId = it.id, scopeId = "assistant")
+                },
+            )
+        }
+
+        assertTrue(result.isFailure)
+        assertFalse(documentPersisted)
+    }
+
+    @Test
+    fun existingTemplateStillWaitsForDocumentPersistence() = runBlocking {
+        val template = MemoryTableTemplate(id = "effective")
+
+        val result = runCatching {
+            persistMemoryTableCreation(
+                template = template,
+                persistTemplate = null,
+                persistDocument = { error("document failed") },
+            )
+        }
+
+        assertTrue(result.isFailure)
+    }
+
     @Test
     fun editorWaitsForTemplateLookupBeforeClosing() {
         val template = MemoryTableTemplate(

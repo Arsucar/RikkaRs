@@ -1859,4 +1859,12 @@
   <string name="assistant_tools_ask_btw_desc">Ask a subagent a side question</string>
   <string name="assistant_tools_manage_subagent_profile_desc">Manage subagent profiles</string>
   <string name="assistant_tools_finish_work_desc">Mark the task as complete</string>
+  <string name="assistant_page_memory_table_no_documents">No memory table documents yet.</string>
+  <string name="assistant_page_memory_table_add_title">Add memory table</string>
+  <string name="assistant_page_memory_table_choose_template">Choose an existing template</string>
+  <string name="assistant_page_memory_table_create_template">Or create a new template</string>
+  <string name="assistant_page_memory_table_create_private">Create private</string>
+  <string name="assistant_page_memory_table_create_global">Create global</string>
+  <string name="assistant_page_memory_table_create_failed">Could not create the memory table. Try again.</string>
+  <string name="assistant_page_memory_table_scope_conversation">Conversation</string>
 </resources>

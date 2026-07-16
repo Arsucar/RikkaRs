@@ -1730,4 +1730,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_tools_ask_btw_desc">하위 에이전트에게 질문</string>
   <string name="assistant_tools_manage_subagent_profile_desc">하위 에이전트 프로필 관리</string>
   <string name="assistant_tools_finish_work_desc">작업을 완료로 표시</string>
+  <string name="assistant_page_memory_table_no_documents">메모리 테이블 문서가 아직 없습니다.</string>
+  <string name="assistant_page_memory_table_add_title">메모리 테이블 추가</string>
+  <string name="assistant_page_memory_table_choose_template">기존 템플릿 선택</string>
+  <string name="assistant_page_memory_table_create_template">또는 새 템플릿 만들기</string>
+  <string name="assistant_page_memory_table_create_private">비공개 생성</string>
+  <string name="assistant_page_memory_table_create_global">전역 생성</string>
+  <string name="assistant_page_memory_table_create_failed">메모리 테이블을 만들 수 없습니다. 다시 시도해 주세요.</string>
+  <string name="assistant_page_memory_table_scope_conversation">대화</string>
 </resources>
