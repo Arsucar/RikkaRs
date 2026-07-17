@@ -27,13 +27,17 @@
 - 当前分支为 `release/rikka-arsucar`，工作区在任务创建前为 clean。
 - 本任务是复杂的父任务；实际交付应拆成可独立规划和验收的子任务。
 - 用户已明确同意创建 Trellis 任务并进入规划阶段。
-- 2026-07-16 盘点 `Arsucar/RikkaRs` 后仅有两个开放 Issue：
-  - [#136](https://github.com/Arsucar/RikkaRs/issues/136) 回退并移除低频的会话归档功能。
-  - [#137](https://github.com/Arsucar/RikkaRs/issues/137) 普通记忆与记忆表格开关相互独立。
-- 两个 Issue 均无评论、无外部依赖且需求规格完整，可独立实现和验收。
-- 已创建两个子任务：
+- 2026-07-18 实时盘点 `Arsucar/RikkaRs` 后开放 Issue 为：
+  - [#144](https://github.com/Arsucar/RikkaRs/issues/144) Room/协程事务完成时 512 MiB Java heap OOM，触发场景与真实增长对象未知。
+  - [#145](https://github.com/Arsucar/RikkaRs/issues/145) 记忆表模板 GLOBAL/ASSISTANT scope 显式迁移及 tool/UI 支持。
+- #136、#137、#140、#141 已完成并由 v2.3.31 正式发布；#138、#139 以 not planned 关闭。
+- 原两个子任务已完成并归档：
   - `07-16-issue-136-remove-conversation-archive`
   - `07-16-issue-137-independent-memory-toggles`
+- 新增两个子任务：
+  - `07-18-issue-144-room-transaction-oom`
+  - `07-18-issue-145-memory-template-scope-migration`
+- #145 需求完整且可独立实现；#144 缺少复现/heap 证据，先交付可证明的内存峰值降低和诊断，证据不足时保持开放并发布真实边界。
 
 ## Out of Scope
 
@@ -42,4 +46,4 @@
 
 ## Open Questions
 
-- 无。规划完成后只需用户批准进入实现阶段。
+- 无。用户已明确同意创建 Trellis 任务、持续处理且不要求中途决策确认。

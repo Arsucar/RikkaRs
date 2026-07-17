@@ -20,7 +20,9 @@
   "subtasks": [],
   "children": [
     "07-16-issue-136-remove-conversation-archive",
-    "07-16-issue-137-independent-memory-toggles"
+    "07-16-issue-137-independent-memory-toggles",
+    "07-18-issue-144-room-transaction-oom",
+    "07-18-issue-145-memory-template-scope-migration"
   ],
   "parent": null,
   "relatedFiles": [],

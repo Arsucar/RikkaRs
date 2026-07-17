@@ -1,1 +1,3 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"父任务负责跨 child 的数据流、提交、验证、发布与 Issue 关闭证据一致性。"}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"#145 与 #144 都触及结构化记忆运行链路，必须保留普通记忆/记忆表独立 capability。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"所有新增 UI 文案和最终交付需符合资源与简中合同。"}

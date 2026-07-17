@@ -1,0 +1,3 @@
+{"file":".trellis/tasks/archive/2026-06/06-28-nightly-audit/research/subagent-d-chat-log.md","reason":"历史审计记录了会话分页读取、长会话写回和保存排队风险；仅作为风险清单，所有结论按当前 HEAD 复核。"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"约束协程取消、回调和 CAS 竞态，避免把内存耗尽后的协程次生异常当作独立根因。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"有界批次、事务类型、输入规模、日志和测试必须在 DAO、Repository、Tool 与 UI 调用层保持同一合同。"}

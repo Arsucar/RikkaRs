@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/archive/2026-06/06-28-nightly-audit/research/subagent-d-chat-log.md","reason":"复核历史已识别的分页但总量未必有界、写回峰值和保存排队风险是否被真实降低。"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"核对协程取消、CAS 和状态更新没有引入新的竞态或错误归因。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对摘要、DAO 投影、批次、诊断和测试的跨层合同一致。"}
+{"file":".trellis/spec/app/conversation-tags-and-hooks.md","reason":"回归会话 tag/Hook 的 Room 原子性、lease 状态机和分页查询合同。"}
+{"file":".trellis/spec/app/subagent-runtime.md","reason":"回归子代理上下文 TTL/LRU、Room 冷恢复、revision 和失败降级合同。"}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"回归结构化记忆 Repository、工具和注入门控，不因 OOM 改动破坏能力隔离。"}

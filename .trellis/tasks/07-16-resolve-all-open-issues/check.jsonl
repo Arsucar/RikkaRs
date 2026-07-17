@@ -1,1 +1,3 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对每个 Issue 的代码、测试、提交、版本、评论和最终状态形成完整证据链。"}
+{"file":".trellis/spec/guides/repository-hygiene.md","reason":"核对提交只包含目标代码和可提交 Trellis 产物，不含本地代理配置、临时文件或敏感内容。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"核对 UI 文案资源、简中翻译和 placeholder 一致性。"}
