@@ -1738,4 +1738,24 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_table_create_global">グローバルを作成</string>
   <string name="assistant_page_memory_table_create_failed">メモリーテーブルを作成できませんでした。もう一度お試しください。</string>
   <string name="assistant_page_memory_table_scope_conversation">会話</string>
+  <string name="assistant_page_memory_table_empty_description">このアシスタント用の構造化情報を整理するメモリテーブルを作成します。</string>
+  <string name="assistant_page_memory_table_added">追加済み</string>
+  <string name="assistant_page_memory_table_create_new_template">新しいテンプレートを作成</string>
+  <string name="assistant_page_memory_table_scope_assistant_desc">このアシスタントだけがこのテンプレートを使用できます。</string>
+  <string name="assistant_page_memory_table_scope_global_desc">すべてのアシスタントがこのテンプレートを使用できます。</string>
+  <string name="assistant_page_memory_table_create">作成</string>
+  <string name="assistant_page_memory_table_delete_title">「%1$s」を削除しますか？</string>
+  <string name="assistant_page_memory_table_delete_description">メモリテーブル文書だけが削除されます。テンプレートは引き続き利用できます。</string>
+  <string name="assistant_page_memory_table_template_description">説明</string>
+  <string name="assistant_page_memory_table_no_description">説明はまだありません</string>
+  <string name="assistant_page_memory_table_manage_templates">テンプレートを管理</string>
+  <string name="assistant_page_memory_table_edit_template">テンプレートを編集</string>
+  <string name="assistant_page_memory_table_name_conflict">同じ名前のテンプレートが既に存在します。</string>
+  <string name="assistant_page_memory_table_duplicate_name">名前の重複</string>
+  <string name="assistant_page_memory_table_save_template">テンプレートを保存</string>
+  <string name="assistant_page_memory_table_delete_template_title">「%1$s」を削除しますか？</string>
+  <string name="assistant_page_memory_table_delete_template_description">このテンプレートと、このテンプレートを使用しているすべてのメモリテーブル文書が削除されます。</string>
+  <string name="assistant_page_memory_table_delete_global_template_description">このグローバルテンプレートはすべてのアシスタントから削除され、このテンプレートを使用しているすべてのメモリテーブル文書も削除されます。</string>
+  <string name="assistant_page_memory_table_template_update_failed">テンプレートを保存できませんでした。もう一度お試しください。</string>
+  <string name="assistant_page_memory_table_template_delete_failed">テンプレートを削除できませんでした。もう一度お試しください。</string>
 </resources>

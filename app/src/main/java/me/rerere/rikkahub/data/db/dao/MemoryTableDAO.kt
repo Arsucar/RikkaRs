@@ -95,9 +95,21 @@ interface MemoryTableDAO {
     @Transaction
     suspend fun deleteEffectiveTemplateAndDocuments(id: String, assistantId: String): Int {
         getEffectiveTemplate(id, assistantId) ?: return 0
+        deleteSnapshotsByTemplate(id)
         deleteDocumentsByTemplate(id)
         return deleteTemplate(id)
     }
+
+    @Query(
+        """
+        DELETE FROM memory_table_snapshots
+        WHERE document_id IN (
+            SELECT id FROM memory_table_documents
+            WHERE template_id = :templateId
+        )
+        """
+    )
+    suspend fun deleteSnapshotsByTemplate(templateId: String): Int
 
     @Query("SELECT * FROM memory_table_documents ORDER BY updated_at DESC")
     fun getDocumentsFlow(): Flow<List<MemoryTableDocumentEntity>>

@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import java.text.Normalizer
+import java.util.Locale
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -22,6 +24,26 @@ data class MemoryTableTemplate(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
 )
+
+class MemoryTableTemplateNameConflictException(
+    val normalizedName: String,
+) : IllegalArgumentException("memory table template name conflicts with an existing template: $normalizedName")
+
+fun normalizeMemoryTableTemplateName(name: String): String {
+    val normalized = Normalizer.normalize(name, Normalizer.Form.NFC)
+    return buildString(normalized.length) {
+        var pendingWhitespace = false
+        normalized.forEach { char ->
+            if (char.isWhitespace() || Character.isSpaceChar(char)) {
+                pendingWhitespace = isNotEmpty()
+            } else {
+                if (pendingWhitespace) append(' ')
+                append(char)
+                pendingWhitespace = false
+            }
+        }
+    }.lowercase(Locale.ROOT)
+}
 
 @Serializable
 data class MemoryTableDocument(

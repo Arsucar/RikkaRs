@@ -1,5 +1,6 @@
 name = "trellis-check"
 description = "Workspace-write Trellis reviewer that self-fixes spec drift, lint/type-check failures, and missing tests."
+model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

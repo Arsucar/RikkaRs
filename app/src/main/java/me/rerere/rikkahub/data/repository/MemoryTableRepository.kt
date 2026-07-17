@@ -13,10 +13,12 @@ import me.rerere.rikkahub.data.model.MemoryTableImportConflictPolicy
 import me.rerere.rikkahub.data.model.MemoryTableImportPlan
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.MemoryTableTemplateNameConflictException
 import me.rerere.rikkahub.data.model.decodeMemoryTableBundle
 import me.rerere.rikkahub.data.model.encodeMemoryTableBundle
 import me.rerere.rikkahub.data.model.isMemoryTableScopeEffective
 import me.rerere.rikkahub.data.model.isMemoryTableTemplateScopeEffective
+import me.rerere.rikkahub.data.model.normalizeMemoryTableTemplateName
 import me.rerere.rikkahub.data.model.resolveMemoryTableBundleImport
 import me.rerere.rikkahub.data.model.normalizeMemoryTablePayloadJson
 import me.rerere.rikkahub.data.model.normalizeMemoryTableSchemaJson
@@ -139,6 +141,7 @@ class MemoryTableRepository(
     suspend fun upsertTemplate(
         template: MemoryTableTemplate,
         actorAssistantId: String,
+        requestedScopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
     ): MemoryTableTemplate {
         val now = Clock.System.now().toEpochMilliseconds()
         val id = template.id.ifBlank { Uuid.random().toString() }
@@ -153,12 +156,18 @@ class MemoryTableRepository(
             description = template.description.trim(),
             schemaJson = normalizeMemoryTableSchemaJson(template.schemaJson),
             scopeType = existing?.let { MemoryTableScopeType.fromStorage(it.scopeType) }
-                ?: MemoryTableScopeType.ASSISTANT,
-            scopeId = existing?.scopeId ?: actorAssistantId,
+                ?: normalizeTemplateScopeType(requestedScopeType),
+            scopeId = existing?.scopeId
+                ?: normalizeTemplateScopeId(requestedScopeType, "", actorAssistantId),
             createdAt = existing?.createdAt ?: template.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
         )
         validateMemoryTableSchemaJson(normalized.schemaJson)
+        val isCreatingOrRenaming = existing == null ||
+            normalizeMemoryTableTemplateName(existing.name) != normalizeMemoryTableTemplateName(normalized.name)
+        if (isCreatingOrRenaming) {
+            ensureTemplateNameAvailable(normalized, actorAssistantId)
+        }
         if (existing == null) {
             if (dao.insertTemplateIgnore(normalized.toEntity()) < 0) {
                 error("memory table template not found or not authorized: $id")
@@ -435,6 +444,32 @@ class MemoryTableRepository(
             }
             MemoryTableScopeType.CONVERSATION -> error("memory table templates cannot use CONVERSATION scope")
         }
+    }
+
+    private suspend fun ensureTemplateNameAvailable(
+        template: MemoryTableTemplate,
+        actorAssistantId: String,
+    ) {
+        val normalizedName = normalizeMemoryTableTemplateName(template.name)
+        val hasConflict = dao.getTemplates().any { candidate ->
+            candidate.id != template.id &&
+                candidate.conflictsWithScope(template.scopeType, actorAssistantId) &&
+                normalizeMemoryTableTemplateName(candidate.name) == normalizedName
+        }
+        if (hasConflict) {
+            throw MemoryTableTemplateNameConflictException(normalizedName)
+        }
+    }
+
+    private fun MemoryTableTemplateEntity.conflictsWithScope(
+        requestedScopeType: MemoryTableScopeType,
+        actorAssistantId: String,
+    ): Boolean = when (requestedScopeType) {
+        MemoryTableScopeType.GLOBAL -> true
+        MemoryTableScopeType.ASSISTANT ->
+            scopeType == MemoryTableScopeType.GLOBAL.name ||
+                (scopeType == MemoryTableScopeType.ASSISTANT.name && scopeId == actorAssistantId)
+        MemoryTableScopeType.CONVERSATION -> false
     }
 
     private fun ensureDocumentScopeAuthorized(

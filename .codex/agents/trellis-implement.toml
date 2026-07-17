@@ -1,5 +1,6 @@
 name = "trellis-implement"
 description = "Workspace-write Trellis implementer that follows specs and keeps generated templates in sync."
+model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

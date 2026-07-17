@@ -13,14 +13,32 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableImportConflictPolicy
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.MemoryTableTemplateNameConflictException
 import me.rerere.rikkahub.data.model.encodeMemoryTableBundle
+import me.rerere.rikkahub.data.model.normalizeMemoryTableTemplateName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class MemoryTableRepositoryTest {
+    @Test
+    fun templateNameNormalizationUsesTrimNfcWhitespaceCollapseAndRootLocale() {
+        val previousLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+
+            assertEquals(
+                "café i",
+                normalizeMemoryTableTemplateName(" \tCafe\u0301\u00a0\nI "),
+            )
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
+    }
+
     @Test
     fun upsertTemplateNormalizesBlankNameAndSchema() = runBlocking {
         val dao = FakeMemoryTableDAO()
@@ -331,6 +349,189 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
+    fun actorlessTemplateUpsertKeepsLegacyDuplicateImportCompatibility() = runBlocking {
+        val dao = FakeMemoryTableDAO()
+        val repository = MemoryTableRepository(dao)
+
+        repository.upsertTemplate(
+            MemoryTableTemplate(
+                id = "legacy-global",
+                name = "Shared",
+                scopeType = MemoryTableScopeType.GLOBAL,
+                scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+            )
+        )
+        repository.upsertTemplate(
+            MemoryTableTemplate(
+                id = "legacy-assistant",
+                name = " shared ",
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = "assistant-a",
+            )
+        )
+
+        assertEquals(listOf("legacy-global", "legacy-assistant"), dao.templates.map { it.id })
+        assertEquals(listOf("GLOBAL", "ASSISTANT"), dao.templates.map { it.scopeType })
+        assertEquals(
+            listOf(MemoryRepository.GLOBAL_MEMORY_ID, "assistant-a"),
+            dao.templates.map { it.scopeId },
+        )
+    }
+
+    @Test
+    fun assistantTemplateNameConflictsWithGlobalAndSameAssistantTemplates() {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity(
+                    id = "global",
+                    scopeType = "GLOBAL",
+                    scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                    name = " Caf\u00e9   Table ",
+                ),
+                templateEntity(
+                    id = "private",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    name = "Private Notes",
+                ),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        assertThrows(MemoryTableTemplateNameConflictException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    MemoryTableTemplate(name = "cafe\u0301\tTABLE"),
+                    actorAssistantId = "assistant-a",
+                )
+            }
+        }
+        assertThrows(MemoryTableTemplateNameConflictException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    MemoryTableTemplate(name = " private\nnotes "),
+                    actorAssistantId = "assistant-a",
+                )
+            }
+        }
+        assertEquals(2, dao.templates.size)
+    }
+
+    @Test
+    fun globalTemplateNameConflictsWithAnyAssistantTemplate() {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity(
+                    id = "private-b",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-b",
+                    name = "Shared",
+                ),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        assertThrows(MemoryTableTemplateNameConflictException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    template = MemoryTableTemplate(name = " shared "),
+                    actorAssistantId = "assistant-a",
+                    requestedScopeType = MemoryTableScopeType.GLOBAL,
+                )
+            }
+        }
+        assertEquals(listOf("private-b"), dao.templates.map { it.id })
+    }
+
+    @Test
+    fun scopedTemplateCreateSupportsRequestedGlobalScope() = runBlocking {
+        val dao = FakeMemoryTableDAO()
+        val repository = MemoryTableRepository(dao)
+
+        val template = repository.upsertTemplate(
+            template = MemoryTableTemplate(name = "Global Table"),
+            actorAssistantId = "assistant-a",
+            requestedScopeType = MemoryTableScopeType.GLOBAL,
+        )
+
+        assertEquals(MemoryTableScopeType.GLOBAL, template.scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, template.scopeId)
+        assertEquals("GLOBAL", dao.templates.single().scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, dao.templates.single().scopeId)
+    }
+
+    @Test
+    fun scopedTemplateUpdateExcludesItsOwnIdFromNameConflictCheck() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity(
+                    id = "template-a",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    name = "Shared Name",
+                ),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val updated = repository.upsertTemplate(
+            MemoryTableTemplate(id = "template-a", name = " shared   NAME "),
+            actorAssistantId = "assistant-a",
+            requestedScopeType = MemoryTableScopeType.GLOBAL,
+        )
+
+        assertEquals(" shared   NAME ", updated.name)
+        assertEquals(MemoryTableScopeType.ASSISTANT, updated.scopeType)
+        assertEquals("assistant-a", updated.scopeId)
+        assertEquals(" shared   NAME ", dao.templates.single().name)
+    }
+
+    @Test
+    fun scopedTemplateUpdateAllowsUnchangedLegacyDuplicateName() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity("template-a", "ASSISTANT", "assistant-a", name = "Shared Name"),
+                templateEntity("template-b", "ASSISTANT", "assistant-a", name = " shared   NAME "),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val updated = repository.upsertTemplate(
+            MemoryTableTemplate(
+                id = "template-a",
+                name = " shared\tname ",
+                description = "Updated description",
+            ),
+            actorAssistantId = "assistant-a",
+        )
+
+        assertEquals("Updated description", updated.description)
+        assertEquals("Updated description", dao.templates.first { it.id == "template-a" }.description)
+        assertEquals(" shared   NAME ", dao.templates.first { it.id == "template-b" }.name)
+    }
+
+    @Test
+    fun deletingDuplicateNameTemplateLeavesOtherIdAndDocumentsUntouched() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity("template-a", "ASSISTANT", "assistant-a", name = "Duplicate"),
+                templateEntity("template-b", "ASSISTANT", "assistant-a", name = " duplicate "),
+            ),
+            documents = listOf(
+                doc("doc-a", "ASSISTANT", "assistant-a", templateId = "template-a"),
+                doc("doc-b", "ASSISTANT", "assistant-a", templateId = "template-b"),
+            ),
+        )
+        val repository = MemoryTableRepository(dao)
+
+        val deleted = repository.deleteTemplate("template-a", actorAssistantId = "assistant-a")
+
+        assertTrue(deleted)
+        assertEquals(listOf("template-b"), dao.templates.map { it.id })
+        assertEquals(listOf("doc-b"), dao.documents.map { it.id })
+    }
+
+    @Test
     fun scopedTemplateUpdateAndDeleteRejectKnownForeignId() = runBlocking {
         val dao = FakeMemoryTableDAO(
             templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
@@ -431,7 +632,7 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
-    fun copyGlobalTemplateCreatesAssistantPrivateTemplateWithNewId() = runBlocking {
+    fun copyGlobalTemplateRejectsDuplicateNameUnderAssistantScope() {
         val dao = FakeMemoryTableDAO(
             templates = listOf(templateEntity("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID)),
             documents = listOf(
@@ -445,12 +646,13 @@ class MemoryTableRepositoryTest {
         )
         val repository = MemoryTableRepository(dao)
 
-        val copy = repository.copyGlobalTemplateToAssistant("global", actorAssistantId = "assistant-a")
+        assertThrows(MemoryTableTemplateNameConflictException::class.java) {
+            runBlocking {
+                repository.copyGlobalTemplateToAssistant("global", actorAssistantId = "assistant-a")
+            }
+        }
 
-        assertTrue(copy.id != "global")
-        assertEquals(MemoryTableScopeType.ASSISTANT, copy.scopeType)
-        assertEquals("assistant-a", copy.scopeId)
-        assertEquals(setOf("global", copy.id), dao.templates.map { it.id }.toSet())
+        assertEquals(listOf("global"), dao.templates.map { it.id })
         assertEquals(listOf("global-doc"), dao.documents.map { it.id })
         assertEquals("global", dao.documents.single().templateId)
     }
@@ -477,9 +679,10 @@ class MemoryTableRepositoryTest {
         id: String,
         scopeType: String,
         scopeId: String,
+        name: String = "Template $id",
     ) = MemoryTableTemplateEntity(
         id = id,
-        name = "Template $id",
+        name = name,
         description = "",
         schemaJson = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}""",
         scopeType = scopeType,
@@ -560,6 +763,8 @@ class MemoryTableRepositoryTest {
             templates.removeAll { it.id == id }
             return before - templates.size
         }
+
+        override suspend fun deleteSnapshotsByTemplate(templateId: String): Int = 0
 
         override fun getDocumentsFlow(): Flow<List<MemoryTableDocumentEntity>> = flowOf(documents)
 

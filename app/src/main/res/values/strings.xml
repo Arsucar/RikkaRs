@@ -1878,4 +1878,22 @@
   <string name="assistant_hook_error_tag_required">Select at least one conversation tag.</string>
   <string name="assistant_hook_error_tag_unavailable">Remove unavailable tags before saving.</string>
   <string name="assistant_hook_remove_unavailable_tags">Remove unavailable tags</string>
+  <string name="assistant_page_memory_table_empty_description">Create a memory table to organize structured information for this assistant.</string>
+  <string name="assistant_page_memory_table_added">Added</string>
+  <string name="assistant_page_memory_table_create_new_template">Create new template</string>
+  <string name="assistant_page_memory_table_scope_assistant_desc">Only this assistant can use this template.</string>
+  <string name="assistant_page_memory_table_scope_global_desc">All assistants can use this template.</string>
+  <string name="assistant_page_memory_table_create">Create</string>
+  <string name="assistant_page_memory_table_delete_title">Delete %1$s?</string>
+  <string name="assistant_page_memory_table_delete_description">This deletes only the memory table document. The template will remain available.</string>
+  <string name="assistant_page_memory_table_manage_templates">Manage templates</string>
+  <string name="assistant_page_memory_table_edit_template">Edit template</string>
+  <string name="assistant_page_memory_table_name_conflict">A template with this name already exists.</string>
+  <string name="assistant_page_memory_table_duplicate_name">Duplicate name</string>
+  <string name="assistant_page_memory_table_save_template">Save template</string>
+  <string name="assistant_page_memory_table_delete_template_title">Delete "%1$s"?</string>
+  <string name="assistant_page_memory_table_delete_template_description">This deletes the template and all memory table documents that use it.</string>
+  <string name="assistant_page_memory_table_delete_global_template_description">This global template will be removed for all assistants, together with all memory table documents that use it.</string>
+  <string name="assistant_page_memory_table_template_update_failed">Could not save the template. Try again.</string>
+  <string name="assistant_page_memory_table_template_delete_failed">Could not delete the template. Try again.</string>
 </resources>

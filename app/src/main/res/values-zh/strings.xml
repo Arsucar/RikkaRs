@@ -1860,4 +1860,22 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_tools_ask_btw_desc">向子代理提问侧问题</string>
   <string name="assistant_tools_manage_subagent_profile_desc">管理子代理配置</string>
   <string name="assistant_tools_finish_work_desc">标记任务完成</string>
+  <string name="assistant_page_memory_table_empty_description">创建记忆表格，为此助手整理结构化信息。</string>
+  <string name="assistant_page_memory_table_added">已添加</string>
+  <string name="assistant_page_memory_table_create_new_template">创建新模板</string>
+  <string name="assistant_page_memory_table_scope_assistant_desc">仅此助手可使用该模板。</string>
+  <string name="assistant_page_memory_table_scope_global_desc">所有助手均可使用该模板。</string>
+  <string name="assistant_page_memory_table_create">创建</string>
+  <string name="assistant_page_memory_table_delete_title">删除“%1$s”？</string>
+  <string name="assistant_page_memory_table_delete_description">仅删除记忆表格文档，模板仍会保留。</string>
+  <string name="assistant_page_memory_table_manage_templates">管理模板</string>
+  <string name="assistant_page_memory_table_edit_template">编辑模板</string>
+  <string name="assistant_page_memory_table_name_conflict">已存在同名模板。</string>
+  <string name="assistant_page_memory_table_duplicate_name">名称重复</string>
+  <string name="assistant_page_memory_table_save_template">保存模板</string>
+  <string name="assistant_page_memory_table_delete_template_title">删除“%1$s”？</string>
+  <string name="assistant_page_memory_table_delete_template_description">这会删除该模板以及使用该模板的所有记忆表格文档。</string>
+  <string name="assistant_page_memory_table_delete_global_template_description">此全局模板将从所有助手中移除，并同时删除使用该模板的所有记忆表格文档。</string>
+  <string name="assistant_page_memory_table_template_update_failed">无法保存模板，请重试。</string>
+  <string name="assistant_page_memory_table_template_delete_failed">无法删除模板，请重试。</string>
 </resources>

@@ -387,9 +387,16 @@ class AssistantDetailVM(
             assistantId = assistantId.toString(),
         )
 
-    fun upsertMemoryTableTemplate(template: MemoryTableTemplate) {
+    fun upsertMemoryTableTemplate(
+        template: MemoryTableTemplate,
+        onDone: (Result<MemoryTableTemplate>) -> Unit = {},
+    ) {
         viewModelScope.launch {
-            memoryTableRepository.upsertTemplate(template, actorAssistantId = assistantId.toString())
+            onDone(
+                runCatching {
+                    memoryTableRepository.upsertTemplate(template, actorAssistantId = assistantId.toString())
+                }
+            )
         }
     }
 
@@ -430,14 +437,11 @@ class AssistantDetailVM(
                     persistMemoryTableCreation(
                         template = template.copy(scopeType = scopeType),
                         persistTemplate = { draft ->
-                            if (scopeType == MemoryTableScopeType.GLOBAL) {
-                                memoryTableRepository.upsertTemplate(draft)
-                            } else {
-                                memoryTableRepository.upsertTemplate(
-                                    draft,
-                                    actorAssistantId = assistantId.toString(),
-                                )
-                            }
+                            memoryTableRepository.upsertTemplate(
+                                template = draft,
+                                actorAssistantId = assistantId.toString(),
+                                requestedScopeType = scopeType,
+                            )
                         },
                         persistDocument = { persistedTemplate ->
                             memoryTableRepository.upsertDocument(
@@ -455,9 +459,16 @@ class AssistantDetailVM(
         }
     }
 
-    fun deleteMemoryTableTemplate(template: MemoryTableTemplate) {
+    fun deleteMemoryTableTemplate(
+        template: MemoryTableTemplate,
+        onDone: (Result<Boolean>) -> Unit = {},
+    ) {
         viewModelScope.launch {
-            memoryTableRepository.deleteTemplate(template.id, actorAssistantId = assistantId.toString())
+            onDone(
+                runCatching {
+                    memoryTableRepository.deleteTemplate(template.id, actorAssistantId = assistantId.toString())
+                }
+            )
         }
     }
 

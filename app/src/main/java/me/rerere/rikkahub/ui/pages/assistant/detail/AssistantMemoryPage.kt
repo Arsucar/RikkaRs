@@ -1,32 +1,50 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.PencilEdit01
-import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowLeft01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Delete01
-import androidx.compose.foundation.layout.Arrangement
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Tick02
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,11 +58,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -58,11 +77,15 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.model.MemoryTableTemplateNameConflictException
 import me.rerere.rikkahub.data.model.isEffectiveFor
+import me.rerere.rikkahub.data.model.normalizeMemoryTableTemplateName
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -119,6 +142,12 @@ fun AssistantMemoryPage(id: String) {
             onCreateMemoryTableTemplateAndDocument = { template, scopeType, onDone ->
                 vm.createMemoryTableTemplateAndDocument(template, scopeType, onDone)
             },
+            onUpsertMemoryTableTemplate = { template, onDone ->
+                vm.upsertMemoryTableTemplate(template, onDone)
+            },
+            onDeleteMemoryTableTemplate = { template, onDone ->
+                vm.deleteMemoryTableTemplate(template, onDone)
+            },
             onDeleteMemoryTableDocument = { vm.deleteMemoryTableDocument(it) },
         )
     }
@@ -145,6 +174,8 @@ private fun AssistantMemoryContent(
         MemoryTableScopeType,
         (Result<MemoryTableDocument>) -> Unit,
     ) -> Unit,
+    onUpsertMemoryTableTemplate: (MemoryTableTemplate, (Result<MemoryTableTemplate>) -> Unit) -> Unit,
+    onDeleteMemoryTableTemplate: (MemoryTableTemplate, (Result<Boolean>) -> Unit) -> Unit,
     onDeleteMemoryTableDocument: (MemoryTableDocument) -> Unit,
 ) {
     val navController = LocalNavController.current
@@ -157,11 +188,29 @@ private fun AssistantMemoryContent(
     }
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
     var pendingDeleteMemoryTableDocument by remember { mutableStateOf<MemoryTableDocument?>(null) }
-    var showAddMemoryTableDialog by remember { mutableStateOf(false) }
+    var showAddMemoryTableSheet by remember { mutableStateOf(false) }
     var showMemoryTableBudgetDialog by remember { mutableStateOf(false) }
     val defaultMemoryTableTemplateName = stringResource(R.string.assistant_page_memory_table_default_template)
     val memoryTableBudgetUnlimitedLabel =
         stringResource(R.string.assistant_page_memory_table_budget_unlimited)
+    val assistantId = assistant.id.toString()
+    val effectiveMemoryTableTemplates = remember(memoryTableTemplates, assistantId) {
+        memoryTableTemplates.filter { it.isEffectiveFor(assistantId) }
+    }
+    val memoryTableDocumentSelection = remember(
+        effectiveMemoryTableTemplates,
+        memoryTableDocuments,
+        assistantId,
+    ) {
+        deriveAssistantMemoryTableDocuments(
+            templates = effectiveMemoryTableTemplates,
+            documents = memoryTableDocuments,
+            assistantId = assistantId,
+        )
+    }
+    val memoryTableTemplatesById = remember(effectiveMemoryTableTemplates) {
+        effectiveMemoryTableTemplates.associateBy { it.id }
+    }
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -426,49 +475,16 @@ private fun AssistantMemoryContent(
         }
 
         MemoryTableSection(
-            settings = settings,
-            assistant = assistant,
-            templates = memoryTableTemplates,
-            documents = memoryTableDocuments,
-            onAddDocument = { showAddMemoryTableDialog = true },
+            enabled = settings.enableMemoryTable && assistant.enableMemoryTable,
+            addEnabled = settings.enableMemoryTable,
+            templatesById = memoryTableTemplatesById,
+            selection = memoryTableDocumentSelection,
+            onAddDocument = { showAddMemoryTableSheet = true },
             onEditDocument = { document ->
-                navController.navigate(
-                    Screen.AssistantMemoryTableDocumentEditor(
-                        documentId = document.id,
-                        templateId = document.templateId,
-                        assistantId = assistant.id.toString(),
-                        scopeType = document.scopeType,
-                    ),
-                )
+                navController.navigate(document.toMemoryTableEditorScreen(assistant))
             },
             onDeleteDocument = { pendingDeleteMemoryTableDocument = it },
         )
-
-        if (showAddMemoryTableDialog) {
-            AddMemoryTableDialog(
-                templates = memoryTableTemplates.filter { it.isEffectiveFor(assistant.id.toString()) },
-                defaultTemplateName = defaultMemoryTableTemplateName,
-                onDismiss = { showAddMemoryTableDialog = false },
-                onCreateFromTemplate = { template, onDone ->
-                    onCreateMemoryTableDocument(template) { result ->
-                        result.onSuccess { document ->
-                            showAddMemoryTableDialog = false
-                            navController.navigate(document.toMemoryTableEditorScreen(assistant))
-                        }
-                        onDone(result)
-                    }
-                },
-                onCreateTemplate = { template, scopeType, onDone ->
-                    onCreateMemoryTableTemplateAndDocument(template, scopeType) { result ->
-                        result.onSuccess { document ->
-                            showAddMemoryTableDialog = false
-                            navController.navigate(document.toMemoryTableEditorScreen(assistant))
-                        }
-                        onDone(result)
-                    }
-                },
-            )
-        }
 
         Box(
             modifier = Modifier
@@ -497,7 +513,7 @@ private fun AssistantMemoryContent(
             ) {
                 Icon(
                     imageVector = HugeIcons.Add01,
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.add),
                 )
             }
         }
@@ -515,6 +531,40 @@ private fun AssistantMemoryContent(
                 )
             }
         }
+    }
+
+    if (showAddMemoryTableSheet) {
+        AddMemoryTableSheet(
+            templates = effectiveMemoryTableTemplates,
+            primaryDocumentsByTemplate = memoryTableDocumentSelection.primaryDocumentsByTemplate,
+            assistantId = assistantId,
+            defaultTemplateName = defaultMemoryTableTemplateName,
+            onDismiss = { showAddMemoryTableSheet = false },
+            onOpenDocument = { document ->
+                showAddMemoryTableSheet = false
+                navController.navigate(document.toMemoryTableEditorScreen(assistant))
+            },
+            onCreateFromTemplate = { template, onDone ->
+                onCreateMemoryTableDocument(template) { result ->
+                    result.onSuccess { document ->
+                        showAddMemoryTableSheet = false
+                        navController.navigate(document.toMemoryTableEditorScreen(assistant))
+                    }
+                    onDone(result)
+                }
+            },
+            onCreateTemplate = { template, scopeType, onDone ->
+                onCreateMemoryTableTemplateAndDocument(template, scopeType) { result ->
+                    result.onSuccess { document ->
+                        showAddMemoryTableSheet = false
+                        navController.navigate(document.toMemoryTableEditorScreen(assistant))
+                    }
+                    onDone(result)
+                }
+            },
+            onUpsertTemplate = onUpsertMemoryTableTemplate,
+            onDeleteTemplate = onDeleteMemoryTableTemplate,
+        )
     }
 
     RikkaConfirmDialog(
@@ -536,24 +586,37 @@ private fun AssistantMemoryContent(
         }
     )
 
-    RikkaConfirmDialog(
-        show = pendingDeleteMemoryTableDocument != null,
-        title = stringResource(R.string.confirm_delete),
-        confirmText = stringResource(R.string.confirm),
-        dismissText = stringResource(R.string.cancel),
-        onConfirm = {
-            pendingDeleteMemoryTableDocument?.let(onDeleteMemoryTableDocument)
-            pendingDeleteMemoryTableDocument = null
-        },
-        onDismiss = { pendingDeleteMemoryTableDocument = null },
-        text = {
-            Text(
-                text = pendingDeleteMemoryTableDocument?.payloadJson.orEmpty(),
-                maxLines = 8,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    )
+    pendingDeleteMemoryTableDocument?.let { document ->
+        val documentName = memoryTableTemplatesById[document.templateId]
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.assistant_page_memory_table_document)
+        AlertDialog(
+            onDismissRequest = { pendingDeleteMemoryTableDocument = null },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_delete_title, documentName))
+            },
+            text = {
+                Text(stringResource(R.string.assistant_page_memory_table_delete_description))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteMemoryTableDocument(document)
+                        pendingDeleteMemoryTableDocument = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteMemoryTableDocument = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 }
 
 internal data class ParsedMemoryTableBudgetInput(
@@ -704,21 +767,14 @@ internal fun deriveAssistantMemoryTableDocuments(
 
 @Composable
 private fun MemoryTableSection(
-    settings: Settings,
-    assistant: Assistant,
-    templates: List<MemoryTableTemplate>,
-    documents: List<MemoryTableDocument>,
+    enabled: Boolean,
+    addEnabled: Boolean,
+    templatesById: Map<String, MemoryTableTemplate>,
+    selection: AssistantMemoryTableDocumentSelection,
     onAddDocument: () -> Unit,
     onEditDocument: (MemoryTableDocument) -> Unit,
     onDeleteDocument: (MemoryTableDocument) -> Unit,
 ) {
-    val enabled = settings.enableMemoryTable && assistant.enableMemoryTable
-    val visibleTemplates = templates.filter { it.isEffectiveFor(assistant.id.toString()) }
-    val selection = deriveAssistantMemoryTableDocuments(
-        templates = visibleTemplates,
-        documents = documents,
-        assistantId = assistant.id.toString(),
-    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -733,19 +789,20 @@ private fun MemoryTableSection(
         )
         IconButton(
             onClick = onAddDocument,
-            enabled = settings.enableMemoryTable,
+            enabled = addEnabled,
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
-            Icon(HugeIcons.Add01, null)
+            Icon(
+                imageVector = HugeIcons.Add01,
+                contentDescription = stringResource(R.string.assistant_page_memory_table_add_title),
+            )
         }
     }
 
     if (selection.visibleDocuments.isEmpty()) {
-        Text(
-            text = stringResource(R.string.assistant_page_memory_table_no_documents),
-            modifier = Modifier.padding(horizontal = 8.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        MemoryTableEmptyState(
+            addEnabled = addEnabled,
+            onAddDocument = onAddDocument,
         )
     }
 
@@ -753,11 +810,91 @@ private fun MemoryTableSection(
         key(document.id) {
             MemoryTableDocumentItem(
                 document = document,
-                template = visibleTemplates.firstOrNull { it.id == document.templateId },
+                template = templatesById[document.templateId],
                 enabled = enabled,
                 onEdit = { onEditDocument(document) },
                 onDelete = { onDeleteDocument(document) },
             )
+        }
+    }
+}
+
+internal fun deriveMemoryTablePickerTemplates(
+    templates: List<MemoryTableTemplate>,
+    primaryDocumentsByTemplate: Map<String, MemoryTableDocument?>,
+    assistantId: String,
+): List<MemoryTableTemplate> = templates
+    .groupBy { normalizeMemoryTableTemplateName(it.name) }
+    .values
+    .map { duplicates ->
+        duplicates.minWith(
+            compareByDescending<MemoryTableTemplate> { primaryDocumentsByTemplate[it.id] != null }
+                .thenByDescending {
+                    it.scopeType == MemoryTableScopeType.ASSISTANT && it.scopeId == assistantId
+                }
+                .thenByDescending { it.scopeType == MemoryTableScopeType.GLOBAL }
+                .thenByDescending { it.updatedAt }
+                .thenBy { it.id }
+        )
+    }
+
+internal fun hasMemoryTableTemplateNameConflict(
+    name: String,
+    scopeType: MemoryTableScopeType,
+    templates: List<MemoryTableTemplate>,
+    assistantId: String,
+    excludedTemplateId: String? = null,
+): Boolean {
+    val normalizedName = normalizeMemoryTableTemplateName(name)
+    if (normalizedName.isEmpty()) return false
+    return templates.any { template ->
+        template.id != excludedTemplateId &&
+            normalizeMemoryTableTemplateName(template.name) == normalizedName &&
+            when (scopeType) {
+                MemoryTableScopeType.GLOBAL -> true
+                MemoryTableScopeType.ASSISTANT ->
+                    template.scopeType == MemoryTableScopeType.GLOBAL ||
+                        (template.scopeType == MemoryTableScopeType.ASSISTANT && template.scopeId == assistantId)
+                MemoryTableScopeType.CONVERSATION -> false
+            }
+    }
+}
+
+@Composable
+private fun MemoryTableEmptyState(
+    addEnabled: Boolean,
+    onAddDocument: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ) {
+            Icon(
+                imageVector = HugeIcons.Database02,
+                contentDescription = null,
+                modifier = Modifier.padding(12.dp).size(24.dp),
+            )
+        }
+        Text(
+            text = stringResource(R.string.assistant_page_memory_table_no_documents),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = stringResource(R.string.assistant_page_memory_table_empty_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onAddDocument, enabled = addEnabled) {
+            Icon(imageVector = HugeIcons.Add01, contentDescription = null)
+            Text(stringResource(R.string.assistant_page_memory_table_add_title))
         }
     }
 }
@@ -770,52 +907,108 @@ private fun MemoryTableDocumentItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val documentName = template?.name
+        ?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.assistant_page_memory_table_document)
+    val documentDescription = template?.description
+        ?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.assistant_page_memory_table_no_description)
+    val scopeLabel = memoryTableScopeLabel(document.scopeType)
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onEdit),
+        onClick = onEdit,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Database02,
+                        contentDescription = null,
+                        modifier = Modifier.padding(8.dp).size(18.dp),
+                    )
+                }
                 Text(
-                    text = template?.name ?: stringResource(R.string.assistant_page_memory_table_document),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.assistant_page_memory_table_document_meta,
-                        stringResource(
-                            when (document.scopeType) {
-                                MemoryTableScopeType.GLOBAL -> R.string.assistant_page_memory_scope_global
-                                MemoryTableScopeType.ASSISTANT -> R.string.assistant_page_memory_scope_assistant
-                                MemoryTableScopeType.CONVERSATION -> {
-                                    R.string.assistant_page_memory_table_scope_conversation
-                                }
-                            }
-                        ),
-                        document.revision,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 4,
+                    text = documentName,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        enabled = enabled,
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.MoreVertical,
+                            contentDescription = stringResource(R.string.more_options),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.delete),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.Delete01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
             }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Text(
+                text = documentDescription,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                IconButton(onClick = onDelete, enabled = enabled) {
-                    Icon(HugeIcons.Delete01, null)
+                Tag(type = TagType.INFO) {
+                    Text(
+                        stringResource(
+                            R.string.assistant_page_memory_table_document_meta,
+                            scopeLabel,
+                            document.revision,
+                        )
+                    )
                 }
             }
         }
@@ -830,104 +1023,687 @@ private fun MemoryTableDocument.toMemoryTableEditorScreen(assistant: Assistant) 
         scopeType = scopeType,
     )
 
+private enum class AddMemoryTableSheetMode {
+    TEMPLATE_PICKER,
+    CREATE_TEMPLATE,
+    MANAGE_TEMPLATES,
+    EDIT_TEMPLATE,
+}
+
 @Composable
-private fun AddMemoryTableDialog(
+private fun AddMemoryTableSheet(
     templates: List<MemoryTableTemplate>,
+    primaryDocumentsByTemplate: Map<String, MemoryTableDocument?>,
+    assistantId: String,
     defaultTemplateName: String,
     onDismiss: () -> Unit,
+    onOpenDocument: (MemoryTableDocument) -> Unit,
     onCreateFromTemplate: (MemoryTableTemplate, (Result<MemoryTableDocument>) -> Unit) -> Unit,
     onCreateTemplate: (
         MemoryTableTemplate,
         MemoryTableScopeType,
         (Result<MemoryTableDocument>) -> Unit,
     ) -> Unit,
+    onUpsertTemplate: (MemoryTableTemplate, (Result<MemoryTableTemplate>) -> Unit) -> Unit,
+    onDeleteTemplate: (MemoryTableTemplate, (Result<Boolean>) -> Unit) -> Unit,
 ) {
+    var mode by remember { mutableStateOf(AddMemoryTableSheetMode.TEMPLATE_PICKER) }
     var name by remember(defaultTemplateName) { mutableStateOf(defaultTemplateName) }
     var description by remember { mutableStateOf("") }
+    var scopeType by remember { mutableStateOf(MemoryTableScopeType.ASSISTANT) }
     var isSaving by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var editingTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
+    var pendingDeleteTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
     val genericError = stringResource(R.string.assistant_page_memory_table_create_failed)
+    val conflictError = stringResource(R.string.assistant_page_memory_table_name_conflict)
+    val updateError = stringResource(R.string.assistant_page_memory_table_template_update_failed)
+    val deleteError = stringResource(R.string.assistant_page_memory_table_template_delete_failed)
+    val pickerTemplates = remember(templates, primaryDocumentsByTemplate, assistantId) {
+        deriveMemoryTablePickerTemplates(templates, primaryDocumentsByTemplate, assistantId)
+    }
     val handleResult: (Result<MemoryTableDocument>) -> Unit = { result ->
         isSaving = false
-        errorMessage = result.exceptionOrNull()?.let { genericError }
+        errorMessage = result.exceptionOrNull()?.let { error ->
+            if (error is MemoryTableTemplateNameConflictException) conflictError else genericError
+        }
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(stringResource(R.string.assistant_page_memory_table_add_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (templates.isNotEmpty()) {
-                    Text(stringResource(R.string.assistant_page_memory_table_choose_template))
-                    templates.fastForEach { template ->
-                        TextButton(
-                            onClick = {
+        sheetGesturesEnabled = !isSaving,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .imePadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+        ) {
+            when (mode) {
+                AddMemoryTableSheetMode.TEMPLATE_PICKER -> {
+                    MemoryTableTemplatePicker(
+                        templates = pickerTemplates,
+                        primaryDocumentsByTemplate = primaryDocumentsByTemplate,
+                        isSaving = isSaving,
+                        errorMessage = errorMessage,
+                        onSelectTemplate = { template ->
+                            val existingDocument = primaryDocumentsByTemplate[template.id]
+                            if (existingDocument != null) {
+                                onOpenDocument(existingDocument)
+                            } else {
                                 isSaving = true
                                 errorMessage = null
                                 onCreateFromTemplate(template, handleResult)
+                            }
+                        },
+                        onCreateTemplate = {
+                            name = defaultTemplateName
+                            description = ""
+                            scopeType = MemoryTableScopeType.ASSISTANT
+                            editingTemplate = null
+                            errorMessage = null
+                            mode = AddMemoryTableSheetMode.CREATE_TEMPLATE
+                        },
+                        onManageTemplates = {
+                            errorMessage = null
+                            mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES
+                        },
+                        onDismiss = onDismiss,
+                    )
+                }
+
+                AddMemoryTableSheetMode.CREATE_TEMPLATE -> {
+                    val hasConflict = hasMemoryTableTemplateNameConflict(
+                        name = name,
+                        scopeType = scopeType,
+                        templates = templates,
+                        assistantId = assistantId,
+                    )
+                    MemoryTableTemplateForm(
+                        name = name,
+                        description = description,
+                        scopeType = scopeType,
+                        isSaving = isSaving,
+                        errorMessage = if (hasConflict) conflictError else errorMessage,
+                        hasNameConflict = hasConflict,
+                        title = stringResource(R.string.assistant_page_memory_table_create_new_template),
+                        submitLabel = stringResource(R.string.assistant_page_memory_table_create),
+                        scopeEditable = true,
+                        onNameChange = { name = it; errorMessage = null },
+                        onDescriptionChange = { description = it },
+                        onScopeChange = {
+                            scopeType = it
+                            errorMessage = null
+                        },
+                        onBack = {
+                            errorMessage = null
+                            mode = AddMemoryTableSheetMode.TEMPLATE_PICKER
+                        },
+                        onCreate = {
+                            if (!hasConflict) {
+                                isSaving = true
+                                errorMessage = null
+                                onCreateTemplate(
+                                    MemoryTableTemplate(
+                                        name = name.trim(),
+                                        description = description.trim(),
+                                    ),
+                                    scopeType,
+                                    handleResult,
+                                )
+                            }
+                        },
+                    )
+                }
+
+                AddMemoryTableSheetMode.MANAGE_TEMPLATES -> {
+                    MemoryTableTemplateManager(
+                        templates = templates,
+                        isSaving = isSaving,
+                        errorMessage = errorMessage,
+                        onBack = { mode = AddMemoryTableSheetMode.TEMPLATE_PICKER },
+                        onEdit = { template ->
+                            editingTemplate = template
+                            name = template.name
+                            description = template.description
+                            scopeType = template.scopeType
+                            errorMessage = null
+                            mode = AddMemoryTableSheetMode.EDIT_TEMPLATE
+                        },
+                        onDelete = { pendingDeleteTemplate = it },
+                    )
+                }
+
+                AddMemoryTableSheetMode.EDIT_TEMPLATE -> editingTemplate?.let { template ->
+                    val hasConflict = normalizeMemoryTableTemplateName(name) !=
+                        normalizeMemoryTableTemplateName(template.name) &&
+                        hasMemoryTableTemplateNameConflict(
+                            name = name,
+                            scopeType = template.scopeType,
+                            templates = templates,
+                            assistantId = assistantId,
+                            excludedTemplateId = template.id,
+                        )
+                    MemoryTableTemplateForm(
+                        name = name,
+                        description = description,
+                        scopeType = template.scopeType,
+                        isSaving = isSaving,
+                        errorMessage = if (hasConflict) conflictError else errorMessage,
+                        hasNameConflict = hasConflict,
+                        title = stringResource(R.string.assistant_page_memory_table_edit_template),
+                        submitLabel = stringResource(R.string.assistant_page_memory_table_save_template),
+                        scopeEditable = false,
+                        onNameChange = { name = it; errorMessage = null },
+                        onDescriptionChange = { description = it; errorMessage = null },
+                        onScopeChange = {},
+                        onBack = { errorMessage = null; mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES },
+                        onCreate = {
+                            if (!hasConflict) {
+                                isSaving = true
+                                errorMessage = null
+                                onUpsertTemplate(
+                                    template.copy(name = name.trim(), description = description.trim()),
+                                ) { result ->
+                                    isSaving = false
+                                    result.onSuccess {
+                                        editingTemplate = null
+                                        mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES
+                                    }.onFailure { error ->
+                                        errorMessage = if (error is MemoryTableTemplateNameConflictException) {
+                                            conflictError
+                                        } else updateError
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    pendingDeleteTemplate?.let { template ->
+        AlertDialog(
+            onDismissRequest = { if (!isSaving) pendingDeleteTemplate = null },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_delete_template_title, template.name))
+            },
+            text = {
+                val isGlobalTemplate = template.scopeType == MemoryTableScopeType.GLOBAL
+                Text(
+                    stringResource(
+                        if (isGlobalTemplate) {
+                            R.string.assistant_page_memory_table_delete_global_template_description
+                        } else {
+                            R.string.assistant_page_memory_table_delete_template_description
+                        }
+                    ),
+                    color = if (isGlobalTemplate) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isSaving,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        isSaving = true
+                        onDeleteTemplate(template) { result ->
+                            isSaving = false
+                            pendingDeleteTemplate = null
+                            errorMessage = result.fold(
+                                onSuccess = { deleted -> if (deleted) null else deleteError },
+                                onFailure = { deleteError },
+                            )
+                        }
+                    },
+                ) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = {
+                TextButton(enabled = !isSaving, onClick = { pendingDeleteTemplate = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun MemoryTableTemplatePicker(
+    templates: List<MemoryTableTemplate>,
+    primaryDocumentsByTemplate: Map<String, MemoryTableDocument?>,
+    isSaving: Boolean,
+    errorMessage: String?,
+    onSelectTemplate: (MemoryTableTemplate) -> Unit,
+    onCreateTemplate: () -> Unit,
+    onManageTemplates: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.assistant_page_memory_table_add_title),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        Text(
+            text = stringResource(R.string.assistant_page_memory_table_choose_template),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(items = templates, key = { it.id }) { template ->
+                MemoryTableTemplateRow(
+                    template = template,
+                    isAdded = primaryDocumentsByTemplate[template.id] != null,
+                    enabled = !isSaving,
+                    onClick = { onSelectTemplate(template) },
+                )
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .clickable(enabled = !isSaving, onClick = onCreateTemplate)
+                .padding(horizontal = 12.dp, vertical = 14.dp)
+                .alpha(if (isSaving) 0.38f else 1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(imageVector = HugeIcons.Add01, contentDescription = null)
+            Text(
+                text = stringResource(R.string.assistant_page_memory_table_create_new_template),
+                style = MaterialTheme.typography.titleSmall,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .clickable(enabled = !isSaving, onClick = onManageTemplates)
+                .padding(horizontal = 12.dp, vertical = 14.dp)
+                .alpha(if (isSaving) 0.38f else 1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(imageVector = HugeIcons.PencilEdit01, contentDescription = null)
+            Text(
+                text = stringResource(R.string.assistant_page_memory_table_manage_templates),
+                style = MaterialTheme.typography.titleSmall,
+            )
+        }
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+        if (isSaving) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.padding(8.dp))
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryTableTemplateRow(
+    template: MemoryTableTemplate,
+    isAdded: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .alpha(if (enabled) 1f else 0.38f),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        ) {
+            Icon(
+                imageVector = HugeIcons.Database02,
+                contentDescription = null,
+                modifier = Modifier.padding(8.dp).size(18.dp),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = template.name,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = template.description.ifBlank {
+                    stringResource(R.string.assistant_page_memory_table_no_description)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Tag(type = TagType.INFO) {
+                    Text(memoryTableScopeLabel(template.scopeType))
+                }
+                if (isAdded) {
+                    Tag(type = TagType.SUCCESS) {
+                        Icon(
+                            imageVector = HugeIcons.Tick02,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(stringResource(R.string.assistant_page_memory_table_added))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryTableTemplateManager(
+    templates: List<MemoryTableTemplate>,
+    isSaving: Boolean,
+    errorMessage: String?,
+    onBack: () -> Unit,
+    onEdit: (MemoryTableTemplate) -> Unit,
+    onDelete: (MemoryTableTemplate) -> Unit,
+) {
+    val duplicateNames = remember(templates) {
+        templates.groupingBy { normalizeMemoryTableTemplateName(it.name) }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, enabled = !isSaving) {
+                Icon(HugeIcons.ArrowLeft01, stringResource(R.string.back))
+            }
+            Text(
+                text = stringResource(R.string.assistant_page_memory_table_manage_templates),
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(templates, key = { it.id }) { template ->
+                var menuExpanded by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Text(
+                            text = template.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = template.description.ifBlank {
+                                stringResource(R.string.assistant_page_memory_table_no_description)
                             },
-                            enabled = !isSaving,
-                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Tag(type = TagType.INFO) { Text(memoryTableScopeLabel(template.scopeType)) }
+                            if (normalizeMemoryTableTemplateName(template.name) in duplicateNames) {
+                                Tag(type = TagType.WARNING) {
+                                    Text(stringResource(R.string.assistant_page_memory_table_duplicate_name))
+                                }
+                            }
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }, enabled = !isSaving) {
+                            Icon(HugeIcons.MoreVertical, stringResource(R.string.more_options))
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
                         ) {
-                            Text(template.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.edit)) },
+                                leadingIcon = { Icon(HugeIcons.PencilEdit01, null) },
+                                onClick = { menuExpanded = false; onEdit(template) },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.delete),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = HugeIcons.Delete01,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                onClick = { menuExpanded = false; onDelete(template) },
+                            )
                         }
                     }
                 }
-                Text(stringResource(R.string.assistant_page_memory_table_create_template))
-                TextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
-                    enabled = !isSaving,
-                    singleLine = true,
-                )
-                TextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(stringResource(R.string.assistant_page_memory_table_template_description)) },
-                    enabled = !isSaving,
-                )
-                errorMessage?.let {
-                    Text(it.ifBlank { genericError }, color = MaterialTheme.colorScheme.error)
-                }
-                if (isSaving) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    isSaving = true
-                    errorMessage = null
-                    onCreateTemplate(
-                        MemoryTableTemplate(name = name, description = description),
-                        MemoryTableScopeType.ASSISTANT,
-                        handleResult,
-                    )
-                },
-                enabled = !isSaving && name.isNotBlank(),
-            ) { Text(stringResource(R.string.assistant_page_memory_table_create_private)) }
-        },
-        dismissButton = {
-            Row {
-                TextButton(
-                    onClick = {
-                        isSaving = true
-                        errorMessage = null
-                        onCreateTemplate(
-                            MemoryTableTemplate(name = name, description = description),
-                            MemoryTableScopeType.GLOBAL,
-                            handleResult,
-                        )
-                    },
-                    enabled = !isSaving && name.isNotBlank(),
-                ) { Text(stringResource(R.string.assistant_page_memory_table_create_global)) }
-                TextButton(onClick = onDismiss, enabled = !isSaving) {
-                    Text(stringResource(R.string.assistant_page_cancel))
-                }
-            }
-        },
-    )
+        }
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+    }
 }
+
+@Composable
+private fun MemoryTableTemplateForm(
+    name: String,
+    description: String,
+    scopeType: MemoryTableScopeType,
+    isSaving: Boolean,
+    errorMessage: String?,
+    hasNameConflict: Boolean,
+    title: String,
+    submitLabel: String,
+    scopeEditable: Boolean,
+    onNameChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onScopeChange: (MemoryTableScopeType) -> Unit,
+    onBack: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, enabled = !isSaving) {
+                Icon(
+                    imageVector = HugeIcons.ArrowLeft01,
+                    contentDescription = stringResource(R.string.back),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
+            enabled = !isSaving,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            isError = hasNameConflict,
+        )
+        OutlinedTextField(
+            value = description,
+            onValueChange = onDescriptionChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.assistant_page_memory_table_template_description)) },
+            enabled = !isSaving,
+            minLines = 2,
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        )
+        if (scopeEditable) {
+            MemoryTableScopeOption(
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                selected = scopeType == MemoryTableScopeType.ASSISTANT,
+                enabled = !isSaving,
+                description = stringResource(R.string.assistant_page_memory_table_scope_assistant_desc),
+                onSelect = onScopeChange,
+            )
+            MemoryTableScopeOption(
+                scopeType = MemoryTableScopeType.GLOBAL,
+                selected = scopeType == MemoryTableScopeType.GLOBAL,
+                enabled = !isSaving,
+                description = stringResource(R.string.assistant_page_memory_table_scope_global_desc),
+                onSelect = onScopeChange,
+            )
+        } else {
+            Tag(type = TagType.INFO) { Text(memoryTableScopeLabel(scopeType)) }
+        }
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Button(
+            onClick = onCreate,
+            enabled = !isSaving && name.trim().isNotEmpty() && !hasNameConflict,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text(submitLabel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryTableScopeOption(
+    scopeType: MemoryTableScopeType,
+    selected: Boolean,
+    enabled: Boolean,
+    description: String,
+    onSelect: (MemoryTableScopeType) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .clickable(enabled = enabled) { onSelect(scopeType) }
+            .padding(12.dp)
+            .alpha(if (enabled) 1f else 0.38f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = { onSelect(scopeType) },
+            enabled = enabled,
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = memoryTableScopeLabel(scopeType),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun memoryTableScopeLabel(scopeType: MemoryTableScopeType): String =
+    stringResource(
+        when (scopeType) {
+            MemoryTableScopeType.GLOBAL -> R.string.assistant_page_memory_scope_global
+            MemoryTableScopeType.ASSISTANT -> R.string.assistant_page_memory_scope_assistant
+            MemoryTableScopeType.CONVERSATION -> R.string.assistant_page_memory_table_scope_conversation
+        }
+    )
 
 @Composable
 private fun MemoryItem(
@@ -977,7 +1753,10 @@ private fun MemoryItem(
                 IconButton(
                     onClick = { onEditMemory(memory) }
                 ) {
-                    Icon(HugeIcons.PencilEdit01, null)
+                    Icon(
+                        imageVector = HugeIcons.PencilEdit01,
+                        contentDescription = stringResource(R.string.edit),
+                    )
                 }
                 IconButton(
                     onClick = { onDeleteMemory(memory) }

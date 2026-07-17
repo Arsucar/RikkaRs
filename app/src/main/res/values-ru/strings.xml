@@ -1738,4 +1738,24 @@
   <string name="assistant_page_memory_table_create_global">Создать глобальный</string>
   <string name="assistant_page_memory_table_create_failed">Не удалось создать таблицу памяти. Повторите попытку.</string>
   <string name="assistant_page_memory_table_scope_conversation">Диалог</string>
+  <string name="assistant_page_memory_table_empty_description">Создайте таблицу памяти, чтобы упорядочить структурированную информацию для этого ассистента.</string>
+  <string name="assistant_page_memory_table_added">Добавлено</string>
+  <string name="assistant_page_memory_table_create_new_template">Создать новый шаблон</string>
+  <string name="assistant_page_memory_table_scope_assistant_desc">Только этот ассистент может использовать этот шаблон.</string>
+  <string name="assistant_page_memory_table_scope_global_desc">Все ассистенты могут использовать этот шаблон.</string>
+  <string name="assistant_page_memory_table_create">Создать</string>
+  <string name="assistant_page_memory_table_delete_title">Удалить «%1$s»?</string>
+  <string name="assistant_page_memory_table_delete_description">Будет удалён только документ таблицы памяти. Шаблон останется доступен.</string>
+  <string name="assistant_page_memory_table_template_description">Описание</string>
+  <string name="assistant_page_memory_table_no_description">Описания пока нет</string>
+  <string name="assistant_page_memory_table_manage_templates">Управление шаблонами</string>
+  <string name="assistant_page_memory_table_edit_template">Редактировать шаблон</string>
+  <string name="assistant_page_memory_table_name_conflict">Шаблон с таким именем уже существует.</string>
+  <string name="assistant_page_memory_table_duplicate_name">Имя уже используется</string>
+  <string name="assistant_page_memory_table_save_template">Сохранить шаблон</string>
+  <string name="assistant_page_memory_table_delete_template_title">Удалить «%1$s»?</string>
+  <string name="assistant_page_memory_table_delete_template_description">Шаблон и все использующие его документы таблиц памяти будут удалены.</string>
+  <string name="assistant_page_memory_table_delete_global_template_description">Этот глобальный шаблон будет удалён для всех ассистентов вместе со всеми использующими его документами таблиц памяти.</string>
+  <string name="assistant_page_memory_table_template_update_failed">Не удалось сохранить шаблон. Повторите попытку.</string>
+  <string name="assistant_page_memory_table_template_delete_failed">Не удалось удалить шаблон. Повторите попытку.</string>
 </resources>

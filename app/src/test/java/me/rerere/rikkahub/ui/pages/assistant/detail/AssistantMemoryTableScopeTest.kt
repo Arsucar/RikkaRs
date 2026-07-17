@@ -150,6 +150,170 @@ class AssistantMemoryTableScopeTest {
     }
 
     @Test
+    fun deriveDocumentsBuildsPrimaryMapIndependentlyForMultipleVisibleTemplates() {
+        val assistantTemplate = MemoryTableTemplate(id = "assistant-template")
+        val globalTemplate = MemoryTableTemplate(id = "global-template")
+        val emptyTemplate = MemoryTableTemplate(id = "empty-template")
+        val selection = deriveAssistantMemoryTableDocuments(
+            templates = listOf(assistantTemplate, globalTemplate, emptyTemplate),
+            documents = listOf(
+                document(
+                    id = "assistant-global",
+                    scopeType = MemoryTableScopeType.GLOBAL,
+                    scopeId = "global",
+                    templateId = assistantTemplate.id,
+                ),
+                document(
+                    id = "assistant-primary",
+                    scopeType = MemoryTableScopeType.ASSISTANT,
+                    scopeId = "assistant-a",
+                    templateId = assistantTemplate.id,
+                ),
+                document(
+                    id = "global-primary",
+                    scopeType = MemoryTableScopeType.GLOBAL,
+                    scopeId = "global",
+                    templateId = globalTemplate.id,
+                ),
+                document(
+                    id = "invisible-assistant",
+                    scopeType = MemoryTableScopeType.ASSISTANT,
+                    scopeId = "assistant-a",
+                    templateId = "invisible-template",
+                ),
+            ),
+            assistantId = "assistant-a",
+        )
+
+        assertEquals("assistant-primary", selection.primaryDocumentsByTemplate[assistantTemplate.id]?.id)
+        assertEquals("global-primary", selection.primaryDocumentsByTemplate[globalTemplate.id]?.id)
+        assertTrue(selection.primaryDocumentsByTemplate.containsKey(emptyTemplate.id))
+        assertNull(selection.primaryDocumentsByTemplate[emptyTemplate.id])
+        assertFalse(selection.primaryDocumentsByTemplate.containsKey("invisible-template"))
+        assertEquals(
+            listOf("assistant-global", "assistant-primary", "global-primary"),
+            selection.visibleDocuments.map { it.id },
+        )
+        assertEquals(listOf("assistant-global"), selection.extraDocuments.map { it.id })
+    }
+
+    @Test
+    fun pickerCollapsesNormalizedDuplicateNamesWithoutDroppingDocumentProjection() {
+        val first = template("first", " Shared  Name ", MemoryTableScopeType.GLOBAL, "global")
+        val second = template("second", "shared name", MemoryTableScopeType.GLOBAL, "global")
+        val documents = listOf(
+            document("first-document", MemoryTableScopeType.GLOBAL, "global", first.id),
+            document("second-document", MemoryTableScopeType.GLOBAL, "global", second.id),
+        )
+        val selection = deriveAssistantMemoryTableDocuments(listOf(first, second), documents, "assistant-a")
+
+        val picker = deriveMemoryTablePickerTemplates(
+            templates = listOf(first, second),
+            primaryDocumentsByTemplate = selection.primaryDocumentsByTemplate,
+            assistantId = "assistant-a",
+        )
+
+        assertEquals(1, picker.size)
+        assertEquals(listOf("first-document", "second-document"), selection.visibleDocuments.map { it.id })
+    }
+
+    @Test
+    fun pickerPrefersTemplateWithPrimaryDocument() {
+        val unusedAssistant = template("assistant", "same", MemoryTableScopeType.ASSISTANT, "assistant-a")
+        val addedGlobal = template("global", "SAME", MemoryTableScopeType.GLOBAL, "global")
+
+        val picker = deriveMemoryTablePickerTemplates(
+            templates = listOf(unusedAssistant, addedGlobal),
+            primaryDocumentsByTemplate = mapOf(
+                unusedAssistant.id to null,
+                addedGlobal.id to document("added", MemoryTableScopeType.GLOBAL, "global", addedGlobal.id),
+            ),
+            assistantId = "assistant-a",
+        )
+
+        assertEquals("global", picker.single().id)
+    }
+
+    @Test
+    fun pickerPrefersCurrentAssistantThenGlobalThenNewestAndId() {
+        val otherAssistant = template("other", "same", MemoryTableScopeType.ASSISTANT, "assistant-b", 30)
+        val global = template("global", "same", MemoryTableScopeType.GLOBAL, "global", 20)
+        val currentAssistant = template("current", "same", MemoryTableScopeType.ASSISTANT, "assistant-a", 10)
+        assertEquals(
+            "current",
+            deriveMemoryTablePickerTemplates(
+                listOf(otherAssistant, global, currentAssistant), emptyMap(), "assistant-a"
+            ).single().id,
+        )
+
+        val newestGlobal = template("z", "global-only", MemoryTableScopeType.GLOBAL, "global", 40)
+        val olderGlobal = template("a", "GLOBAL-ONLY", MemoryTableScopeType.GLOBAL, "global", 10)
+        assertEquals(
+            "z",
+            deriveMemoryTablePickerTemplates(
+                listOf(olderGlobal, newestGlobal), emptyMap(), "assistant-a"
+            ).single().id,
+        )
+
+        val globalBeforeOtherAssistant = template("global-a", "scope-tie", MemoryTableScopeType.GLOBAL, "global", 1)
+        val newerForeignAssistant =
+            template("assistant-z", "SCOPE-TIE", MemoryTableScopeType.ASSISTANT, "assistant-b", 99)
+        assertEquals(
+            "global-a",
+            deriveMemoryTablePickerTemplates(
+                listOf(newerForeignAssistant, globalBeforeOtherAssistant),
+                emptyMap(),
+                "assistant-a",
+            ).single().id,
+        )
+
+        val stableA = template("a", "id-tie", MemoryTableScopeType.GLOBAL, "global", 10)
+        val stableZ = template("z", "ID-TIE", MemoryTableScopeType.GLOBAL, "global", 10)
+        assertEquals(
+            "a",
+            deriveMemoryTablePickerTemplates(
+                listOf(stableZ, stableA),
+                emptyMap(),
+                "assistant-a",
+            ).single().id,
+        )
+    }
+
+    @Test
+    fun templateNameConflictUsesScopeRulesAndExcludesEditedTemplate() {
+        val global = template("global", "Shared Name", MemoryTableScopeType.GLOBAL, "global")
+        val current = template("current", "Private", MemoryTableScopeType.ASSISTANT, "assistant-a")
+        val other = template("other", "Other Private", MemoryTableScopeType.ASSISTANT, "assistant-b")
+        val templates = listOf(global, current, other)
+
+        assertTrue(
+            hasMemoryTableTemplateNameConflict(
+                " shared   name ", MemoryTableScopeType.ASSISTANT, templates, "assistant-a"
+            )
+        )
+        assertTrue(
+            hasMemoryTableTemplateNameConflict(
+                "private", MemoryTableScopeType.ASSISTANT, templates, "assistant-a"
+            )
+        )
+        assertFalse(
+            hasMemoryTableTemplateNameConflict(
+                "other private", MemoryTableScopeType.ASSISTANT, templates, "assistant-a"
+            )
+        )
+        assertTrue(
+            hasMemoryTableTemplateNameConflict(
+                "other private", MemoryTableScopeType.GLOBAL, templates, "assistant-a"
+            )
+        )
+        assertFalse(
+            hasMemoryTableTemplateNameConflict(
+                " private ", MemoryTableScopeType.ASSISTANT, templates, "assistant-a", excludedTemplateId = current.id
+            )
+        )
+    }
+
+    @Test
     fun editorLookupRequiresMatchingIdTemplateAndScope() {
         val documents = listOf(
             document("assistant-a", MemoryTableScopeType.ASSISTANT, "assistant-a"),
@@ -258,10 +422,25 @@ class AssistantMemoryTableScopeTest {
         id: String,
         scopeType: MemoryTableScopeType,
         scopeId: String,
+        templateId: String = "template",
     ) = MemoryTableDocument(
         id = id,
-        templateId = "template",
+        templateId = templateId,
         scopeType = scopeType,
         scopeId = scopeId,
+    )
+
+    private fun template(
+        id: String,
+        name: String,
+        scopeType: MemoryTableScopeType,
+        scopeId: String,
+        updatedAt: Long = 0,
+    ) = MemoryTableTemplate(
+        id = id,
+        name = name,
+        scopeType = scopeType,
+        scopeId = scopeId,
+        updatedAt = updatedAt,
     )
 }
