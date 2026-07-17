@@ -1154,3 +1154,38 @@ Fixed legacy duplicate template edit validation, cleaned revision snapshots duri
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: 完成 Issues #142 与 #143
+
+**Date**: 2026-07-17
+**Task**: 完成 Issues #142 与 #143
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+为结构化记忆表接入 revision 历史、差异与安全回滚；将 WebDAV/S3/本地备份导入导出迁移到 AppScope 协调器，修复离页取消、取消错误提示、成功时序、临时文件清理和路径穿越。编译与 app 全量 JVM 测试通过；设备离线，未安装和未运行仪器测试；lintDebug 超时未完成。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d3eb6672` | (see git log) |
+| `7c4ec367` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
