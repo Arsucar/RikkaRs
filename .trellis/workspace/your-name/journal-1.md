@@ -1257,3 +1257,37 @@ Prepared v2.3.31 metadata and bilingual release notes for issues #136, #137, #14
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: Issue 146 memory table document trash
+
+**Date**: 2026-07-18
+**Task**: Issue 146 memory table document trash
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented Room v41 document soft deletion, Assistant trash UI, tool/runtime guards, lifecycle cleanup, localization, migration/DAO/Repository/tool/UI tests; pushed, documented, and closed GitHub issue #146. Device remained offline and repository lint still fails on pre-existing findings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6be60cb0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
