@@ -12,6 +12,23 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.31
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.30 之后）
+
+- **会话归档移除与数据保留** — 移除低频的会话归档页面、入口和操作；升级后原归档会话会作为普通会话重新可见，标题、消息、标签、文件夹等数据保持不变，助手归档功能不受影响。（#136）
+  **Conversation archive removal with data preservation** — Remove the low-use conversation archive page and actions; previously archived conversations become visible as regular conversations after upgrading, with titles, messages, tags, folders, and other data preserved. Assistant archiving is unchanged. (#136)
+- **普通记忆与记忆表独立控制** — 普通记忆和结构化记忆表现在可独立启用；关闭普通记忆不再阻断记忆表注入或工具，全局记忆表开关关闭时也会保留助手级偏好并显示明确原因。（#137）
+  **Independent memory and memory-table controls** — Ordinary memory and structured memory tables can now be enabled independently; disabling ordinary memory no longer blocks memory-table injection or tools, while assistant-level preferences are preserved when the global memory-table switch is off. (#137)
+- **记忆表文档与模板管理重构** — 助手记忆页改为以已创建文档为主，新增表格通过模板选择器完成；支持创建、编辑和管理私有/全局模板，阻止同名冲突，并明确区分删除文档与级联删除模板。（#140）
+  **Memory-table document and template workflow** — The assistant memory page now focuses on created documents, with new tables added through a template picker; private and global templates can be created, edited, and managed with duplicate-name protection and clear document-versus-template deletion behavior. (#140)
+- **Assistant Hooks 配置体验优化** — Hook 卡片支持整卡编辑，删除移入确认菜单；编辑页按基础、运行、规则和动作分区，并为无效模型、提示词及标签配置显示具体校验错误。（#141）
+  **Assistant Hooks configuration improvements** — Hook cards now open directly for editing, deletion moves to a confirmation menu, and the editor is organized into Basic, Runtime, Rules, and Action sections with explicit validation for models, prompts, and tag configuration. (#141)
+- **记忆表版本历史与可靠回滚** — 补齐结构化记忆快照的生产接线和可视化历史页，可查看版本时间、JSON 内容及与当前版本的差异，并在确认后将旧版本恢复为新的 revision。（#142）
+  **Memory-table revision history and reliable rollback** — Complete the production snapshot wiring and add a revision-history UI for viewing timestamps, JSON payloads, and diffs against the current version, with confirmed rollback recorded as a new revision. (#142)
+- **备份离页续跑与恢复安全性** — WebDAV、S3 和本地导入导出在切换 Tab 或离开备份页后仍可继续，并保留成功、失败或取消状态；同时修正成功时间记录、临时文件清理和备份恢复路径校验。（#143）
+  **Background backup continuity and safer restore** — WebDAV, S3, and local import/export tasks now continue when switching tabs or leaving the backup page, retaining success, failure, or cancellation state; success-time recording, temporary-file cleanup, and restore-path validation are also hardened. (#143)
+
 ## v2.3.30
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.29 之后）
