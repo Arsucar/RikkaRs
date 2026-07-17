@@ -7,6 +7,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,7 @@ import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
+import me.rerere.rikkahub.data.repository.MemoryTableDocumentSnapshot
 import me.rerere.rikkahub.data.repository.ConversationTagRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillFileImportReader
@@ -498,6 +500,52 @@ class AssistantDetailVM(
         }
     }
 
+    suspend fun getMemoryTableRevisionHistory(
+        documentId: String,
+        conversationId: String? = null,
+    ): Result<MemoryTableRevisionHistory> = try {
+        val current = memoryTableRepository.getEffectiveDocument(
+            id = documentId,
+            assistantId = assistantId.toString(),
+            conversationId = conversationId,
+        ) ?: error("memory table document not found or not authorized: $documentId")
+        val snapshots = memoryTableRepository.getDocumentSnapshots(
+            documentId = documentId,
+            actorAssistantId = assistantId.toString(),
+            actorConversationId = conversationId,
+        )
+        Result.success(MemoryTableRevisionHistory(current, snapshots))
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
+
+    fun rollbackMemoryTableDocument(
+        documentId: String,
+        revision: Int,
+        conversationId: String? = null,
+        onDone: (Result<MemoryTableDocument>) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val result = try {
+                Result.success(
+                    memoryTableRepository.rollbackDocument(
+                        documentId = documentId,
+                        revision = revision,
+                        actorAssistantId = assistantId.toString(),
+                        actorConversationId = conversationId,
+                    )
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+            onDone(result)
+        }
+    }
+
     fun checkAvatarDelete(old: Assistant, new: Assistant) {
         if (old.avatar is Avatar.Image && old.avatar != new.avatar) {
             filesManager.deleteChatFiles(listOf(old.avatar.url.toUri()))
@@ -529,3 +577,8 @@ internal suspend fun persistMemoryTableCreation(
     val persistedTemplate = persistTemplate?.invoke(template) ?: template
     return persistDocument(persistedTemplate)
 }
+
+data class MemoryTableRevisionHistory(
+    val currentDocument: MemoryTableDocument,
+    val snapshots: List<MemoryTableDocumentSnapshot>,
+)

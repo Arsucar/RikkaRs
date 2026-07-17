@@ -47,7 +47,7 @@ val repositoryModule = module {
     }
 
     single {
-        MemoryTableRepository(get())
+        MemoryTableRepository(get(), get(), get())
     }
 
     single {

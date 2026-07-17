@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.repository
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import androidx.room.withTransaction
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.MemoryTableDAO
 import me.rerere.rikkahub.data.db.dao.MemoryTableSnapshotDAO
 import me.rerere.rikkahub.data.db.entity.MemoryTableDocumentEntity
@@ -30,17 +32,10 @@ import kotlin.uuid.Uuid
 
 class MemoryTableRepository(
     private val dao: MemoryTableDAO,
-    // #96: optional snapshot DAO. Null keeps the repository fully functional
-    // without revision history (used by existing unit tests that don't wire it).
-    private val snapshotDao: MemoryTableSnapshotDAO? = null,
+    private val snapshotDao: MemoryTableSnapshotDAO,
+    private val database: AppDatabase? = null,
 ) {
     suspend fun deleteDataOwnedByAssistant(assistantId: String) {
-        val documentIds = dao.getDocumentIdsOwnedByAssistant(assistantId)
-        snapshotDao?.let { snapshots ->
-            documentIds.forEach { documentId ->
-                snapshots.deleteSnapshotsForDocument(documentId)
-            }
-        }
         dao.deleteMemoryTableDataOwnedByAssistant(assistantId)
     }
 
@@ -189,9 +184,7 @@ class MemoryTableRepository(
     }
 
     suspend fun deleteTemplate(id: String): Boolean {
-        if (dao.getTemplate(id) == null) return false
-        dao.deleteDocumentsByTemplate(id)
-        return dao.deleteTemplate(id) > 0
+        return dao.deleteTemplateAndDocuments(id) > 0
     }
 
     suspend fun deleteTemplate(id: String, actorAssistantId: String): Boolean =
@@ -214,7 +207,10 @@ class MemoryTableRepository(
         )
     }
 
-    suspend fun upsertDocument(document: MemoryTableDocument): MemoryTableDocument {
+    suspend fun upsertDocument(document: MemoryTableDocument): MemoryTableDocument =
+        inTransaction { upsertDocumentInternal(document) }
+
+    private suspend fun upsertDocumentInternal(document: MemoryTableDocument): MemoryTableDocument {
         val now = Clock.System.now().toEpochMilliseconds()
         val payloadJson = normalizeMemoryTablePayloadJson(document.payloadJson)
         validateMemoryTablePayloadJson(payloadJson)
@@ -236,18 +232,16 @@ class MemoryTableRepository(
         // #96: before overwriting an existing document, snapshot its prior payload so
         // a previous revision can be restored later. New documents have no prior state.
         if (old != null) {
-            snapshotDao?.let { snapshots ->
-                snapshots.upsertSnapshot(
-                    MemoryTableSnapshotEntity(
-                        id = Uuid.random().toString(),
-                        documentId = old.id,
-                        revision = old.revision,
-                        payloadJson = old.payloadJson,
-                        createdAt = now,
-                    )
+            snapshotDao.upsertSnapshot(
+                MemoryTableSnapshotEntity(
+                    id = snapshotId(old.id, old.revision),
+                    documentId = old.id,
+                    revision = old.revision,
+                    payloadJson = old.payloadJson,
+                    createdAt = now,
                 )
-                snapshots.pruneSnapshots(old.id, MEMORY_TABLE_SNAPSHOT_RETENTION)
-            }
+            )
+            snapshotDao.pruneSnapshots(old.id, MEMORY_TABLE_SNAPSHOT_RETENTION)
         }
         dao.upsertDocument(normalized.toEntity())
         return normalized
@@ -257,7 +251,7 @@ class MemoryTableRepository(
         document: MemoryTableDocument,
         actorAssistantId: String,
         actorConversationId: String? = null,
-    ): MemoryTableDocument {
+    ): MemoryTableDocument = inTransaction {
         val old = document.id
             .takeIf { it.isNotBlank() }
             ?.let { dao.getEffectiveDocument(it, actorAssistantId, actorConversationId) }
@@ -273,25 +267,44 @@ class MemoryTableRepository(
             actorAssistantId = actorAssistantId,
             actorConversationId = actorConversationId,
         )
-        return upsertDocument(document)
+        upsertDocumentInternal(document)
     }
 
     // #96: list stored revision snapshots for a document, newest revision first.
-    suspend fun getDocumentSnapshots(documentId: String): List<MemoryTableDocumentSnapshot> =
-        snapshotDao?.getSnapshotsForDocument(documentId)
-            ?.map { MemoryTableDocumentSnapshot(it.documentId, it.revision, it.payloadJson, it.createdAt) }
-            .orEmpty()
+    suspend fun getDocumentSnapshots(
+        documentId: String,
+        actorAssistantId: String,
+        actorConversationId: String? = null,
+    ): List<MemoryTableDocumentSnapshot> {
+        val current = getEffectiveDocument(documentId, actorAssistantId, actorConversationId)
+            ?: error("memory table document not found or not authorized: $documentId")
+        return snapshotDao.getSnapshotsForDocument(documentId)
+            .filter { it.revision >= 0 && it.revision < current.revision }
+            .distinctBy { it.revision }
+            .map { MemoryTableDocumentSnapshot(it.documentId, it.revision, it.payloadJson, it.createdAt) }
+    }
 
     // #96: restore a document payload from a stored snapshot revision. Restoring writes
     // a new revision (and snapshots the current payload first) so history stays linear.
-    suspend fun rollbackDocument(documentId: String, revision: Int): MemoryTableDocument {
-        val snapshots = snapshotDao
-            ?: error("memory table snapshots are unavailable")
-        val snapshot = snapshots.getSnapshot(documentId, revision)
+    suspend fun rollbackDocument(
+        documentId: String,
+        revision: Int,
+        actorAssistantId: String,
+        actorConversationId: String? = null,
+    ): MemoryTableDocument = inTransaction {
+        val current = getEffectiveDocument(documentId, actorAssistantId, actorConversationId)
+            ?: error("memory table document not found or not authorized: $documentId")
+        check(revision >= 0 && revision < current.revision) {
+            "memory table revision is not a historical revision: $documentId@$revision"
+        }
+        val snapshot = snapshotDao.getSnapshot(documentId, revision)
             ?: error("memory table snapshot not found for $documentId@$revision")
-        val current = dao.getDocument(documentId)?.toModel()
-            ?: error("memory table document not found: $documentId")
-        return upsertDocument(current.copy(payloadJson = snapshot.payloadJson))
+        val restored = upsertDocumentInternal(current.copy(payloadJson = snapshot.payloadJson))
+        // A rollback of the oldest retained revision may cause normal pruning to remove
+        // the selected target. Reinsert the immutable target inside the same transaction
+        // so a reported rollback failure never leaves the current document modified.
+        snapshotDao.upsertSnapshot(snapshot)
+        restored
     }
 
     suspend fun getDocument(id: String): MemoryTableDocument? =
@@ -307,7 +320,7 @@ class MemoryTableRepository(
             ?.toModel()
 
     suspend fun deleteDocument(id: String) {
-        dao.deleteDocument(id)
+        dao.deleteDocumentAndSnapshots(id)
     }
 
     suspend fun deleteDocument(
@@ -316,7 +329,7 @@ class MemoryTableRepository(
         conversationId: String? = null,
     ): Boolean {
         getEffectiveDocument(id, assistantId, conversationId) ?: return false
-        return dao.deleteDocument(id) > 0
+        return dao.deleteDocumentAndSnapshots(id) > 0
     }
 
     // #100: export all templates + documents as a versioned JSON bundle.
@@ -405,6 +418,12 @@ class MemoryTableRepository(
             createdAt = createdAt,
             updatedAt = updatedAt,
         )
+
+    private suspend fun <T> inTransaction(block: suspend () -> T): T =
+        database?.withTransaction { block() } ?: block()
+
+    private fun snapshotId(documentId: String, revision: Int): String =
+        "memory-table-snapshot:$documentId:$revision"
 
     private fun MemoryTableTemplate.toEntity(): MemoryTableTemplateEntity =
         MemoryTableTemplateEntity(

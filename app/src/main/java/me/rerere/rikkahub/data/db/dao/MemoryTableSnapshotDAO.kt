@@ -13,7 +13,7 @@ interface MemoryTableSnapshotDAO {
         """
         SELECT * FROM memory_table_snapshots
         WHERE document_id = :documentId
-        ORDER BY revision DESC
+        ORDER BY revision DESC, created_at DESC, id DESC
         """
     )
     fun getSnapshotsForDocumentFlow(documentId: String): Flow<List<MemoryTableSnapshotEntity>>
@@ -22,7 +22,7 @@ interface MemoryTableSnapshotDAO {
         """
         SELECT * FROM memory_table_snapshots
         WHERE document_id = :documentId
-        ORDER BY revision DESC
+        ORDER BY revision DESC, created_at DESC, id DESC
         """
     )
     suspend fun getSnapshotsForDocument(documentId: String): List<MemoryTableSnapshotEntity>
@@ -31,6 +31,7 @@ interface MemoryTableSnapshotDAO {
         """
         SELECT * FROM memory_table_snapshots
         WHERE document_id = :documentId AND revision = :revision
+        ORDER BY created_at DESC, id DESC
         LIMIT 1
         """
     )

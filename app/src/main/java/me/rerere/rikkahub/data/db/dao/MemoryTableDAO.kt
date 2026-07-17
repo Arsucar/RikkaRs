@@ -100,6 +100,14 @@ interface MemoryTableDAO {
         return deleteTemplate(id)
     }
 
+    @Transaction
+    suspend fun deleteTemplateAndDocuments(id: String): Int {
+        getTemplate(id) ?: return 0
+        deleteSnapshotsByTemplate(id)
+        deleteDocumentsByTemplate(id)
+        return deleteTemplate(id)
+    }
+
     @Query(
         """
         DELETE FROM memory_table_snapshots
@@ -197,6 +205,15 @@ interface MemoryTableDAO {
     @Query("DELETE FROM memory_table_documents WHERE id = :id")
     suspend fun deleteDocument(id: String): Int
 
+    @Query("DELETE FROM memory_table_snapshots WHERE document_id = :documentId")
+    suspend fun deleteSnapshotsForDocument(documentId: String): Int
+
+    @Transaction
+    suspend fun deleteDocumentAndSnapshots(id: String): Int {
+        deleteSnapshotsForDocument(id)
+        return deleteDocument(id)
+    }
+
     @Query("DELETE FROM memory_table_documents WHERE template_id = :templateId")
     suspend fun deleteDocumentsByTemplate(templateId: String): Int
 
@@ -232,8 +249,24 @@ interface MemoryTableDAO {
     )
     suspend fun deleteTemplatesOwnedByAssistant(assistantId: String): Int
 
+    @Query(
+        """
+        DELETE FROM memory_table_snapshots
+        WHERE document_id IN (
+            SELECT id FROM memory_table_documents
+            WHERE (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+               OR template_id IN (
+                   SELECT id FROM memory_table_templates
+                   WHERE scope_type = 'ASSISTANT' AND scope_id = :assistantId
+               )
+        )
+        """
+    )
+    suspend fun deleteSnapshotsOwnedByAssistant(assistantId: String): Int
+
     @Transaction
     suspend fun deleteMemoryTableDataOwnedByAssistant(assistantId: String) {
+        deleteSnapshotsOwnedByAssistant(assistantId)
         deleteDocumentsOwnedByAssistant(assistantId)
         deleteTemplatesOwnedByAssistant(assistantId)
     }

@@ -42,7 +42,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun upsertTemplateNormalizesBlankNameAndSchema() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val template = repository.upsertTemplate(MemoryTableTemplate(name = "", schemaJson = ""))
 
@@ -58,7 +58,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun upsertTemplateRejectsInvalidSchemaBeforeDaoWrite() {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val error = assertThrows(IllegalArgumentException::class.java) {
             runBlocking {
@@ -79,7 +79,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun deleteTemplateReturnsFalseWhenTemplateIsMissing() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val deleted = repository.deleteTemplate("missing")
 
@@ -105,7 +105,7 @@ class MemoryTableRepositoryTest {
                 doc("other", "ASSISTANT", "assistant-a").copy(templateId = "other-template"),
             )
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val deleted = repository.deleteTemplate("template")
 
@@ -124,7 +124,7 @@ class MemoryTableRepositoryTest {
                 doc("conversation-a", "CONVERSATION", "conversation-a"),
             )
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val documents = repository.getEffectiveDocuments(
             assistantId = "assistant-a",
@@ -146,7 +146,7 @@ class MemoryTableRepositoryTest {
                 doc("unknown", "UNKNOWN", "assistant-a"),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val conversationSuspend = repository.getEffectiveDocuments(
             assistantId = "assistant-a",
@@ -174,7 +174,7 @@ class MemoryTableRepositoryTest {
                 doc("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID),
             )
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val documents = repository.getEffectiveDocumentsIfEnabled(
             settingsEnabled = false,
@@ -190,7 +190,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun upsertDocumentBumpsRevisionWhenUpdating() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
         val created = repository.upsertDocument(
             MemoryTableDocument(
                 templateId = "template",
@@ -209,7 +209,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun upsertDocumentRejectsInvalidPayloadBeforeDaoWrite() {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val error = assertThrows(IllegalArgumentException::class.java) {
             runBlocking {
@@ -239,7 +239,7 @@ class MemoryTableRepositoryTest {
             revision = 3,
         )
         val dao = FakeMemoryTableDAO(documents = listOf(existing))
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val error = assertThrows(IllegalArgumentException::class.java) {
             runBlocking {
@@ -291,14 +291,129 @@ class MemoryTableRepositoryTest {
         )
         assertEquals("""{"facts":[{"key":"name","value":"Bob"}]}""", dao.documents.single().payloadJson)
 
-        val snapshots = repository.getDocumentSnapshots("doc")
+        val snapshots = repository.getDocumentSnapshots("doc", actorAssistantId = "assistant-a")
         assertEquals(1, snapshots.size)
         assertEquals(0, snapshots.single().revision)
 
         // Rollback to revision 0's payload.
-        val restored = repository.rollbackDocument("doc", revision = 0)
+        val restored = repository.rollbackDocument(
+            documentId = "doc",
+            revision = 0,
+            actorAssistantId = "assistant-a",
+        )
         assertTrue(restored.payloadJson.contains("Alice"))
         assertTrue(dao.documents.single().payloadJson.contains("Alice"))
+        assertEquals(2, restored.revision)
+        assertEquals(
+            listOf(1, 0),
+            repository.getDocumentSnapshots("doc", actorAssistantId = "assistant-a").map { it.revision },
+        )
+    }
+
+    @Test
+    fun historyAndRollbackRejectForeignAssistantWithoutChangingDocument() = runBlocking {
+        val original = doc(
+            id = "doc",
+            scopeType = "ASSISTANT",
+            scopeId = "assistant-a",
+            payloadJson = """{"value":"current"}""",
+            revision = 3,
+        )
+        val dao = FakeMemoryTableDAO(documents = listOf(original))
+        val snapshotDao = FakeMemoryTableSnapshotDAO().apply {
+            snapshots += MemoryTableSnapshotEntity(
+                id = "snapshot",
+                documentId = "doc",
+                revision = 2,
+                payloadJson = """{"value":"old"}""",
+                createdAt = 2,
+            )
+        }
+        val repository = MemoryTableRepository(dao, snapshotDao)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.getDocumentSnapshots("doc", actorAssistantId = "assistant-b")
+            }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.rollbackDocument(
+                    documentId = "doc",
+                    revision = 2,
+                    actorAssistantId = "assistant-b",
+                )
+            }
+        }
+
+        assertEquals(original, dao.documents.single())
+        assertEquals(0, dao.documentUpserts)
+    }
+
+    @Test
+    fun rollbackRejectsMissingRevisionWithoutChangingDocument() = runBlocking {
+        val original = doc(
+            id = "doc",
+            scopeType = "ASSISTANT",
+            scopeId = "assistant-a",
+            payloadJson = """{"value":"current"}""",
+            revision = 3,
+        )
+        val dao = FakeMemoryTableDAO(documents = listOf(original))
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.rollbackDocument(
+                    documentId = "doc",
+                    revision = 99,
+                    actorAssistantId = "assistant-a",
+                )
+            }
+        }
+
+        assertEquals(original, dao.documents.single())
+        assertEquals(0, dao.documentUpserts)
+    }
+
+    @Test
+    fun historyAndRollbackRejectNonHistoricalRevisionsWithoutChangingDocument() = runBlocking {
+        val original = doc(
+            id = "doc",
+            scopeType = "ASSISTANT",
+            scopeId = "assistant-a",
+            payloadJson = """{"value":"current"}""",
+            revision = 3,
+        )
+        val dao = FakeMemoryTableDAO(documents = listOf(original))
+        val snapshotDao = FakeMemoryTableSnapshotDAO().apply {
+            snapshots += listOf(
+                MemoryTableSnapshotEntity("negative", "doc", -1, "{}", 1),
+                MemoryTableSnapshotEntity("current", "doc", 3, "{}", 2),
+                MemoryTableSnapshotEntity("future", "doc", 4, "{}", 3),
+                MemoryTableSnapshotEntity("historical", "doc", 2, "{}", 4),
+            )
+        }
+        val repository = MemoryTableRepository(dao, snapshotDao)
+
+        assertEquals(
+            listOf(2),
+            repository.getDocumentSnapshots("doc", actorAssistantId = "assistant-a").map { it.revision },
+        )
+        listOf(-1, 3, 4).forEach { revision ->
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking {
+                    repository.rollbackDocument(
+                        documentId = "doc",
+                        revision = revision,
+                        actorAssistantId = "assistant-a",
+                    )
+                }
+            }
+        }
+
+        assertEquals(original, dao.documents.single())
+        assertEquals(0, dao.documentUpserts)
     }
 
     @Test
@@ -311,7 +426,7 @@ class MemoryTableRepositoryTest {
                 templateEntity("conversation", "CONVERSATION", "conversation-a"),
             )
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val templates = repository.getEffectiveTemplates("assistant-a")
         val flowTemplates = repository.getEffectiveTemplatesFlow("assistant-a").first()
@@ -323,7 +438,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun scopedTemplateCreateDefaultsToActorAndAllowsSameNamePerAssistant() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val a = repository.upsertTemplate(
             MemoryTableTemplate(name = "Shared"),
@@ -351,7 +466,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun actorlessTemplateUpsertKeepsLegacyDuplicateImportCompatibility() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         repository.upsertTemplate(
             MemoryTableTemplate(
@@ -396,7 +511,7 @@ class MemoryTableRepositoryTest {
                 ),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertThrows(MemoryTableTemplateNameConflictException::class.java) {
             runBlocking {
@@ -429,7 +544,7 @@ class MemoryTableRepositoryTest {
                 ),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertThrows(MemoryTableTemplateNameConflictException::class.java) {
             runBlocking {
@@ -446,7 +561,7 @@ class MemoryTableRepositoryTest {
     @Test
     fun scopedTemplateCreateSupportsRequestedGlobalScope() = runBlocking {
         val dao = FakeMemoryTableDAO()
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val template = repository.upsertTemplate(
             template = MemoryTableTemplate(name = "Global Table"),
@@ -472,7 +587,7 @@ class MemoryTableRepositoryTest {
                 ),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val updated = repository.upsertTemplate(
             MemoryTableTemplate(id = "template-a", name = " shared   NAME "),
@@ -494,7 +609,7 @@ class MemoryTableRepositoryTest {
                 templateEntity("template-b", "ASSISTANT", "assistant-a", name = " shared   NAME "),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val updated = repository.upsertTemplate(
             MemoryTableTemplate(
@@ -522,7 +637,7 @@ class MemoryTableRepositoryTest {
                 doc("doc-b", "ASSISTANT", "assistant-a", templateId = "template-b"),
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val deleted = repository.deleteTemplate("template-a", actorAssistantId = "assistant-a")
 
@@ -537,7 +652,7 @@ class MemoryTableRepositoryTest {
             templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
             documents = listOf(doc("doc-a", "ASSISTANT", "assistant-a")),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertThrows(IllegalStateException::class.java) {
             runBlocking {
@@ -559,7 +674,7 @@ class MemoryTableRepositoryTest {
         val dao = FakeMemoryTableDAO(
             templates = listOf(templateEntity("malformed-global", "GLOBAL", "other")),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertEquals(null, repository.getEffectiveTemplate("malformed-global", "assistant-a"))
         assertFalse(repository.deleteTemplate("malformed-global", actorAssistantId = "assistant-a"))
@@ -571,7 +686,7 @@ class MemoryTableRepositoryTest {
         val dao = FakeMemoryTableDAO(
             templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         val updated = repository.upsertTemplate(
             MemoryTableTemplate(
@@ -595,7 +710,7 @@ class MemoryTableRepositoryTest {
             templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
             documents = listOf(doc("doc-a", "ASSISTANT", "assistant-a")),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertEquals(
             null,
@@ -644,7 +759,7 @@ class MemoryTableRepositoryTest {
                 )
             ),
         )
-        val repository = MemoryTableRepository(dao)
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
         assertThrows(MemoryTableTemplateNameConflictException::class.java) {
             runBlocking {
@@ -823,6 +938,8 @@ class MemoryTableRepositoryTest {
             return before - documents.size
         }
 
+        override suspend fun deleteSnapshotsForDocument(documentId: String): Int = 0
+
         override suspend fun deleteDocumentsByTemplate(templateId: String): Int {
             val before = documents.size
             documents.removeAll { it.templateId == templateId }
@@ -856,6 +973,8 @@ class MemoryTableRepositoryTest {
             templates.removeAll { it.scopeType == "ASSISTANT" && it.scopeId == assistantId }
             return before - templates.size
         }
+
+        override suspend fun deleteSnapshotsOwnedByAssistant(assistantId: String): Int = 0
     }
 
     private class FakeMemoryTableSnapshotDAO : MemoryTableSnapshotDAO {

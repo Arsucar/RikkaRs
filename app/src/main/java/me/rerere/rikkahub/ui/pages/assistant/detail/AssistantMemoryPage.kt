@@ -483,6 +483,9 @@ private fun AssistantMemoryContent(
             onEditDocument = { document ->
                 navController.navigate(document.toMemoryTableEditorScreen(assistant))
             },
+            onHistoryDocument = { document ->
+                navController.navigate(document.toMemoryTableRevisionHistoryScreen(assistant))
+            },
             onDeleteDocument = { pendingDeleteMemoryTableDocument = it },
         )
 
@@ -773,6 +776,7 @@ private fun MemoryTableSection(
     selection: AssistantMemoryTableDocumentSelection,
     onAddDocument: () -> Unit,
     onEditDocument: (MemoryTableDocument) -> Unit,
+    onHistoryDocument: (MemoryTableDocument) -> Unit,
     onDeleteDocument: (MemoryTableDocument) -> Unit,
 ) {
     Box(
@@ -813,6 +817,7 @@ private fun MemoryTableSection(
                 template = templatesById[document.templateId],
                 enabled = enabled,
                 onEdit = { onEditDocument(document) },
+                onHistory = { onHistoryDocument(document) },
                 onDelete = { onDeleteDocument(document) },
             )
         }
@@ -905,6 +910,7 @@ private fun MemoryTableDocumentItem(
     template: MemoryTableTemplate?,
     enabled: Boolean,
     onEdit: () -> Unit,
+    onHistory: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1001,7 +1007,7 @@ private fun MemoryTableDocumentItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Tag(type = TagType.INFO) {
+                Tag(type = TagType.INFO, onClick = onHistory) {
                     Text(
                         stringResource(
                             R.string.assistant_page_memory_table_document_meta,
@@ -1021,6 +1027,12 @@ private fun MemoryTableDocument.toMemoryTableEditorScreen(assistant: Assistant) 
         templateId = templateId,
         assistantId = assistant.id.toString(),
         scopeType = scopeType,
+    )
+
+private fun MemoryTableDocument.toMemoryTableRevisionHistoryScreen(assistant: Assistant) =
+    Screen.AssistantMemoryTableRevisionHistory(
+        documentId = id,
+        assistantId = assistant.id.toString(),
     )
 
 private enum class AddMemoryTableSheetMode {

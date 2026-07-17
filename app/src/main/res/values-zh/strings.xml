@@ -1878,4 +1878,18 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_table_delete_global_template_description">此全局模板将从所有助手中移除，并同时删除使用该模板的所有记忆表格文档。</string>
   <string name="assistant_page_memory_table_template_update_failed">无法保存模板，请重试。</string>
   <string name="assistant_page_memory_table_template_delete_failed">无法删除模板，请重试。</string>
+  <string name="assistant_page_memory_table_revision_restore_success">已将记忆表格恢复到所选版本。</string>
+  <string name="assistant_page_memory_table_revision_restore_error">无法恢复此版本，请重试。</string>
+  <string name="assistant_page_memory_table_revision_history_title">版本历史</string>
+  <string name="assistant_page_memory_table_revision_restore_title">恢复版本？</string>
+  <string name="assistant_page_memory_table_revision_restore">恢复</string>
+  <string name="assistant_page_memory_table_revision_restore_description">将版本 %1$d 恢复为当前记忆表格版本？</string>
+  <string name="assistant_page_memory_table_revision_load_error">无法加载版本历史。</string>
+  <string name="assistant_page_memory_table_revision_empty_title">暂无版本历史</string>
+  <string name="assistant_page_memory_table_revision_empty_description">编辑文档后，之前的版本会显示在这里。</string>
+  <string name="assistant_page_memory_table_revision_meta">版本 %1$d · %2$s</string>
+  <string name="assistant_page_memory_table_revision_current">当前</string>
+  <string name="assistant_page_memory_table_revision_compare_current">与当前版本的差异</string>
+  <string name="assistant_page_memory_table_revision_no_changes">没有差异</string>
+  <string name="assistant_page_memory_table_revision_payload">快照内容</string>
 </resources>

@@ -1896,4 +1896,18 @@
   <string name="assistant_page_memory_table_delete_global_template_description">This global template will be removed for all assistants, together with all memory table documents that use it.</string>
   <string name="assistant_page_memory_table_template_update_failed">Could not save the template. Try again.</string>
   <string name="assistant_page_memory_table_template_delete_failed">Could not delete the template. Try again.</string>
+  <string name="assistant_page_memory_table_revision_restore_success">Memory table restored to the selected revision.</string>
+  <string name="assistant_page_memory_table_revision_restore_error">Could not restore this revision. Try again.</string>
+  <string name="assistant_page_memory_table_revision_history_title">Revision history</string>
+  <string name="assistant_page_memory_table_revision_restore_title">Restore revision?</string>
+  <string name="assistant_page_memory_table_revision_restore">Restore</string>
+  <string name="assistant_page_memory_table_revision_restore_description">Restore revision %1$d as the current memory table version?</string>
+  <string name="assistant_page_memory_table_revision_load_error">Revision history could not be loaded.</string>
+  <string name="assistant_page_memory_table_revision_empty_title">No revision history</string>
+  <string name="assistant_page_memory_table_revision_empty_description">Previous versions will appear here after the document is edited.</string>
+  <string name="assistant_page_memory_table_revision_meta">Revision %1$d · %2$s</string>
+  <string name="assistant_page_memory_table_revision_current">Current</string>
+  <string name="assistant_page_memory_table_revision_compare_current">Changes compared with the current version</string>
+  <string name="assistant_page_memory_table_revision_no_changes">No differences</string>
+  <string name="assistant_page_memory_table_revision_payload">Snapshot payload</string>
 </resources>

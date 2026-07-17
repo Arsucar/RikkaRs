@@ -94,6 +94,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableDocumentEditorPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableRevisionHistoryPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantSubagentPage
@@ -406,6 +407,14 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
+                            entry<Screen.AssistantMemoryTableRevisionHistory> { key ->
+                                AssistantMemoryTableRevisionHistoryPage(
+                                    documentId = key.documentId,
+                                    assistantId = key.assistantId,
+                                    conversationId = key.conversationId,
+                                )
+                            }
+
                             entry<Screen.AssistantRequest> { key ->
                                 AssistantRequestPage(key.id)
                             }
@@ -684,6 +693,13 @@ sealed interface Screen : NavKey {
         val templateId: String,
         val assistantId: String,
         val scopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
+        val conversationId: String? = null,
+    ) : Screen
+
+    @Serializable
+    data class AssistantMemoryTableRevisionHistory(
+        val documentId: String,
+        val assistantId: String,
         val conversationId: String? = null,
     ) : Screen
 

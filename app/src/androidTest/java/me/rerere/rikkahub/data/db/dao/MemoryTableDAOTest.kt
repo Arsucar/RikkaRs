@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.entity.MemoryTableDocumentEntity
+import me.rerere.rikkahub.data.db.entity.MemoryTableSnapshotEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableTemplateEntity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -18,6 +19,7 @@ import org.junit.runner.RunWith
 class MemoryTableDAOTest {
     private lateinit var database: AppDatabase
     private lateinit var dao: MemoryTableDAO
+    private lateinit var snapshotDao: MemoryTableSnapshotDAO
 
     @Before
     fun setUp() {
@@ -26,6 +28,7 @@ class MemoryTableDAOTest {
             .allowMainThreadQueries()
             .build()
         dao = database.memoryTableDao()
+        snapshotDao = database.memoryTableSnapshotDao()
     }
 
     @After
@@ -102,6 +105,8 @@ class MemoryTableDAOTest {
                 templateId = "assistant-a",
             )
         )
+        snapshotDao.upsertSnapshot(snapshot("assistant-a-snapshot", "assistant-a-doc", revision = 0))
+        snapshotDao.upsertSnapshot(snapshot("unrelated-snapshot", "unrelated-doc", revision = 0))
         dao.upsertDocument(
             document(
                 id = "malformed-global-doc",
@@ -122,6 +127,8 @@ class MemoryTableDAOTest {
         assertEquals(1, dao.deleteEffectiveTemplateAndDocuments("assistant-a", "assistant-a"))
         assertEquals(null, dao.getTemplate("assistant-a"))
         assertEquals(null, dao.getDocument("assistant-a-doc"))
+        assertEquals(0, snapshotDao.countSnapshots("assistant-a-doc"))
+        assertEquals(1, snapshotDao.countSnapshots("unrelated-doc"))
     }
 
     @Test
@@ -163,5 +170,17 @@ class MemoryTableDAOTest {
         scopeId = scopeId,
         createdAt = 1,
         updatedAt = updatedAt,
+    )
+
+    private fun snapshot(
+        id: String,
+        documentId: String,
+        revision: Int,
+    ) = MemoryTableSnapshotEntity(
+        id = id,
+        documentId = documentId,
+        revision = revision,
+        payloadJson = "{}",
+        createdAt = revision.toLong(),
     )
 }
