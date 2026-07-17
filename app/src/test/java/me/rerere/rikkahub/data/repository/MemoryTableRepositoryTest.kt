@@ -576,7 +576,7 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
-    fun scopedTemplateUpdateExcludesItsOwnIdFromNameConflictCheck() = runBlocking {
+    fun scopedTemplateMigrationExcludesItsOwnIdFromNameConflictCheck() = runBlocking {
         val dao = FakeMemoryTableDAO(
             templates = listOf(
                 templateEntity(
@@ -596,8 +596,8 @@ class MemoryTableRepositoryTest {
         )
 
         assertEquals(" shared   NAME ", updated.name)
-        assertEquals(MemoryTableScopeType.ASSISTANT, updated.scopeType)
-        assertEquals("assistant-a", updated.scopeId)
+        assertEquals(MemoryTableScopeType.GLOBAL, updated.scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, updated.scopeId)
         assertEquals(" shared   NAME ", dao.templates.single().name)
     }
 
@@ -682,7 +682,7 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
-    fun scopedTemplateUpdateCannotChangeExistingOwnership() = runBlocking {
+    fun scopedTemplateUpdateWithoutExplicitTargetKeepsExistingOwnership() = runBlocking {
         val dao = FakeMemoryTableDAO(
             templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
         )
@@ -700,6 +700,94 @@ class MemoryTableRepositoryTest {
 
         assertEquals(MemoryTableScopeType.ASSISTANT, updated.scopeType)
         assertEquals("assistant-a", updated.scopeId)
+        assertEquals("ASSISTANT", dao.templates.single().scopeType)
+        assertEquals("assistant-a", dao.templates.single().scopeId)
+    }
+
+    @Test
+    fun scopedTemplateUpdateCanMoveGlobalToAssistantWithoutChangingDocuments() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(
+                templateEntity("template-a", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID),
+            ),
+            documents = listOf(
+                doc(
+                    id = "doc-a",
+                    scopeType = "GLOBAL",
+                    scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                    templateId = "template-a",
+                )
+            ),
+        )
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        val updated = repository.upsertTemplate(
+            MemoryTableTemplate(id = "template-a", name = "Moved"),
+            actorAssistantId = "assistant-a",
+            requestedScopeType = MemoryTableScopeType.ASSISTANT,
+        )
+
+        assertEquals("template-a", updated.id)
+        assertEquals(MemoryTableScopeType.ASSISTANT, updated.scopeType)
+        assertEquals("assistant-a", updated.scopeId)
+        assertEquals("ASSISTANT", dao.templates.single().scopeType)
+        assertEquals("assistant-a", dao.templates.single().scopeId)
+        assertEquals("GLOBAL", dao.documents.single().scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, dao.documents.single().scopeId)
+        assertEquals("template-a", dao.documents.single().templateId)
+        assertEquals(emptyList<MemoryTableTemplate>(), repository.getEffectiveTemplates("assistant-b"))
+    }
+
+    @Test
+    fun scopedTemplateUpdateCanMoveAssistantToGlobal() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
+        )
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        val updated = repository.upsertTemplate(
+            MemoryTableTemplate(id = "template-a", name = "Shared"),
+            actorAssistantId = "assistant-a",
+            requestedScopeType = MemoryTableScopeType.GLOBAL,
+        )
+
+        assertEquals(MemoryTableScopeType.GLOBAL, updated.scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, updated.scopeId)
+        assertEquals(listOf("template-a"), repository.getEffectiveTemplates("assistant-b").map { it.id })
+    }
+
+    @Test
+    fun scopedTemplateCreateRejectsConversationScope() {
+        val repository = MemoryTableRepository(FakeMemoryTableDAO(), FakeMemoryTableSnapshotDAO())
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    MemoryTableTemplate(name = "Invalid"),
+                    actorAssistantId = "assistant-a",
+                    requestedScopeType = MemoryTableScopeType.CONVERSATION,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun scopedTemplateMigrationRejectsConversationScopeAndKeepsOwner() {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template-a", "ASSISTANT", "assistant-a")),
+        )
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.upsertTemplate(
+                    MemoryTableTemplate(id = "template-a", name = "Invalid"),
+                    actorAssistantId = "assistant-a",
+                    requestedScopeType = MemoryTableScopeType.CONVERSATION,
+                )
+            }
+        }
+
         assertEquals("ASSISTANT", dao.templates.single().scopeType)
         assertEquals("assistant-a", dao.templates.single().scopeId)
     }
@@ -747,9 +835,19 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
-    fun copyGlobalTemplateRejectsDuplicateNameUnderAssistantScope() {
+    fun copyGlobalTemplateCreatesAssistantCopyAndKeepsSourceDocuments() = runBlocking {
         val dao = FakeMemoryTableDAO(
-            templates = listOf(templateEntity("global", "GLOBAL", MemoryRepository.GLOBAL_MEMORY_ID)),
+            templates = listOf(
+                templateEntity(
+                    id = "global",
+                    scopeType = "GLOBAL",
+                    scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                    name = "Template",
+                ).copy(
+                    description = "Source description",
+                    schemaJson = """{"tables":[{"name":"source","columns":[{"name":"key"}]}]}""",
+                )
+            ),
             documents = listOf(
                 doc(
                     id = "global-doc",
@@ -761,13 +859,20 @@ class MemoryTableRepositoryTest {
         )
         val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
 
-        assertThrows(MemoryTableTemplateNameConflictException::class.java) {
-            runBlocking {
-                repository.copyGlobalTemplateToAssistant("global", actorAssistantId = "assistant-a")
-            }
-        }
+        val copied = repository.copyGlobalTemplateToAssistant(
+            templateId = "global",
+            actorAssistantId = "assistant-a",
+            copyName = "Template copy",
+        )
 
-        assertEquals(listOf("global"), dao.templates.map { it.id })
+        assertEquals("Template copy", copied.name)
+        assertTrue(copied.id != "global")
+        assertEquals("Source description", copied.description)
+        assertEquals("""{"tables":[{"name":"source","columns":[{"name":"key"}]}]}""", copied.schemaJson)
+        assertEquals(MemoryTableScopeType.ASSISTANT, copied.scopeType)
+        assertEquals("assistant-a", copied.scopeId)
+        assertEquals(2, dao.templates.size)
+        assertEquals("GLOBAL", dao.templates.first { it.id == "global" }.scopeType)
         assertEquals(listOf("global-doc"), dao.documents.map { it.id })
         assertEquals("global", dao.documents.single().templateId)
     }
@@ -855,6 +960,8 @@ class MemoryTableRepositoryTest {
             name: String,
             description: String,
             schemaJson: String,
+            scopeType: String,
+            scopeId: String,
             updatedAt: Long,
         ): Int {
             val index = templates.indexOfFirst {
@@ -868,6 +975,8 @@ class MemoryTableRepositoryTest {
                 name = name,
                 description = description,
                 schemaJson = schemaJson,
+                scopeType = scopeType,
+                scopeId = scopeId,
                 updatedAt = updatedAt,
             )
             return 1

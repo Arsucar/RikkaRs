@@ -235,3 +235,125 @@ onTemplateClick = { template ->
     }
 }
 ```
+
+## Scenario: Memory-table template scope migration
+
+### 1. Scope / Trigger
+
+Use this contract when creating, editing, copying, listing, or authorizing a
+`MemoryTableTemplate` through Repository, `memory_table_tool`, or the assistant
+memory UI.
+
+### 2. Signatures
+
+```kotlin
+suspend fun upsertTemplate(
+    template: MemoryTableTemplate,
+    actorAssistantId: String,
+    requestedScopeType: MemoryTableScopeType? = null,
+): MemoryTableTemplate
+
+suspend fun copyGlobalTemplateToAssistant(
+    templateId: String,
+    actorAssistantId: String,
+    copyName: String,
+): MemoryTableTemplate
+```
+
+The guarded DAO update writes ordinary fields and ownership in one statement:
+
+```kotlin
+suspend fun updateEffectiveTemplateFields(
+    id: String,
+    assistantId: String,
+    name: String,
+    description: String,
+    schemaJson: String,
+    scopeType: String,
+    scopeId: String,
+    updatedAt: Long,
+): Int
+```
+
+### 3. Contracts
+
+- Repository is the only owner of `scopeId` derivation. UI and tools pass the
+  requested scope type and actor identity; they never construct another
+  assistant's owner ID.
+- Create + null target defaults to current-assistant `ASSISTANT`; update + null
+  preserves the stored scope. Explicit `ASSISTANT` / `GLOBAL` performs an
+  in-place migration with the same template ID.
+- Template actions reject `CONVERSATION`. `GLOBAL` always stores
+  `__global__`; `ASSISTANT` always stores the current actor assistant ID.
+- The guarded update authorizes against the row's old owner, then writes name,
+  description, schema, scope, and timestamp atomically.
+- Migration never changes document rows, document scope, payload, revision, or
+  template references. Standard reads become invisible to other assistants
+  because effective template IDs change, not because documents are rewritten.
+- Target-namespace normalized-name checks are authoritative in Repository and
+  exclude the same template ID. Scope changes must re-run them even if the name
+  did not change.
+- Copy is not migration: copy creates a new assistant-owned ID and preserves the
+  source GLOBAL row. UI must offer an editable copy name so a prior copy does
+  not create a dead-end conflict.
+
+### 4. Validation & Error Matrix
+
+- Foreign/malformed/missing known ID -> reject without changing any row.
+- `requestedScopeType = CONVERSATION` -> reject before DAO update.
+- Update target omitted -> keep stored owner even if the draft model carries a
+  different scope.
+- Target normalized name conflicts ->
+  `MemoryTableTemplateNameConflictException`; keep edit/copy UI open.
+- Scope equals stored scope -> idempotent ordinary update; no migration prompt.
+- GLOBAL -> ASSISTANT -> other assistants no longer list the template; linked
+  document rows remain byte-for-byte unchanged.
+- ASSISTANT -> GLOBAL -> all assistants list the template after Room refresh.
+
+### 5. Good / Base / Bad Cases
+
+- Good: tool parses optional `scope`, preserves null-vs-explicit presence, and
+  passes both draft + nullable target to the actor-scoped Repository closure.
+- Good: Compose confirms a real scope change, disables dismiss/submit while the
+  write is active, and reports success/error after Room completes.
+- Base: edit name/description with null target; ownership stays unchanged.
+- Bad: tool or UI writes `scopeId = assistantId` itself.
+- Bad: infer migration from `template.scopeType` on update; this loses the
+  difference between omitted scope and explicit scope.
+- Bad: copy the same GLOBAL name directly and leave the user no way to resolve
+  the target namespace conflict.
+
+### 6. Tests Required
+
+- DAO/instrumented: GLOBAL→A update, A→GLOBAL update, foreign actor returns 0,
+  ordinary fields and scope change together, linked documents unchanged.
+- Repository: create null defaults ASSISTANT; update null preserves; explicit
+  both directions; same-scope idempotence; conversation/foreign/malformed
+  rejection; target-name conflicts; document scope/reference unchanged.
+- Tool: create/update `assistant|global`, omitted update target, and conversation
+  rejection for both actions.
+- UI pure/state: scope-change confirmation only when different; target-scope
+  conflict checking; copy and migrate are distinct; loading prevents repeat.
+- Resource/Kotlin compile and existing #122/#140 memory-table regressions remain
+  green; run app installation when a device is available.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+val target = params["scope"] ?: "assistant"
+draft.copy(scopeType = target, scopeId = assistantId)
+repository.upsertTemplate(draft, assistantId)
+```
+
+#### Correct
+
+```kotlin
+val requestedScopeType = params["scope"]?.toTemplateScopeOrNull()
+repository.upsertTemplate(
+    template = draft,
+    actorAssistantId = assistantId,
+    requestedScopeType = requestedScopeType,
+)
+```

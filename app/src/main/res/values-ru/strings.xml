@@ -1758,4 +1758,15 @@
   <string name="assistant_page_memory_table_delete_global_template_description">Этот глобальный шаблон будет удалён для всех ассистентов вместе со всеми использующими его документами таблиц памяти.</string>
   <string name="assistant_page_memory_table_template_update_failed">Не удалось сохранить шаблон. Повторите попытку.</string>
   <string name="assistant_page_memory_table_template_delete_failed">Не удалось удалить шаблон. Повторите попытку.</string>
+  <string name="assistant_page_memory_table_template_migration_success">Область шаблона обновлена</string>
+  <string name="assistant_page_memory_table_template_migration_failed">Не удалось обновить область шаблона</string>
+  <string name="assistant_page_memory_table_template_copy_success">Шаблон скопирован для этого ассистента</string>
+  <string name="assistant_page_memory_table_template_copy_failed">Не удалось скопировать шаблон</string>
+  <string name="assistant_page_memory_table_template_migration_title">Изменить область шаблона?</string>
+  <string name="assistant_page_memory_table_template_migration_to_global_description">Шаблон станет виден всем ассистентам. Области существующих документов не изменятся.</string>
+  <string name="assistant_page_memory_table_template_migration_to_assistant_description">Другие ассистенты больше не будут видеть этот шаблон. Области существующих документов не изменятся.</string>
+  <string name="assistant_page_memory_table_template_migrate">Изменить область</string>
+  <string name="assistant_page_memory_table_template_copy_name">Копия: %1$s</string>
+  <string name="assistant_page_memory_table_template_copy_to_assistant">Скопировать для этого ассистента</string>
+  <string name="assistant_page_memory_table_template_copy_description">Создать копию только для этого ассистента. Исходный глобальный шаблон останется доступен всем.</string>
 </resources>

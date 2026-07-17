@@ -132,6 +132,52 @@ class MemoryTableDAOTest {
     }
 
     @Test
+    fun effectiveTemplateUpdateMovesScopeAndPreservesDocuments() = runBlocking {
+        dao.upsertTemplate(template("global", "GLOBAL", "__global__", updatedAt = 30))
+        dao.upsertDocument(
+            document(
+                id = "global-doc",
+                scopeType = "GLOBAL",
+                scopeId = "global",
+                updatedAt = 30,
+                templateId = "global",
+            )
+        )
+
+        assertEquals(
+            1,
+            dao.updateEffectiveTemplateFields(
+                id = "global",
+                assistantId = "assistant-a",
+                name = "Moved",
+                description = "private",
+                schemaJson = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}""",
+                scopeType = "ASSISTANT",
+                scopeId = "assistant-a",
+                updatedAt = 40,
+            ),
+        )
+        assertEquals(0, dao.updateEffectiveTemplateFields(
+            id = "global",
+            assistantId = "assistant-b",
+            name = "Stolen",
+            description = "",
+            schemaJson = "{}",
+            scopeType = "GLOBAL",
+            scopeId = "__global__",
+            updatedAt = 50,
+        ))
+
+        val moved = dao.getTemplate("global")
+        assertEquals("Moved", moved?.name)
+        assertEquals("ASSISTANT", moved?.scopeType)
+        assertEquals("assistant-a", moved?.scopeId)
+        assertEquals("GLOBAL", dao.getDocument("global-doc")?.scopeType)
+        assertEquals("global", dao.getDocument("global-doc")?.scopeId)
+        assertEquals("global", dao.getDocument("global-doc")?.templateId)
+    }
+
+    @Test
     fun effectiveDocumentByIdRejectsKnownForeignId() = runBlocking {
         dao.upsertDocument(document("doc-a", "ASSISTANT", "assistant-a", updatedAt = 10))
 

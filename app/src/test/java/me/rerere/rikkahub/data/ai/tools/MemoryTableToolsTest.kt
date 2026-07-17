@@ -742,7 +742,7 @@ class MemoryTableToolsTest {
                     MemoryTableTemplate(id = "tpl-1", name = "user_memories", description = "prefs"),
                 )
             },
-            upsertTemplate = { error("unexpected upsert template") },
+            upsertTemplate = { _, _ -> error("unexpected upsert template") },
         ).single()
 
         val result = tool.execute(
@@ -758,6 +758,7 @@ class MemoryTableToolsTest {
     @Test
     fun createTemplatePersistsTemplateAndReturnsIt() = runBlocking {
         var captured: MemoryTableTemplate? = null
+        var capturedScope: MemoryTableScopeType? = MemoryTableScopeType.GLOBAL
         val tool = buildMemoryTableTools(
             json = json,
             assistantId = "assistant-a",
@@ -766,8 +767,18 @@ class MemoryTableToolsTest {
             upsertDocument = { error("unexpected upsert") },
             deleteDocument = { error("unexpected delete") },
             readTemplates = { error("unexpected read templates") },
-            upsertTemplate = {
-                val created = it.copy(id = "generated-id")
+            upsertTemplate = { template, requestedScopeType ->
+                capturedScope = requestedScopeType
+                val targetScope = requestedScopeType ?: MemoryTableScopeType.ASSISTANT
+                val created = template.copy(
+                    id = "generated-id",
+                    scopeType = targetScope,
+                    scopeId = when (targetScope) {
+                        MemoryTableScopeType.GLOBAL -> MemoryRepository.GLOBAL_MEMORY_ID
+                        MemoryTableScopeType.ASSISTANT -> "assistant-a"
+                        MemoryTableScopeType.CONVERSATION -> error("unexpected conversation scope")
+                    },
+                )
                 captured = created
                 created
             },
@@ -782,12 +793,48 @@ class MemoryTableToolsTest {
         ).single() as UIMessagePart.Text
 
         assertEquals("user_memories", captured?.name)
+        assertEquals(MemoryTableScopeType.ASSISTANT, captured?.scopeType)
+        assertEquals(null, capturedScope)
         assertTrue(result.text.contains("generated-id"))
+    }
+
+    @Test
+    fun createTemplatePassesExplicitGlobalScope() = runBlocking {
+        var capturedTemplate: MemoryTableTemplate? = null
+        var capturedScope: MemoryTableScopeType? = null
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            upsertTemplate = { template, requestedScopeType ->
+                capturedScope = requestedScopeType
+                template.copy(
+                    scopeType = requestedScopeType ?: MemoryTableScopeType.ASSISTANT,
+                    scopeId = MemoryRepository.GLOBAL_MEMORY_ID,
+                ).also { capturedTemplate = it }
+            },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "create_template")
+                put("name", "shared")
+                put("scope", "global")
+            }
+        )
+
+        assertEquals(MemoryTableScopeType.GLOBAL, capturedTemplate?.scopeType)
+        assertEquals(MemoryRepository.GLOBAL_MEMORY_ID, capturedTemplate?.scopeId)
+        assertEquals(MemoryTableScopeType.GLOBAL, capturedScope)
     }
 
     @Test
     fun updateTemplatePersistsChangedFields() = runBlocking {
         var captured: MemoryTableTemplate? = null
+        var capturedScope: MemoryTableScopeType? = MemoryTableScopeType.GLOBAL
         val tool = buildMemoryTableTools(
             json = json,
             assistantId = "assistant-a",
@@ -805,9 +852,10 @@ class MemoryTableToolsTest {
                     )
                 )
             },
-            upsertTemplate = {
-                captured = it
-                it
+            upsertTemplate = { template, requestedScopeType ->
+                captured = template
+                capturedScope = requestedScopeType
+                template
             },
         ).single()
 
@@ -822,7 +870,79 @@ class MemoryTableToolsTest {
 
         assertEquals("new", captured?.name)
         assertEquals("new desc", captured?.description)
+        assertEquals(null, capturedScope)
         assertTrue(result.text.contains("new"))
+    }
+
+    @Test
+    fun updateTemplatePassesExplicitAssistantScope() = runBlocking {
+        var capturedScope: MemoryTableScopeType? = null
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(MemoryTableTemplate(id = "template", name = "shared")) },
+            upsertTemplate = { template, requestedScopeType ->
+                capturedScope = requestedScopeType
+                template
+            },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "update_template")
+                put("template_id", "template")
+                put("scope", "assistant")
+            }
+        )
+
+        assertEquals(MemoryTableScopeType.ASSISTANT, capturedScope)
+    }
+
+    @Test
+    fun templateActionsRejectConversationScope() = runBlocking {
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            upsertTemplate = { _, _ -> error("unexpected upsert template") },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "create_template")
+                put("name", "invalid")
+                put("scope", "conversation")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertTrue(result.text.contains("templates cannot use conversation scope"))
+
+        val updateTool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(MemoryTableTemplate(id = "template", name = "existing")) },
+            upsertTemplate = { _, _ -> error("unexpected upsert template") },
+        ).single()
+        val updateResult = updateTool.execute(
+            buildJsonObject {
+                put("action", "update_template")
+                put("template_id", "template")
+                put("scope", "conversation")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertTrue(updateResult.text.contains("templates cannot use conversation scope"))
     }
 
     @Test
@@ -909,7 +1029,7 @@ class MemoryTableToolsTest {
             upsertDocument = { error("unexpected upsert") },
             deleteDocument = { error("unexpected delete") },
             readTemplates = { error("unexpected read templates") },
-            upsertTemplate = { error("unexpected upsert template") },
+            upsertTemplate = { _, _ -> error("unexpected upsert template") },
         ).single()
 
         val result = tool.execute(

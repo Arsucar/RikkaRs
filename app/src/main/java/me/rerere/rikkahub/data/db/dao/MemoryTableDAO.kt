@@ -72,6 +72,8 @@ interface MemoryTableDAO {
         SET name = :name,
             description = :description,
             schema_json = :schemaJson,
+            scope_type = :scopeType,
+            scope_id = :scopeId,
             updated_at = :updatedAt
         WHERE id = :id
           AND (
@@ -86,6 +88,8 @@ interface MemoryTableDAO {
         name: String,
         description: String,
         schemaJson: String,
+        scopeType: String,
+        scopeId: String,
         updatedAt: Long,
     ): Int
 

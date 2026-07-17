@@ -391,12 +391,17 @@ class AssistantDetailVM(
 
     fun upsertMemoryTableTemplate(
         template: MemoryTableTemplate,
+        requestedScopeType: MemoryTableScopeType? = null,
         onDone: (Result<MemoryTableTemplate>) -> Unit = {},
     ) {
         viewModelScope.launch {
             onDone(
                 runCatching {
-                    memoryTableRepository.upsertTemplate(template, actorAssistantId = assistantId.toString())
+                    memoryTableRepository.upsertTemplate(
+                        template = template,
+                        actorAssistantId = assistantId.toString(),
+                        requestedScopeType = requestedScopeType,
+                    )
                 }
             )
         }
@@ -474,9 +479,21 @@ class AssistantDetailVM(
         }
     }
 
-    fun copyGlobalMemoryTableTemplate(template: MemoryTableTemplate) {
+    fun copyGlobalMemoryTableTemplate(
+        template: MemoryTableTemplate,
+        copyName: String,
+        onDone: (Result<MemoryTableTemplate>) -> Unit = {},
+    ) {
         viewModelScope.launch {
-            memoryTableRepository.copyGlobalTemplateToAssistant(template.id, actorAssistantId = assistantId.toString())
+            onDone(
+                runCatching {
+                    memoryTableRepository.copyGlobalTemplateToAssistant(
+                        templateId = template.id,
+                        actorAssistantId = assistantId.toString(),
+                        copyName = copyName,
+                    )
+                }
+            )
         }
     }
 

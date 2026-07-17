@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
@@ -82,6 +83,7 @@ import me.rerere.rikkahub.data.model.isEffectiveFor
 import me.rerere.rikkahub.data.model.normalizeMemoryTableTemplateName
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -142,8 +144,11 @@ fun AssistantMemoryPage(id: String) {
             onCreateMemoryTableTemplateAndDocument = { template, scopeType, onDone ->
                 vm.createMemoryTableTemplateAndDocument(template, scopeType, onDone)
             },
-            onUpsertMemoryTableTemplate = { template, onDone ->
-                vm.upsertMemoryTableTemplate(template, onDone)
+            onUpsertMemoryTableTemplate = { template, requestedScopeType, onDone ->
+                vm.upsertMemoryTableTemplate(template, requestedScopeType, onDone)
+            },
+            onCopyMemoryTableTemplate = { template, copyName, onDone ->
+                vm.copyGlobalMemoryTableTemplate(template, copyName, onDone)
             },
             onDeleteMemoryTableTemplate = { template, onDone ->
                 vm.deleteMemoryTableTemplate(template, onDone)
@@ -174,7 +179,16 @@ private fun AssistantMemoryContent(
         MemoryTableScopeType,
         (Result<MemoryTableDocument>) -> Unit,
     ) -> Unit,
-    onUpsertMemoryTableTemplate: (MemoryTableTemplate, (Result<MemoryTableTemplate>) -> Unit) -> Unit,
+    onUpsertMemoryTableTemplate: (
+        MemoryTableTemplate,
+        MemoryTableScopeType?,
+        (Result<MemoryTableTemplate>) -> Unit,
+    ) -> Unit,
+    onCopyMemoryTableTemplate: (
+        MemoryTableTemplate,
+        String,
+        (Result<MemoryTableTemplate>) -> Unit,
+    ) -> Unit,
     onDeleteMemoryTableTemplate: (MemoryTableTemplate, (Result<Boolean>) -> Unit) -> Unit,
     onDeleteMemoryTableDocument: (MemoryTableDocument) -> Unit,
 ) {
@@ -566,6 +580,7 @@ private fun AssistantMemoryContent(
                 }
             },
             onUpsertTemplate = onUpsertMemoryTableTemplate,
+            onCopyTemplate = onCopyMemoryTableTemplate,
             onDeleteTemplate = onDeleteMemoryTableTemplate,
         )
     }
@@ -1042,6 +1057,16 @@ private enum class AddMemoryTableSheetMode {
     EDIT_TEMPLATE,
 }
 
+private data class PendingMemoryTableTemplateMigration(
+    val draft: MemoryTableTemplate,
+    val targetScopeType: MemoryTableScopeType,
+)
+
+private data class PendingMemoryTableTemplateCopy(
+    val template: MemoryTableTemplate,
+    val name: String,
+)
+
 @Composable
 private fun AddMemoryTableSheet(
     templates: List<MemoryTableTemplate>,
@@ -1056,9 +1081,15 @@ private fun AddMemoryTableSheet(
         MemoryTableScopeType,
         (Result<MemoryTableDocument>) -> Unit,
     ) -> Unit,
-    onUpsertTemplate: (MemoryTableTemplate, (Result<MemoryTableTemplate>) -> Unit) -> Unit,
+    onUpsertTemplate: (
+        MemoryTableTemplate,
+        MemoryTableScopeType?,
+        (Result<MemoryTableTemplate>) -> Unit,
+    ) -> Unit,
+    onCopyTemplate: (MemoryTableTemplate, String, (Result<MemoryTableTemplate>) -> Unit) -> Unit,
     onDeleteTemplate: (MemoryTableTemplate, (Result<Boolean>) -> Unit) -> Unit,
 ) {
+    val toaster = LocalToaster.current
     var mode by remember { mutableStateOf(AddMemoryTableSheetMode.TEMPLATE_PICKER) }
     var name by remember(defaultTemplateName) { mutableStateOf(defaultTemplateName) }
     var description by remember { mutableStateOf("") }
@@ -1067,10 +1098,16 @@ private fun AddMemoryTableSheet(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var editingTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
     var pendingDeleteTemplate by remember { mutableStateOf<MemoryTableTemplate?>(null) }
+    var pendingScopeMigration by remember { mutableStateOf<PendingMemoryTableTemplateMigration?>(null) }
+    var pendingCopyTemplate by remember { mutableStateOf<PendingMemoryTableTemplateCopy?>(null) }
     val genericError = stringResource(R.string.assistant_page_memory_table_create_failed)
     val conflictError = stringResource(R.string.assistant_page_memory_table_name_conflict)
     val updateError = stringResource(R.string.assistant_page_memory_table_template_update_failed)
     val deleteError = stringResource(R.string.assistant_page_memory_table_template_delete_failed)
+    val migrationSuccess = stringResource(R.string.assistant_page_memory_table_template_migration_success)
+    val migrationError = stringResource(R.string.assistant_page_memory_table_template_migration_failed)
+    val copySuccess = stringResource(R.string.assistant_page_memory_table_template_copy_success)
+    val copyError = stringResource(R.string.assistant_page_memory_table_template_copy_failed)
     val pickerTemplates = remember(templates, primaryDocumentsByTemplate, assistantId) {
         deriveMemoryTablePickerTemplates(templates, primaryDocumentsByTemplate, assistantId)
     }
@@ -1184,16 +1221,25 @@ private fun AddMemoryTableSheet(
                             errorMessage = null
                             mode = AddMemoryTableSheetMode.EDIT_TEMPLATE
                         },
+                        onCopy = { template, copyName ->
+                            errorMessage = null
+                            pendingCopyTemplate = PendingMemoryTableTemplateCopy(template, copyName)
+                        },
                         onDelete = { pendingDeleteTemplate = it },
                     )
                 }
 
                 AddMemoryTableSheetMode.EDIT_TEMPLATE -> editingTemplate?.let { template ->
-                    val hasConflict = normalizeMemoryTableTemplateName(name) !=
-                        normalizeMemoryTableTemplateName(template.name) &&
+                    val isScopeChanging = shouldConfirmMemoryTableTemplateScopeMigration(
+                        currentScopeType = template.scopeType,
+                        targetScopeType = scopeType,
+                    )
+                    val shouldCheckConflict = isScopeChanging ||
+                        normalizeMemoryTableTemplateName(name) != normalizeMemoryTableTemplateName(template.name)
+                    val hasConflict = shouldCheckConflict &&
                         hasMemoryTableTemplateNameConflict(
                             name = name,
-                            scopeType = template.scopeType,
+                            scopeType = scopeType,
                             templates = templates,
                             assistantId = assistantId,
                             excludedTemplateId = template.id,
@@ -1201,32 +1247,45 @@ private fun AddMemoryTableSheet(
                     MemoryTableTemplateForm(
                         name = name,
                         description = description,
-                        scopeType = template.scopeType,
+                        scopeType = scopeType,
                         isSaving = isSaving,
                         errorMessage = if (hasConflict) conflictError else errorMessage,
                         hasNameConflict = hasConflict,
                         title = stringResource(R.string.assistant_page_memory_table_edit_template),
                         submitLabel = stringResource(R.string.assistant_page_memory_table_save_template),
-                        scopeEditable = false,
+                        scopeEditable = true,
                         onNameChange = { name = it; errorMessage = null },
                         onDescriptionChange = { description = it; errorMessage = null },
-                        onScopeChange = {},
+                        onScopeChange = {
+                            scopeType = it
+                            errorMessage = null
+                        },
                         onBack = { errorMessage = null; mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES },
                         onCreate = {
                             if (!hasConflict) {
-                                isSaving = true
                                 errorMessage = null
-                                onUpsertTemplate(
-                                    template.copy(name = name.trim(), description = description.trim()),
-                                ) { result ->
-                                    isSaving = false
-                                    result.onSuccess {
-                                        editingTemplate = null
-                                        mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES
-                                    }.onFailure { error ->
-                                        errorMessage = if (error is MemoryTableTemplateNameConflictException) {
-                                            conflictError
-                                        } else updateError
+                                val draft = template.copy(
+                                    name = name.trim(),
+                                    description = description.trim(),
+                                    scopeType = scopeType,
+                                )
+                                if (isScopeChanging) {
+                                    pendingScopeMigration = PendingMemoryTableTemplateMigration(
+                                        draft = draft,
+                                        targetScopeType = scopeType,
+                                    )
+                                } else {
+                                    isSaving = true
+                                    onUpsertTemplate(draft, null) { result ->
+                                        isSaving = false
+                                        result.onSuccess {
+                                            editingTemplate = null
+                                            mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES
+                                        }.onFailure { error ->
+                                            errorMessage = if (error is MemoryTableTemplateNameConflictException) {
+                                                conflictError
+                                            } else updateError
+                                        }
                                     }
                                 }
                             }
@@ -1279,6 +1338,135 @@ private fun AddMemoryTableSheet(
             },
             dismissButton = {
                 TextButton(enabled = !isSaving, onClick = { pendingDeleteTemplate = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingScopeMigration?.let { migration ->
+        val isMovingToGlobal = migration.targetScopeType == MemoryTableScopeType.GLOBAL
+        AlertDialog(
+            onDismissRequest = { if (!isSaving) pendingScopeMigration = null },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_template_migration_title))
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (isMovingToGlobal) {
+                            R.string.assistant_page_memory_table_template_migration_to_global_description
+                        } else {
+                            R.string.assistant_page_memory_table_template_migration_to_assistant_description
+                        }
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isSaving,
+                    onClick = {
+                        isSaving = true
+                        errorMessage = null
+                        onUpsertTemplate(
+                            migration.draft,
+                            migration.targetScopeType,
+                        ) { result ->
+                            isSaving = false
+                            result.onSuccess {
+                                pendingScopeMigration = null
+                                editingTemplate = null
+                                mode = AddMemoryTableSheetMode.MANAGE_TEMPLATES
+                                toaster.show(migrationSuccess, type = ToastType.Success)
+                            }.onFailure { error ->
+                                pendingScopeMigration = null
+                                errorMessage = if (error is MemoryTableTemplateNameConflictException) {
+                                    conflictError
+                                } else migrationError
+                                toaster.show(migrationError, type = ToastType.Error)
+                            }
+                        }
+                    },
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(stringResource(R.string.assistant_page_memory_table_template_migrate))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !isSaving, onClick = { pendingScopeMigration = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingCopyTemplate?.let { pendingCopy ->
+        val hasConflict = hasMemoryTableTemplateNameConflict(
+            name = pendingCopy.name,
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            templates = templates,
+            assistantId = assistantId,
+        )
+        AlertDialog(
+            onDismissRequest = { if (!isSaving) pendingCopyTemplate = null },
+            title = {
+                Text(stringResource(R.string.assistant_page_memory_table_template_copy_to_assistant))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.assistant_page_memory_table_template_copy_description))
+                    OutlinedTextField(
+                        value = pendingCopy.name,
+                        onValueChange = { newName ->
+                            pendingCopyTemplate = pendingCopy.copy(name = newName)
+                            errorMessage = null
+                        },
+                        enabled = !isSaving,
+                        isError = hasConflict,
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
+                    )
+                    if (hasConflict) {
+                        Text(
+                            text = conflictError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isSaving && pendingCopy.name.trim().isNotEmpty() && !hasConflict,
+                    onClick = {
+                        isSaving = true
+                        errorMessage = null
+                        onCopyTemplate(pendingCopy.template, pendingCopy.name.trim()) { result ->
+                            isSaving = false
+                            result.onSuccess {
+                                pendingCopyTemplate = null
+                                toaster.show(copySuccess, type = ToastType.Success)
+                            }.onFailure { error ->
+                                errorMessage = if (error is MemoryTableTemplateNameConflictException) {
+                                    conflictError
+                                } else copyError
+                                toaster.show(copyError, type = ToastType.Error)
+                            }
+                        }
+                    },
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(stringResource(R.string.assistant_page_memory_table_template_copy_to_assistant))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !isSaving, onClick = { pendingCopyTemplate = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -1465,6 +1653,7 @@ private fun MemoryTableTemplateManager(
     errorMessage: String?,
     onBack: () -> Unit,
     onEdit: (MemoryTableTemplate) -> Unit,
+    onCopy: (MemoryTableTemplate, String) -> Unit,
     onDelete: (MemoryTableTemplate) -> Unit,
 ) {
     val duplicateNames = remember(templates) {
@@ -1489,6 +1678,10 @@ private fun MemoryTableTemplateManager(
         ) {
             items(templates, key = { it.id }) { template ->
                 var menuExpanded by remember { mutableStateOf(false) }
+                val copyName = stringResource(
+                    R.string.assistant_page_memory_table_template_copy_name,
+                    template.name,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.Top,
@@ -1534,6 +1727,18 @@ private fun MemoryTableTemplateManager(
                                 leadingIcon = { Icon(HugeIcons.PencilEdit01, null) },
                                 onClick = { menuExpanded = false; onEdit(template) },
                             )
+                            if (template.scopeType == MemoryTableScopeType.GLOBAL) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(stringResource(R.string.assistant_page_memory_table_template_copy_to_assistant))
+                                    },
+                                    leadingIcon = { Icon(HugeIcons.Add01, null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onCopy(template, copyName)
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -1716,6 +1921,11 @@ private fun memoryTableScopeLabel(scopeType: MemoryTableScopeType): String =
             MemoryTableScopeType.CONVERSATION -> R.string.assistant_page_memory_table_scope_conversation
         }
     )
+
+internal fun shouldConfirmMemoryTableTemplateScopeMigration(
+    currentScopeType: MemoryTableScopeType,
+    targetScopeType: MemoryTableScopeType,
+): Boolean = currentScopeType != targetScopeType
 
 @Composable
 private fun MemoryItem(

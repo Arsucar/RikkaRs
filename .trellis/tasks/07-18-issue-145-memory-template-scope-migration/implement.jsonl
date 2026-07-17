@@ -1,0 +1,6 @@
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"记忆表 Repository/UI 当前合同；迁移需有意识修改 scope 只读规则，同时保留文档独立 scope、Room 成功后刷新和错误处理。"}
+{"file":".trellis/tasks/archive/2026-07/07-14-issue-122-template-isolation/research/issue-122-template-ownership.md","reason":"模板 ownership、GLOBAL∪当前 ASSISTANT 可见性、known-ID actor 授权和未来显式迁移边界的权威历史研究。"}
+{"file":".trellis/tasks/archive/2026-07/07-16-issue-140-ui-optimization/research/template-dedup-management.md","reason":"scope 迁移改变目标有效 namespace，必须沿用规范化名称冲突、历史重复 ID 保留和 ID 级管理合同。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"scope 必须从 tool/UI 贯穿 Repository 与 DAO，并让 create/update 使用同一权威语义。"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"约束迁移提交、列表刷新、loading 和 Compose remember 依赖，避免显示旧 scope 或提前成功。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"迁移确认、复制区分、失败反馈和 scope 状态均为用户可见文案。"}

@@ -1758,4 +1758,15 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_table_delete_global_template_description">이 전역 템플릿은 모든 어시스턴트에서 제거되며, 이 템플릿을 사용하는 모든 메모리 테이블 문서도 함께 삭제됩니다.</string>
   <string name="assistant_page_memory_table_template_update_failed">템플릿을 저장하지 못했습니다. 다시 시도해 주세요.</string>
   <string name="assistant_page_memory_table_template_delete_failed">템플릿을 삭제하지 못했습니다. 다시 시도해 주세요.</string>
+  <string name="assistant_page_memory_table_template_migration_success">템플릿 범위를 업데이트했습니다</string>
+  <string name="assistant_page_memory_table_template_migration_failed">템플릿 범위를 업데이트할 수 없습니다</string>
+  <string name="assistant_page_memory_table_template_copy_success">이 어시스턴트에 템플릿을 복사했습니다</string>
+  <string name="assistant_page_memory_table_template_copy_failed">템플릿을 복사할 수 없습니다</string>
+  <string name="assistant_page_memory_table_template_migration_title">템플릿 범위를 변경할까요?</string>
+  <string name="assistant_page_memory_table_template_migration_to_global_description">모든 어시스턴트가 이 템플릿을 볼 수 있게 됩니다. 기존 문서 범위는 변경되지 않습니다.</string>
+  <string name="assistant_page_memory_table_template_migration_to_assistant_description">다른 어시스턴트는 더 이상 이 템플릿을 볼 수 없습니다. 기존 문서 범위는 변경되지 않습니다.</string>
+  <string name="assistant_page_memory_table_template_migrate">범위 변경</string>
+  <string name="assistant_page_memory_table_template_copy_name">%1$s 사본</string>
+  <string name="assistant_page_memory_table_template_copy_to_assistant">이 어시스턴트에 복사</string>
+  <string name="assistant_page_memory_table_template_copy_description">현재 어시스턴트 전용 사본을 만듭니다. 원본 전역 템플릿은 계속 모든 어시스턴트가 사용할 수 있습니다.</string>
 </resources>

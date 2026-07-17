@@ -1910,4 +1910,15 @@
   <string name="assistant_page_memory_table_revision_compare_current">Changes compared with the current version</string>
   <string name="assistant_page_memory_table_revision_no_changes">No differences</string>
   <string name="assistant_page_memory_table_revision_payload">Snapshot payload</string>
+  <string name="assistant_page_memory_table_template_migration_success">Template scope updated</string>
+  <string name="assistant_page_memory_table_template_migration_failed">Couldn\'t update template scope</string>
+  <string name="assistant_page_memory_table_template_copy_success">Template copied to this assistant</string>
+  <string name="assistant_page_memory_table_template_copy_failed">Couldn\'t copy template</string>
+  <string name="assistant_page_memory_table_template_migration_title">Change template scope?</string>
+  <string name="assistant_page_memory_table_template_migration_to_global_description">All assistants will be able to see this template. Existing document scopes will not change.</string>
+  <string name="assistant_page_memory_table_template_migration_to_assistant_description">Other assistants will no longer see this template. Existing document scopes will not change.</string>
+  <string name="assistant_page_memory_table_template_migrate">Change scope</string>
+  <string name="assistant_page_memory_table_template_copy_name">%1$s copy</string>
+  <string name="assistant_page_memory_table_template_copy_to_assistant">Copy to this assistant</string>
+  <string name="assistant_page_memory_table_template_copy_description">Create an assistant-only copy. The global template will remain available to everyone.</string>
 </resources>

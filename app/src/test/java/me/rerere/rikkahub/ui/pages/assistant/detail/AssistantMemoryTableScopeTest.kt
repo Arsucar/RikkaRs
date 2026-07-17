@@ -12,6 +12,28 @@ import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
 class AssistantMemoryTableScopeTest {
+
+    @Test
+    fun `template scope migration confirmation is required only when scope changes`() {
+        assertFalse(
+            shouldConfirmMemoryTableTemplateScopeMigration(
+                currentScopeType = MemoryTableScopeType.ASSISTANT,
+                targetScopeType = MemoryTableScopeType.ASSISTANT,
+            )
+        )
+        assertTrue(
+            shouldConfirmMemoryTableTemplateScopeMigration(
+                currentScopeType = MemoryTableScopeType.GLOBAL,
+                targetScopeType = MemoryTableScopeType.ASSISTANT,
+            )
+        )
+        assertTrue(
+            shouldConfirmMemoryTableTemplateScopeMigration(
+                currentScopeType = MemoryTableScopeType.ASSISTANT,
+                targetScopeType = MemoryTableScopeType.GLOBAL,
+            )
+        )
+    }
     @Test
     fun creationPersistsTemplateBeforeDocument() = runBlocking {
         val events = mutableListOf<String>()

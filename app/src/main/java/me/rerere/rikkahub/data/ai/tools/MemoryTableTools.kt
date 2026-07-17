@@ -35,7 +35,9 @@ fun buildMemoryTableToolsIfEnabled(
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
     deleteDocument: suspend (String) -> Unit,
     readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
-    upsertTemplate: suspend (MemoryTableTemplate) -> MemoryTableTemplate = { it },
+    upsertTemplate: suspend (MemoryTableTemplate, MemoryTableScopeType?) -> MemoryTableTemplate = { template, _ ->
+        template
+    },
     deleteTemplate: suspend (String) -> Boolean = { false },
 ): List<Tool> {
     if (!enabled) return emptyList()
@@ -62,7 +64,9 @@ fun buildMemoryTableTools(
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
     deleteDocument: suspend (String) -> Unit,
     readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
-    upsertTemplate: suspend (MemoryTableTemplate) -> MemoryTableTemplate = { it },
+    upsertTemplate: suspend (MemoryTableTemplate, MemoryTableScopeType?) -> MemoryTableTemplate = { template, _ ->
+        template
+    },
     deleteTemplate: suspend (String) -> Boolean = { false },
 ): List<Tool> = listOf(
     Tool(
@@ -80,8 +84,9 @@ fun buildMemoryTableTools(
             Recommended flow: `list_templates` → if none fits `create_template` → then `upsert_rows` with the returned template id.
             The schema is template-defined; do not invent table names outside the template.
             Row identity uses explicit `row_key`, then the template column with primaryKey=true, then a template column named `key`.
-            `scope` is optional for upsert: `conversation` is currently read-only until the conversation memory-table UI exists,
-            `assistant` stores for this assistant, and `global` shares across assistants.
+            `scope` is optional. Template create/update accepts only `assistant` or `global`; create defaults to assistant,
+            while update preserves the current scope when omitted. Document upsert accepts conversation/assistant/global,
+            but conversation writes are currently read-only until the conversation memory-table UI exists.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
@@ -123,6 +128,10 @@ fun buildMemoryTableTools(
                     })
                     put("scope", buildJsonObject {
                         put("type", "string")
+                        put(
+                            "description",
+                            "Template create/update: assistant|global. Document writes: conversation|assistant|global."
+                        )
                         put("enum", buildJsonArray {
                             add("conversation")
                             add("assistant")
@@ -193,6 +202,7 @@ fun buildMemoryTableTools(
                             ?: error("name is required for create_template")
                         val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
                         val schemaJson = params["schema_json"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                        val requestedScopeType = params["scope"]?.toMemoryTableTemplateScopeTypeOrNull()
                         json.encodeToJsonElement(
                             MemoryTableTemplate.serializer(),
                             upsertTemplate(
@@ -200,7 +210,8 @@ fun buildMemoryTableTools(
                                     name = name,
                                     description = description,
                                     schemaJson = schemaJson,
-                                )
+                                ),
+                                requestedScopeType,
                             ),
                         )
                     }
@@ -210,6 +221,7 @@ fun buildMemoryTableTools(
                             ?: error("template_id is required for update_template")
                         val old = readTemplates().firstOrNull { template -> template.id == templateId }
                             ?: error("memory table template not found: $templateId")
+                        val requestedScopeType = params["scope"]?.toMemoryTableTemplateScopeTypeOrNull()
                         json.encodeToJsonElement(
                             MemoryTableTemplate.serializer(),
                             upsertTemplate(
@@ -219,7 +231,8 @@ fun buildMemoryTableTools(
                                         ?: old.description,
                                     schemaJson = params.stringParameter("schema_json")
                                         ?: old.schemaJson,
-                                )
+                                ),
+                                requestedScopeType,
                             ),
                         )
                     }
@@ -483,6 +496,16 @@ private fun kotlinx.serialization.json.JsonElement.toMemoryTableScopeTypeOrNull(
         "assistant" -> MemoryTableScopeType.ASSISTANT
         null -> null
         else -> error("scope must be one of [conversation, assistant, global]")
+    }
+}
+
+private fun kotlinx.serialization.json.JsonElement.toMemoryTableTemplateScopeTypeOrNull(): MemoryTableScopeType? {
+    return when (jsonPrimitive.contentOrNull?.lowercase()) {
+        "global" -> MemoryTableScopeType.GLOBAL
+        "assistant" -> MemoryTableScopeType.ASSISTANT
+        "conversation" -> error("memory table templates cannot use conversation scope")
+        null -> null
+        else -> error("template scope must be one of [assistant, global]")
     }
 }
 

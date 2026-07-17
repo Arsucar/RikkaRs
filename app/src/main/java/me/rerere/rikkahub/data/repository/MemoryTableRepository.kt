@@ -136,7 +136,7 @@ class MemoryTableRepository(
     suspend fun upsertTemplate(
         template: MemoryTableTemplate,
         actorAssistantId: String,
-        requestedScopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
+        requestedScopeType: MemoryTableScopeType? = null,
     ): MemoryTableTemplate {
         val now = Clock.System.now().toEpochMilliseconds()
         val id = template.id.ifBlank { Uuid.random().toString() }
@@ -145,22 +145,26 @@ class MemoryTableRepository(
         if (existing == null && id == template.id && dao.getTemplate(id) != null) {
             error("memory table template not found or not authorized: $id")
         }
+        val existingScopeType = existing?.let { MemoryTableScopeType.fromStorage(it.scopeType) }
+        val targetScopeType = normalizeTemplateScopeType(
+            requestedScopeType ?: existingScopeType ?: MemoryTableScopeType.ASSISTANT,
+        )
         val normalized = template.copy(
             id = id,
             name = template.name.ifBlank { "Default memory table" },
             description = template.description.trim(),
             schemaJson = normalizeMemoryTableSchemaJson(template.schemaJson),
-            scopeType = existing?.let { MemoryTableScopeType.fromStorage(it.scopeType) }
-                ?: normalizeTemplateScopeType(requestedScopeType),
-            scopeId = existing?.scopeId
-                ?: normalizeTemplateScopeId(requestedScopeType, "", actorAssistantId),
+            scopeType = targetScopeType,
+            scopeId = normalizeTemplateScopeId(targetScopeType, "", actorAssistantId),
             createdAt = existing?.createdAt ?: template.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
         )
         validateMemoryTableSchemaJson(normalized.schemaJson)
-        val isCreatingOrRenaming = existing == null ||
-            normalizeMemoryTableTemplateName(existing.name) != normalizeMemoryTableTemplateName(normalized.name)
-        if (isCreatingOrRenaming) {
+        val isCreatingRenamingOrMoving = existing == null ||
+            normalizeMemoryTableTemplateName(existing.name) != normalizeMemoryTableTemplateName(normalized.name) ||
+            existingScopeType != normalized.scopeType ||
+            existing.scopeId != normalized.scopeId
+        if (isCreatingRenamingOrMoving) {
             ensureTemplateNameAvailable(normalized, actorAssistantId)
         }
         if (existing == null) {
@@ -174,6 +178,8 @@ class MemoryTableRepository(
                 name = normalized.name,
                 description = normalized.description,
                 schemaJson = normalized.schemaJson,
+                scopeType = normalized.scopeType.name,
+                scopeId = normalized.scopeId,
                 updatedAt = normalized.updatedAt,
             )
             if (updated <= 0) {
@@ -190,7 +196,11 @@ class MemoryTableRepository(
     suspend fun deleteTemplate(id: String, actorAssistantId: String): Boolean =
         dao.deleteEffectiveTemplateAndDocuments(id, actorAssistantId) > 0
 
-    suspend fun copyGlobalTemplateToAssistant(templateId: String, actorAssistantId: String): MemoryTableTemplate {
+    suspend fun copyGlobalTemplateToAssistant(
+        templateId: String,
+        actorAssistantId: String,
+        copyName: String,
+    ): MemoryTableTemplate {
         val template = dao.getEffectiveTemplate(templateId, actorAssistantId)
             ?.takeIf { it.scopeType == MemoryTableScopeType.GLOBAL.name }
             ?.toModel()
@@ -198,12 +208,14 @@ class MemoryTableRepository(
         return upsertTemplate(
             template.copy(
                 id = Uuid.random().toString(),
+                name = copyName,
                 scopeType = MemoryTableScopeType.ASSISTANT,
                 scopeId = actorAssistantId,
                 createdAt = 0,
                 updatedAt = 0,
             ),
             actorAssistantId = actorAssistantId,
+            requestedScopeType = MemoryTableScopeType.ASSISTANT,
         )
     }
 

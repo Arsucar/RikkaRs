@@ -1232,10 +1232,11 @@ class ChatService(
                     )
                 },
                 readTemplates = { memoryTableRepository.getEffectiveTemplates(assistant.id.toString()) },
-                upsertTemplate = { template ->
+                upsertTemplate = { template, requestedScopeType ->
                     memoryTableRepository.upsertTemplate(
                         template = template,
                         actorAssistantId = assistant.id.toString(),
+                        requestedScopeType = requestedScopeType,
                     )
                 },
                 deleteTemplate = { templateId ->

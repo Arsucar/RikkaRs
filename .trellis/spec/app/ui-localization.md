@@ -21,6 +21,8 @@
 - Resource keys, formatting placeholders, quantities, escaping, and line breaks must remain compatible across default and Simplified Chinese resources.
 - Internal enum names and storage keys such as `MODEL_NOT_FOUND`, `red`, or `colorKey` must be mapped to localized display resources.
 - User data, model output, tag names, Hook names, and sanitized provider messages remain dynamic data and are not translated.
+- Android XML string apostrophes must use the resource escape (`Couldn\'t`), even when an XML parser accepts the raw character; AAPT otherwise reports an invalid escape while flattening values.
+- If `locale-tui` adds the source key but automatic translation fails, treat every untranslated configured locale as missing work. Verify and fill the locale files instead of accepting the command's zero exit code as translation success.
 
 ### 4. Validation & Error Matrix
 
@@ -28,6 +30,7 @@
 - Simplified Chinese key missing -> fallback UI; block delivery for new/changed UI.
 - Simplified Chinese value exactly equals English -> review and translate unless it is an approved proper noun.
 - Placeholder set differs -> formatting/runtime risk; block delivery.
+- `locale-tui` reports provider/region translation errors -> source key may exist but translated keys are absent; inspect every configured locale before delivery.
 - Direct `Text("...")`, `contentDescription = "..."`, enum `.name`, or raw internal key shown to users -> replace with a resource mapping.
 
 ### 5. Good/Base/Bad Cases
@@ -40,6 +43,7 @@
 ### 6. Tests Required
 
 - Compare target key coverage between `values` and `values-zh`.
+- For repositories with additional configured locales, parse every `values-*` XML and assert the complete target-key set exists in each file.
 - Assert formatting placeholder sets are identical.
 - Audit changed UI files for hardcoded user-visible literals and raw enum/storage-key display.
 - Run `:app:processDebugResources`, `:app:compileDebugKotlin`, and `git diff --check`.

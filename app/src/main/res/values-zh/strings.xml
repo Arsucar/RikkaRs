@@ -1892,4 +1892,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_table_revision_compare_current">与当前版本的差异</string>
   <string name="assistant_page_memory_table_revision_no_changes">没有差异</string>
   <string name="assistant_page_memory_table_revision_payload">快照内容</string>
+  <string name="assistant_page_memory_table_template_migration_success">已更新模板作用域</string>
+  <string name="assistant_page_memory_table_template_migration_failed">无法更新模板作用域</string>
+  <string name="assistant_page_memory_table_template_copy_success">已将模板复制到此助手</string>
+  <string name="assistant_page_memory_table_template_copy_failed">无法复制模板</string>
+  <string name="assistant_page_memory_table_template_migration_title">更改模板作用域？</string>
+  <string name="assistant_page_memory_table_template_migration_to_global_description">所有助手都将能看到此模板。现有文档的作用域不会更改。</string>
+  <string name="assistant_page_memory_table_template_migration_to_assistant_description">其他助手将不再看到此模板。现有文档的作用域不会更改。</string>
+  <string name="assistant_page_memory_table_template_migrate">更改作用域</string>
+  <string name="assistant_page_memory_table_template_copy_name">%1$s 副本</string>
+  <string name="assistant_page_memory_table_template_copy_to_assistant">复制到此助手</string>
+  <string name="assistant_page_memory_table_template_copy_description">创建仅当前助手可用的副本。原全局模板仍对所有助手可用。</string>
 </resources>

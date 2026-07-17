@@ -1,0 +1,6 @@
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"核对迁移不改变文档 scope、不耦合普通记忆能力，并且只在持久化成功后刷新 UI。"}
+{"file":".trellis/tasks/archive/2026-07/07-14-issue-122-template-isolation/research/issue-122-template-ownership.md","reason":"核对迁移后其他助手立即不可见、他人私有模板不可迁移，known-ID 不绕过 actor 授权。"}
+{"file":".trellis/tasks/archive/2026-07/07-16-issue-140-ui-optimization/research/template-dedup-management.md","reason":"核对目标 scope 名称冲突、历史重复项、完整管理可见性和 ID 稳定性。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 UI 与 memory_table_tool 的 create/update/list 对 scope、错误和幂等行为一致。"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"核对并发提交、Compose 状态刷新、失败保留表单及无提前 success。"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"核对默认资源与简中翻译、其余 locale key、placeholder 和无硬编码文案。"}
