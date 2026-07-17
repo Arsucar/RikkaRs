@@ -8,7 +8,7 @@
 - [x] 新增/更新 JVM 与 DAO 测试：ID 投影/隔离、统计、批次边界、分页 fallback、顺序、摘要路径、sync diff。
 - [x] 静态复核 MemoryTable、Hook、Tag、Subagent transaction 候选，记录未修改理由与剩余风险。
 - [x] 运行 `git diff --check`、聚焦测试、完整 app JVM 测试、`:app:compileDebugKotlin` 和 androidTest 编译；设备 offline 且重连 10060，无法执行安装/仪器测试。
-- [ ] 发布中英文进展/边界评论并保持 Issue 开放；缺少原始复现、heap/allocation 证据和真实数据规模压力验证。
+- [x] 发布并重新读取中英文进展/边界评论；Issue 保持开放，缺少原始复现、heap/allocation 证据和真实数据规模压力验证。
 
 ## Risk and Rollback Points
 
