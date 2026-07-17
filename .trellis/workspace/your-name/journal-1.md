@@ -1189,3 +1189,37 @@ Fixed legacy duplicate template edit validation, cleaned revision snapshots duri
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: 提交 finish-work 自动提交能力
+
+**Date**: 2026-07-17
+**Task**: 提交 finish-work 自动提交能力
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+将 trellis-finish-work 调整为仅暂存当前任务文件、校验 staged diff，并在归档与 journal 前自动创建 conventional commit；本轮已实际用于 Issues #142/#143 收尾。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c37d394f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
