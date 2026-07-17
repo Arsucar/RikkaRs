@@ -12,8 +12,15 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 
 @Dao
 interface MessageNodeDAO {
-    @Query("SELECT * FROM message_node WHERE conversation_id = :conversationId ORDER BY node_index ASC")
-    suspend fun getNodesOfConversation(conversationId: String): List<MessageNodeEntity>
+    @Query("SELECT id FROM message_node WHERE conversation_id = :conversationId ORDER BY node_index ASC")
+    suspend fun getNodeIdsOfConversation(conversationId: String): List<String>
+
+    @Query(
+        "SELECT COUNT(*) AS nodeCount, " +
+            "COALESCE(SUM(LENGTH(messages)), 0) AS messageChars " +
+            "FROM message_node WHERE conversation_id = :conversationId"
+    )
+    suspend fun getReadSummary(conversationId: String): MessageNodeReadSummary
 
     @Query(
         "SELECT * FROM message_node WHERE conversation_id = :conversationId " +
@@ -47,6 +54,11 @@ interface MessageNodeDAO {
     @RawQuery
     suspend fun getMessageCountPerDayRaw(query: SupportSQLiteQuery): List<MessageDayCount>
 }
+
+data class MessageNodeReadSummary(
+    val nodeCount: Long,
+    val messageChars: Long,
+)
 
 data class MessageTokenStats(
     val totalMessages: Int = 0,

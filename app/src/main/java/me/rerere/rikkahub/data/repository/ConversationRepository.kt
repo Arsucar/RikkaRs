@@ -11,6 +11,7 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import me.rerere.common.android.Logging
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
@@ -38,16 +39,16 @@ class ConversationRepository(
     companion object {
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
+        private const val MESSAGE_NODE_PAGE_SIZE = 64
+        private const val MESSAGE_NODE_WRITE_BATCH_SIZE = 64
+        private const val TAG = "ConversationRepository"
     }
 
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
             assistantId = assistantId.toString(),
             limit = limit
-        ).map { entity ->
-            val nodes = loadMessageNodes(entity.id)
-            conversationEntityToConversation(entity, nodes)
-        }
+        ).map(::lightConversationEntityToConversation)
     }
 
     suspend fun getLatestActiveConversationIdOfAssistant(assistantId: Uuid): Uuid? {
@@ -76,7 +77,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.getConversationsOfAssistantPaging(assistantId.toString()) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
+            lightConversationEntityToConversation(entity)
         }
     }
 
@@ -89,7 +90,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.getUnfiledConversationsOfAssistantPaging(assistantId.toString()) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
+            lightConversationEntityToConversation(entity)
         }
     }
 
@@ -102,7 +103,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.getConversationsOfFolderPaging(folderId.toString()) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
+            lightConversationEntityToConversation(entity)
         }
     }
 
@@ -124,7 +125,7 @@ class ConversationRepository(
             ) {
                 is PagingSource.LoadResult.Page -> ConversationPageResult(
                     items = result.data.map { entity ->
-                        conversationSummaryToConversation(entity)
+                        lightConversationEntityToConversation(entity)
                     },
                     nextOffset = result.nextKey
                 )
@@ -159,7 +160,7 @@ class ConversationRepository(
             ) {
                 is PagingSource.LoadResult.Page -> ConversationPageResult(
                     items = result.data.map { entity ->
-                        conversationSummaryToConversation(entity)
+                        lightConversationEntityToConversation(entity)
                     },
                     nextOffset = result.nextKey
                 )
@@ -209,7 +210,7 @@ class ConversationRepository(
             ) {
                 is PagingSource.LoadResult.Page -> ConversationPageResult(
                     items = result.data.map { entity ->
-                        conversationSummaryToConversation(entity)
+                        lightConversationEntityToConversation(entity)
                     },
                     nextOffset = result.nextKey
                 )
@@ -241,7 +242,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.searchConversationsPaging(titleKeyword) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
+            lightConversationEntityToConversation(entity)
         }
     }
 
@@ -270,14 +271,14 @@ class ConversationRepository(
             }
         ).flow.map { pagingData ->
             pagingData.map { entity ->
-                conversationSummaryToConversation(entity)
+                lightConversationEntityToConversation(entity)
             }
         }
 
     suspend fun getConversationById(uuid: Uuid): Conversation? {
         val entity = conversationDAO.getConversationById(uuid.toString())
         return if (entity != null) {
-            val nodes = loadMessageNodes(entity.id)
+            val nodes = loadMessageNodes(entity.id, operation = "get_by_id")
             conversationEntityToConversation(entity, nodes)
         } else null
     }
@@ -295,7 +296,11 @@ class ConversationRepository(
             conversationDAO.insert(
                 conversationToConversationEntity(conversation)
             )
-            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            saveMessageNodes(
+                conversationId = conversation.id.toString(),
+                nodes = conversation.messageNodes,
+                operation = "insert",
+            )
         }
         messageFtsManager.indexConversation(conversation)
     }
@@ -310,7 +315,7 @@ class ConversationRepository(
             conversationDAO.getConversationsPaging(buildConversationFilterQuery(filter))
         },
     ).flow.map { pagingData ->
-        pagingData.map(::conversationSummaryToConversation)
+        pagingData.map(::lightConversationEntityToConversation)
     }
 
     /**
@@ -320,7 +325,11 @@ class ConversationRepository(
     suspend fun insertForkConversation(sourceConversationId: Uuid, fork: Conversation) {
         database.withTransaction {
             conversationDAO.insert(conversationToConversationEntity(fork))
-            saveMessageNodes(fork.id.toString(), fork.messageNodes)
+            saveMessageNodes(
+                conversationId = fork.id.toString(),
+                nodes = fork.messageNodes,
+                operation = "fork",
+            )
             database.conversationTagDao().copyRelationsForFork(
                 sourceConversationId = sourceConversationId.toString(),
                 targetConversationId = fork.id.toString(),
@@ -334,7 +343,11 @@ class ConversationRepository(
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
             )
-            syncMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            syncMessageNodes(
+                conversationId = conversation.id.toString(),
+                nodes = conversation.messageNodes,
+                operation = "update",
+            )
         }
         messageFtsManager.indexConversation(conversation)
     }
@@ -367,9 +380,11 @@ class ConversationRepository(
         val total = allIds.size
         allIds.forEachIndexed { index, id ->
             val entity = conversationDAO.getConversationById(id) ?: return@forEachIndexed
-            val nodes = loadMessageNodes(entity.id)
+            val nodes = loadMessageNodes(entity.id, operation = "rebuild_index")
             val conversation = conversationEntityToConversation(entity, nodes)
             messageFtsManager.indexConversation(conversation)
+            // indexConversation consumes the decoded tree synchronously, so this loop retains
+            // only one full conversation at a time.
             onProgress(index + 1, total)
         }
     }
@@ -451,86 +466,427 @@ class ConversationRepository(
         )
     }
 
-    private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {
-        return Conversation(
-            id = Uuid.parse(entity.id),
-            assistantId = Uuid.parse(entity.assistantId),
-            title = entity.title,
-            isPinned = entity.isPinned,
-            createAt = Instant.ofEpochMilli(entity.createAt),
-            updateAt = Instant.ofEpochMilli(entity.updateAt),
-            messageNodes = emptyList(),
-            chatModelId = entity.chatModelId.ifEmpty { null }?.let { Uuid.parse(it) },
-            folderId = entity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
-        )
-    }
-
-    private suspend fun loadMessageNodes(conversationId: String): List<MessageNode> {
+    private suspend fun loadMessageNodes(
+        conversationId: String,
+        operation: String,
+    ): List<MessageNode> {
         val favoriteNodeIds = favoriteDAO
             .getFavoriteNodeIdsOfConversation(conversationId)
             .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
             .toSet()
 
         return database.withTransaction {
+            val startedAtNanos = System.nanoTime()
+            val readSummary = try {
+                messageNodeDAO.getReadSummary(conversationId)
+            } catch (error: Exception) {
+                logConversationNodeDiagnostics(
+                    operation = operation,
+                    phase = "read_summary_failed",
+                    conversationId = conversationId,
+                    startedAtNanos = startedAtNanos,
+                    errorType = error::class.simpleName,
+                )
+                throw error
+            }
             val nodes = mutableListOf<MessageNode>()
-            var offset = 0
-            val pageSize = 64
-            while (true) {
-                val page = try {
-                    messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
-                } catch (e: SQLiteBlobTooBigException) {
-                    e.printStackTrace()
-                    offset += pageSize
-                    continue
-                } catch (e: IllegalStateException) {
-                    e.printStackTrace()
-                    offset += pageSize
-                    continue
-                }
-                if (page.isEmpty()) break
-                page.forEach { entity ->
-                    val nodeId = Uuid.parse(entity.id)
-                    nodes.add(
-                        messageNodeEntityToMessageNode(
-                            entity = entity,
-                            isFavorite = favoriteNodeIds.contains(nodeId),
+            val diagnosticsEnabled = shouldLogConversationNodeDiagnostics(
+                nodeCount = readSummary.nodeCount,
+                serializedChars = readSummary.messageChars,
+            )
+            if (diagnosticsEnabled) {
+                logConversationNodeDiagnostics(
+                    operation = operation,
+                    phase = "read_start",
+                    conversationId = conversationId,
+                    totalNodeCount = readSummary.nodeCount,
+                    totalMessageChars = readSummary.messageChars,
+                    startedAtNanos = startedAtNanos,
+                )
+            }
+
+            val readStats = try {
+                consumePagedRowsWithSingleRowFallback(
+                    pageSize = MESSAGE_NODE_PAGE_SIZE,
+                    load = { limit, offset ->
+                        messageNodeDAO.getNodesOfConversationPaged(conversationId, limit, offset)
+                    },
+                    isOversizedPage = { it is SQLiteBlobTooBigException },
+                    consume = { page ->
+                        page.forEach { entity ->
+                            val nodeId = Uuid.parse(entity.id)
+                            nodes.add(
+                                messageNodeEntityToMessageNode(
+                                    entity = entity,
+                                    isFavorite = favoriteNodeIds.contains(nodeId),
+                                )
+                            )
+                        }
+                    },
+                    onSingleRowFailure = { offset, error ->
+                        logConversationNodeDiagnostics(
+                            operation = operation,
+                            phase = "read_row_failed",
+                            conversationId = conversationId,
+                            loadedNodeCount = nodes.size,
+                            totalNodeCount = readSummary.nodeCount,
+                            totalMessageChars = readSummary.messageChars,
+                            rowOffset = offset,
+                            startedAtNanos = startedAtNanos,
+                            errorType = error::class.simpleName,
                         )
-                    )
-                }
-                offset += page.size
+                    },
+                )
+            } catch (error: Exception) {
+                logConversationNodeDiagnostics(
+                    operation = operation,
+                    phase = "read_failed",
+                    conversationId = conversationId,
+                    loadedNodeCount = nodes.size,
+                    totalNodeCount = readSummary.nodeCount,
+                    totalMessageChars = readSummary.messageChars,
+                    startedAtNanos = startedAtNanos,
+                    errorType = error::class.simpleName,
+                )
+                throw error
+            }
+            if (diagnosticsEnabled) {
+                logConversationNodeDiagnostics(
+                    operation = operation,
+                    phase = "read_complete",
+                    conversationId = conversationId,
+                    pageCount = readStats.pageCount,
+                    loadedNodeCount = nodes.size,
+                    totalNodeCount = readSummary.nodeCount,
+                    totalMessageChars = readSummary.messageChars,
+                    startedAtNanos = startedAtNanos,
+                )
             }
             nodes
         }
     }
 
-    private suspend fun saveMessageNodes(conversationId: String, nodes: List<MessageNode>) {
-        val entities = nodes.mapIndexed { index, node ->
-            messageNodeToEntity(
-                node = node,
+    private suspend fun saveMessageNodes(
+        conversationId: String,
+        nodes: List<MessageNode>,
+        operation: String,
+    ) {
+        val startedAtNanos = System.nanoTime()
+        var persistedNodeCount = 0
+        var serializedChars = 0L
+        var writeBatchCount = 0
+        var diagnosticsLogged = false
+        if (shouldLogConversationNodeDiagnostics(nodes.size.toLong(), 0)) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "write_start",
                 conversationId = conversationId,
-                nodeIndex = index,
+                plannedNodeCount = nodes.size,
+                startedAtNanos = startedAtNanos,
+            )
+            diagnosticsLogged = true
+        }
+        try {
+            mapAndConsumeInBatches(
+                items = nodes,
+                batchSize = MESSAGE_NODE_WRITE_BATCH_SIZE,
+                transform = { index, node ->
+                    messageNodeToEntity(
+                        node = node,
+                        conversationId = conversationId,
+                        nodeIndex = index,
+                    ).also { serializedChars += countUnicodeCodePoints(it.messages) }
+                },
+                consume = { entities ->
+                    if (!diagnosticsLogged && shouldLogConversationNodeDiagnostics(0, serializedChars)) {
+                        logConversationNodeDiagnostics(
+                            operation = operation,
+                            phase = "write_start",
+                            conversationId = conversationId,
+                            plannedNodeCount = nodes.size,
+                            writeBatchCount = writeBatchCount,
+                            completedDaoNodeCount = persistedNodeCount,
+                            serializedChars = serializedChars,
+                            startedAtNanos = startedAtNanos,
+                        )
+                        diagnosticsLogged = true
+                    }
+                    messageNodeDAO.insertAll(entities)
+                    writeBatchCount++
+                    persistedNodeCount += entities.size
+                },
+            )
+        } catch (error: Exception) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "write_failed",
+                conversationId = conversationId,
+                plannedNodeCount = nodes.size,
+                writeBatchCount = writeBatchCount,
+                completedDaoNodeCount = persistedNodeCount,
+                serializedChars = serializedChars,
+                startedAtNanos = startedAtNanos,
+                errorType = error::class.simpleName,
+            )
+            throw error
+        }
+        if (diagnosticsLogged) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "write_complete",
+                conversationId = conversationId,
+                plannedNodeCount = nodes.size,
+                writeBatchCount = writeBatchCount,
+                completedDaoNodeCount = persistedNodeCount,
+                serializedChars = serializedChars,
+                startedAtNanos = startedAtNanos,
             )
         }
-        messageNodeDAO.insertAll(entities)
     }
 
-    private suspend fun syncMessageNodes(conversationId: String, nodes: List<MessageNode>) {
-        val existing = messageNodeDAO.getNodesOfConversation(conversationId)
+    private suspend fun syncMessageNodes(
+        conversationId: String,
+        nodes: List<MessageNode>,
+        operation: String,
+    ) {
+        val existingIds = messageNodeDAO.getNodeIdsOfConversation(conversationId)
         val (deleteIds, upsertNodes) = computeNodeSyncOps(
-            existingIds = existing.map { it.id },
+            existingIds = existingIds,
             newNodes = nodes,
         )
-        deleteIds.forEach { messageNodeDAO.deleteById(it) }
-        upsertNodes.forEachIndexed { index, node ->
-            messageNodeDAO.insert(
-                messageNodeToEntity(
+        val startedAtNanos = System.nanoTime()
+        var serializedChars = 0L
+        var writeCallCount = 0
+        var diagnosticsLogged = false
+        if (shouldLogConversationNodeDiagnostics(upsertNodes.size.toLong(), 0)) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "sync_start",
+                conversationId = conversationId,
+                plannedNodeCount = upsertNodes.size,
+                deleteNodeCount = deleteIds.size,
+                startedAtNanos = startedAtNanos,
+            )
+            diagnosticsLogged = true
+        }
+        try {
+            deleteIds.forEach { messageNodeDAO.deleteById(it) }
+            upsertNodes.forEachIndexed { index, node ->
+                val entity = messageNodeToEntity(
                     node = node,
                     conversationId = conversationId,
                     nodeIndex = index,
-                ),
+                )
+                serializedChars += countUnicodeCodePoints(entity.messages)
+                if (!diagnosticsLogged && shouldLogConversationNodeDiagnostics(0, serializedChars)) {
+                    logConversationNodeDiagnostics(
+                        operation = operation,
+                        phase = "sync_start",
+                        conversationId = conversationId,
+                        plannedNodeCount = upsertNodes.size,
+                        deleteNodeCount = deleteIds.size,
+                        writeCallCount = writeCallCount,
+                        completedDaoNodeCount = writeCallCount,
+                        serializedChars = serializedChars,
+                        startedAtNanos = startedAtNanos,
+                    )
+                    diagnosticsLogged = true
+                }
+                messageNodeDAO.insert(entity)
+                writeCallCount++
+            }
+        } catch (error: Exception) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "sync_failed",
+                conversationId = conversationId,
+                plannedNodeCount = upsertNodes.size,
+                deleteNodeCount = deleteIds.size,
+                writeCallCount = writeCallCount,
+                completedDaoNodeCount = writeCallCount,
+                serializedChars = serializedChars,
+                startedAtNanos = startedAtNanos,
+                errorType = error::class.simpleName,
+            )
+            throw error
+        }
+        if (diagnosticsLogged) {
+            logConversationNodeDiagnostics(
+                operation = operation,
+                phase = "sync_complete",
+                conversationId = conversationId,
+                plannedNodeCount = upsertNodes.size,
+                deleteNodeCount = deleteIds.size,
+                writeCallCount = writeCallCount,
+                completedDaoNodeCount = writeCallCount,
+                serializedChars = serializedChars,
+                startedAtNanos = startedAtNanos,
             )
         }
     }
+
+    private fun logConversationNodeDiagnostics(
+        operation: String,
+        phase: String,
+        conversationId: String,
+        pageCount: Int? = null,
+        loadedNodeCount: Int? = null,
+        totalNodeCount: Long? = null,
+        totalMessageChars: Long? = null,
+        plannedNodeCount: Int? = null,
+        deleteNodeCount: Int? = null,
+        writeBatchCount: Int? = null,
+        writeCallCount: Int? = null,
+        completedDaoNodeCount: Int? = null,
+        serializedChars: Long? = null,
+        rowOffset: Int? = null,
+        startedAtNanos: Long,
+        errorType: String? = null,
+    ) {
+        val runtime = Runtime.getRuntime()
+        Logging.log(
+            TAG,
+            buildConversationNodeDiagnosticMessage(
+                operation = operation,
+                phase = phase,
+                conversationId = conversationId,
+                pageCount = pageCount,
+                loadedNodeCount = loadedNodeCount,
+                totalNodeCount = totalNodeCount,
+                totalMessageChars = totalMessageChars,
+                plannedNodeCount = plannedNodeCount,
+                deleteNodeCount = deleteNodeCount,
+                writeBatchCount = writeBatchCount,
+                writeCallCount = writeCallCount,
+                completedDaoNodeCount = completedDaoNodeCount,
+                serializedChars = serializedChars,
+                rowOffset = rowOffset,
+                elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
+                heapUsedBytes = runtime.totalMemory() - runtime.freeMemory(),
+                heapMaxBytes = runtime.maxMemory(),
+                errorType = errorType,
+            ),
+        )
+    }
+}
+
+internal fun lightConversationEntityToConversation(entity: LightConversationEntity): Conversation = Conversation(
+    id = Uuid.parse(entity.id),
+    assistantId = Uuid.parse(entity.assistantId),
+    title = entity.title,
+    isPinned = entity.isPinned,
+    createAt = Instant.ofEpochMilli(entity.createAt),
+    updateAt = Instant.ofEpochMilli(entity.updateAt),
+    messageNodes = emptyList(),
+    chatModelId = entity.chatModelId.ifEmpty { null }?.let { Uuid.parse(it) },
+    folderId = entity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
+)
+
+internal suspend fun <T, R> mapAndConsumeInBatches(
+    items: List<T>,
+    batchSize: Int,
+    transform: (index: Int, item: T) -> R,
+    consume: suspend (List<R>) -> Unit,
+) {
+    require(batchSize > 0) { "batchSize must be positive" }
+    var startIndex = 0
+    while (startIndex < items.size) {
+        val endIndex = minOf(startIndex + batchSize, items.size)
+        val batch = ArrayList<R>(endIndex - startIndex)
+        for (index in startIndex until endIndex) {
+            batch += transform(index, items[index])
+        }
+        consume(batch)
+        startIndex = endIndex
+    }
+}
+
+internal data class PagedReadStats(
+    val pageCount: Int,
+)
+
+internal suspend fun <T> consumePagedRowsWithSingleRowFallback(
+    pageSize: Int,
+    load: suspend (limit: Int, offset: Int) -> List<T>,
+    isOversizedPage: (Throwable) -> Boolean,
+    consume: suspend (List<T>) -> Unit,
+    onSingleRowFailure: (offset: Int, error: Throwable) -> Unit,
+): PagedReadStats {
+    require(pageSize > 0) { "pageSize must be positive" }
+    var offset = 0
+    var pageCount = 0
+    while (true) {
+        val page = try {
+            load(pageSize, offset)
+        } catch (error: Throwable) {
+            if (!isOversizedPage(error)) throw error
+            val singleRow = try {
+                load(1, offset)
+            } catch (singleRowError: Throwable) {
+                if (!isOversizedPage(singleRowError)) throw singleRowError
+                onSingleRowFailure(offset, singleRowError)
+                throw singleRowError
+            }
+            if (singleRow.isEmpty()) break
+            consume(singleRow)
+            pageCount++
+            offset += singleRow.size
+            continue
+        }
+        if (page.isEmpty()) break
+        consume(page)
+        pageCount++
+        offset += page.size
+    }
+    return PagedReadStats(pageCount = pageCount)
+}
+
+internal fun countUnicodeCodePoints(value: String): Long =
+    value.codePointCount(0, value.length).toLong()
+
+internal fun shouldLogConversationNodeDiagnostics(
+    nodeCount: Long,
+    serializedChars: Long,
+): Boolean = nodeCount >= 256L || serializedChars >= 4_000_000L
+
+internal fun buildConversationNodeDiagnosticMessage(
+    operation: String,
+    phase: String,
+    conversationId: String,
+    pageCount: Int? = null,
+    loadedNodeCount: Int? = null,
+    totalNodeCount: Long? = null,
+    totalMessageChars: Long? = null,
+    plannedNodeCount: Int? = null,
+    deleteNodeCount: Int? = null,
+    writeBatchCount: Int? = null,
+    writeCallCount: Int? = null,
+    completedDaoNodeCount: Int? = null,
+    serializedChars: Long? = null,
+    rowOffset: Int? = null,
+    elapsedMs: Long,
+    heapUsedBytes: Long,
+    heapMaxBytes: Long,
+    errorType: String? = null,
+): String = buildString {
+    append("operation=").append(operation)
+    append(" phase=").append(phase)
+    append(" conversationId=").append(conversationId)
+    pageCount?.let { append(" pageCount=").append(it) }
+    loadedNodeCount?.let { append(" loadedNodeCount=").append(it) }
+    totalNodeCount?.let { append(" totalNodeCount=").append(it) }
+    totalMessageChars?.let { append(" totalMessageChars=").append(it) }
+    plannedNodeCount?.let { append(" plannedNodeCount=").append(it) }
+    deleteNodeCount?.let { append(" deleteNodeCount=").append(it) }
+    writeBatchCount?.let { append(" writeBatchCount=").append(it) }
+    writeCallCount?.let { append(" writeCallCount=").append(it) }
+    completedDaoNodeCount?.let { append(" completedDaoNodeCount=").append(it) }
+    serializedChars?.let { append(" serializedChars=").append(it) }
+    rowOffset?.let { append(" rowOffset=").append(it) }
+    append(" elapsedMs=").append(elapsedMs)
+    append(" heapUsedBytes=").append(heapUsedBytes)
+    append(" heapMaxBytes=").append(heapMaxBytes)
+    errorType?.let { append(" errorType=").append(it) }
 }
 
 internal fun messageNodeToEntity(

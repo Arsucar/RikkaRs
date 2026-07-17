@@ -32,7 +32,7 @@
 
 ## Error and Compatibility Contract
 
-- 既有 `SQLiteBlobTooBigException` / 反序列化失败处理行为不得被静默扩大；失败页和跳过行为需要保留或以更明确错误替代。
+- 页级 `SQLiteBlobTooBigException` 允许在同 offset 降级为单行读取；单行仍失败时记录元数据并重抛，禁止返回缺失节点的部分 Conversation。其他 Room/反序列化异常原样传播。
 - 不增加 Room 版本，不改变实体字段。
 - 不记录消息正文、JSON payload、附件路径或模型输出。
 - `recent_chats` 的 JSON 字段、limit 1..30 和排序保持兼容。
