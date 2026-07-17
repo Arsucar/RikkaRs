@@ -1223,3 +1223,37 @@ Fixed legacy duplicate template edit validation, cleaned revision snapshots duri
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: Release v2.3.31
+
+**Date**: 2026-07-17
+**Task**: Release v2.3.31
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Prepared v2.3.31 metadata and bilingual release notes for issues #136, #137, #140, #141, #142, and #143; compile and Debug assembly passed, device remained offline.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e6765d1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
