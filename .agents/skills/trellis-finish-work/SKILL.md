@@ -5,7 +5,7 @@ description: "Wrap up the current session: verify quality gate passed, remind us
 
 # Finish Work
 
-Wrap up the current session: archive the active task (and any other completed-but-unarchived tasks the user wants to clean up) and record the session journal. Code commits are NOT done here — those happen in workflow Phase 3.4 before you invoke this command.
+Wrap up the current session: commit related code changes, archive the active task (and any other completed-but-unarchived tasks the user wants to clean up), and record the session journal. This skill owns the final code commit when it is invoked with a dirty working tree.
 
 ## Step 1: Survey current state
 
@@ -39,10 +39,11 @@ For each remaining dirty path, decide whether it belongs to **the current task**
 
 Then route:
 
-- **Any remaining path looks like current-task work** — bail out with:
-  > "Working tree has uncommitted code changes from this task: `<list>`. Return to workflow Phase 3.4 to commit them before running ``finish-work` (Trellis command)`."
-
-  Do NOT run `git commit` here. Do NOT prompt the user to commit. The user goes back to Phase 3.4 and the AI drives the batched commit there.
+- **Any remaining path looks like current-task work** — commit those paths before continuing:
+  1. Stage only the identified current-task paths with `git add -- <paths>`. Never stage unrelated files, `.trellis/workspace/`, or `.trellis/tasks/` bookkeeping paths.
+  2. Inspect the staged patch with `git diff --cached --check` and `git diff --cached --stat`. If a file mixes current-task and unrelated edits and cannot be safely staged by path, stop and ask the user which hunks belong to this task.
+  3. Draft a concise conventional commit message from the task scope and recent history, then run `git commit -m "<message>"` without asking for a second confirmation.
+  4. Record the resulting work commit hash for Step 4. If staging, validation, or commit fails, stop and report the exact failure; do not archive or write a journal entry.
 - **All remaining paths look unrelated** (other parallel-window work) — report them once and continue to Step 3:
   > "FYI, dirty files outside this task's scope — leaving them for the other window: `<list>`."
 - **Genuinely unsure** — ask the user once: "Are `<list>` this task's work I forgot to commit, or another window's? (commit / ignore)" — then route per their answer.
@@ -66,6 +67,6 @@ python ./.trellis/scripts/add_session.py \
   --summary "Brief summary"
 ```
 
-Use the work-commit hashes produced in Phase 3.4 (visible in Step 1's `Recent commits` list, or via `git log --oneline`) for `--commit`. Do not include the archive commit hashes from Step 3. This produces a `chore: record journal` commit.
+Use the work-commit hashes produced in this skill's Step 2 (or earlier Phase 3.4 commits) for `--commit`. Do not include the archive commit hashes from Step 3. This produces a `chore: record journal` commit.
 
 Final git log order: `<work commits from 3.4>` → `chore(task): archive ...` (one or more) → `chore: record journal`.
