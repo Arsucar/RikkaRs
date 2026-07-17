@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.backup
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,17 +9,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
+import me.rerere.rikkahub.data.sync.BackupOperation
+import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
 import me.rerere.rikkahub.utils.UiState
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 private const val TAG = "BackupVM"
 
@@ -26,7 +34,13 @@ class BackupVM(
     private val webDavSync: WebDavSync,
     private val s3Sync: S3Sync,
     private val conversationRepository: ConversationRepository,
+    private val context: Context,
+    private val taskCoordinator: BackupTaskCoordinator,
 ) : ViewModel() {
+    val taskStates = taskCoordinator.states
+
+    fun consumeTaskSuccess(operation: BackupOperation): Boolean =
+        taskCoordinator.consumeSuccess(operation)
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -73,6 +87,17 @@ class BackupVM(
         recordBackupTime()
     }
 
+    fun startWebDavBackup(): Boolean = taskCoordinator.start(BackupOperation.WEB_DAV_BACKUP) {
+        webDavSync.backup(settings.value.webDavConfig)
+        recordBackupTime()
+        loadBackupFileItems()
+    }
+
+    fun startWebDavRestore(item: WebDavBackupItem): Boolean =
+        taskCoordinator.start(BackupOperation.WEB_DAV_RESTORE) {
+            webDavSync.restore(config = settings.value.webDavConfig, item = item)
+        }
+
     suspend fun restore(item: WebDavBackupItem) {
         webDavSync.restore(config = settings.value.webDavConfig, item = item)
     }
@@ -83,9 +108,47 @@ class BackupVM(
 
     suspend fun exportToFile(): File {
         val file = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
-        recordBackupTime()
         return file
     }
+
+    fun startLocalExport(targetUri: Uri): Boolean = taskCoordinator.start(BackupOperation.LOCAL_EXPORT) {
+        val exportFile = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        try {
+            withContext(Dispatchers.IO) {
+                val output = context.contentResolver.openOutputStream(targetUri)
+                    ?: error("Unable to open the selected export destination")
+                output.use { outputStream ->
+                    FileInputStream(exportFile).use { inputStream -> inputStream.copyTo(outputStream) }
+                }
+            }
+            recordBackupTime()
+        } finally {
+            exportFile.delete()
+        }
+    }
+
+    fun startLocalImport(sourceUri: Uri, importType: String): Boolean =
+        taskCoordinator.start(BackupOperation.LOCAL_IMPORT) {
+            val extension = if (importType == "chatbox") "json" else "zip"
+            val tempFile = File(context.cacheDir, "temp_${importType}_${System.currentTimeMillis()}.$extension")
+            try {
+                withContext(Dispatchers.IO) {
+                    val input = context.contentResolver.openInputStream(sourceUri)
+                        ?: error("Unable to open the selected import file")
+                    input.use { inputStream ->
+                        FileOutputStream(tempFile).use { outputStream -> inputStream.copyTo(outputStream) }
+                    }
+                }
+                when (importType) {
+                    "local" -> restoreFromLocalFile(tempFile)
+                    "chatbox" -> restoreFromChatBox(tempFile)
+                    "cherry" -> restoreFromCherryStudio(tempFile)
+                    else -> error("Unsupported import type: $importType")
+                }
+            } finally {
+                tempFile.delete()
+            }
+        }
 
     suspend fun restoreFromLocalFile(file: File) {
         webDavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
@@ -137,7 +200,7 @@ class BackupVM(
         )
     }
 
-    fun restoreFromCherryStudio(file: File) {
+    suspend fun restoreFromCherryStudio(file: File) {
         val importProviders = CherryStudioProviderImporter.importProviders(file)
 
         if (importProviders.isEmpty()) {
@@ -146,7 +209,7 @@ class BackupVM(
 
         Log.i(TAG, "restoreFromCherryStudio: import ${importProviders.size} providers: $importProviders")
 
-        updateSettings(
+        settingsStore.update(
             settings.value.copy(
                 providers = importProviders + settings.value.providers,
             )
@@ -178,6 +241,16 @@ class BackupVM(
     suspend fun backupToS3() {
         s3Sync.backupToS3(settings.value.s3Config)
         recordBackupTime()
+    }
+
+    fun startS3Backup(): Boolean = taskCoordinator.start(BackupOperation.S3_BACKUP) {
+        s3Sync.backupToS3(settings.value.s3Config)
+        recordBackupTime()
+        loadS3BackupFileItems()
+    }
+
+    fun startS3Restore(item: S3BackupItem): Boolean = taskCoordinator.start(BackupOperation.S3_RESTORE) {
+        s3Sync.restoreFromS3(config = settings.value.s3Config, item = item)
     }
 
     suspend fun restoreFromS3(item: S3BackupItem) {

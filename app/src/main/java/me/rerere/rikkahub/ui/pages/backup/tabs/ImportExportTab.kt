@@ -14,25 +14,22 @@ import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.dokar.sonner.ToastType
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.data.sync.BackupOperation
+import me.rerere.rikkahub.data.sync.BackupTaskState
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.StickyHeader
-import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -41,11 +38,17 @@ fun ImportExportTab(
     vm: BackupVM,
     onShowRestartDialog: () -> Unit
 ) {
-    val toaster = LocalToaster.current
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var isExporting by remember { mutableStateOf(false) }
-    var isRestoring by remember { mutableStateOf(false) }
+    val taskStates by vm.taskStates.collectAsStateWithLifecycle()
+    val exportState = taskStates.getValue(BackupOperation.LOCAL_EXPORT)
+    val importState = taskStates.getValue(BackupOperation.LOCAL_IMPORT)
+    val isExporting = exportState == BackupTaskState.Running
+    val isRestoring = importState == BackupTaskState.Running
+
+    LaunchedEffect(importState) {
+        if (importState == BackupTaskState.Success) {
+            onShowRestartDialog()
+        }
+    }
 
     // 导入类型：local 为本地备份，chatbox 为 Chatbox 导入，cherry 为 Cherry Studio 导入
     var importType by remember { mutableStateOf("local") }
@@ -55,35 +58,7 @@ fun ImportExportTab(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         uri?.let { targetUri ->
-            scope.launch {
-                isExporting = true
-                runCatching {
-                    // 导出文件
-                    val exportFile = vm.exportToFile()
-
-                    // 复制到用户选择的位置
-                    context.contentResolver.openOutputStream(targetUri)?.use { outputStream ->
-                        FileInputStream(exportFile).use { inputStream ->
-                            inputStream.copyTo(outputStream)
-                        }
-                    }
-
-                    // 清理临时文件
-                    exportFile.delete()
-
-                    toaster.show(
-                        context.getString(R.string.backup_page_backup_success),
-                        type = ToastType.Success
-                    )
-                }.onFailure { e ->
-                    e.printStackTrace()
-                    toaster.show(
-                        context.getString(R.string.backup_page_restore_failed, e.message ?: ""),
-                        type = ToastType.Error
-                    )
-                }
-                isExporting = false
-            }
+            vm.startLocalExport(targetUri)
         }
     }
 
@@ -92,79 +67,7 @@ fun ImportExportTab(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { sourceUri ->
-            scope.launch {
-                isRestoring = true
-                runCatching {
-                    when (importType) {
-                        "local" -> {
-                            // 本地备份导入：处理zip文件
-                            val tempFile =
-                                File(context.cacheDir, "temp_restore_${System.currentTimeMillis()}.zip")
-
-                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                                FileOutputStream(tempFile).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-
-                            // 从临时文件恢复
-                            vm.restoreFromLocalFile(tempFile)
-
-                            // 清理临时文件
-                            tempFile.delete()
-                        }
-
-                        "chatbox" -> {
-                            // Chatbox导入：处理json文件
-                            val tempFile =
-                                File(context.cacheDir, "temp_chatbox_${System.currentTimeMillis()}.json")
-
-                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                                FileOutputStream(tempFile).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-
-                            // 从Chatbox文件恢复
-                            vm.restoreFromChatBox(tempFile)
-
-                            // 清理临时文件
-                            tempFile.delete()
-                        }
-
-                        "cherry" -> {
-                            // Cherry Studio导入：处理zip文件
-                            val tempFile =
-                                File(context.cacheDir, "temp_cherry_${System.currentTimeMillis()}.zip")
-
-                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                                FileOutputStream(tempFile).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-
-                            // 从Cherry Studio备份恢复
-                            vm.restoreFromCherryStudio(tempFile)
-
-                            // 清理临时文件
-                            tempFile.delete()
-                        }
-                    }
-
-                    toaster.show(
-                        context.getString(R.string.backup_page_restore_success),
-                        type = ToastType.Success
-                    )
-                    onShowRestartDialog()
-                }.onFailure { e ->
-                    e.printStackTrace()
-                    toaster.show(
-                        context.getString(R.string.backup_page_restore_failed, e.message ?: ""),
-                        type = ToastType.Error
-                    )
-                }
-                isRestoring = false
-            }
+            vm.startLocalImport(sourceUri, importType)
         }
     }
 
@@ -192,11 +95,13 @@ fun ImportExportTab(
                     headlineContent = { Text(stringResource(R.string.backup_page_local_backup_export)) },
                     supportingContent = {
                         Text(
-                            if (isExporting) {
-                                stringResource(R.string.backup_page_exporting)
-                            } else {
-                                stringResource(R.string.backup_page_export_desc)
-                            }
+                            taskDescription(
+                                state = exportState,
+                                running = stringResource(R.string.backup_page_exporting),
+                                idle = stringResource(R.string.backup_page_export_desc),
+                                success = stringResource(R.string.backup_page_backup_success),
+                                cancelled = stringResource(R.string.hook_status_cancelled),
+                            )
                         )
                     },
                     leadingContent = {
@@ -218,11 +123,13 @@ fun ImportExportTab(
                     headlineContent = { Text(stringResource(R.string.backup_page_local_backup_import)) },
                     supportingContent = {
                         Text(
-                            if (isRestoring) {
-                                stringResource(R.string.backup_page_importing)
-                            } else {
-                                stringResource(R.string.backup_page_import_desc)
-                            }
+                            taskDescription(
+                                state = importState,
+                                running = stringResource(R.string.backup_page_importing),
+                                idle = stringResource(R.string.backup_page_import_desc),
+                                success = stringResource(R.string.backup_page_restore_success),
+                                cancelled = stringResource(R.string.hook_status_cancelled),
+                            )
                         )
                     },
                     leadingContent = {
@@ -282,4 +189,18 @@ fun ImportExportTab(
             }
         }
     }
+}
+
+private fun taskDescription(
+    state: BackupTaskState,
+    running: String,
+    idle: String,
+    success: String,
+    cancelled: String,
+): String = when (state) {
+    BackupTaskState.Running -> running
+    BackupTaskState.Success -> success
+    is BackupTaskState.Failed -> state.error.message ?: idle
+    BackupTaskState.Cancelled -> cancelled
+    BackupTaskState.Idle -> idle
 }

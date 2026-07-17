@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,8 @@ import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
+import me.rerere.rikkahub.data.sync.BackupOperation
+import me.rerere.rikkahub.data.sync.BackupTaskState
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -76,12 +79,23 @@ fun WebDavTab(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val webDavConfig = settings.webDavConfig
     val backupItemsState by vm.webDavBackupItems.collectAsStateWithLifecycle()
+    val taskStates by vm.taskStates.collectAsStateWithLifecycle()
+    val backupState = taskStates.getValue(BackupOperation.WEB_DAV_BACKUP)
+    val restoreState = taskStates.getValue(BackupOperation.WEB_DAV_RESTORE)
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
-    var restoringItemId by remember { mutableStateOf<String?>(null) }
-    var isBackingUp by remember { mutableStateOf(false) }
+    val isBackingUp = backupState == BackupTaskState.Running
+
+    LaunchedEffect(restoreState) {
+        if (restoreState == BackupTaskState.Success &&
+            vm.consumeTaskSuccess(BackupOperation.WEB_DAV_RESTORE)
+        ) {
+            showBackupFiles = false
+            onShowRestartDialog()
+        }
+    }
 
     fun updateWebDavConfig(newConfig: WebDavConfig) {
         vm.updateSettings(settings.copy(webDavConfig = newConfig))
@@ -117,7 +131,8 @@ fun WebDavTab(
             BackupStatusCard(
                 title = stringResource(R.string.backup_page_webdav_backup),
                 lastBackupText = lastBackupText,
-                fileSummaryText = backupFileSummary
+                fileSummaryText = backupFileSummary,
+                taskState = backupState,
             )
 
             CardGroup {
@@ -264,24 +279,7 @@ fun WebDavTab(
             }
             Button(
                 onClick = {
-                    scope.launch {
-                        isBackingUp = true
-                        runCatching {
-                            vm.backup()
-                            vm.loadBackupFileItems()
-                            toaster.show(
-                                context.getString(R.string.backup_page_backup_success),
-                                type = ToastType.Success
-                            )
-                        }.onFailure {
-                            it.printStackTrace()
-                            toaster.show(
-                                it.message ?: context.getString(R.string.backup_page_unknown_error),
-                                type = ToastType.Error
-                            )
-                        }
-                        isBackingUp = false
-                    }
+                    vm.startWebDavBackup()
                 },
                 enabled = !isBackingUp
             ) {
@@ -323,6 +321,15 @@ fun WebDavTab(
                     stringResource(R.string.backup_page_webdav_backup_files),
                     modifier = Modifier.fillMaxWidth()
                 )
+                when (val state = restoreState) {
+                    BackupTaskState.Success -> Text(stringResource(R.string.backup_page_restore_success))
+                    BackupTaskState.Cancelled -> Text(stringResource(R.string.hook_status_cancelled))
+                    is BackupTaskState.Failed -> Text(
+                        text = state.error.message ?: stringResource(R.string.backup_page_unknown_error),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    BackupTaskState.Idle, BackupTaskState.Running -> Unit
+                }
                 backupItemsState.onSuccess {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -332,7 +339,7 @@ fun WebDavTab(
                         items(it) { item ->
                             WebDavBackupItemCard(
                                 item = item,
-                                isRestoring = restoringItemId == item.displayName,
+                                isRestoring = restoreState == BackupTaskState.Running,
                                 onDelete = {
                                     scope.launch {
                                         runCatching {
@@ -355,28 +362,7 @@ fun WebDavTab(
                                     }
                                 },
                                 onRestore = { restoreItem ->
-                                    scope.launch {
-                                        restoringItemId = restoreItem.displayName
-                                        runCatching {
-                                            vm.restore(item = restoreItem)
-                                            toaster.show(
-                                                context.getString(R.string.backup_page_restore_success),
-                                                type = ToastType.Success
-                                            )
-                                            showBackupFiles = false
-                                            onShowRestartDialog()
-                                        }.onFailure { err ->
-                                            err.printStackTrace()
-                                            toaster.show(
-                                                context.getString(
-                                                    R.string.backup_page_restore_failed,
-                                                    err.message ?: ""
-                                                ),
-                                                type = ToastType.Error
-                                            )
-                                        }
-                                        restoringItemId = null
-                                    }
+                                    vm.startWebDavRestore(restoreItem)
                                 },
                             )
                         }
@@ -409,6 +395,7 @@ private fun BackupStatusCard(
     title: String,
     lastBackupText: String,
     fileSummaryText: String,
+    taskState: BackupTaskState,
 ) {
     CardGroup {
         item(
@@ -432,6 +419,24 @@ private fun BackupStatusCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (taskState != BackupTaskState.Idle) {
+                        Text(
+                            text = when (taskState) {
+                                BackupTaskState.Running -> stringResource(R.string.backup_page_backing_up)
+                                BackupTaskState.Success -> stringResource(R.string.backup_page_backup_success)
+                                BackupTaskState.Cancelled -> stringResource(R.string.hook_status_cancelled)
+                                is BackupTaskState.Failed -> taskState.error.message
+                                    ?: stringResource(R.string.backup_page_unknown_error)
+                                BackupTaskState.Idle -> ""
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (taskState is BackupTaskState.Failed) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
                 }
             },
         )

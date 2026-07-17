@@ -4,9 +4,11 @@ import android.content.Context
 import android.util.Log
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.data.files.FileFolders
+import me.rerere.rikkahub.data.files.resolveContainedFile
 import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -45,22 +47,14 @@ class WebDavSync(
 
     suspend fun backup(config: WebDavConfig) = withContext(Dispatchers.IO) {
         val file = prepareBackupFile(config)
-        val client = getClient(config)
-
-        // Ensure the backup directory exists
-        client.ensureCollectionExists().getOrThrow()
-
-        // Upload the backup file
-        client.put(
-            path = file.name,
-            file = file,
-            contentType = "application/zip"
-        ).getOrThrow()
-
-        Log.i(TAG, "backup: Uploaded ${file.name} (${file.length().fileSizeToString()})")
-
-        // Clean up temp file
-        file.delete()
+        try {
+            val client = getClient(config)
+            client.ensureCollectionExists().getOrThrow()
+            client.put(path = file.name, file = file, contentType = "application/zip").getOrThrow()
+            Log.i(TAG, "backup: Uploaded ${file.name} (${file.length().fileSizeToString()})")
+        } finally {
+            file.delete()
+        }
     }
 
     suspend fun listBackupFiles(config: WebDavConfig): List<WebDavBackupItem> = withContext(Dispatchers.IO) {
@@ -126,6 +120,8 @@ class WebDavSync(
         try {
             restoreFromBackupFile(file, config)
             Log.i(TAG, "restoreFromLocalFile: Restore completed successfully")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "restoreFromLocalFile: Failed to restore from local file", e)
             throw Exception("Restore failed: ${e.message}")
@@ -140,8 +136,9 @@ class WebDavSync(
             backupFile.delete()
         }
 
-        // Create zip file and backup data
-        ZipOutputStream(FileOutputStream(backupFile)).use { zipOut ->
+        try {
+            // Create zip file and backup data
+            ZipOutputStream(FileOutputStream(backupFile)).use { zipOut ->
             addVirtualFileToZip(
                 zipOut = zipOut,
                 name = "settings.json",
@@ -207,11 +204,15 @@ class WebDavSync(
             }
         }
 
-        Log.i(
-            TAG,
-            "prepareBackupFile: Created backup file ${backupFile.name} (${backupFile.length().fileSizeToString()})"
-        )
-        backupFile
+            Log.i(
+                TAG,
+                "prepareBackupFile: Created backup file ${backupFile.name} (${backupFile.length().fileSizeToString()})"
+            )
+            backupFile
+        } catch (error: Throwable) {
+            backupFile.delete()
+            throw error
+        }
     }
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = withContext(Dispatchers.IO) {
@@ -233,6 +234,8 @@ class WebDavSync(
                                 val settings = json.decodeFromString<Settings>(migratedJson)
                                 settingsStore.update(settings)
                                 Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 Log.e(TAG, "restoreFromBackupFile: Failed to restore settings", e)
                                 throw Exception("Failed to restore settings: ${e.message}")
@@ -288,7 +291,8 @@ class WebDavSync(
                                         Log.i(TAG, "restoreFromBackupFile: Created upload directory")
                                     }
 
-                                    val targetFile = File(uploadFolder, fileName)
+                                    val targetFile = resolveContainedFile(uploadFolder, fileName)
+                                        ?: throw IllegalArgumentException("Invalid backup file path: ${zipEntry.name}")
                                     Log.i(
                                         TAG,
                                         "restoreFromBackupFile: Restoring file ${zipEntry.name} to ${targetFile.absolutePath}"
@@ -302,6 +306,8 @@ class WebDavSync(
                                             TAG,
                                             "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
                                         )
+                                    } catch (e: CancellationException) {
+                                        throw e
                                     } catch (e: Exception) {
                                         Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
                                         throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
@@ -400,6 +406,8 @@ class WebDavSync(
                 zipIn.copyTo(outputStream)
             }
             Log.i(TAG, "restoreFromBackupFile: Restored skill file $entryName (${targetFile.length()} bytes)")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "restoreFromBackupFile: Failed to restore skill file $entryName", e)
             throw Exception("Failed to restore skill file $entryName: ${e.message}")

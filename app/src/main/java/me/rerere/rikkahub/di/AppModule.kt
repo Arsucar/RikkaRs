@@ -5,6 +5,7 @@ import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.data.model.HookActionType
@@ -69,6 +70,8 @@ val appModule = module {
     single {
         AppScope()
     }
+
+    single { BackupTaskCoordinator(scope = get<AppScope>()) }
 
     single<EmojiData> {
         EmojiUtils.loadEmoji(get())
