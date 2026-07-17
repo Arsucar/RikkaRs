@@ -8,7 +8,7 @@
 - [x] 使用 locale-tui 流程更新所有现有 locale 字符串。
 - [x] 补 DAO/Repository/tool/migration/UI state 测试；验证 snapshot/revision 保留、purge、重复删除、assistant cleanup。
 - [x] 运行资源处理、聚焦 JVM/Room 测试、`:app:compileDebugKotlin`、androidTest 编译与设备安装；设备不可用时如实降级。
-- [ ] 更新 app memory spec/CHANGELOG，提交推送，发布并复核中英文 Issue 评论后关闭 #146。
+- [x] 更新 app memory spec，提交推送，发布并复核中英文 Issue 评论后关闭 #146；CHANGELOG 按父任务约定延后到 #147 完成后统一更新。
 
 ## Validation
 
