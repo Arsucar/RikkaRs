@@ -51,6 +51,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ConversationTagRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
+import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_USER_UI
+import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
@@ -571,16 +573,17 @@ class ChatVM(
     // #89: 删除一个记忆表文档（抽屉内针对对话级文档的清理）。
     fun deleteMemoryTableDocument(
         documentId: String,
-        onDone: (Result<Unit>) -> Unit = {},
+        onDone: (Result<MemoryTableSoftDeleteResult>) -> Unit = {},
     ) {
         viewModelScope.launch {
             val result = runCatching {
-                memoryTableRepository.deleteDocument(
+                memoryTableRepository.softDeleteDocument(
                     id = documentId,
+                    deletedBy = MEMORY_TABLE_DELETED_BY_USER_UI,
                     assistantId = conversation.value.assistantId.toString(),
                     conversationId = _conversationId.toString(),
                 )
-            }.map { Unit }
+            }
             onDone(result)
         }
     }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -35,6 +36,8 @@ import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_USER_UI
+import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.repository.MemoryTableDocumentSnapshot
 import me.rerere.rikkahub.data.repository.ConversationTagRepository
@@ -103,6 +106,31 @@ class AssistantDetailVM(
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
+
+    private val memoryTableTrashReloadRequest = MutableStateFlow(0)
+
+    internal val memoryTableTrashUiState = memoryTableTrashReloadRequest
+        .flatMapLatest {
+            memoryTableRepository
+                .getDeletedDocumentsForAssistantFlow(assistantId.toString())
+                .map<List<MemoryTableDocument>, MemoryTableTrashUiState> { documents ->
+                    if (documents.isEmpty()) {
+                        MemoryTableTrashUiState.Empty
+                    } else {
+                        MemoryTableTrashUiState.Success(documents)
+                    }
+                }
+                .catch { emit(MemoryTableTrashUiState.Error(it)) }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = MemoryTableTrashUiState.Loading,
+        )
+
+    fun reloadMemoryTableTrash() {
+        memoryTableTrashReloadRequest.value++
+    }
 
     suspend fun getMemoryTableDocumentsForEditor(conversationId: String?): List<MemoryTableDocument> =
         memoryTableRepository.getEffectiveDocuments(
@@ -507,12 +535,53 @@ class AssistantDetailVM(
         }
     }
 
-    fun deleteMemoryTableDocument(document: MemoryTableDocument, conversationId: String? = null) {
+    fun deleteMemoryTableDocument(
+        document: MemoryTableDocument,
+        conversationId: String? = null,
+        onDone: (Result<MemoryTableSoftDeleteResult>) -> Unit = {},
+    ) {
         viewModelScope.launch {
-            memoryTableRepository.deleteDocument(
-                id = document.id,
-                assistantId = assistantId.toString(),
-                conversationId = conversationId,
+            onDone(
+                runCatching {
+                    memoryTableRepository.softDeleteDocument(
+                        id = document.id,
+                        deletedBy = MEMORY_TABLE_DELETED_BY_USER_UI,
+                        assistantId = assistantId.toString(),
+                        conversationId = conversationId,
+                    )
+                }
+            )
+        }
+    }
+
+    fun restoreMemoryTableDocument(
+        documentId: String,
+        onDone: (Result<MemoryTableDocument>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            onDone(
+                runCatching {
+                    memoryTableRepository.restoreDocument(
+                        id = documentId,
+                        assistantId = assistantId.toString(),
+                    )
+                }
+            )
+        }
+    }
+
+    fun purgeMemoryTableDocument(
+        documentId: String,
+        onDone: (Result<Boolean>) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            onDone(
+                runCatching {
+                    memoryTableRepository.purgeDocument(
+                        id = documentId,
+                        assistantId = assistantId.toString(),
+                    )
+                }
             )
         }
     }

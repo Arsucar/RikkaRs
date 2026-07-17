@@ -123,18 +123,43 @@ interface MemoryTableDAO {
     )
     suspend fun deleteSnapshotsByTemplate(templateId: String): Int
 
-    @Query("SELECT * FROM memory_table_documents ORDER BY updated_at DESC")
+    @Query("SELECT * FROM memory_table_documents WHERE deleted_at IS NULL ORDER BY updated_at DESC")
     fun getDocumentsFlow(): Flow<List<MemoryTableDocumentEntity>>
 
-    @Query("SELECT * FROM memory_table_documents ORDER BY updated_at DESC")
+    @Query("SELECT * FROM memory_table_documents WHERE deleted_at IS NULL ORDER BY updated_at DESC")
     suspend fun getDocuments(): List<MemoryTableDocumentEntity>
+
+    @Query("SELECT * FROM memory_table_documents ORDER BY updated_at DESC")
+    suspend fun getDocumentsIncludingDeleted(): List<MemoryTableDocumentEntity>
 
     @Query(
         """
         SELECT * FROM memory_table_documents
-        WHERE scope_type = 'GLOBAL'
-           OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
-           OR (:conversationId IS NOT NULL AND scope_type = 'CONVERSATION' AND scope_id = :conversationId)
+        WHERE deleted_at IS NOT NULL
+          AND (
+              scope_type = 'GLOBAL'
+              OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+              OR (
+                  scope_type = 'CONVERSATION'
+                  AND scope_id IN (
+                      SELECT id FROM conversationentity WHERE assistant_id = :assistantId
+                  )
+              )
+          )
+        ORDER BY deleted_at DESC, updated_at DESC, id ASC
+        """
+    )
+    fun getDeletedDocumentsForAssistantFlow(assistantId: String): Flow<List<MemoryTableDocumentEntity>>
+
+    @Query(
+        """
+        SELECT * FROM memory_table_documents
+        WHERE deleted_at IS NULL
+          AND (
+              scope_type = 'GLOBAL'
+              OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+              OR (:conversationId IS NOT NULL AND scope_type = 'CONVERSATION' AND scope_id = :conversationId)
+          )
         ORDER BY CASE scope_type
             WHEN 'GLOBAL' THEN 0
             WHEN 'ASSISTANT' THEN 1
@@ -150,9 +175,12 @@ interface MemoryTableDAO {
     @Query(
         """
         SELECT * FROM memory_table_documents
-        WHERE scope_type = 'GLOBAL'
-           OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
-           OR (:conversationId IS NOT NULL AND scope_type = 'CONVERSATION' AND scope_id = :conversationId)
+        WHERE deleted_at IS NULL
+          AND (
+              scope_type = 'GLOBAL'
+              OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+              OR (:conversationId IS NOT NULL AND scope_type = 'CONVERSATION' AND scope_id = :conversationId)
+          )
         ORDER BY CASE scope_type
             WHEN 'GLOBAL' THEN 0
             WHEN 'ASSISTANT' THEN 1
@@ -168,7 +196,7 @@ interface MemoryTableDAO {
     @Query(
         """
         SELECT * FROM memory_table_documents
-        WHERE scope_type = :scopeType AND scope_id = :scopeId
+        WHERE deleted_at IS NULL AND scope_type = :scopeType AND scope_id = :scopeId
         ORDER BY updated_at DESC
         """
     )
@@ -177,19 +205,34 @@ interface MemoryTableDAO {
     @Query(
         """
         SELECT * FROM memory_table_documents
-        WHERE scope_type = :scopeType AND scope_id = :scopeId
+        WHERE deleted_at IS NULL AND scope_type = :scopeType AND scope_id = :scopeId
         ORDER BY updated_at DESC
         """
     )
     suspend fun getDocumentsForScope(scopeType: String, scopeId: String): List<MemoryTableDocumentEntity>
 
-    @Query("SELECT * FROM memory_table_documents WHERE id = :id")
+    @Query(
+        """
+        SELECT * FROM memory_table_documents
+        WHERE scope_type = :scopeType AND scope_id = :scopeId
+        ORDER BY updated_at DESC
+        """
+    )
+    suspend fun getDocumentsForScopeIncludingDeleted(
+        scopeType: String,
+        scopeId: String,
+    ): List<MemoryTableDocumentEntity>
+
+    @Query("SELECT * FROM memory_table_documents WHERE id = :id AND deleted_at IS NULL")
     suspend fun getDocument(id: String): MemoryTableDocumentEntity?
+
+    @Query("SELECT * FROM memory_table_documents WHERE id = :id")
+    suspend fun getDocumentIncludingDeleted(id: String): MemoryTableDocumentEntity?
 
     @Query(
         """
         SELECT * FROM memory_table_documents
-        WHERE id = :id
+        WHERE id = :id AND deleted_at IS NULL
           AND (
               scope_type = 'GLOBAL'
               OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
@@ -203,8 +246,77 @@ interface MemoryTableDAO {
         conversationId: String?,
     ): MemoryTableDocumentEntity?
 
+    @Query(
+        """
+        SELECT * FROM memory_table_documents
+        WHERE id = :id
+          AND (
+              scope_type = 'GLOBAL'
+              OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+              OR (:conversationId IS NOT NULL AND scope_type = 'CONVERSATION' AND scope_id = :conversationId)
+          )
+        """
+    )
+    suspend fun getEffectiveDocumentIncludingDeleted(
+        id: String,
+        assistantId: String,
+        conversationId: String?,
+    ): MemoryTableDocumentEntity?
+
+    @Query(
+        """
+        SELECT * FROM memory_table_documents
+        WHERE id = :id
+          AND (
+              scope_type = 'GLOBAL'
+              OR (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+              OR (
+                  scope_type = 'CONVERSATION'
+                  AND scope_id IN (
+                      SELECT id FROM conversationentity WHERE assistant_id = :assistantId
+                  )
+              )
+          )
+        """
+    )
+    suspend fun getDocumentForAssistantIncludingDeleted(
+        id: String,
+        assistantId: String,
+    ): MemoryTableDocumentEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDocument(document: MemoryTableDocumentEntity)
+
+    @Query(
+        """
+        UPDATE memory_table_documents
+        SET deleted_at = :deletedAt, deleted_by = :deletedBy
+        WHERE id = :id AND deleted_at IS NULL
+        """
+    )
+    suspend fun softDeleteDocument(id: String, deletedAt: Long, deletedBy: String): Int
+
+    @Query(
+        """
+        UPDATE memory_table_documents
+        SET deleted_at = NULL, deleted_by = NULL
+        WHERE id = :id AND deleted_at IS NOT NULL
+        """
+    )
+    suspend fun restoreDocument(id: String): Int
+
+    @Query(
+        """
+        UPDATE memory_table_documents
+        SET source_document_id = :sourceDocumentId, follow_source = :followSource
+        WHERE id = :id AND deleted_at IS NOT NULL
+        """
+    )
+    suspend fun updateDeletedDocumentFollowReference(
+        id: String,
+        sourceDocumentId: String?,
+        followSource: Boolean,
+    ): Int
 
     @Query("DELETE FROM memory_table_documents WHERE id = :id")
     suspend fun deleteDocument(id: String): Int
@@ -212,10 +324,35 @@ interface MemoryTableDAO {
     @Query("DELETE FROM memory_table_snapshots WHERE document_id = :documentId")
     suspend fun deleteSnapshotsForDocument(documentId: String): Int
 
+    @Query(
+        """
+        DELETE FROM memory_table_snapshots
+        WHERE document_id IN (
+            SELECT id FROM memory_table_documents
+            WHERE scope_type = 'CONVERSATION' AND scope_id = :conversationId
+        )
+        """
+    )
+    suspend fun deleteSnapshotsForConversation(conversationId: String): Int
+
+    @Query(
+        """
+        DELETE FROM memory_table_documents
+        WHERE scope_type = 'CONVERSATION' AND scope_id = :conversationId
+        """
+    )
+    suspend fun deleteDocumentsForConversation(conversationId: String): Int
+
     @Transaction
     suspend fun deleteDocumentAndSnapshots(id: String): Int {
         deleteSnapshotsForDocument(id)
         return deleteDocument(id)
+    }
+
+    @Transaction
+    suspend fun deleteMemoryTableDataForConversation(conversationId: String) {
+        deleteSnapshotsForConversation(conversationId)
+        deleteDocumentsForConversation(conversationId)
     }
 
     @Query("DELETE FROM memory_table_documents WHERE template_id = :templateId")
@@ -225,6 +362,12 @@ interface MemoryTableDAO {
         """
         SELECT id FROM memory_table_documents
         WHERE (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+           OR (
+               scope_type = 'CONVERSATION'
+               AND scope_id IN (
+                   SELECT id FROM conversationentity WHERE assistant_id = :assistantId
+               )
+           )
            OR template_id IN (
                SELECT id FROM memory_table_templates
                WHERE scope_type = 'ASSISTANT' AND scope_id = :assistantId
@@ -237,6 +380,12 @@ interface MemoryTableDAO {
         """
         DELETE FROM memory_table_documents
         WHERE (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+           OR (
+               scope_type = 'CONVERSATION'
+               AND scope_id IN (
+                   SELECT id FROM conversationentity WHERE assistant_id = :assistantId
+               )
+           )
            OR template_id IN (
                SELECT id FROM memory_table_templates
                WHERE scope_type = 'ASSISTANT' AND scope_id = :assistantId
@@ -259,6 +408,12 @@ interface MemoryTableDAO {
         WHERE document_id IN (
             SELECT id FROM memory_table_documents
             WHERE (scope_type = 'ASSISTANT' AND scope_id = :assistantId)
+               OR (
+                   scope_type = 'CONVERSATION'
+                   AND scope_id IN (
+                       SELECT id FROM conversationentity WHERE assistant_id = :assistantId
+                   )
+               )
                OR template_id IN (
                    SELECT id FROM memory_table_templates
                    WHERE scope_type = 'ASSISTANT' AND scope_id = :assistantId

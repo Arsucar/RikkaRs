@@ -357,3 +357,97 @@ repository.upsertTemplate(
     requestedScopeType = requestedScopeType,
 )
 ```
+
+## Scenario: Memory-table document trash lifecycle
+
+### 1. Scope / Trigger
+
+Use this contract when changing memory-table document reads, writes, deletion,
+restore/purge UI, Room migrations, or owner lifecycle cleanup. Templates remain
+hard-deleted; only documents enter trash.
+
+### 2. Signatures
+
+```kotlin
+suspend fun softDeleteDocument(
+    id: String,
+    deletedBy: String,
+    assistantId: String,
+    conversationId: String? = null,
+): MemoryTableSoftDeleteResult
+
+suspend fun restoreDocument(id: String, assistantId: String, conversationId: String? = null): MemoryTableDocument
+suspend fun purgeDocument(id: String, assistantId: String, conversationId: String? = null): Boolean
+```
+
+Room v41 stores nullable `memory_table_documents.deleted_at` / `deleted_by`
+and indexes `deleted_at`.
+
+### 3. Contracts
+
+- Default document lists, scope/effective lookups, injection, `read`, and
+  `query` include `deleted_at IS NULL`; including-deleted APIs are restricted
+  to authorization, conflict detection, trash, cleanup, and explicit write rejection.
+- Soft delete conditionally sets audit fields once and preserves payload,
+  revision, timestamps, follow-source fields, and every snapshot. Repeated
+  deletion returns `ALREADY_DELETED` without replacing the original audit.
+- Restore only clears the two deletion fields. Purge requires a trashed row and
+  deletes snapshots before the document in one transaction.
+- Any write with an explicit trashed document ID throws
+  `MemoryTableDocumentDeletedException`; it must never fall through to random-ID creation.
+- Template deletion, Assistant deletion, and Conversation deletion hard-delete
+  both active and trashed owned documents plus snapshots. Conversation moves
+  relink active and trashed follow-source documents; trashed rows keep their
+  deletion audit, payload, revision, and `updatedAt`.
+- `deletedAt` / `deletedBy` are transient in the portable memory-table bundle;
+  DATABASE file backup still preserves them through the Room files.
+
+### 4. Validation & Error Matrix
+
+- Active lookup of trashed ID -> not found / invisible.
+- Explicit write to trashed ID -> `MemoryTableDocumentDeletedException`, zero writes.
+- Restore active row -> idempotently return the active row.
+- Purge active row -> reject; purge trashed row -> remove document and snapshots.
+- Wrong `delete_document` confirmation -> reject before any including-deleted read or write.
+- Conversation/Assistant ownership mismatch -> reject without exposing or mutating the row.
+
+### 5. Good / Base / Bad Cases
+
+- Good: active lookup misses, an explicit write checks the actor-authorized
+  including-deleted lookup, detects trash, and throws the stable deleted error.
+- Base: `delete_document` returns `moved_to_trash`, then a repeat returns
+  `already_in_trash` with the original `deletedAt/deletedBy` unchanged.
+- Bad: `@Insert(REPLACE)` receives an explicit trashed ID and silently revives it.
+- Bad: delete a Conversation row before clearing its conversation-scoped
+  documents, leaving trash that no Assistant can list, restore, or purge.
+
+### 6. Tests Required
+
+- v40->v41 migration: old payload/revision/follow-source/snapshot survive,
+  deletion fields are NULL, and the `deleted_at` index exists.
+- Instrumented DAO: active/trash isolation; repeat delete audit preservation;
+  restore field preservation; purge snapshot removal; template/Assistant/
+  Conversation hard cleanup for active and trash rows.
+- Repository/tool JVM: deleted upsert/apply/patch/delete-row/rollback rejection,
+  zero-write confirmation guards, both delete statuses, and trashed follow-source relinking.
+- UI projection: template-name/document-ID fallback and deterministic
+  `deletedAt DESC, id ASC` ordering.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+val old = getDocument(id)
+val draft = old ?: MemoryTableDocument() // A trashed explicit ID becomes a new active row.
+upsertDocument(draft.copy(payloadJson = payload))
+```
+
+#### Correct
+
+```kotlin
+val old = getDocument(id) ?: getDocumentIncludingDeleted(id)?.also {
+    if (it.deletedAt != null) throw MemoryTableDocumentDeletedException(id)
+} ?: error("memory table document not found: $id")
+upsertDocument(old.copy(payloadJson = payload))
+```

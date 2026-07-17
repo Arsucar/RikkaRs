@@ -95,6 +95,7 @@ import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableDocumentEditorPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableRevisionHistoryPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryTableTrashPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantSubagentPage
@@ -397,6 +398,10 @@ class RouteActivity : ComponentActivity() {
                                 AssistantMemoryPage(key.id)
                             }
 
+                            entry<Screen.AssistantMemoryTableTrash> { key ->
+                                AssistantMemoryTableTrashPage(key.assistantId)
+                            }
+
                             entry<Screen.AssistantMemoryTableDocumentEditor> { key ->
                                 AssistantMemoryTableDocumentEditorPage(
                                     documentId = key.documentId,
@@ -686,6 +691,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AssistantMemory(val id: String) : Screen
+
+    @Serializable
+    data class AssistantMemoryTableTrash(val assistantId: String) : Screen
 
     @Serializable
     data class AssistantMemoryTableDocumentEditor(

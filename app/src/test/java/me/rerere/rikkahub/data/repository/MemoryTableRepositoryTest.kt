@@ -804,7 +804,11 @@ class MemoryTableRepositoryTest {
             null,
             repository.getEffectiveDocument("doc-a", assistantId = "assistant-b"),
         )
-        assertFalse(repository.deleteDocument("doc-a", assistantId = "assistant-b"))
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.softDeleteDocument("doc-a", "user_ui", assistantId = "assistant-b")
+            }
+        }
         assertThrows(IllegalStateException::class.java) {
             runBlocking {
                 repository.upsertDocument(
@@ -877,6 +881,164 @@ class MemoryTableRepositoryTest {
         assertEquals("global", dao.documents.single().templateId)
     }
 
+    @Test
+    fun softDeleteHidesDocumentPreservesAuditAndRestoreKeepsRevisionHistory() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            documents = listOf(
+                doc(
+                    id = "doc",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    payloadJson = "{\"facts\":[]}",
+                    revision = 4,
+                )
+            )
+        )
+        val snapshotDao = FakeMemoryTableSnapshotDAO().apply {
+            snapshots += MemoryTableSnapshotEntity("snapshot", "doc", 3, "{}", 1)
+        }
+        val repository = MemoryTableRepository(dao, snapshotDao)
+
+        assertEquals(
+            MemoryTableSoftDeleteResult.DELETED,
+            repository.softDeleteDocument("doc", "user_ui", "assistant-a"),
+        )
+        assertEquals(null, repository.getDocument("doc"))
+        val deleted = repository.getDeletedDocumentsForAssistantFlow("assistant-a").first().single()
+        assertEquals("{\"facts\":[]}", deleted.payloadJson)
+        assertEquals(4, deleted.revision)
+        assertEquals("user_ui", deleted.deletedBy)
+        assertTrue(deleted.deletedAt != null)
+        val originalDeletedAt = deleted.deletedAt
+        assertEquals(1, snapshotDao.countSnapshots("doc"))
+
+        assertEquals(
+            MemoryTableSoftDeleteResult.ALREADY_DELETED,
+            repository.softDeleteDocument("doc", "memory_table_tool", "assistant-a"),
+        )
+        assertEquals(originalDeletedAt, repository.getDocumentIncludingDeleted("doc")?.deletedAt)
+        assertEquals("user_ui", repository.getDocumentIncludingDeleted("doc")?.deletedBy)
+
+        val restored = repository.restoreDocument("doc", "assistant-a")
+        assertEquals(4, restored.revision)
+        assertEquals("{\"facts\":[]}", restored.payloadJson)
+        assertEquals(null, restored.deletedAt)
+        assertEquals(null, restored.deletedBy)
+        assertEquals(1, snapshotDao.countSnapshots("doc"))
+        assertEquals("doc", repository.getDocument("doc")?.id)
+    }
+
+    @Test
+    fun deletedDocumentCannotBeUpsertedOrRolledBack() {
+        val dao = FakeMemoryTableDAO(
+            documents = listOf(
+                doc(
+                    id = "doc",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    revision = 1,
+                    deletedAt = 10,
+                    deletedBy = "user_ui",
+                )
+            )
+        )
+        val snapshotDao = FakeMemoryTableSnapshotDAO().apply {
+            snapshots += MemoryTableSnapshotEntity("snapshot", "doc", 0, "old", 1)
+        }
+        val originalDocument = dao.documents.single()
+        val originalSnapshots = snapshotDao.snapshots.toList()
+        val repository = MemoryTableRepository(dao, snapshotDao)
+
+        assertThrows(MemoryTableDocumentDeletedException::class.java) {
+            runBlocking {
+                repository.upsertDocument(
+                    MemoryTableDocument(
+                        id = "doc",
+                        templateId = "template",
+                        scopeType = MemoryTableScopeType.ASSISTANT,
+                        scopeId = "assistant-a",
+                    )
+                )
+            }
+        }
+        assertThrows(MemoryTableDocumentDeletedException::class.java) {
+            runBlocking { repository.rollbackDocument("doc", 0, "assistant-a") }
+        }
+        assertEquals(0, dao.documentUpserts)
+        assertEquals(originalDocument, dao.documents.single())
+        assertEquals(originalSnapshots, snapshotDao.snapshots)
+    }
+
+    @Test
+    fun purgeRequiresTrashAndRemovesDocument() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            documents = listOf(
+                doc("active", "ASSISTANT", "assistant-a"),
+                doc(
+                    id = "deleted",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    deletedAt = 10,
+                    deletedBy = "user_ui",
+                ),
+            )
+        )
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.purgeDocument("active", "assistant-a") }
+        }
+        assertTrue(repository.purgeDocument("deleted", "assistant-a"))
+        assertEquals(null, repository.getDocumentIncludingDeleted("deleted"))
+        assertEquals("active", repository.getDocument("active")?.id)
+        assertEquals(listOf("deleted"), dao.deletedSnapshotDocumentIds)
+    }
+
+    @Test
+    fun relinkFollowReferencesUpdatesActiveAndDeletedConversationDocuments() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            documents = listOf(
+                doc(
+                    id = "new-source",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-new",
+                    templateId = "template",
+                ),
+                doc(
+                    id = "active-follow",
+                    scopeType = "CONVERSATION",
+                    scopeId = "conversation",
+                    revision = 2,
+                    templateId = "template",
+                ).copy(sourceDocumentId = "old-source", followSource = true),
+                doc(
+                    id = "deleted-follow",
+                    scopeType = "CONVERSATION",
+                    scopeId = "conversation",
+                    payloadJson = "deleted-payload",
+                    revision = 3,
+                    templateId = "template",
+                    deletedAt = 10,
+                    deletedBy = "user_ui",
+                ).copy(sourceDocumentId = "old-source", followSource = true),
+            )
+        )
+        val repository = MemoryTableRepository(dao, FakeMemoryTableSnapshotDAO())
+
+        repository.relinkFollowReferences("conversation", "assistant-old", "assistant-new")
+
+        val active = dao.documents.single { it.id == "active-follow" }
+        assertEquals("new-source", active.sourceDocumentId)
+        assertTrue(active.followSource)
+        val deleted = dao.documents.single { it.id == "deleted-follow" }
+        assertEquals("new-source", deleted.sourceDocumentId)
+        assertTrue(deleted.followSource)
+        assertEquals("deleted-payload", deleted.payloadJson)
+        assertEquals(3, deleted.revision)
+        assertEquals(10L, deleted.deletedAt)
+        assertEquals("user_ui", deleted.deletedBy)
+    }
+
     private fun doc(
         id: String,
         scopeType: String,
@@ -884,6 +1046,8 @@ class MemoryTableRepositoryTest {
         payloadJson: String = "{}",
         revision: Int = 0,
         templateId: String = "template",
+        deletedAt: Long? = null,
+        deletedBy: String? = null,
     ) = MemoryTableDocumentEntity(
         id = id,
         templateId = templateId,
@@ -893,6 +1057,8 @@ class MemoryTableRepositoryTest {
         revision = revision,
         createdAt = 1,
         updatedAt = 1,
+        deletedAt = deletedAt,
+        deletedBy = deletedBy,
     )
 
     private fun templateEntity(
@@ -914,12 +1080,14 @@ class MemoryTableRepositoryTest {
     private class FakeMemoryTableDAO(
         templates: List<MemoryTableTemplateEntity> = emptyList(),
         documents: List<MemoryTableDocumentEntity> = emptyList(),
+        private val conversationAssistantIds: Map<String, String> = emptyMap(),
     ) : MemoryTableDAO {
         val templates = templates.toMutableList()
         val documents = documents.toMutableList()
         var effectiveDocumentReads = 0
         var templateUpserts = 0
         var documentUpserts = 0
+        val deletedSnapshotDocumentIds = mutableListOf<String>()
 
         override fun getTemplatesFlow(): Flow<List<MemoryTableTemplateEntity>> = flowOf(templates)
 
@@ -990,36 +1158,64 @@ class MemoryTableRepositoryTest {
 
         override suspend fun deleteSnapshotsByTemplate(templateId: String): Int = 0
 
-        override fun getDocumentsFlow(): Flow<List<MemoryTableDocumentEntity>> = flowOf(documents)
+        override fun getDocumentsFlow(): Flow<List<MemoryTableDocumentEntity>> =
+            flowOf(documents.filter { it.deletedAt == null })
 
-        override suspend fun getDocuments(): List<MemoryTableDocumentEntity> = documents
+        override suspend fun getDocuments(): List<MemoryTableDocumentEntity> =
+            documents.filter { it.deletedAt == null }
+
+        override suspend fun getDocumentsIncludingDeleted(): List<MemoryTableDocumentEntity> = documents
+
+        override fun getDeletedDocumentsForAssistantFlow(
+            assistantId: String,
+        ): Flow<List<MemoryTableDocumentEntity>> = flowOf(
+            documents.filter { document ->
+                document.deletedAt != null && (
+                    document.scopeType == "GLOBAL" ||
+                        (document.scopeType == "ASSISTANT" && document.scopeId == assistantId) ||
+                        (document.scopeType == "CONVERSATION" &&
+                            conversationAssistantIds[document.scopeId] == assistantId)
+                    )
+            }
+        )
 
         override suspend fun getEffectiveDocuments(
             assistantId: String,
             conversationId: String?,
         ): List<MemoryTableDocumentEntity> {
             effectiveDocumentReads++
-            return documents.toList()
+            return documents.filter { it.deletedAt == null }
         }
 
         override fun getEffectiveDocumentsFlow(
             assistantId: String,
             conversationId: String?,
-        ): Flow<List<MemoryTableDocumentEntity>> = flowOf(documents.toList())
+        ): Flow<List<MemoryTableDocumentEntity>> = flowOf(documents.filter { it.deletedAt == null })
 
         override fun getDocumentsForScopeFlow(
             scopeType: String,
             scopeId: String,
         ): Flow<List<MemoryTableDocumentEntity>> =
-            flowOf(documents.filter { it.scopeType == scopeType && it.scopeId == scopeId })
+            flowOf(documents.filter {
+                it.deletedAt == null && it.scopeType == scopeType && it.scopeId == scopeId
+            })
 
         override suspend fun getDocumentsForScope(
+            scopeType: String,
+            scopeId: String,
+        ): List<MemoryTableDocumentEntity> =
+            documents.filter { it.deletedAt == null && it.scopeType == scopeType && it.scopeId == scopeId }
+
+        override suspend fun getDocumentsForScopeIncludingDeleted(
             scopeType: String,
             scopeId: String,
         ): List<MemoryTableDocumentEntity> =
             documents.filter { it.scopeType == scopeType && it.scopeId == scopeId }
 
         override suspend fun getDocument(id: String): MemoryTableDocumentEntity? =
+            documents.firstOrNull { it.id == id && it.deletedAt == null }
+
+        override suspend fun getDocumentIncludingDeleted(id: String): MemoryTableDocumentEntity? =
             documents.firstOrNull { it.id == id }
 
         override suspend fun getEffectiveDocument(
@@ -1028,12 +1224,35 @@ class MemoryTableRepositoryTest {
             conversationId: String?,
         ): MemoryTableDocumentEntity? =
             documents.firstOrNull {
-                it.id == id && (
+                it.id == id && it.deletedAt == null && (
                     it.scopeType == "GLOBAL" ||
                         (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
                         (conversationId != null && it.scopeType == "CONVERSATION" && it.scopeId == conversationId)
                     )
             }
+
+        override suspend fun getEffectiveDocumentIncludingDeleted(
+            id: String,
+            assistantId: String,
+            conversationId: String?,
+        ): MemoryTableDocumentEntity? = documents.firstOrNull {
+            it.id == id && (
+                it.scopeType == "GLOBAL" ||
+                    (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    (conversationId != null && it.scopeType == "CONVERSATION" && it.scopeId == conversationId)
+                )
+        }
+
+        override suspend fun getDocumentForAssistantIncludingDeleted(
+            id: String,
+            assistantId: String,
+        ): MemoryTableDocumentEntity? = documents.firstOrNull {
+            it.id == id && (
+                it.scopeType == "GLOBAL" ||
+                    (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    (it.scopeType == "CONVERSATION" && conversationAssistantIds[it.scopeId] == assistantId)
+                )
+        }
 
         override suspend fun upsertDocument(document: MemoryTableDocumentEntity) {
             documentUpserts++
@@ -1047,7 +1266,46 @@ class MemoryTableRepositoryTest {
             return before - documents.size
         }
 
-        override suspend fun deleteSnapshotsForDocument(documentId: String): Int = 0
+        override suspend fun softDeleteDocument(id: String, deletedAt: Long, deletedBy: String): Int {
+            val index = documents.indexOfFirst { it.id == id && it.deletedAt == null }
+            if (index < 0) return 0
+            documents[index] = documents[index].copy(deletedAt = deletedAt, deletedBy = deletedBy)
+            return 1
+        }
+
+        override suspend fun restoreDocument(id: String): Int {
+            val index = documents.indexOfFirst { it.id == id && it.deletedAt != null }
+            if (index < 0) return 0
+            documents[index] = documents[index].copy(deletedAt = null, deletedBy = null)
+            return 1
+        }
+
+        override suspend fun updateDeletedDocumentFollowReference(
+            id: String,
+            sourceDocumentId: String?,
+            followSource: Boolean,
+        ): Int {
+            val index = documents.indexOfFirst { it.id == id && it.deletedAt != null }
+            if (index < 0) return 0
+            documents[index] = documents[index].copy(
+                sourceDocumentId = sourceDocumentId,
+                followSource = followSource,
+            )
+            return 1
+        }
+
+        override suspend fun deleteSnapshotsForDocument(documentId: String): Int {
+            deletedSnapshotDocumentIds += documentId
+            return 1
+        }
+
+        override suspend fun deleteSnapshotsForConversation(conversationId: String): Int = 0
+
+        override suspend fun deleteDocumentsForConversation(conversationId: String): Int {
+            val before = documents.size
+            documents.removeAll { it.scopeType == "CONVERSATION" && it.scopeId == conversationId }
+            return before - documents.size
+        }
 
         override suspend fun deleteDocumentsByTemplate(templateId: String): Int {
             val before = documents.size
@@ -1061,6 +1319,7 @@ class MemoryTableRepositoryTest {
                 .mapTo(mutableSetOf()) { it.id }
             return documents.filter {
                 (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    (it.scopeType == "CONVERSATION" && conversationAssistantIds[it.scopeId] == assistantId) ||
                     it.templateId in ownedTemplateIds
             }.map { it.id }
         }
@@ -1072,6 +1331,7 @@ class MemoryTableRepositoryTest {
             val before = documents.size
             documents.removeAll {
                 (it.scopeType == "ASSISTANT" && it.scopeId == assistantId) ||
+                    (it.scopeType == "CONVERSATION" && conversationAssistantIds[it.scopeId] == assistantId) ||
                     it.templateId in ownedTemplateIds
             }
             return before - documents.size

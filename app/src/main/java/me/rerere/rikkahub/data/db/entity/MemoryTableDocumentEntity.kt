@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
         Index(value = ["template_id"]),
         Index(value = ["scope_type", "scope_id"]),
         Index(value = ["updated_at"]),
+        Index(value = ["deleted_at"]),
     ],
 )
 data class MemoryTableDocumentEntity(
@@ -36,4 +37,8 @@ data class MemoryTableDocumentEntity(
     // #89: 1 = payload mirrors source document, 0 = detached for independent edits.
     @ColumnInfo(name = "follow_source", defaultValue = "0")
     val followSource: Boolean = false,
+    @ColumnInfo("deleted_at")
+    val deletedAt: Long? = null,
+    @ColumnInfo("deleted_by")
+    val deletedBy: String? = null,
 )

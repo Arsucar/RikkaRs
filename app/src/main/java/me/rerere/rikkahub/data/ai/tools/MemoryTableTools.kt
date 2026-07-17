@@ -22,6 +22,8 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableDocumentDeletedException
+import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 
 private const val DEFAULT_ROW_BUSINESS_KEY = "key"
 
@@ -32,8 +34,9 @@ fun buildMemoryTableToolsIfEnabled(
     conversationId: String? = null,
     readDocuments: suspend () -> List<MemoryTableDocument>,
     getDocument: suspend (String) -> MemoryTableDocument?,
+    getDocumentIncludingDeleted: suspend (String) -> MemoryTableDocument? = getDocument,
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
-    deleteDocument: suspend (String) -> Unit,
+    deleteDocument: suspend (String) -> MemoryTableSoftDeleteResult,
     readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
     upsertTemplate: suspend (MemoryTableTemplate, MemoryTableScopeType?) -> MemoryTableTemplate = { template, _ ->
         template
@@ -47,6 +50,7 @@ fun buildMemoryTableToolsIfEnabled(
         conversationId = conversationId,
         readDocuments = readDocuments,
         getDocument = getDocument,
+        getDocumentIncludingDeleted = getDocumentIncludingDeleted,
         upsertDocument = upsertDocument,
         deleteDocument = deleteDocument,
         readTemplates = readTemplates,
@@ -61,8 +65,9 @@ fun buildMemoryTableTools(
     conversationId: String? = null,
     readDocuments: suspend () -> List<MemoryTableDocument>,
     getDocument: suspend (String) -> MemoryTableDocument?,
+    getDocumentIncludingDeleted: suspend (String) -> MemoryTableDocument? = getDocument,
     upsertDocument: suspend (MemoryTableDocument) -> MemoryTableDocument,
-    deleteDocument: suspend (String) -> Unit,
+    deleteDocument: suspend (String) -> MemoryTableSoftDeleteResult,
     readTemplates: suspend () -> List<MemoryTableTemplate> = { emptyList() },
     upsertTemplate: suspend (MemoryTableTemplate, MemoryTableScopeType?) -> MemoryTableTemplate = { template, _ ->
         template
@@ -79,7 +84,7 @@ fun buildMemoryTableTools(
             `read` to inspect active documents, `query` to find rows in one table by column/value without loading the whole payload,
             `upsert_rows` to create or replace payload JSON,
             `patch_rows` to merge a JSON object into an existing document payload,
-            `delete_row` to delete one row by table/key, and `delete_document` to delete a whole document.
+            `delete_row` to delete one row by table/key, and `delete_document` to move a whole document to trash.
             `apply_ops` applies an ordered `ops` array (insert/update/delete) atomically to one document; if any op fails nothing is written.
             Recommended flow: `list_templates` → if none fits `create_template` → then `upsert_rows` with the returned template id.
             The schema is template-defined; do not invent table names outside the template.
@@ -285,7 +290,7 @@ fun buildMemoryTableTools(
                     "apply_ops" -> {
                         val id = params["document_id"]?.jsonPrimitive?.contentOrNull
                             ?: error("document_id is required for apply_ops")
-                        val old = getDocument(id) ?: error("memory table document not found: $id")
+                        val old = getWritableDocument(id, getDocument, getDocumentIncludingDeleted)
                         ensureWritableMemoryTableScope(old.scopeType)
                         val opsJson = params["ops"]?.jsonPrimitive?.contentOrNull
                             ?: error("ops is required for apply_ops")
@@ -316,7 +321,9 @@ fun buildMemoryTableTools(
 
                     "upsert_rows" -> {
                         val existingId = params["document_id"]?.jsonPrimitive?.contentOrNull
-                        val old = existingId?.takeIf { id -> id.isNotBlank() }?.let { id -> getDocument(id) }
+                        val old = existingId
+                            ?.takeIf { id -> id.isNotBlank() }
+                            ?.let { id -> getWritableDocument(id, getDocument, getDocumentIncludingDeleted) }
                         val templateId = params["template_id"]?.jsonPrimitive?.contentOrNull
                             ?: old?.templateId
                             ?: error("template_id is required")
@@ -367,7 +374,7 @@ fun buildMemoryTableTools(
 
                     "patch_rows" -> {
                         val id = params["document_id"]?.jsonPrimitive?.contentOrNull ?: error("document_id is required")
-                        val old = getDocument(id) ?: error("memory table document not found: $id")
+                        val old = getWritableDocument(id, getDocument, getDocumentIncludingDeleted)
                         ensureWritableMemoryTableScope(old.scopeType)
                         val patchJson = params["payload_json"]?.jsonPrimitive?.contentOrNull
                             ?: error("payload_json is required")
@@ -414,12 +421,20 @@ fun buildMemoryTableTools(
                         if (confirmation != id) {
                             error("confirm_document_id must match document_id for delete_document")
                         }
-                        val old = getDocument(id) ?: error("memory table document not found: $id")
+                        val old = getDocumentIncludingDeleted(id)
+                            ?: error("memory table document not found: $id")
                         ensureWritableMemoryTableScope(old.scopeType)
-                        deleteDocument(id)
+                        val result = deleteDocument(id)
                         buildJsonObject {
                             put("success", JsonPrimitive(true))
                             put("document_id", id)
+                            put(
+                                "status",
+                                when (result) {
+                                    MemoryTableSoftDeleteResult.DELETED -> "moved_to_trash"
+                                    MemoryTableSoftDeleteResult.ALREADY_DELETED -> "already_in_trash"
+                                },
+                            )
                         }
                     }
 
@@ -428,7 +443,7 @@ fun buildMemoryTableTools(
                         val table = params.stringParameter("table") ?: error("table is required for delete_row")
                         val rowKeyValue = params.stringParameter("row_key_value")
                             ?: error("row_key_value is required for delete_row")
-                        val old = getDocument(id) ?: error("memory table document not found: $id")
+                        val old = getWritableDocument(id, getDocument, getDocumentIncludingDeleted)
                         ensureWritableMemoryTableScope(old.scopeType)
                         val explicitRowKey = params.stringParameter("row_key")
                         val templates = readTemplates()
@@ -483,6 +498,19 @@ private fun memoryTableToolError(error: Throwable): JsonObject =
         put("success", JsonPrimitive(false))
         put("error", JsonPrimitive(error.message ?: error::class.simpleName.orEmpty()))
     }
+
+private suspend fun getWritableDocument(
+    id: String,
+    getDocument: suspend (String) -> MemoryTableDocument?,
+    getDocumentIncludingDeleted: suspend (String) -> MemoryTableDocument?,
+): MemoryTableDocument {
+    getDocument(id)?.let { return it }
+    val includingDeleted = getDocumentIncludingDeleted(id)
+    if (includingDeleted?.deletedAt != null) {
+        throw MemoryTableDocumentDeletedException(id)
+    }
+    error("memory table document not found: $id")
+}
 
 private fun kotlinx.serialization.json.JsonElement.toMemoryTableScopeType(): MemoryTableScopeType {
     return toMemoryTableScopeTypeOrNull()

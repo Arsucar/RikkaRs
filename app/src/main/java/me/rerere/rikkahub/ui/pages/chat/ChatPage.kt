@@ -140,6 +140,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val toaster = LocalToaster.current
+    val moveToTrashSuccess = stringResource(R.string.assistant_page_memory_table_move_to_trash_success)
+    val moveToTrashError = stringResource(R.string.assistant_page_memory_table_move_to_trash_error)
 
     // #89: 右侧对话级记忆表抽屉。Compose 无原生右侧抽屉，用 RTL 包裹 ModalNavigationDrawer 实现，
     // drawerContent 与主内容都翻回 LTR 防止整页镜像。
@@ -344,9 +346,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             onDeleteDocument = { documentId ->
                                 vm.deleteMemoryTableDocument(documentId) { result ->
                                     result.onSuccess {
-                                        toaster.show("已删除", type = ToastType.Success)
+                                        toaster.show(moveToTrashSuccess, type = ToastType.Success)
                                     }.onFailure {
-                                        toaster.show(it.message ?: "删除失败", type = ToastType.Error)
+                                        toaster.show(moveToTrashError, type = ToastType.Error)
                                     }
                                 }
                             },

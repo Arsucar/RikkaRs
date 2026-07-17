@@ -69,6 +69,10 @@ class MemoryTableRepository(
     fun getDocumentsFlow(): Flow<List<MemoryTableDocument>> =
         dao.getDocumentsFlow().map { documents -> documents.map { it.toModel() } }
 
+    fun getDeletedDocumentsForAssistantFlow(assistantId: String): Flow<List<MemoryTableDocument>> =
+        dao.getDeletedDocumentsForAssistantFlow(assistantId)
+            .map { documents -> documents.map { it.toModel() } }
+
     suspend fun getDocuments(): List<MemoryTableDocument> =
         dao.getDocuments().map { it.toModel() }
 
@@ -226,7 +230,10 @@ class MemoryTableRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         val payloadJson = normalizeMemoryTablePayloadJson(document.payloadJson)
         validateMemoryTablePayloadJson(payloadJson)
-        val old = document.id.takeIf { it.isNotBlank() }?.let { dao.getDocument(it) }
+        val old = document.id.takeIf { it.isNotBlank() }?.let { dao.getDocumentIncludingDeleted(it) }
+        if (old?.deletedAt != null) {
+            throw MemoryTableDocumentDeletedException(old.id)
+        }
         val normalized = document.copy(
             id = document.id.ifBlank { Uuid.random().toString() },
             scopeId = document.scopeId.ifBlank {
@@ -240,6 +247,8 @@ class MemoryTableRepository(
             revision = (old?.revision ?: document.revision).coerceAtLeast(0) + if (old == null) 0 else 1,
             createdAt = old?.createdAt ?: document.createdAt.takeIf { it > 0 } ?: now,
             updatedAt = now,
+            deletedAt = old?.deletedAt,
+            deletedBy = old?.deletedBy,
         )
         // #96: before overwriting an existing document, snapshot its prior payload so
         // a previous revision can be restored later. New documents have no prior state.
@@ -266,9 +275,12 @@ class MemoryTableRepository(
     ): MemoryTableDocument = inTransaction {
         val old = document.id
             .takeIf { it.isNotBlank() }
-            ?.let { dao.getEffectiveDocument(it, actorAssistantId, actorConversationId) }
-        if (old == null && document.id.isNotBlank() && dao.getDocument(document.id) != null) {
+            ?.let { dao.getEffectiveDocumentIncludingDeleted(it, actorAssistantId, actorConversationId) }
+        if (old == null && document.id.isNotBlank() && dao.getDocumentIncludingDeleted(document.id) != null) {
             error("memory table document not found or not authorized: ${document.id}")
+        }
+        if (old?.deletedAt != null) {
+            throw MemoryTableDocumentDeletedException(old.id)
         }
         val template = dao.getEffectiveTemplate(document.templateId, actorAssistantId)
             ?.takeIf { it.isEffectiveFor(actorAssistantId) }
@@ -304,8 +316,15 @@ class MemoryTableRepository(
         actorAssistantId: String,
         actorConversationId: String? = null,
     ): MemoryTableDocument = inTransaction {
-        val current = getEffectiveDocument(documentId, actorAssistantId, actorConversationId)
-            ?: error("memory table document not found or not authorized: $documentId")
+        val currentEntity = dao.getEffectiveDocumentIncludingDeleted(
+            documentId,
+            actorAssistantId,
+            actorConversationId,
+        ) ?: error("memory table document not found or not authorized: $documentId")
+        if (currentEntity.deletedAt != null) {
+            throw MemoryTableDocumentDeletedException(documentId)
+        }
+        val current = currentEntity.toModel()
         check(revision >= 0 && revision < current.revision) {
             "memory table revision is not a historical revision: $documentId@$revision"
         }
@@ -322,6 +341,9 @@ class MemoryTableRepository(
     suspend fun getDocument(id: String): MemoryTableDocument? =
         dao.getDocument(id)?.toModel()
 
+    suspend fun getDocumentIncludingDeleted(id: String): MemoryTableDocument? =
+        dao.getDocumentIncludingDeleted(id)?.toModel()
+
     suspend fun getEffectiveDocument(
         id: String,
         assistantId: String,
@@ -331,17 +353,59 @@ class MemoryTableRepository(
             ?.takeIf { it.isEffectiveFor(assistantId, conversationId) }
             ?.toModel()
 
-    suspend fun deleteDocument(id: String) {
-        dao.deleteDocumentAndSnapshots(id)
-    }
-
-    suspend fun deleteDocument(
+    suspend fun getDocumentIncludingDeletedForActor(
         id: String,
         assistantId: String,
         conversationId: String? = null,
-    ): Boolean {
-        getEffectiveDocument(id, assistantId, conversationId) ?: return false
-        return dao.deleteDocumentAndSnapshots(id) > 0
+    ): MemoryTableDocument? = if (conversationId != null) {
+        dao.getEffectiveDocumentIncludingDeleted(id, assistantId, conversationId)?.toModel()
+    } else {
+        dao.getDocumentForAssistantIncludingDeleted(id, assistantId)?.toModel()
+    }
+
+    suspend fun softDeleteDocument(
+        id: String,
+        deletedBy: String,
+        assistantId: String,
+        conversationId: String? = null,
+    ): MemoryTableSoftDeleteResult = inTransaction {
+        val document = getAuthorizedDocumentIncludingDeleted(id, assistantId, conversationId)
+        if (document.deletedAt != null) {
+            return@inTransaction MemoryTableSoftDeleteResult.ALREADY_DELETED
+        }
+        val affected = dao.softDeleteDocument(
+            id = id,
+            deletedAt = Clock.System.now().toEpochMilliseconds(),
+            deletedBy = deletedBy,
+        )
+        if (affected > 0) {
+            MemoryTableSoftDeleteResult.DELETED
+        } else if (dao.getDocumentIncludingDeleted(id)?.deletedAt != null) {
+            MemoryTableSoftDeleteResult.ALREADY_DELETED
+        } else {
+            error("memory table document not found or not authorized: $id")
+        }
+    }
+
+    suspend fun restoreDocument(
+        id: String,
+        assistantId: String,
+        conversationId: String? = null,
+    ): MemoryTableDocument = inTransaction {
+        val document = getAuthorizedDocumentIncludingDeleted(id, assistantId, conversationId)
+        if (document.deletedAt == null) return@inTransaction document.toModel()
+        check(dao.restoreDocument(id) > 0) { "memory table document restore failed: $id" }
+        document.copy(deletedAt = null, deletedBy = null).toModel()
+    }
+
+    suspend fun purgeDocument(
+        id: String,
+        assistantId: String,
+        conversationId: String? = null,
+    ): Boolean = inTransaction {
+        val document = getAuthorizedDocumentIncludingDeleted(id, assistantId, conversationId)
+        check(document.deletedAt != null) { "memory table document must be in trash before purge: $id" }
+        dao.deleteDocumentAndSnapshots(id) > 0
     }
 
     // #100: export all templates + documents as a versioned JSON bundle.
@@ -359,7 +423,18 @@ class MemoryTableRepository(
     ): MemoryTableImportPlan {
         val bundle = decodeMemoryTableBundle(bundleJson)
         val existingTemplateIds = getTemplates().map { it.id }.toSet()
-        val existingDocumentIds = getDocuments().map { it.id }.toSet()
+        val documentsIncludingDeleted = dao.getDocumentsIncludingDeleted()
+        val existingDocumentIds = documentsIncludingDeleted.map { it.id }.toSet()
+        if (policy == MemoryTableImportConflictPolicy.OVERWRITE) {
+            val deletedIds = documentsIncludingDeleted
+                .asSequence()
+                .filter { it.deletedAt != null }
+                .map { it.id }
+                .toSet()
+            bundle.documents.firstOrNull { it.id in deletedIds }?.let {
+                throw MemoryTableDocumentDeletedException(it.id)
+            }
+        }
         val plan = resolveMemoryTableBundleImport(
             bundle = bundle,
             existingTemplateIds = existingTemplateIds,
@@ -406,16 +481,27 @@ class MemoryTableRepository(
     ) {
         val newAssistantDocs = getDocumentsForScope(MemoryTableScopeType.ASSISTANT, newAssistantId)
         val newSourceByTemplate = newAssistantDocs.associateBy { it.templateId }
-        getDocumentsForScope(MemoryTableScopeType.CONVERSATION, conversationId)
+        dao.getDocumentsForScopeIncludingDeleted(MemoryTableScopeType.CONVERSATION.name, conversationId)
+            .map { it.toModel() }
             .filter { it.followSource }
             .forEach { document ->
                 val match = newSourceByTemplate[document.templateId]
                 val relinked = if (match != null) {
                     document.copy(sourceDocumentId = match.id, followSource = true)
                 } else {
-                    document.copy(followSource = false)
+                    document.copy(sourceDocumentId = null, followSource = false)
                 }
-                upsertDocument(relinked)
+                if (document.deletedAt != null) {
+                    check(
+                        dao.updateDeletedDocumentFollowReference(
+                            id = document.id,
+                            sourceDocumentId = relinked.sourceDocumentId,
+                            followSource = relinked.followSource,
+                        ) > 0
+                    ) { "deleted memory table document relink failed: ${document.id}" }
+                } else {
+                    upsertDocument(relinked)
+                }
             }
     }
 
@@ -535,6 +621,22 @@ class MemoryTableRepository(
         conversationId = conversationId,
     )
 
+    private suspend fun getAuthorizedDocumentIncludingDeleted(
+        id: String,
+        assistantId: String,
+        conversationId: String?,
+    ): MemoryTableDocumentEntity {
+        val document = if (conversationId != null) {
+            dao.getEffectiveDocumentIncludingDeleted(id, assistantId, conversationId)
+        } else {
+            dao.getDocumentForAssistantIncludingDeleted(id, assistantId)
+        }
+        if (document == null) {
+            error("memory table document not found or not authorized: $id")
+        }
+        return document
+    }
+
     private fun MemoryTableDocumentEntity.toModel(): MemoryTableDocument =
         MemoryTableDocument(
             id = id,
@@ -547,6 +649,8 @@ class MemoryTableRepository(
             updatedAt = updatedAt,
             sourceDocumentId = sourceDocumentId,
             followSource = followSource,
+            deletedAt = deletedAt,
+            deletedBy = deletedBy,
         )
 
     private fun MemoryTableDocument.toEntity(): MemoryTableDocumentEntity =
@@ -561,8 +665,24 @@ class MemoryTableRepository(
             updatedAt = updatedAt,
             sourceDocumentId = sourceDocumentId,
             followSource = followSource,
+            deletedAt = deletedAt,
+            deletedBy = deletedBy,
         )
 }
+
+class MemoryTableDocumentDeletedException(
+    val documentId: String,
+) : IllegalStateException(
+    "memory table document is in trash and must be restored before writing: $documentId"
+)
+
+enum class MemoryTableSoftDeleteResult {
+    DELETED,
+    ALREADY_DELETED,
+}
+
+const val MEMORY_TABLE_DELETED_BY_USER_UI = "user_ui"
+const val MEMORY_TABLE_DELETED_BY_TOOL = "memory_table_tool"
 
 // #96: max revision snapshots kept per document; older snapshots are pruned.
 const val MEMORY_TABLE_SNAPSHOT_RETENTION = 20

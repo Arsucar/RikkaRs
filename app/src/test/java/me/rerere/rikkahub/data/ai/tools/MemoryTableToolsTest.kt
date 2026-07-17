@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -569,7 +570,10 @@ class MemoryTableToolsTest {
             readDocuments = { error("unexpected read") },
             getDocument = { document("doc", MemoryTableScopeType.ASSISTANT, "assistant-a") },
             upsertDocument = { error("unexpected upsert") },
-            deleteDocument = { deletedId = it },
+            deleteDocument = {
+                deletedId = it
+                MemoryTableSoftDeleteResult.DELETED
+            },
         ).single()
 
         val result = tool.execute(
@@ -588,13 +592,21 @@ class MemoryTableToolsTest {
     @Test
     fun deleteDocumentRequiresMatchingConfirmation() = runBlocking {
         var deletedId: String? = null
+        var includingDeletedReads = 0
         val tool = buildMemoryTableTools(
             json = json,
             assistantId = "assistant-a",
             readDocuments = { error("unexpected read") },
             getDocument = { document("doc", MemoryTableScopeType.ASSISTANT, "assistant-a") },
+            getDocumentIncludingDeleted = {
+                includingDeletedReads++
+                document("doc", MemoryTableScopeType.ASSISTANT, "assistant-a")
+            },
             upsertDocument = { error("unexpected upsert") },
-            deleteDocument = { deletedId = it },
+            deleteDocument = {
+                deletedId = it
+                MemoryTableSoftDeleteResult.DELETED
+            },
         ).single()
 
         val rejected = tool.execute(
@@ -609,6 +621,18 @@ class MemoryTableToolsTest {
         assertEquals("false", rejectedPayload.getValue("success").jsonPrimitive.content)
         assertTrue(rejectedPayload.getValue("error").jsonPrimitive.content.contains("confirm_document_id"))
         assertEquals(null, deletedId)
+        assertEquals(0, includingDeletedReads)
+
+        val missing = tool.execute(
+            buildJsonObject {
+                put("action", "delete_document")
+                put("document_id", "doc")
+            }
+        ).single() as UIMessagePart.Text
+        val missingPayload = json.parseToJsonElement(missing.text).jsonObject
+        assertEquals("false", missingPayload.getValue("success").jsonPrimitive.content)
+        assertEquals(0, includingDeletedReads)
+        assertEquals(null, deletedId)
 
         val result = tool.execute(
             buildJsonObject {
@@ -621,7 +645,111 @@ class MemoryTableToolsTest {
         val payload = json.parseToJsonElement(result.text).jsonObject
         assertEquals("true", payload.getValue("success").jsonPrimitive.content)
         assertEquals("doc", payload.getValue("document_id").jsonPrimitive.content)
+        assertEquals("moved_to_trash", payload.getValue("status").jsonPrimitive.content)
         assertEquals("doc", deletedId)
+        assertEquals(1, includingDeletedReads)
+    }
+
+    @Test
+    fun repeatedDeleteDocumentReportsAlreadyInTrash() = runBlocking {
+        var deleteCalls = 0
+        val deleted = document(
+            "doc",
+            MemoryTableScopeType.ASSISTANT,
+            "assistant-a",
+            deletedAt = 100,
+            deletedBy = "user_ui",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { null },
+            getDocumentIncludingDeleted = { deleted },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = {
+                deleteCalls++
+                MemoryTableSoftDeleteResult.ALREADY_DELETED
+            },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "delete_document")
+                put("document_id", "doc")
+                put("confirm_document_id", "doc")
+            }
+        ).single() as UIMessagePart.Text
+
+        val payload = json.parseToJsonElement(result.text).jsonObject
+        assertEquals("true", payload.getValue("success").jsonPrimitive.content)
+        assertEquals("already_in_trash", payload.getValue("status").jsonPrimitive.content)
+        assertEquals(1, deleteCalls)
+    }
+
+    @Test
+    fun deletedDocumentIsHiddenFromQueryAndRejectedByWrites() = runBlocking {
+        var upsertCalls = 0
+        var includingDeletedReads = 0
+        val deleted = document(
+            "doc",
+            MemoryTableScopeType.ASSISTANT,
+            "assistant-a",
+            payloadJson = """{"facts":[]}""",
+            deletedAt = 100,
+            deletedBy = "user_ui",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { emptyList() },
+            getDocument = { null },
+            getDocumentIncludingDeleted = {
+                includingDeletedReads++
+                deleted
+            },
+            upsertDocument = {
+                upsertCalls++
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        val query = tool.execute(
+            buildJsonObject {
+                put("action", "query")
+                put("document_id", "doc")
+                put("table", "facts")
+            }
+        ).single() as UIMessagePart.Text
+        val queryPayload = json.parseToJsonElement(query.text).jsonObject
+        assertEquals("false", queryPayload.getValue("success").jsonPrimitive.content)
+        assertTrue(queryPayload.getValue("error").jsonPrimitive.content.contains("not found"))
+        assertEquals(0, includingDeletedReads)
+
+        val apply = tool.execute(
+            buildJsonObject {
+                put("action", "apply_ops")
+                put("document_id", "doc")
+                put("ops", "[]")
+            }
+        ).single() as UIMessagePart.Text
+        val applyPayload = json.parseToJsonElement(apply.text).jsonObject
+        assertEquals("false", applyPayload.getValue("success").jsonPrimitive.content)
+        assertTrue(applyPayload.getValue("error").jsonPrimitive.content.contains("in trash"))
+
+        val upsert = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put("payload_json", "{}")
+            }
+        ).single() as UIMessagePart.Text
+        val upsertPayload = json.parseToJsonElement(upsert.text).jsonObject
+        assertEquals("false", upsertPayload.getValue("success").jsonPrimitive.content)
+        assertTrue(upsertPayload.getValue("error").jsonPrimitive.content.contains("in trash"))
+        assertEquals(2, includingDeletedReads)
+        assertEquals(0, upsertCalls)
     }
 
     @Test
@@ -1431,7 +1559,10 @@ class MemoryTableToolsTest {
             readDocuments = { error("unexpected read") },
             getDocument = { existing },
             upsertDocument = { error("unexpected upsert") },
-            deleteDocument = { deletedId = it },
+            deleteDocument = {
+                deletedId = it
+                MemoryTableSoftDeleteResult.DELETED
+            },
             readTemplates = { error("delete_document must not read table policy") },
         ).single()
 
@@ -1581,12 +1712,16 @@ class MemoryTableToolsTest {
         scopeType: MemoryTableScopeType,
         scopeId: String,
         payloadJson: String = """{"id":"$id"}""",
+        deletedAt: Long? = null,
+        deletedBy: String? = null,
     ) = MemoryTableDocument(
         id = id,
         templateId = "template",
         scopeType = scopeType,
         scopeId = scopeId,
         payloadJson = payloadJson,
+        deletedAt = deletedAt,
+        deletedBy = deletedBy,
     )
 
     private fun assertUpdatePolicyError(result: UIMessagePart.Text, table: String) {

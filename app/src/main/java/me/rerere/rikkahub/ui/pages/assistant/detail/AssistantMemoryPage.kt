@@ -9,6 +9,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Tick02
+import me.rerere.hugeicons.stroke.RestoreBin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,10 @@ fun AssistantMemoryPage(id: String) {
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
     val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val navController = LocalNavController.current
+    val toaster = LocalToaster.current
+    val moveToTrashSuccess = stringResource(R.string.assistant_page_memory_table_move_to_trash_success)
+    val moveToTrashError = stringResource(R.string.assistant_page_memory_table_move_to_trash_error)
 
     Scaffold(
         topBar = {
@@ -116,6 +121,16 @@ fun AssistantMemoryPage(id: String) {
                 },
                 navigationIcon = {
                     BackButton()
+                },
+                actions = {
+                    IconButton(onClick = { navController.navigate(Screen.AssistantMemoryTableTrash(id)) }) {
+                        Icon(
+                            imageVector = HugeIcons.RestoreBin,
+                            contentDescription = stringResource(
+                                R.string.assistant_page_memory_table_trash_content_description
+                            ),
+                        )
+                    }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -153,7 +168,14 @@ fun AssistantMemoryPage(id: String) {
             onDeleteMemoryTableTemplate = { template, onDone ->
                 vm.deleteMemoryTableTemplate(template, onDone)
             },
-            onDeleteMemoryTableDocument = { vm.deleteMemoryTableDocument(it) },
+            onDeleteMemoryTableDocument = { document ->
+                vm.deleteMemoryTableDocument(document) { result ->
+                    toaster.show(
+                        if (result.isSuccess) moveToTrashSuccess else moveToTrashError,
+                        type = if (result.isSuccess) ToastType.Success else ToastType.Error,
+                    )
+                }
+            },
         )
     }
 }
@@ -625,7 +647,7 @@ private fun AssistantMemoryContent(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text(stringResource(R.string.delete))
+                    Text(stringResource(R.string.assistant_page_memory_table_trash))
                 }
             },
             dismissButton = {

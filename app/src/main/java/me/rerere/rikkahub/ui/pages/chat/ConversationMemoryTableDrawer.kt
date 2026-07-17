@@ -1023,8 +1023,8 @@ private fun MemoryTableDocumentCard(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除记忆表") },
-            text = { Text("确定要删除这个对话级记忆表吗？此操作不可撤销。") },
+            title = { Text(stringResource(R.string.assistant_page_memory_table_move_to_trash_title)) },
+            text = { Text(stringResource(R.string.assistant_page_memory_table_move_to_trash_description)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1032,12 +1032,12 @@ private fun MemoryTableDocumentCard(
                         onDeleteDocument()
                     },
                 ) {
-                    Text("删除")
+                    Text(stringResource(R.string.assistant_page_memory_table_trash))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )

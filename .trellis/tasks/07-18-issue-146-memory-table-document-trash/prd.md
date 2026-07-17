@@ -21,16 +21,16 @@
 
 ## Acceptance Criteria
 
-- [ ] v40→v41 migration 保留旧文档、payload、revision 与 snapshot，新增删除字段为 null。
-- [ ] UI/tool 软删后 active list、read/query 与注入不可见，trash list 可见且包含删除时间/来源。
-- [ ] restore 后 payload/revision/snapshots 与软删前一致，revision history 可继续打开。
-- [ ] purge 后 document 与 snapshots 均不存在且不可恢复。
-- [ ] 已软删 ID 的 upsert/apply_ops/rollback/write 被稳定错误拒绝，不会复活。
-- [ ] `delete_document` 正确 confirm 软删，错误 confirm 与重复软删行为有回归测试。
-- [ ] Assistant Memory 回收站支持加载、空态、恢复、永久删除和明确反馈；Conversation drawer 不再显示“不可撤销”软删文案。
-- [ ] template 硬删仍清 active/trash 下属数据；助手删除硬清所有相关 scope 文档和 snapshots。
-- [ ] DATABASE 备份恢复后 soft-deleted row 仍在 trash，active row 仍 active，或记录可核验的文件级往返证明。
-- [ ] Repository/tool/DAO/UI 相关测试、资源处理、app 编译与可用设备安装通过，无法执行项如实记录。
+- [x] v40→v41 migration 保留旧文档、payload、revision 与 snapshot，新增删除字段为 null。
+- [x] UI/tool 软删后 active list、read/query 与注入不可见，trash list 可见且包含删除时间/来源。
+- [x] restore 后 payload/revision/snapshots 与软删前一致，revision history 可继续打开。
+- [x] purge 后 document 与 snapshots 均不存在且不可恢复。
+- [x] 已软删 ID 的 upsert/apply_ops/rollback/write 被稳定错误拒绝，不会复活。
+- [x] `delete_document` 正确 confirm 软删，错误 confirm 与重复软删行为有回归测试。
+- [x] Assistant Memory 回收站支持加载、空态、恢复、永久删除和明确反馈；Conversation drawer 不再显示“不可撤销”软删文案。
+- [x] template 硬删仍清 active/trash 下属数据；助手删除硬清所有相关 scope 文档和 snapshots。
+- [x] DATABASE 备份恢复后 soft-deleted row 仍在 trash，active row 仍 active，或记录可核验的文件级往返证明。
+- [x] Repository/tool/DAO/UI 相关测试、资源处理、app 编译与可用设备安装通过，无法执行项如实记录。
 
 ## Confirmed Facts
 

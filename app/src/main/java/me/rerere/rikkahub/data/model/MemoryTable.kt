@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.model
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -59,6 +60,8 @@ data class MemoryTableDocument(
     val sourceDocumentId: String? = null,
     // #89: true = payload mirrors the source document; false = detached for independent edits.
     val followSource: Boolean = false,
+    @Transient val deletedAt: Long? = null,
+    @Transient val deletedBy: String? = null,
 )
 
 @Serializable

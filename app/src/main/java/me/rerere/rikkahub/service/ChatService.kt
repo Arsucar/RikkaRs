@@ -144,6 +144,7 @@ import me.rerere.rikkahub.service.hooks.HookDispatcher
 import me.rerere.rikkahub.service.hooks.evaluateHookFinalSuccess
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
+import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_TOOL
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
@@ -1217,6 +1218,13 @@ class ChatService(
                         conversationId = conversation.id.toString(),
                     )
                 },
+                getDocumentIncludingDeleted = { documentId ->
+                    memoryTableRepository.getDocumentIncludingDeletedForActor(
+                        id = documentId,
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                },
                 upsertDocument = { document ->
                     memoryTableRepository.upsertDocument(
                         document = document,
@@ -1225,8 +1233,9 @@ class ChatService(
                     )
                 },
                 deleteDocument = { documentId ->
-                    memoryTableRepository.deleteDocument(
+                    memoryTableRepository.softDeleteDocument(
                         id = documentId,
+                        deletedBy = MEMORY_TABLE_DELETED_BY_TOOL,
                         assistantId = assistant.id.toString(),
                         conversationId = conversation.id.toString(),
                     )
