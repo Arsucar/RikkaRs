@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/app/memory-capabilities.md", "reason": "验证 memory-table UI、Repository、错误与测试矩阵"}
+{"file": ".trellis/spec/app/ui-localization.md", "reason": "核对英文/简中资源和占位符"}
