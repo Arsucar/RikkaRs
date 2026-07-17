@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/conversation-tags-and-hooks.md","reason":"Verify AddTag compatibility and Hook runtime invariants"}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Verify CAS, scope, updatePolicy and deleted-target behavior"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Verify UI and locale completeness"}
+{"file":".trellis/tasks/07-18-issue-147-hook-memory-table-sync/research/current-implementation-audit.md","reason":"Verify all identified generalization and atomicity gaps"}

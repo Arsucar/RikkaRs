@@ -30,6 +30,9 @@
 - 2026-07-18 实时盘点 `Arsucar/RikkaRs` 后开放 Issue 为：
   - [#144](https://github.com/Arsucar/RikkaRs/issues/144) Room/协程事务完成时 512 MiB Java heap OOM，触发场景与真实增长对象未知。
   - [#145](https://github.com/Arsucar/RikkaRs/issues/145) 记忆表模板 GLOBAL/ASSISTANT scope 显式迁移及 tool/UI 支持。
+- 2026-07-18 完成 #144/#145 交付后再次盘点，新增开放 Issue：
+  - [#146](https://github.com/Arsucar/RikkaRs/issues/146) 记忆表文档软删除、回收站与最小删除审计。
+  - [#147](https://github.com/Arsucar/RikkaRs/issues/147) 将 Assistant Hook 泛化为通用后处理框架，并新增受限的记忆表同步 Action。
 - #136、#137、#140、#141 已完成并由 v2.3.31 正式发布；#138、#139 以 not planned 关闭。
 - 原两个子任务已完成并归档：
   - `07-16-issue-136-remove-conversation-archive`
@@ -38,6 +41,8 @@
   - `07-18-issue-144-room-transaction-oom`
   - `07-18-issue-145-memory-template-scope-migration`
 - #145 需求完整且可独立实现；#144 缺少复现/heap 证据，先交付可证明的内存峰值降低和诊断，证据不足时保持开放并发布真实边界。
+- #144 已交付峰值降低与诊断并保持开放；#145 已实现、评论并关闭。
+- #146 与 #147 均为复杂 app 子任务；#147 的 CAS/目标生命周期依赖 #146 的软删除状态，数据库迁移顺序固定为 #146 `40→41`、#147 `41→42`。
 
 ## Out of Scope
 
