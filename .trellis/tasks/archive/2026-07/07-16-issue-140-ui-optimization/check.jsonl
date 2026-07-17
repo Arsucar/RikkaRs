@@ -1,0 +1,6 @@
+{"file":".trellis/spec/app/index.md","reason":"Quality gate and app-module verification expectations."}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Review UI changes against #140 document, scope, navigation, deletion, and error contracts."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Verify resource coverage, placeholders, accessibility strings, and no raw internal values."}
+{"file":".trellis/spec/guides/repository-hygiene.md","reason":"Keep device screenshots/UIAutomator artifacts out of broad staging during app acceptance."}
+{"file":".trellis/tasks/07-16-issue-140-ui-optimization/research/ui-audit.md","reason":"Audit expected UI improvements and explicitly excluded data-layer behavior."}
+{"file":".trellis/tasks/07-16-issue-140-ui-optimization/research/template-dedup-management.md","reason":"Verify conflict enforcement, picker-only deduplication, complete management visibility, and ID-scoped deletion."}

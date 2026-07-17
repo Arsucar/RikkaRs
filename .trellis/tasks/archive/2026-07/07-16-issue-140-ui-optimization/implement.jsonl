@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"App-layer pre-development checklist and memory/UI spec routing."}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Preserve document-first list, document-only deletion, scope gates, persistence ordering, and localized error contracts."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"All changed visible text and accessibility descriptions must be resource-backed with valid translations."}
+{"file":".trellis/tasks/07-16-issue-140-ui-optimization/research/ui-audit.md","reason":"Current UI defects, reusable Compose patterns, and known no-DB-migration boundaries."}
+{"file":".trellis/tasks/07-16-issue-140-ui-optimization/research/template-dedup-management.md","reason":"Selected normalized-name conflict rules, legacy picker projection, management APIs, and deletion boundaries."}
