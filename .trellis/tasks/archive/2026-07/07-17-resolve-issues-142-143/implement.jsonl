@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "两个 issue 均跨越 UI、ViewModel、Repository/服务和持久化边界"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有 DiffView、AppScope、状态机与取消处理模式"}

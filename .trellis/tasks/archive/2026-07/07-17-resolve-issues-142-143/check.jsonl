@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/app/index.md", "reason": "App 模块编译、测试、安装与本地化质量门禁"}
+{"file": ".trellis/spec/guides/repository-hygiene.md", "reason": "提交前仅暂存当前任务文件并排除独立技能修改"}

@@ -1,0 +1,29 @@
+{
+  "id": "resolve-issues-142-143",
+  "name": "resolve-issues-142-143",
+  "title": "处理 GitHub Issues #142 与 #143",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P1",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-17",
+  "completedAt": "2026-07-17",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-17-issue-142-memory-revision-history",
+    "07-17-issue-143-backup-lifecycle"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
