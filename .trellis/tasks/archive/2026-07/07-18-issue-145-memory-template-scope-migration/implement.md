@@ -8,7 +8,7 @@
 - [x] 使用 `locale-tui-localization` 写入源 key；自动翻译因区域 403 失败后，人工补齐简中、繁中、日文、韩文、俄文并验证 XML/placeholder。
 - [x] 更新 Repository、DAO、Tool、UI pure/state 测试；保留 #122/#140/capability 回归。
 - [x] 完成 `git diff --check`、resources、聚焦 JVM 测试、`:app:compileDebugKotlin` 和 androidTest 编译；设备 offline，安装未执行；lint 两次分别在 120s/300s 超时，未声称通过。
-- [ ] 更新 CHANGELOG，提交推送后按中英文规范评论并关闭 #145，重新读取评论确认。
+- [x] 修复提交 `a1fcdf2d` 已推送；中文/英文评论已分别发布并重新读取确认，#145 已关闭。CHANGELOG 由父任务在全部 Issue 收尾时统一更新。
 
 ## Risk and Rollback Points
 

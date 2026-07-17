@@ -39,3 +39,11 @@
 
 - 模板没有 revision；并发 scope 更新为单条 guarded UPDATE + last-write-wins。
 - 迁移按 Issue 约定不修改文档 scope。既有文档 known-ID 授权边界不在本任务扩大处理。
+
+## 交付
+
+- 修复提交：`a1fcdf2d`，已推送至 `origin/release/rikka-arsucar`。
+- 中文评论：https://github.com/Arsucar/RikkaRs/issues/145#issuecomment-5006850870
+- 英文评论：https://github.com/Arsucar/RikkaRs/issues/145#issuecomment-5006851243
+- 两条评论已重新读取，均包含目标分支、修复提交、版本、验证和已知边界。
+- Issue #145 于 2026-07-18（Asia/Shanghai）关闭。
