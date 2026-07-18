@@ -10,7 +10,7 @@
 - [x] 使用 locale-tui 增补/翻译所有新增 UI/error/history keys，并做 6 locale XML/coverage/placeholder 审计。
 - [x] 补 evidence/parser/hash/provider/handler/UI JVM 测试，以及 Room 原子性、20 标签交换、幂等、缺失 tag 回滚、source/lease/终态失败测试。
 - [x] 运行资源、production/JVM/androidTest 编译、全量 JVM、lint changed-file audit 与设备安装流程。
-- [ ] 更新 Hook code-spec 与 CHANGELOG，提交推送，发布并复核中英文评论后关闭 #148；最终重新盘点开放 Issues。
+- [x] 更新 Hook code-spec 与 CHANGELOG，提交推送，发布并复核中英文评论后关闭 #148；最终重新盘点开放 Issues。
 
 ## Validation results
 
