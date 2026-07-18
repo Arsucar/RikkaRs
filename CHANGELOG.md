@@ -12,6 +12,13 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.33
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.32 之后）
+
+- **Hook 标签管理编辑器重构** — 将「添加会话标签 / 转换标签」收敛为统一的「标签管理」动作：一份 allowlist + 评估提示词策略；动作类型改为下拉选择（标签管理 / 同步记忆表）；提示词默认折叠；编辑页移除启用开关（列表页开关保留）；旧 Add/Transition 配置可迁移加载与保存，运行时改为 multi-op 标签变更且去掉 Issue 证据硬门控。（#150）
+  **Hook tag-management editor refactor** — Unify “add conversation tag” and “transition tags” into a single Tag management action with one allowlist plus evaluation-prompt strategy; action type uses a Select (Tag management / Sync memory table); the prompt is collapsed by default; the editor enable switch is removed (list toggle remains); legacy Add/Transition configs migrate for edit/save, and runtime uses multi-op tag changes without a hard Issue-evidence gate. (#150)
+
 ## v2.3.32
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.31 之后）
