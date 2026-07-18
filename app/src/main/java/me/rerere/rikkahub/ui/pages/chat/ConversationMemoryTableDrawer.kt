@@ -601,7 +601,11 @@ private fun ConversationHookHistory(
                                                     }
                                                 }
                                             }
-                                            if (execution.actionType == HookActionType.TRANSITION_CONVERSATION_TAGS) {
+                                            if (
+                                                execution.actionType == HookActionType.TRANSITION_CONVERSATION_TAGS ||
+                                                execution.actionType == HookActionType.MANAGE_CONVERSATION_TAGS ||
+                                                execution.actionType == HookActionType.ADD_CONVERSATION_TAG
+                                            ) {
                                                 val summary = execution.operationSummaryJson?.let { value ->
                                                     runCatching {
                                                         JsonInstant.decodeFromString<
@@ -640,6 +644,17 @@ private fun ConversationHookHistory(
                                                         ),
                                                         style = MaterialTheme.typography.bodySmall,
                                                     )
+                                                }
+                                                if (summary == null) {
+                                                    execution.operationSummaryJson?.let { raw ->
+                                                        Text(
+                                                            stringResource(
+                                                                R.string.hook_sync_history_operations,
+                                                                raw,
+                                                            ),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                        )
+                                                    }
                                                 }
                                                 execution.operationCount?.let { count ->
                                                     Text(

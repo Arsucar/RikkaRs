@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.model.normalizeActionConfig
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_USER_UI
 import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
@@ -366,13 +367,14 @@ class AssistantDetailVM(
 
     fun upsertHook(hook: ConversationHook) {
         mutateHooks { hooks ->
-            val existing = hooks.firstOrNull { it.id == hook.id }
+            val normalized = hook.normalizeActionConfig()
+            val existing = hooks.firstOrNull { it.id == normalized.id }
             if (existing == null) {
-                hooks + hook.copy(configVersion = 1)
+                hooks + normalized.copy(configVersion = 1)
             } else {
                 hooks.map { current ->
-                    if (current.id == hook.id) {
-                        hook.copy(configVersion = existing.configVersion + 1)
+                    if (current.id == normalized.id) {
+                        normalized.copy(configVersion = existing.configVersion + 1)
                     } else {
                         current
                     }
@@ -413,7 +415,10 @@ class AssistantDetailVM(
                 settings.copy(
                     assistants = settings.assistants.map { assistant ->
                         if (assistant.id == assistantId) {
-                            assistant.copy(hooks = transform(assistant.hooks))
+                            // Persist only normalized action configs (legacy Add/Transition → Manage).
+                            assistant.copy(
+                                hooks = transform(assistant.hooks).map { it.normalizeActionConfig() },
+                            )
                         } else {
                             assistant
                         }

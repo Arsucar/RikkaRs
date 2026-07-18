@@ -27,6 +27,12 @@ enum class HookTrigger {
 @Serializable
 sealed interface HookActionConfig {
     @Serializable
+    @SerialName("manage_conversation_tags")
+    data class ManageConversationTags(
+        val allowedTagIds: Set<Uuid> = emptySet(),
+    ) : HookActionConfig
+
+    @Serializable
     @SerialName("add_conversation_tag")
     data class AddConversationTag(
         val allowedTagIds: Set<Uuid> = emptySet(),
@@ -57,9 +63,10 @@ sealed interface HookActionConfig {
 
 @Serializable
 enum class HookActionType {
+    MANAGE_CONVERSATION_TAGS,
+    SYNC_MEMORY_TABLE,
     ADD_CONVERSATION_TAG,
     TRANSITION_CONVERSATION_TAGS,
-    SYNC_MEMORY_TABLE,
 }
 
 @Serializable
@@ -67,24 +74,48 @@ enum class HookActionFilter {
     GITHUB_ISSUE_COMPLETION,
 }
 
+fun HookActionConfig.normalize(): HookActionConfig = when (this) {
+    is HookActionConfig.ManageConversationTags -> this
+    is HookActionConfig.AddConversationTag -> HookActionConfig.ManageConversationTags(allowedTagIds)
+    is HookActionConfig.TransitionConversationTags -> HookActionConfig.ManageConversationTags(
+        setOf(addTagId, removeTagId),
+    )
+    is HookActionConfig.SyncMemoryTable -> this
+}
+
+fun ConversationHook.normalizeActionConfig(): ConversationHook =
+    copy(actionConfig = actionConfig.normalize())
+
+fun parseStoredHookActionType(raw: String): HookActionType =
+    runCatching { HookActionType.valueOf(raw) }.getOrElse {
+        throw IllegalArgumentException("Unknown HookActionType: $raw")
+    }
+
 val HookActionConfig.actionType: HookActionType
     get() = when (this) {
-        is HookActionConfig.AddConversationTag -> HookActionType.ADD_CONVERSATION_TAG
-        is HookActionConfig.TransitionConversationTags -> HookActionType.TRANSITION_CONVERSATION_TAGS
+        is HookActionConfig.ManageConversationTags -> HookActionType.MANAGE_CONVERSATION_TAGS
+        is HookActionConfig.AddConversationTag -> HookActionType.MANAGE_CONVERSATION_TAGS
+        is HookActionConfig.TransitionConversationTags -> HookActionType.MANAGE_CONVERSATION_TAGS
         is HookActionConfig.SyncMemoryTable -> HookActionType.SYNC_MEMORY_TABLE
     }
 
 fun ConversationHook.configurationHash(): String {
-    val actionMaterial = when (val action = actionConfig) {
+    val normalized = actionConfig.normalize()
+    val actionMaterial = when (val action = normalized) {
+        is HookActionConfig.ManageConversationTags -> action.allowedTagIds
+            .map { it.toString() }
+            .sorted()
+            .joinToString(",")
         is HookActionConfig.AddConversationTag -> action.allowedTagIds
             .map { it.toString() }
             .sorted()
             .joinToString(",")
-        is HookActionConfig.TransitionConversationTags -> listOf(
-            action.addTagId.toString(),
-            action.removeTagId.toString(),
-            action.filter.name,
-        ).joinToString("|") { value -> "${value.length}:$value" }
+        is HookActionConfig.TransitionConversationTags -> action.let {
+            setOf(it.addTagId, it.removeTagId)
+                .map { id -> id.toString() }
+                .sorted()
+                .joinToString(",")
+        }
         is HookActionConfig.SyncMemoryTable -> listOf(
             action.targetDocumentId,
             action.targetScopeType.name,
@@ -105,7 +136,7 @@ fun ConversationHook.configurationHash(): String {
         trigger.name,
         modelId.toString(),
         prompt,
-        actionConfig.actionType.name,
+        normalized.actionType.name,
         actionMaterial,
     ).joinToString(separator = "|") { value -> "${value.length}:$value" }
     return MessageDigest.getInstance("SHA-256")
@@ -308,6 +339,8 @@ object HookRuntimeRules {
     const val MAX_SYNC_MAX_OPERATIONS = 50
     const val MAX_SYNC_RESPONSE_CHARS = 64_000
     const val MAX_TAG_TRANSITION_RESPONSE_CHARS = 64_000
+    const val MAX_TAG_MANAGE_OPS = 8
+    const val MAX_TAG_MANAGE_RESPONSE_CHARS = 64_000
     const val MAX_SYNC_AUDIT_JSON_CHARS = 8_000
 }
 

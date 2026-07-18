@@ -25,7 +25,8 @@
 - Whole-Conversation saves must not carry tag collections; otherwise concurrent relationship writes can be lost.
 - A Hook runs only after a persisted logical turn reaches final assistant success with no resumable pending tool.
 - Hook model requests use a frozen in-memory message/prompt/config snapshot. Full prompt, message snapshot, provider output, headers, and credentials never enter Hook Room tables.
-- AddTag Hook output is one JSON object whose key set is exactly `decision`, `tagId`, and `reason`.
+- Tag management Hook output is one JSON object whose key set is exactly `decision`, `operations`, and `reason`. Each operation is `{ "op": "add"|"remove", "tagId": "<uuid>" }` and must stay within the configured allowlist; invalid ops fail closed with zero tag writes.
+- Legacy `add_conversation_tag` / `transition_conversation_tags` configs normalize to `manage_conversation_tags` on load/save. Historical DB `ADD_CONVERSATION_TAG` / `TRANSITION_CONVERSATION_TAGS` enum names remain display-only aliases.
 - A timeout invalidates the lease before cancelling work. Parser and action writes must recheck the active lease so late results cannot write tags or overwrite terminal state.
 - `generationDoneFlow` remains a UI notification mechanism and is not a Hook success or history source.
 
@@ -101,9 +102,14 @@ action presentation, or destructive configuration actions.
   use the same localized fallback in the list and confirmation.
 - Supporting text is `model · action type`; action labels come from
   `HookActionConfig.actionType`, not a hard-coded current subtype.
+- Top-level action Select exposes only `MANAGE_CONVERSATION_TAGS` and
+  `SYNC_MEMORY_TABLE`. Tag management uses one allowlist plus evaluation prompt
+  strategy; no mode segmented control, dual-permission bar, condition dropdown,
+  or Issue evidence form gate.
 - The editor exposes Basic, Runtime, Rules, and Action sections. Invalid name,
   model, trigger, prompt, or action state must show visible field/section errors.
-- Prompt editors must have a bounded visible height while retaining multiline
+- Evaluation prompt UI defaults to collapsed/compressed preview and expands on
+  demand. Expanded editors keep a bounded visible height with multiline
   scrolling. UI changes must not modify Hook execution, lease, or exactly-once
   persistence contracts.
 
@@ -121,8 +127,9 @@ action presentation, or destructive configuration actions.
 
 - Good: derive all errors once and bind both field messages and save enabled
   state to the same validation object.
-- Base: `AddConversationTag` renders through the sealed action editor and saves
-  the same serialized subtype as before.
+- Base: `ManageConversationTags` renders through the sealed action editor and
+  saves `manage_conversation_tags`; legacy Add/Transition configs normalize on
+  load and save.
 - Bad: `canSave = name.isNotBlank()` while fields apply separate rules.
 - Bad: render `assistant_hook_action_add_tag` directly in every list row.
 - Bad: place edit and destructive delete icon buttons together as permanent
@@ -174,8 +181,10 @@ writing structured memory-table data from a Hook.
 
 ### 3. Contracts
 
-- Dispatcher and Registry must not cast requests/results to one concrete Action. Existing
-  `add_conversation_tag` serialization and configuration-hash material remain stable.
+- Dispatcher and Registry must not cast requests/results to one concrete Action. Registry
+  registers only `MANAGE_CONVERSATION_TAGS` and `SYNC_MEMORY_TABLE`. Legacy
+  `add_conversation_tag` / `transition_conversation_tags` decode and normalize to
+  `ManageConversationTags`; manage allowlist hash material stays order-invariant.
 - Sync model input contains only selected, visible, active-branch USER/ASSISTANT text through the frozen cutoff;
   SYSTEM/TOOL content, alternate branches, hidden nodes, and later messages are excluded.
 - The Sync provider receives no tools and returns exactly `decision`, `baseRevision`, `operations`, and `reason`.
@@ -216,8 +225,8 @@ writing structured memory-table data from a Hook.
 
 ### 6. Tests Required
 
-- Literal legacy `add_conversation_tag` JSON and AddTag golden configuration hash.
-- Sync hash mutation for every Action field plus model/prompt; AddTag tag-set order invariance.
+- Literal legacy `add_conversation_tag` / `transition_conversation_tags` JSON normalize to manage.
+- Sync hash mutation for every Action field plus model/prompt; manage allowlist order invariance.
 - Frozen-context branch/hidden/role/cutoff/count/Unicode character-bound tests.
 - Sync strict parser exact-key, type, size, operation-limit, and unauthorized-field tests.
 - Dispatcher stage-error and post-provider gate regressions when those paths change.
@@ -246,72 +255,20 @@ when (handler.execute(executionId, leaseToken, prepared, parsed)) {
 }
 ```
 
-## Scenario: Evidence-gated conversation tag transitions
+## Scenario: Evidence-gated conversation tag transitions (superseded by #150)
 
-### 1. Scope / Trigger
+### Status
 
-Use this contract when a Hook removes one configured conversation tag and adds another only after a final response
-contains deterministic external-completion evidence.
+**Superseded.** Product decision D2/B1 removed the Issue-evidence hard gate. Tag strategy lives in the evaluation
+prompt plus multi-op model output under `ManageConversationTags`. Keep historical Transition execution rows and
+`GITHUB_ISSUE_EVIDENCE_NOT_FOUND` error strings for history display only; prepare paths must not call
+`detectGitHubIssueCompletionEvidence`.
 
-### 2. Signatures
+### Replacement contract
 
-- `HookActionConfig.TransitionConversationTags(addTagId, removeTagId, GITHUB_ISSUE_COMPLETION)` stores stable IDs.
-- `detectGitHubIssueCompletionEvidence(finalAssistantText)` is the provider-before local evidence boundary.
-- `ConversationTagHookCommitter.commitTransition(...)` owns relation writes and execution/run terminalization.
-
-### 3. Contracts
-
-- Evidence input is only the frozen final active Assistant text; old turns, Tool output, prompts, and subagent
-  transcripts are excluded.
-- GitHub evidence requires a strict Issue URL or boundary-safe `#N` plus creation-success language in the same clause
-  within 80 Unicode code points. Markdown code/quotes, URL-contained shorthand, PR/build/order/commit/release markers,
-  negative/plan/failure language, and malformed Issue references fail closed.
-- The provider receives no tools and returns exact raw JSON with only `decision` and `reason`; tag IDs never cross the
-  model authority boundary.
-- Within one Room transaction, the committer rechecks lease, conversation, active source selection, and both tag
-  entities, then removes before adding and terminalizes execution/run. A failed terminal CAS rolls back relations.
-- Prepared and terminal audit stores only bounded action/filter/evidence/tag IDs/change booleans; never text, prompt,
-  raw provider output, Tool output, or credentials.
-
-### 4. Validation & Error Matrix
-
-- No accepted evidence -> `SKIPPED`, decision null, `GITHUB_ISSUE_EVIDENCE_NOT_FOUND`, zero provider/tag calls.
-- Same IDs or stale configured tag -> pre-provider `SKIPPED` with `TAG_TRANSITION_CONFLICT` / `TAG_NOT_FOUND`.
-- Provider skip -> `SKIPPED / SKIP`, zero relation changes, accepted evidence retained in audit.
-- Hook disabled/version/hash changed after provider -> `SKIPPED` with parsed decision and `HOOK_DISABLED`.
-- Apply with 1–2 changed relations -> `SUCCESS / APPLY`; 0 changed -> `SKIPPED / APPLY`.
-- Missing tag after provider or tag limit -> `FAILED` with `TAG_NOT_FOUND` / `TAG_LIMIT_REACHED`; mutations roll back.
-- Missing conversation or inactive source -> `CANCELLED`; lease loss preserves the existing terminal owner.
-
-### 5. Good/Base/Bad Cases
-
-- Good: a 20-tag conversation has the remove relation, so remove-first frees capacity and add succeeds atomically.
-- Base: completed is already present and in-progress already absent; execution is an audited zero-operation skip.
-- Bad: scan the whole conversation or accept `Created https://evil.test/?issue=#148` as shorthand evidence.
-
-### 6. Tests Required
-
-- JVM evidence tests for Markdown delimiters, URL/path/host/number overflow, URL-contained `#N`, negative lexicons,
-  conflicting markers, and exact 80/81-code-point distance.
-- Dispatcher tests proving filter/preflight reject makes zero provider calls, provider skip preserves audit, and
-  post-provider config changes make zero relation writes.
-- Room tests for 0/1/2 changes, 20-tag exchange, missing tag, inactive source, lease loss, tag limit, and terminal-write
-  rollback; assert execution/run rows and unrelated tag relations.
-- Preserve literal AddTag JSON/hash and golden terminal fields after moving AddTag into the shared committer.
-
-### 7. Wrong vs Correct
-
-#### Wrong
-
-```kotlin
-conversation.messages.any { it.toText().contains("#") }
-tagRepository.addTag(conversationId, addTagId)
-hookRepository.completeSuccess(executionId)
-```
-
-#### Correct
-
-```kotlin
-val evidence = detectGitHubIssueCompletionEvidence(frozenFinalText) ?: return auditedSkip()
-conversationTagHookCommitter.commitTransition(executionId, leaseToken, prepared, parsed)
-```
+- Config: `HookActionConfig.ManageConversationTags(allowedTagIds)`.
+- Runtime: `ManageConversationTagsHookAction` + `ManageConversationTagsHookOutputParser` +
+  `ConversationTagHookCommitter.commitManageTags`.
+- Output keys: exactly `decision`, `operations`, `reason`; ops are allowlist-scoped add/remove; any illegal op fails
+  closed with zero writes.
+- Legacy Transition JSON normalizes to manage allowlist `{addTagId, removeTagId}` and drops filter-driven gating.

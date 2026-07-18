@@ -24,6 +24,117 @@ class ConversationTagHookCommitter(
     private val tagRepository: ConversationTagRepository,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+    suspend fun commitManageTags(
+        executionId: Uuid,
+        leaseToken: Long,
+        prepared: PreparedHookAction.ManageConversationTags,
+        output: ParsedManageConversationTagsHookOutput,
+    ) {
+        try {
+            database.withTransaction {
+                val execution = activeExecution(executionId, leaseToken) ?: throw LeaseLost()
+                when (validateSource(prepared.conversationId, prepared.sourceNodeId, prepared.sourceMessageId)) {
+                    SourceValidation.CONVERSATION_MISSING -> {
+                        finish(
+                            executionId, leaseToken, execution.runId, HookExecutionStatus.CANCELLED,
+                            decision = null, tagId = null, reason = null, reasonTruncated = false,
+                            errorCode = HookErrorCode.CONVERSATION_NOT_FOUND,
+                        )
+                        return@withTransaction
+                    }
+                    SourceValidation.INACTIVE -> {
+                        finish(
+                            executionId, leaseToken, execution.runId, HookExecutionStatus.CANCELLED,
+                            decision = null, tagId = null, reason = null, reasonTruncated = false,
+                            errorCode = HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE,
+                        )
+                        return@withTransaction
+                    }
+                    SourceValidation.ACTIVE -> Unit
+                }
+                for (op in output.operations) {
+                    if (tagDao.getTagById(op.tagId.toString()) == null) {
+                        finish(
+                            executionId, leaseToken, execution.runId, HookExecutionStatus.SKIPPED,
+                            decision = HookDecision.APPLY,
+                            tagId = op.tagId,
+                            reason = output.reason,
+                            reasonTruncated = output.reasonTruncated,
+                            errorCode = HookErrorCode.TAG_NOT_FOUND,
+                        )
+                        return@withTransaction
+                    }
+                }
+                var changedCount = 0
+                try {
+                    for (op in output.operations) {
+                        val changed = when (op.kind) {
+                            TagManageOpKind.ADD -> tagRepository.addTag(prepared.conversationId, op.tagId)
+                            TagManageOpKind.REMOVE -> tagRepository.removeTag(prepared.conversationId, op.tagId)
+                        }
+                        if (changed) changedCount += 1
+                    }
+                } catch (error: ConversationTagException) {
+                    throw RollbackFailure(mapTransitionError(error.code))
+                }
+                val primaryTagId = output.operations.firstOrNull()?.tagId
+                val summaryJson = manageTagsAuditSummaryJson(output.operations, changedCount)
+                val diffJson = manageTagsAuditDiffJson(output.operations)
+                finish(
+                    executionId = executionId,
+                    leaseToken = leaseToken,
+                    runId = execution.runId,
+                    status = if (changedCount == 0) HookExecutionStatus.SKIPPED else HookExecutionStatus.SUCCESS,
+                    decision = HookDecision.APPLY,
+                    tagId = primaryTagId,
+                    operationCount = changedCount,
+                    operationSummaryJson = summaryJson,
+                    diffSummaryJson = diffJson,
+                    reason = output.reason,
+                    reasonTruncated = output.reasonTruncated,
+                    errorCode = null,
+                )
+            }
+        } catch (_: LeaseLost) {
+        } catch (failure: RollbackFailure) {
+            try {
+                database.withTransaction {
+                    val execution = activeExecution(executionId, leaseToken) ?: throw LeaseLost()
+                    finish(
+                        executionId = executionId,
+                        leaseToken = leaseToken,
+                        runId = execution.runId,
+                        status = HookExecutionStatus.FAILED,
+                        decision = HookDecision.APPLY,
+                        tagId = output.operations.firstOrNull()?.tagId,
+                        reason = output.reason,
+                        reasonTruncated = output.reasonTruncated,
+                        errorCode = failure.errorCode,
+                    )
+                }
+            } catch (_: LeaseLost) {
+            }
+        } catch (error: ConversationTagException) {
+            try {
+                database.withTransaction {
+                    val execution = activeExecution(executionId, leaseToken) ?: throw LeaseLost()
+                    finish(
+                        executionId = executionId,
+                        leaseToken = leaseToken,
+                        runId = execution.runId,
+                        status = HookExecutionStatus.FAILED,
+                        decision = HookDecision.APPLY,
+                        tagId = output.operations.firstOrNull()?.tagId,
+                        reason = output.reason,
+                        reasonTruncated = output.reasonTruncated,
+                        errorCode = mapTransitionError(error.code),
+                    )
+                }
+            } catch (_: LeaseLost) {
+            }
+        }
+    }
+
     suspend fun commitAdd(
         executionId: Uuid,
         leaseToken: Long,
@@ -308,6 +419,20 @@ class ConversationTagHookCommitter(
         -> HookErrorCode.TAG_LIMIT_REACHED
         ConversationTagErrorCode.SAME_TAG -> HookErrorCode.TAG_TRANSITION_CONFLICT
         else -> HookErrorCode.ACTION_FAILED
+    }
+
+    private fun manageTagsAuditSummaryJson(operations: List<TagManageOperation>, changedCount: Int): String {
+        val ops = operations.joinToString(",") { op ->
+            """{"op":"${op.kind.name.lowercase()}","tagId":"${op.tagId}"}"""
+        }
+        return """{"action":"manage_conversation_tags","operationCount":${operations.size},"changedCount":$changedCount,"ops":[$ops]}"""
+    }
+
+    private fun manageTagsAuditDiffJson(operations: List<TagManageOperation>): String {
+        val ops = operations.joinToString(",") { op ->
+            """{"op":"${op.kind.name.lowercase()}","tagId":"${op.tagId}"}"""
+        }
+        return "[$ops]"
     }
 
     private enum class SourceValidation {

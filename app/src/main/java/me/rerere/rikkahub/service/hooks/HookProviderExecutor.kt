@@ -16,6 +16,13 @@ sealed interface FrozenHookModelRequest {
     val modelId: Uuid
     val prompt: String
 
+    data class ManageConversationTags(
+        override val modelId: Uuid,
+        override val prompt: String,
+        val messageTextSnapshot: String,
+        val allowedTags: Map<Uuid, String>,
+    ) : FrozenHookModelRequest
+
     data class AddConversationTag(
         override val modelId: Uuid,
         override val prompt: String,
@@ -83,9 +90,42 @@ class ProviderHookModelExecutor(
 }
 
 internal fun buildHookEvaluationPrompt(request: FrozenHookModelRequest): String = when (request) {
+    is FrozenHookModelRequest.ManageConversationTags -> buildManageTagsEvaluationPrompt(request)
     is FrozenHookModelRequest.AddConversationTag -> buildAddTagEvaluationPrompt(request)
     is FrozenHookModelRequest.TransitionConversationTags -> buildTagTransitionEvaluationPrompt(request)
     is FrozenHookModelRequest.SyncMemoryTable -> buildMemoryTableSyncEvaluationPrompt(request)
+}
+
+private fun buildManageTagsEvaluationPrompt(request: FrozenHookModelRequest.ManageConversationTags): String {
+    val allowedTags = request.allowedTags.entries
+        .sortedBy { it.key.toString() }
+        .joinToString("\n") { (id, name) -> "$id\t$name" }
+    val configuredPrompt = request.prompt.applyPlaceholders(
+        "content" to request.messageTextSnapshot,
+        "allowed_tags" to allowedTags,
+    )
+    return buildString {
+        appendLine(configuredPrompt.trim())
+        appendLine()
+        appendLine("Frozen final assistant response:")
+        appendLine("<assistant_response>")
+        appendLine(request.messageTextSnapshot)
+        appendLine("</assistant_response>")
+        appendLine()
+        appendLine("Allowed existing tags (tagId, then display name):")
+        appendLine("<allowed_tags>")
+        appendLine(allowedTags)
+        appendLine("</allowed_tags>")
+        appendLine()
+        append(
+            "Return exactly one JSON object with exactly the keys decision, operations, and reason. " +
+                "Use {\"decision\":\"apply\",\"operations\":[{\"op\":\"add|remove\",\"tagId\":\"<uuid>\"}]," +
+                "\"reason\":\"...\"} to apply up to ${me.rerere.rikkahub.data.model.HookRuntimeRules.MAX_TAG_MANAGE_OPS} " +
+                "operations, or {\"decision\":\"skip\",\"operations\":[],\"reason\":\"...\"} to skip. " +
+                "Only use tagIds from the allowlist. Prefer remove before add when swapping tags near the limit. " +
+                "Do not include Markdown fences or any other text."
+        )
+    }
 }
 
 private fun buildAddTagEvaluationPrompt(request: FrozenHookModelRequest.AddConversationTag): String {

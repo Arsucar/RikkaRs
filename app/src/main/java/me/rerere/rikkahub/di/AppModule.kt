@@ -8,14 +8,13 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.service.hooks.AddConversationTagHookAction
 import me.rerere.rikkahub.service.hooks.HookActionRegistry
 import me.rerere.rikkahub.service.hooks.HookDispatcher
 import me.rerere.rikkahub.service.hooks.ConversationTagHookCommitter
+import me.rerere.rikkahub.service.hooks.ManageConversationTagsHookAction
 import me.rerere.rikkahub.service.hooks.ProviderHookModelExecutor
 import me.rerere.rikkahub.service.hooks.MemoryTableHookSyncCommitter
 import me.rerere.rikkahub.service.hooks.SyncMemoryTableHookAction
-import me.rerere.rikkahub.service.hooks.TransitionConversationTagsHookAction
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenSession
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -49,12 +48,7 @@ val appModule = module {
     single {
         HookActionRegistry(
             listOf(
-                AddConversationTagHookAction(
-                    tagRepository = get(),
-                    committer = get(),
-                ),
-                TransitionConversationTagsHookAction(
-                    settingsStore = get(),
+                ManageConversationTagsHookAction(
                     tagRepository = get(),
                     committer = get(),
                 ),

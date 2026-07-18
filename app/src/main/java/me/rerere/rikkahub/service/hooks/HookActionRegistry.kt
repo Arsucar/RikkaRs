@@ -48,6 +48,16 @@ sealed interface PreparedHookAction {
     val request: FrozenHookModelRequest
     val audit: HookPreparedAudit?
 
+    data class ManageConversationTags(
+        override val request: FrozenHookModelRequest.ManageConversationTags,
+        val conversationId: Uuid,
+        val sourceNodeId: Uuid,
+        val sourceMessageId: Uuid,
+        val allowedTagIds: Set<Uuid>,
+    ) : PreparedHookAction {
+        override val audit: HookPreparedAudit? = null
+    }
+
     data class AddConversationTag(
         override val request: FrozenHookModelRequest.AddConversationTag,
         val conversationId: Uuid,

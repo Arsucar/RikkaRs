@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/app/conversation-tags-and-hooks.md", "reason": "Verify UI/runtime/spec compliance after manage-tags unification"}
+{"file": ".trellis/spec/app/index.md", "reason": "App quality checklist: compile, localization, hook tests"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/prd.md", "reason": "Acceptance criteria 1–8 mapping"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/design.md", "reason": "Migration, fail-closed C1, no evidence hard-gate, Sync isolation"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/implement.md", "reason": "Validation commands and review gates"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/research/hook-editor-tag-action-model.md", "reason": "Regression surfaces: history enums, hash, registry"}

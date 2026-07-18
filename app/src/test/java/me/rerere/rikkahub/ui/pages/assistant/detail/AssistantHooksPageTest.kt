@@ -23,7 +23,7 @@ class AssistantHooksPageTest {
             modelIsValid = true,
             trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
             prompt = "Apply the tag when the work is complete.",
-            actionConfig = HookActionConfig.AddConversationTag(setOf(tagId)),
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(tagId)),
             availableTagIds = setOf(tagId),
         )
 
@@ -42,7 +42,7 @@ class AssistantHooksPageTest {
             modelIsValid = false,
             trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
             prompt = "\n",
-            actionConfig = HookActionConfig.AddConversationTag(),
+            actionConfig = HookActionConfig.ManageConversationTags(),
             availableTagIds = emptySet(),
         )
 
@@ -60,7 +60,7 @@ class AssistantHooksPageTest {
             modelIsValid = true,
             trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
             prompt = "Apply the tag when the work is complete.",
-            actionConfig = HookActionConfig.AddConversationTag(setOf(tagId)),
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(tagId)),
             availableTagIds = emptySet(),
         )
 
@@ -71,29 +71,31 @@ class AssistantHooksPageTest {
     @Test
     fun actionTypeUsesLocalizedPresentationBoundary() {
         assertEquals(
-            R.string.assistant_hook_action_add_tag,
-            hookActionLabelRes(HookActionType.ADD_CONVERSATION_TAG),
+            R.string.assistant_hook_action_manage_tags,
+            hookActionLabelRes(HookActionType.MANAGE_CONVERSATION_TAGS),
         )
         assertEquals(
             R.string.assistant_hook_action_sync_memory_table,
             hookActionLabelRes(HookActionType.SYNC_MEMORY_TABLE),
         )
         assertEquals(
-            R.string.assistant_hook_action_transition_tags,
+            R.string.assistant_hook_action_manage_tags,
+            hookActionLabelRes(HookActionType.ADD_CONVERSATION_TAG),
+        )
+        assertEquals(
+            R.string.assistant_hook_action_manage_tags,
             hookActionLabelRes(HookActionType.TRANSITION_CONVERSATION_TAGS),
         )
     }
 
     @Test
-    fun transitionValidationRequiresDistinctAvailableTags() {
+    fun legacyTransitionConfigNormalizesToManageAllowlistValidation() {
         val addTagId = Uuid.random()
         val removeTagId = Uuid.random()
         val valid = transitionValidation(addTagId, removeTagId, setOf(addTagId, removeTagId))
-        val same = transitionValidation(addTagId, addTagId, setOf(addTagId))
         val unavailable = transitionValidation(addTagId, removeTagId, setOf(addTagId))
 
         assertTrue(valid.canSave)
-        assertEquals(HookEditorFieldError.TRANSITION_TAG_CONFLICT, same.actionError)
         assertEquals(HookEditorFieldError.TAG_UNAVAILABLE, unavailable.actionError)
     }
 
@@ -106,7 +108,7 @@ class AssistantHooksPageTest {
             modelIsValid = true,
             trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
             prompt = "Decide.",
-            actionConfig = HookActionConfig.TransitionConversationTags(addTagId, removeTagId),
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(addTagId, removeTagId)),
             availableTagIds = setOf(addTagId, removeTagId),
             tagCatalogReady = false,
         )

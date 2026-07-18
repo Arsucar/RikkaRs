@@ -178,6 +178,42 @@ class HookOutputParserTest {
         assertEquals(HookErrorCode.SCHEMA_MISMATCH, oversized.code)
     }
 
+    @Test
+    fun manageTagsParserParsesApplyAndSkip() {
+        val tagId = Uuid.random()
+        val apply = ManageConversationTagsHookOutputParser.parse(
+            """{"decision":"apply","operations":[{"op":"add","tagId":"$tagId"}],"reason":" done "}"""
+        )
+        val skip = ManageConversationTagsHookOutputParser.parse(
+            """{"decision":"skip","operations":[],"reason":"no"}"""
+        )
+
+        assertEquals(HookDecision.APPLY, apply.decision)
+        assertEquals(1, apply.operations.size)
+        assertEquals(TagManageOpKind.ADD, apply.operations.single().kind)
+        assertEquals(tagId, apply.operations.single().tagId)
+        assertEquals("done", apply.reason)
+        assertEquals(HookDecision.SKIP, skip.decision)
+        assertTrue(skip.operations.isEmpty())
+    }
+
+    @Test
+    fun manageTagsParserRejectsInvalidShapes() {
+        val tagId = Uuid.random()
+        listOf(
+            """{"decision":"skip","operations":[{"op":"add","tagId":"$tagId"}],"reason":"x"}""",
+            """{"decision":"apply","operations":[],"reason":"x"}""",
+            """{"decision":"apply","operations":[{"op":"move","tagId":"$tagId"}],"reason":"x"}""",
+            """{"decision":"apply","tagId":"$tagId","reason":"x"}""",
+            """{"decision":"apply","operations":[{"op":"add","tagId":"bad"}],"reason":"x"}""",
+        ).forEach { raw ->
+            val error = assertThrows(HookOutputException::class.java) {
+                ManageConversationTagsHookOutputParser.parse(raw)
+            }
+            assertEquals(HookErrorCode.SCHEMA_MISMATCH, error.code)
+        }
+    }
+
     private fun validSyncJson(): String =
         """{"decision":"skip","baseRevision":1,"operations":[],"reason":"x"}"""
 }

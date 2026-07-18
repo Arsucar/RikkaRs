@@ -32,6 +32,23 @@ data class ParsedTransitionConversationTagsHookOutput(
     override val reasonTruncated: Boolean,
 ) : ParsedHookOutput
 
+enum class TagManageOpKind {
+    ADD,
+    REMOVE,
+}
+
+data class TagManageOperation(
+    val kind: TagManageOpKind,
+    val tagId: Uuid,
+)
+
+data class ParsedManageConversationTagsHookOutput(
+    override val decision: HookDecision,
+    val operations: List<TagManageOperation>,
+    override val reason: String,
+    override val reasonTruncated: Boolean,
+) : ParsedHookOutput
+
 data class ParsedMemoryTableSyncHookOutput(
     override val decision: HookDecision,
     val baseRevision: Int,
@@ -117,6 +134,67 @@ object TransitionConversationTagsHookOutputParser {
         val truncatedReason = truncateHookReason(objectValue["reason"].stringValue())
         return ParsedTransitionConversationTagsHookOutput(
             decision = decision,
+            reason = truncatedReason.value,
+            reasonTruncated = truncatedReason.truncated,
+        )
+    }
+
+    private fun kotlinx.serialization.json.JsonElement?.stringValue(): String {
+        val primitive = this as? JsonPrimitive
+            ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        if (!primitive.isString) throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        return primitive.contentOrNull ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+    }
+}
+
+object ManageConversationTagsHookOutputParser {
+    private val exactKeys = setOf("decision", "operations", "reason")
+    private val operationKeys = setOf("op", "tagId")
+    private val strictJson = Json { isLenient = false; ignoreUnknownKeys = false }
+
+    fun parse(raw: String): ParsedManageConversationTagsHookOutput {
+        val trimmed = raw.trim()
+        if (trimmed.length > HookRuntimeRules.MAX_TAG_MANAGE_RESPONSE_CHARS) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        val objectValue = runCatching { strictJson.parseToJsonElement(trimmed) }.getOrElse {
+            throw HookOutputException(HookErrorCode.INVALID_JSON)
+        } as? JsonObject ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        if (objectValue.keys != exactKeys) throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        val decision = when (objectValue["decision"].stringValue()) {
+            "apply" -> HookDecision.APPLY
+            "skip" -> HookDecision.SKIP
+            else -> throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        val operationsArray = objectValue["operations"] as? JsonArray
+            ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        if (operationsArray.size > HookRuntimeRules.MAX_TAG_MANAGE_OPS) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        if (decision == HookDecision.SKIP && operationsArray.isNotEmpty()) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        if (decision == HookDecision.APPLY && operationsArray.isEmpty()) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        val operations = operationsArray.map { element ->
+            val opObject = element as? JsonObject
+                ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+            if (opObject.keys != operationKeys) throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+            val kind = when (opObject["op"].stringValue()) {
+                "add" -> TagManageOpKind.ADD
+                "remove" -> TagManageOpKind.REMOVE
+                else -> throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+            }
+            val tagId = runCatching { Uuid.parse(opObject["tagId"].stringValue()) }.getOrElse {
+                throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+            }
+            TagManageOperation(kind = kind, tagId = tagId)
+        }
+        val truncatedReason = truncateHookReason(objectValue["reason"].stringValue().trim())
+        return ParsedManageConversationTagsHookOutput(
+            decision = decision,
+            operations = operations,
             reason = truncatedReason.value,
             reasonTruncated = truncatedReason.truncated,
         )

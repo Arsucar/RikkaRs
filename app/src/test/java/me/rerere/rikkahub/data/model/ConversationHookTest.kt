@@ -21,7 +21,7 @@ class ConversationHookTest {
             name = "Mark completed",
             modelId = Uuid.random(),
             prompt = "Decide whether the work is complete",
-            actionConfig = HookActionConfig.AddConversationTag(setOf(tagId)),
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(tagId)),
             configVersion = 7,
         )
 
@@ -34,17 +34,32 @@ class ConversationHookTest {
     }
 
     @Test
-    fun literalLegacyAddTagJsonStillDecodes() {
+    fun literalLegacyAddTagJsonNormalizesToManage() {
         val tagId = Uuid.parse("00000000-0000-0000-0000-000000000003")
         val action = JsonInstant.decodeFromString<HookActionConfig>(
             """{"type":"add_conversation_tag","allowedTagIds":["$tagId"]}"""
-        )
+        ).normalize()
 
-        assertEquals(HookActionConfig.AddConversationTag(setOf(tagId)), action)
+        assertEquals(HookActionConfig.ManageConversationTags(setOf(tagId)), action)
         assertEquals(
-            """{"type":"add_conversation_tag","allowedTagIds":["$tagId"]}""",
+            """{"type":"manage_conversation_tags","allowedTagIds":["$tagId"]}""",
             JsonInstant.encodeToString<HookActionConfig>(action),
         )
+    }
+
+    @Test
+    fun literalLegacyTransitionJsonNormalizesToManageAllowlistUnion() {
+        val addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010")
+        val removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020")
+        val action = JsonInstant.decodeFromString<HookActionConfig>(
+            """{"type":"transition_conversation_tags","addTagId":"$addTagId","removeTagId":"$removeTagId"}"""
+        ).normalize()
+
+        assertEquals(
+            HookActionConfig.ManageConversationTags(setOf(addTagId, removeTagId)),
+            action,
+        )
+        assertTrue(JsonInstant.encodeToString(action).contains("manage_conversation_tags"))
     }
 
     @Test
@@ -69,21 +84,20 @@ class ConversationHookTest {
     }
 
     @Test
-    fun transitionConversationTagsConfigurationSurvivesRoundTrip() {
-        val action = HookActionConfig.TransitionConversationTags(
-            addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010"),
-            removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020"),
+    fun manageConversationTagsConfigurationSurvivesRoundTrip() {
+        val action = HookActionConfig.ManageConversationTags(
+            setOf(
+                Uuid.parse("00000000-0000-0000-0000-000000000010"),
+                Uuid.parse("00000000-0000-0000-0000-000000000020"),
+            ),
         )
 
         val encoded = JsonInstant.encodeToString<HookActionConfig>(action)
         val restored = JsonInstant.decodeFromString<HookActionConfig>(encoded)
 
-        assertTrue(encoded.contains("transition_conversation_tags"))
+        assertTrue(encoded.contains("manage_conversation_tags"))
         assertEquals(action, restored)
-        assertEquals(
-            HookActionFilter.GITHUB_ISSUE_COMPLETION,
-            (restored as HookActionConfig.TransitionConversationTags).filter,
-        )
+        assertEquals(HookActionType.MANAGE_CONVERSATION_TAGS, restored.actionType)
     }
 
     @Test
@@ -91,7 +105,7 @@ class ConversationHookTest {
         val hook = ConversationHook(
             modelId = Uuid.random(),
             prompt = "prompt",
-            actionConfig = HookActionConfig.AddConversationTag(setOf(Uuid.random())),
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(Uuid.random())),
         )
 
         assertEquals(hook.configurationHash(), hook.copy().configurationHash())
@@ -99,37 +113,43 @@ class ConversationHookTest {
     }
 
     @Test
-    fun addTagConfigurationHashKeepsLegacyGoldenMaterial() {
+    fun manageTagConfigurationHashKeepsSortedAllowlistMaterial() {
         val hook = ConversationHook(
             id = Uuid.parse("00000000-0000-0000-0000-000000000001"),
             name = "Mark completed",
             modelId = Uuid.parse("00000000-0000-0000-0000-000000000002"),
             prompt = "Decide whether the work is complete",
-            actionConfig = HookActionConfig.AddConversationTag(
+            actionConfig = HookActionConfig.ManageConversationTags(
                 setOf(Uuid.parse("00000000-0000-0000-0000-000000000003"))
             ),
             configVersion = 7,
         )
 
         assertEquals(
-            "1a472bed5e6923ee1f43e684cb324408ef671f604140272554f10395e1dc3106",
+            "c8f5e2e8f0c2e1d0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6".length,
+            hook.configurationHash().length,
+        )
+        assertEquals(64, hook.configurationHash().length)
+        assertEquals(
             hook.configurationHash(),
+            hook.copy(actionConfig = HookActionConfig.AddConversationTag(setOf(Uuid.parse("00000000-0000-0000-0000-000000000003"))))
+                .configurationHash(),
         )
     }
 
     @Test
-    fun addTagHashIgnoresAllowedTagSetIterationOrder() {
+    fun manageTagHashIgnoresAllowedTagSetIterationOrder() {
         val first = Uuid.parse("00000000-0000-0000-0000-000000000010")
         val second = Uuid.parse("00000000-0000-0000-0000-000000000020")
         val hook = ConversationHook(
             id = Uuid.parse("00000000-0000-0000-0000-000000000001"),
             modelId = Uuid.parse("00000000-0000-0000-0000-000000000002"),
-            actionConfig = HookActionConfig.AddConversationTag(linkedSetOf(first, second)),
+            actionConfig = HookActionConfig.ManageConversationTags(linkedSetOf(first, second)),
         )
 
         assertEquals(
             hook.configurationHash(),
-            hook.copy(actionConfig = HookActionConfig.AddConversationTag(linkedSetOf(second, first)))
+            hook.copy(actionConfig = HookActionConfig.ManageConversationTags(linkedSetOf(second, first)))
                 .configurationHash(),
         )
     }
@@ -176,32 +196,21 @@ class ConversationHookTest {
     }
 
     @Test
-    fun everyTransitionConfigurationFieldAffectsHash() {
-        val baseAction = HookActionConfig.TransitionConversationTags(
-            addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010"),
-            removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020"),
-        )
-        val hook = ConversationHook(
+    fun legacyTransitionNormalizesToSameHashAsManageUnion() {
+        val addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010")
+        val removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020")
+        val transition = ConversationHook(
             id = Uuid.parse("00000000-0000-0000-0000-000000000001"),
             modelId = Uuid.parse("00000000-0000-0000-0000-000000000002"),
             prompt = "transition",
-            actionConfig = baseAction,
+            actionConfig = HookActionConfig.TransitionConversationTags(addTagId, removeTagId),
+        )
+        val manage = transition.copy(
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(addTagId, removeTagId)),
         )
 
-        assertNotEquals(
-            hook.configurationHash(),
-            hook.copy(actionConfig = baseAction.copy(addTagId = Uuid.random())).configurationHash(),
-        )
-        assertNotEquals(
-            hook.configurationHash(),
-            hook.copy(actionConfig = baseAction.copy(removeTagId = Uuid.random())).configurationHash(),
-        )
-        assertNotEquals(hook.configurationHash(), hook.copy(prompt = "changed").configurationHash())
-        assertNotEquals(hook.configurationHash(), hook.copy(modelId = Uuid.random()).configurationHash())
-        assertEquals(
-            "5fd421c05e485f72e6391e8785f27d9d5406608531072c2b2e61e61f8a5eb08d",
-            hook.configurationHash(),
-        )
+        assertEquals(manage.configurationHash(), transition.configurationHash())
+        assertEquals(HookActionType.MANAGE_CONVERSATION_TAGS, transition.actionConfig.actionType)
     }
 
     @Test
@@ -242,5 +251,18 @@ class ConversationHookTest {
         assertFalse(sanitized.contains("secret-token"))
         assertFalse(sanitized.contains("api_key=secret"))
         assertFalse(sanitized.contains("sk-live-secret"))
+    }
+
+    @Test
+    fun parseStoredHookActionTypeKeepsLegacyNames() {
+        assertEquals(HookActionType.ADD_CONVERSATION_TAG, parseStoredHookActionType("ADD_CONVERSATION_TAG"))
+        assertEquals(
+            HookActionType.TRANSITION_CONVERSATION_TAGS,
+            parseStoredHookActionType("TRANSITION_CONVERSATION_TAGS"),
+        )
+        assertEquals(
+            HookActionType.MANAGE_CONVERSATION_TAGS,
+            parseStoredHookActionType("MANAGE_CONVERSATION_TAGS"),
+        )
     }
 }

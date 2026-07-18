@@ -25,6 +25,7 @@ import me.rerere.rikkahub.data.model.HookRunRecord
 import me.rerere.rikkahub.data.model.HookRunStatus
 import me.rerere.rikkahub.data.model.HookRuntimeRules
 import me.rerere.rikkahub.data.model.HookTrigger
+import me.rerere.rikkahub.data.model.parseStoredHookActionType
 import me.rerere.rikkahub.data.model.sanitizeHookError
 import me.rerere.rikkahub.data.model.truncateHookReason
 import java.security.MessageDigest
@@ -418,7 +419,7 @@ private fun HookExecutionEntity.toModel(): HookExecutionRecord = HookExecutionRe
     hookConfigVersion = hookConfigVersion,
     hookConfigHash = hookConfigHash,
     modelId = Uuid.parse(modelId),
-    actionType = HookActionType.valueOf(actionType),
+    actionType = parseStoredHookActionType(actionType),
     executionMode = HookExecutionMode.valueOf(executionMode),
     startedAt = startedAt?.let(Instant::ofEpochMilli),
     endedAt = endedAt?.let(Instant::ofEpochMilli),

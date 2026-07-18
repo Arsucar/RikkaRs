@@ -1783,10 +1783,16 @@
   <string name="assistant_hook_trigger_final_success">After the final assistant response succeeds</string>
   <string name="assistant_hook_prompt">Evaluation prompt</string>
   <string name="assistant_hook_prompt_description">Instruct the model when to apply one of the allowed tags. The runtime requires strict JSON output.</string>
+  <string name="assistant_hook_manage_prompt_description">Write tag strategy in this prompt (add/remove within the allowlist, Issue workflows, etc.). Runtime expects strict JSON with decision, operations, and reason.</string>
+  <string name="assistant_hook_prompt_expand">Expand</string>
+  <string name="assistant_hook_prompt_collapse">Collapse</string>
+  <string name="assistant_hook_prompt_collapsed_placeholder">Tap to edit evaluation prompt</string>
   <string name="assistant_hook_allowed_tags">Allowed conversation tags</string>
-  <string name="assistant_hook_allowed_tags_description">The hook may only select an existing tag from this frozen allowlist.</string>
+  <string name="assistant_hook_allowed_tags_description">This hook may only add or remove tags from this frozen allowlist. Strategy lives in the evaluation prompt.</string>
+  <string name="assistant_hook_allowlist_summary_overflow">%1$s · +%2$d more</string>
   <string name="assistant_hook_no_tags">No conversation tags are available.</string>
   <string name="assistant_hook_action_add_tag">Add conversation tag</string>
+  <string name="assistant_hook_action_manage_tags">Tag management</string>
   <string name="hook_history_menu_title">Hook history</string>
   <string name="hook_history_menu_subtitle">Review recent hook runs and decisions for this conversation</string>
   <string name="hook_history_title">Hook history</string>

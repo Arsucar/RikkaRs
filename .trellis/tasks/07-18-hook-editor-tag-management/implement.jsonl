@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/app/conversation-tags-and-hooks.md", "reason": "Hook UI/runtime contracts, tag writes, evidence scenario to supersede, Sync boundaries"}
+{"file": ".trellis/spec/app/index.md", "reason": "App pre-dev checklist for tags/hooks and localization"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared coding guidelines index"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/prd.md", "reason": "Requirements, decisions D1–D7, acceptance criteria"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/design.md", "reason": "Config migration, multi-op protocol, UI/runtime design"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/implement.md", "reason": "Ordered checklist and validation commands"}
+{"file": ".trellis/tasks/07-18-hook-editor-tag-management/research/hook-editor-tag-action-model.md", "reason": "Current editor/runtime map, break surfaces for Preview/Run/Retry and history"}
