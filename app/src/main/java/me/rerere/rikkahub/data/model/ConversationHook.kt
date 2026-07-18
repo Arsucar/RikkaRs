@@ -31,16 +31,32 @@ sealed interface HookActionConfig {
     data class AddConversationTag(
         val allowedTagIds: Set<Uuid> = emptySet(),
     ) : HookActionConfig
+
+    @Serializable
+    @SerialName("sync_memory_table")
+    data class SyncMemoryTable(
+        val targetDocumentId: String = "",
+        val targetScopeType: MemoryTableScopeType = MemoryTableScopeType.ASSISTANT,
+        val recentMessageCount: Int = HookRuntimeRules.DEFAULT_SYNC_MESSAGE_COUNT,
+        val includeUserMessages: Boolean = true,
+        val includeAssistantMessages: Boolean = true,
+        val maxContextChars: Int = HookRuntimeRules.DEFAULT_SYNC_CONTEXT_CHARS,
+        val maxOperations: Int = HookRuntimeRules.DEFAULT_SYNC_MAX_OPERATIONS,
+        val minimumIntervalSeconds: Int = 0,
+        val automatic: Boolean = false,
+    ) : HookActionConfig
 }
 
 @Serializable
 enum class HookActionType {
     ADD_CONVERSATION_TAG,
+    SYNC_MEMORY_TABLE,
 }
 
 val HookActionConfig.actionType: HookActionType
     get() = when (this) {
         is HookActionConfig.AddConversationTag -> HookActionType.ADD_CONVERSATION_TAG
+        is HookActionConfig.SyncMemoryTable -> HookActionType.SYNC_MEMORY_TABLE
     }
 
 fun ConversationHook.configurationHash(): String {
@@ -49,6 +65,17 @@ fun ConversationHook.configurationHash(): String {
             .map { it.toString() }
             .sorted()
             .joinToString(",")
+        is HookActionConfig.SyncMemoryTable -> listOf(
+            action.targetDocumentId,
+            action.targetScopeType.name,
+            action.recentMessageCount.toString(),
+            action.includeUserMessages.toString(),
+            action.includeAssistantMessages.toString(),
+            action.maxContextChars.toString(),
+            action.maxOperations.toString(),
+            action.minimumIntervalSeconds.toString(),
+            action.automatic.toString(),
+        ).joinToString("|") { value -> "${value.length}:$value" }
     }
     val material = listOf(
         id.toString(),
@@ -95,6 +122,11 @@ enum class HookExecutionStatus {
     INTERRUPTED,
 }
 
+enum class HookExecutionMode {
+    AUTO,
+    MANUAL,
+}
+
 fun aggregateHookRunStatus(statuses: List<HookExecutionStatus>): HookRunStatus {
     require(statuses.isNotEmpty())
     if (statuses.all { it == HookExecutionStatus.QUEUED }) return HookRunStatus.QUEUED
@@ -126,6 +158,19 @@ enum class HookErrorCode {
     TAG_NOT_FOUND,
     CONVERSATION_NOT_FOUND,
     SOURCE_MESSAGE_NOT_ACTIVE,
+    HOOK_DISABLED,
+    MEMORY_TABLE_DISABLED,
+    MEMORY_TABLE_AUTO_SYNC_DISABLED,
+    MEMORY_TABLE_AUTOMATIC_DISABLED,
+    MEMORY_TABLE_FREQUENCY_LIMIT,
+    MEMORY_TABLE_TARGET_NOT_FOUND,
+    MEMORY_TABLE_TARGET_DELETED,
+    MEMORY_TABLE_TARGET_CHANGED,
+    MEMORY_TABLE_SCOPE_FORBIDDEN,
+    MEMORY_TABLE_REVISION_CONFLICT,
+    MEMORY_TABLE_INVALID_OPERATIONS,
+    IDEMPOTENT_REPLAY,
+    RETRY_NOT_ALLOWED,
     ACTION_FAILED,
 }
 
@@ -156,11 +201,23 @@ data class HookExecutionRecord(
     val hookConfigHash: String,
     val modelId: Uuid,
     val actionType: HookActionType,
+    val executionMode: HookExecutionMode,
     val startedAt: Instant?,
     val endedAt: Instant?,
     val status: HookExecutionStatus,
     val decision: HookDecision?,
     val tagId: Uuid?,
+    val targetDocumentId: String?,
+    val targetTemplateId: String?,
+    val targetScopeType: MemoryTableScopeType?,
+    val targetScopeId: String?,
+    val baseRevision: Int?,
+    val resultRevision: Int?,
+    val operationCount: Int?,
+    val operationSummaryJson: String?,
+    val diffSummaryJson: String?,
+    val retryOfExecutionId: Uuid?,
+    val idempotencyKey: String?,
     val reason: String?,
     val reasonTruncated: Boolean,
     val errorCode: HookErrorCode?,
@@ -196,6 +253,8 @@ data class HookExecutionMetadata(
     val hookConfigHash: String,
     val modelId: Uuid,
     val actionType: HookActionType,
+    val executionMode: HookExecutionMode = HookExecutionMode.AUTO,
+    val retryOfExecutionId: Uuid? = null,
 )
 
 sealed interface HookDispatchPersistenceResult {
@@ -215,6 +274,17 @@ object HookRuntimeRules {
     const val MAX_RUNS_PER_CONVERSATION = 100
     const val RETENTION_DAYS = 30L
     const val EXECUTION_TIMEOUT_SECONDS = 30L
+    const val DEFAULT_SYNC_MESSAGE_COUNT = 8
+    const val MIN_SYNC_MESSAGE_COUNT = 1
+    const val MAX_SYNC_MESSAGE_COUNT = 40
+    const val DEFAULT_SYNC_CONTEXT_CHARS = 12_000
+    const val MIN_SYNC_CONTEXT_CHARS = 256
+    const val MAX_SYNC_CONTEXT_CHARS = 64_000
+    const val DEFAULT_SYNC_MAX_OPERATIONS = 12
+    const val MIN_SYNC_MAX_OPERATIONS = 1
+    const val MAX_SYNC_MAX_OPERATIONS = 50
+    const val MAX_SYNC_RESPONSE_CHARS = 64_000
+    const val MAX_SYNC_AUDIT_JSON_CHARS = 8_000
 }
 
 data class TruncatedHookText(

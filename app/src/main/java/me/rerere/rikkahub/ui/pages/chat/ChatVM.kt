@@ -42,6 +42,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookRunHistory
+import me.rerere.rikkahub.data.model.HookExecutionRecord
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
@@ -56,6 +57,7 @@ import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
@@ -115,6 +117,9 @@ class ChatVM(
         .map<List<HookRunHistory>, UiState<List<HookRunHistory>>> { UiState.Success(it) }
         .catch { emit(UiState.Error(it)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
+
+    val hookPreviewState = MutableStateFlow<UiState<MemoryTableHookPreview>>(UiState.Idle)
+    val hookManualRunState = MutableStateFlow<UiState<HookExecutionRecord>>(UiState.Idle)
 
     val conversationTags: StateFlow<List<ConversationTag>> = conversationTagRepository.observeTags()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -384,6 +389,59 @@ class ChatVM(
         viewModelScope.launch {
             chatService.stopGeneration(_conversationId)
         }
+    }
+
+    fun previewMemoryTableHook(hookId: Uuid) {
+        viewModelScope.launch {
+            hookPreviewState.value = UiState.Loading
+            hookPreviewState.value = runCatching {
+                chatService.previewMemoryTableHook(_conversationId, hookId)
+            }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it) },
+            )
+        }
+    }
+
+    fun applyMemoryTableHookPreview(preview: MemoryTableHookPreview) {
+        viewModelScope.launch {
+            hookManualRunState.value = UiState.Loading
+            hookManualRunState.value = runCatching {
+                chatService.applyMemoryTableHookPreview(preview)
+            }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it) },
+            )
+        }
+    }
+
+    fun runMemoryTableHookNow(hookId: Uuid) {
+        viewModelScope.launch {
+            hookManualRunState.value = UiState.Loading
+            hookManualRunState.value = runCatching {
+                chatService.runMemoryTableHookNow(_conversationId, hookId)
+            }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it) },
+            )
+        }
+    }
+
+    fun retryMemoryTableHookExecution(executionId: Uuid) {
+        viewModelScope.launch {
+            hookManualRunState.value = UiState.Loading
+            hookManualRunState.value = runCatching {
+                chatService.retryMemoryTableHookExecution(executionId)
+            }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it) },
+            )
+        }
+    }
+
+    fun clearMemoryTableHookActionState() {
+        hookPreviewState.value = UiState.Idle
+        hookManualRunState.value = UiState.Idle
     }
 
     fun saveConversationAsync() {

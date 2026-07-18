@@ -25,7 +25,7 @@
 - Whole-Conversation saves must not carry tag collections; otherwise concurrent relationship writes can be lost.
 - A Hook runs only after a persisted logical turn reaches final assistant success with no resumable pending tool.
 - Hook model requests use a frozen in-memory message/prompt/config snapshot. Full prompt, message snapshot, provider output, headers, and credentials never enter Hook Room tables.
-- Hook output is one JSON object whose key set is exactly `decision`, `tagId`, and `reason`.
+- AddTag Hook output is one JSON object whose key set is exactly `decision`, `tagId`, and `reason`.
 - A timeout invalidates the lease before cancelling work. Parser and action writes must recheck the active lease so late results cannot write tags or overwrite terminal state.
 - `generationDoneFlow` remains a UI notification mechanism and is not a Hook success or history source.
 
@@ -156,3 +156,92 @@ SaveButton(enabled = validation.canSave)
 ```
 
 Relationship writes remain atomic, and Hook execution starts only from the persisted logical-turn gate.
+
+## Scenario: Action-specific Hooks and memory-table synchronization
+
+### 1. Scope / Trigger
+
+Use this contract when adding a Hook Action, changing frozen Hook input, executing manual preview/run/retry, or
+writing structured memory-table data from a Hook.
+
+### 2. Signatures
+
+- `HookActionHandler` owns `prepare`, action-specific `parse`, optional `preview`, and `execute`.
+- `HookActionRegistry.requireHandler(HookActionType)` is the only Action dispatch boundary.
+- `freezeMemoryTableHookMessages(conversation, cutoffMessageId, config)` returns bounded selected-branch text.
+- `MemoryTableHookSyncCommitter.commit(executionId, leaseToken, prepared, output)` owns the Room transaction.
+- Room v42 adds generalized `hook_executions` audit fields and durable `hook_action_cursors`.
+
+### 3. Contracts
+
+- Dispatcher and Registry must not cast requests/results to one concrete Action. Existing
+  `add_conversation_tag` serialization and configuration-hash material remain stable.
+- Sync model input contains only selected, visible, active-branch USER/ASSISTANT text through the frozen cutoff;
+  SYSTEM/TOOL content, alternate branches, hidden nodes, and later messages are excluded.
+- The Sync provider receives no tools and returns exactly `decision`, `baseRevision`, `operations`, and `reason`.
+  Target ID, scope, schema, update policy, and authorization remain local authority.
+- Automatic Sync is preflighted before provider invocation and rechecked before execution: global table gate,
+  Assistant table gate, global auto permission, Hook enabled/config hash/version, and Action `automatic`.
+- Manual preview performs no Room write. Apply Preview and Run Now create ordinary manual Hook history and recheck
+  the active cutoff, current Hook configuration, target, frozen schema, and revision.
+- Dispatcher unknown failures use stage-specific fallbacks: provider call -> `MODEL_REQUEST_FAILED`, parser ->
+  `SCHEMA_MISMATCH`, preparation/action/Room -> `ACTION_FAILED`. Explicit `HookOutputException.code` wins.
+- A committed Sync handler returns `HookActionResult.Terminalized`; Dispatcher must not perform a second success write.
+- Successful idempotency cursors outlive bounded Hook history and have no foreign key to prunable run/execution rows.
+
+### 4. Validation & Error Matrix
+
+- Hook disabled/config changed -> `HOOK_DISABLED`; zero provider call when detected at preflight, zero write when
+  detected after provider output.
+- Global/Assistant table disabled -> `MEMORY_TABLE_DISABLED`; zero write.
+- Automatic permission/Action automatic disabled -> corresponding stable error; zero provider call/write.
+- Inactive cutoff -> `SOURCE_MESSAGE_NOT_ACTIVE`; no preview or execution.
+- Extra/missing output keys, non-integer revision, oversized response/operation list -> `SCHEMA_MISMATCH`.
+- Invalid table/column/type/key/update policy -> `MEMORY_TABLE_INVALID_OPERATIONS`; all operations rejected.
+- Target deleted/foreign/global/scope changed -> stable target/scope error; zero write.
+- Revision or frozen-schema mismatch -> `MEMORY_TABLE_REVISION_CONFLICT` or `MEMORY_TABLE_TARGET_CHANGED`; zero write.
+- Existing cursor by idempotency key, natural source key, or execution ID -> terminal `SKIPPED` /
+  `IDEMPOTENT_REPLAY`, preserving the committed result revision.
+- Retry is allowed only for uncommitted failed Sync executions with unchanged Hook configuration; otherwise
+  `RETRY_NOT_ALLOWED`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: freeze one bounded branch, call the provider without tools, validate operations locally, then atomically write
+  payload/snapshot/cursor/execution/run.
+- Base: model returns `skip`; execution becomes `SKIPPED` with audit fields but no payload revision or cursor write.
+- Good: user disables the Hook while a slow provider request is running; post-provider gate returns `SKIPPED`.
+- Bad: reuse the current template schema after the model answered without comparing it to the frozen schema.
+- Bad: catch every handler exception as `MODEL_REQUEST_FAILED` or mark success in Dispatcher after the handler commits.
+
+### 6. Tests Required
+
+- Literal legacy `add_conversation_tag` JSON and AddTag golden configuration hash.
+- Sync hash mutation for every Action field plus model/prompt; AddTag tag-set order invariance.
+- Frozen-context branch/hidden/role/cutoff/count/Unicode character-bound tests.
+- Sync strict parser exact-key, type, size, operation-limit, and unauthorized-field tests.
+- Dispatcher stage-error and post-provider gate regressions when those paths change.
+- Hook editor Sync target/scope/role/limit validation and action label mapping.
+- Compile production, JVM test, and androidTest sources after cross-layer Hook changes.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+val parsed = HookOutputParser.parse(raw) // tag-specific parser in generic dispatcher
+handler.execute(parsed)
+hookRepository.completeSuccess(executionId) // second transaction after Sync commit
+```
+
+#### Correct
+
+```kotlin
+val handler = actionRegistry.requireHandler(hook.actionConfig.actionType)
+val prepared = handler.prepare(hook, freezeContext)
+val parsed = handler.parse(raw, prepared)
+when (handler.execute(executionId, leaseToken, prepared, parsed)) {
+    HookActionResult.Terminalized -> Unit
+    else -> finishFromAction(...)
+}
+```

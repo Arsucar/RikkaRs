@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,10 +65,15 @@ import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookActionConfig
 import me.rerere.rikkahub.data.model.HookActionType
 import me.rerere.rikkahub.data.model.HookTrigger
+import me.rerere.rikkahub.data.model.HookRuntimeRules
+import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ConversationTagLabel
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -76,7 +84,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
 @Composable
-fun AssistantHooksPage(id: String) {
+fun AssistantHooksPage(id: String, conversationId: String? = null) {
     val vm: AssistantDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -97,7 +105,7 @@ fun AssistantHooksPage(id: String) {
                 title = { Text(stringResource(R.string.assistant_hook_settings_title)) },
                 navigationIcon = { BackButton() },
                 actions = {
-                    IconButton(onClick = { nav.navigate(Screen.AssistantHookEditor(id)) }) {
+                    IconButton(onClick = { nav.navigate(Screen.AssistantHookEditor(id, conversationId = conversationId)) }) {
                         Icon(HugeIcons.Add01, stringResource(R.string.assistant_hook_add))
                     }
                 },
@@ -125,7 +133,7 @@ fun AssistantHooksPage(id: String) {
                         stringResource(R.string.assistant_hook_empty_description),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = { nav.navigate(Screen.AssistantHookEditor(id)) }) {
+                    TextButton(onClick = { nav.navigate(Screen.AssistantHookEditor(id, conversationId = conversationId)) }) {
                         Text(stringResource(R.string.assistant_hook_add))
                     }
                 }
@@ -147,7 +155,7 @@ fun AssistantHooksPage(id: String) {
                         }
                         Card(
                             onClick = {
-                                nav.navigate(Screen.AssistantHookEditor(id, hook.id.toString()))
+                                nav.navigate(Screen.AssistantHookEditor(id, hook.id.toString(), conversationId))
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -254,11 +262,21 @@ fun AssistantHooksPage(id: String) {
 }
 
 @Composable
-fun AssistantHookEditorPage(id: String, hookId: String?) {
+fun AssistantHookEditorPage(id: String, hookId: String?, conversationId: String? = null) {
     val vm: AssistantDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val tags by vm.conversationTags.collectAsStateWithLifecycle()
+    val templates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
+    val assistantDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
+    var availableDocuments by remember(conversationId) { mutableStateOf(emptyList<MemoryTableDocument>()) }
+    LaunchedEffect(conversationId, assistantDocuments) {
+        availableDocuments = if (conversationId == null) {
+            assistantDocuments
+        } else {
+            vm.getMemoryTableDocumentsForEditor(conversationId)
+        }.filter { it.scopeType != MemoryTableScopeType.GLOBAL }
+    }
     val nav = LocalNavController.current
     val existing = remember(assistant.hooks, hookId) {
         hookId?.let { value -> runCatching { Uuid.parse(value) }.getOrNull() }
@@ -274,10 +292,24 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
     val trigger by remember(hookId, existing?.configVersion) {
         mutableStateOf(existing?.trigger ?: HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS)
     }
-    var actionConfig by remember(hookId, existing?.configVersion) {
+    var selectedActionType by remember(hookId, existing?.configVersion) {
+        mutableStateOf(existing?.actionConfig?.actionType ?: HookActionType.ADD_CONVERSATION_TAG)
+    }
+    var addTagConfig by remember(hookId, existing?.configVersion) {
         mutableStateOf(
-            existing?.actionConfig ?: HookActionConfig.AddConversationTag()
+            existing?.actionConfig as? HookActionConfig.AddConversationTag
+                ?: HookActionConfig.AddConversationTag()
         )
+    }
+    var syncConfig by remember(hookId, existing?.configVersion) {
+        mutableStateOf(
+            existing?.actionConfig as? HookActionConfig.SyncMemoryTable
+                ?: HookActionConfig.SyncMemoryTable()
+        )
+    }
+    val actionConfig: HookActionConfig = when (selectedActionType) {
+        HookActionType.ADD_CONVERSATION_TAG -> addTagConfig
+        HookActionType.SYNC_MEMORY_TABLE -> syncConfig
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val validation = validateHookEditor(
@@ -287,6 +319,8 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
         prompt = prompt,
         actionConfig = actionConfig,
         availableTagIds = tags.mapTo(mutableSetOf()) { it.id },
+        availableDocuments = availableDocuments,
+        conversationId = conversationId,
     )
 
     Scaffold(
@@ -418,8 +452,17 @@ fun AssistantHookEditorPage(id: String, hookId: String?) {
                 HookActionEditor(
                     actionConfig = actionConfig,
                     tags = tags,
+                    documents = availableDocuments,
+                    templates = templates,
+                    conversationId = conversationId,
                     error = validation.actionError,
-                    onActionConfigChange = { actionConfig = it },
+                    onActionTypeChange = { selectedActionType = it },
+                    onActionConfigChange = { updated ->
+                        when (updated) {
+                            is HookActionConfig.AddConversationTag -> addTagConfig = updated
+                            is HookActionConfig.SyncMemoryTable -> syncConfig = updated
+                        }
+                    },
                     onCreateFirstTag = { nav.navigate(Screen.SettingConversationTags) },
                 )
             }
@@ -449,19 +492,31 @@ private fun HookEditorErrorText(text: String) {
 private fun HookActionEditor(
     actionConfig: HookActionConfig,
     tags: List<ConversationTag>,
+    documents: List<MemoryTableDocument>,
+    templates: List<MemoryTableTemplate>,
+    conversationId: String?,
     error: HookEditorFieldError?,
+    onActionTypeChange: (HookActionType) -> Unit,
     onActionConfigChange: (HookActionConfig) -> Unit,
     onCreateFirstTag: () -> Unit,
 ) {
-    when (actionConfig) {
-        is HookActionConfig.AddConversationTag -> {
-            val availableTagIds = tags.mapTo(mutableSetOf()) { it.id }
-            val unavailableTagIds = actionConfig.allowedTagIds - availableTagIds
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    stringResource(hookActionLabelRes(actionConfig.actionType)),
-                    style = MaterialTheme.typography.titleSmall,
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HookActionType.entries.forEach { actionType ->
+                FilterChip(
+                    selected = actionConfig.actionType == actionType,
+                    onClick = { onActionTypeChange(actionType) },
+                    label = { Text(stringResource(hookActionLabelRes(actionType))) },
                 )
+            }
+        }
+        when (actionConfig) {
+            is HookActionConfig.AddConversationTag -> {
+                val availableTagIds = tags.mapTo(mutableSetOf()) { it.id }
+                val unavailableTagIds = actionConfig.allowedTagIds - availableTagIds
                 Text(
                     stringResource(R.string.assistant_hook_allowed_tags_description),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -483,9 +538,7 @@ private fun HookActionEditor(
                                 onClick = {
                                     val currentIds = actionConfig.allowedTagIds intersect availableTagIds
                                     val updatedIds = if (selected) currentIds - tag.id else currentIds + tag.id
-                                    onActionConfigChange(
-                                        HookActionConfig.AddConversationTag(updatedIds)
-                                    )
+                                    onActionConfigChange(HookActionConfig.AddConversationTag(updatedIds))
                                 },
                                 label = { ConversationTagLabel(tag.displayName, tag.colorKey) },
                             )
@@ -505,10 +558,136 @@ private fun HookActionEditor(
                         Text(stringResource(R.string.assistant_hook_remove_unavailable_tags))
                     }
                 }
-                error?.let { HookEditorErrorText(stringResource(it.stringRes)) }
+            }
+
+            is HookActionConfig.SyncMemoryTable -> {
+                val candidates = documents.filter { document ->
+                    document.scopeType == MemoryTableScopeType.ASSISTANT ||
+                        (document.scopeType == MemoryTableScopeType.CONVERSATION &&
+                            conversationId != null && document.scopeId == conversationId)
+                }
+                val selected = candidates.firstOrNull { it.id == actionConfig.targetDocumentId }
+                Text(
+                    stringResource(R.string.assistant_hook_sync_target),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    stringResource(R.string.assistant_hook_sync_target_description),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (candidates.isEmpty()) {
+                    Text(stringResource(R.string.assistant_hook_sync_no_targets))
+                } else {
+                    Select(
+                        options = candidates,
+                        selectedOption = selected ?: candidates.first(),
+                        onOptionSelected = { document ->
+                            onActionConfigChange(
+                                actionConfig.copy(
+                                    targetDocumentId = document.id,
+                                    targetScopeType = document.scopeType,
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        optionToString = { document ->
+                            templates.firstOrNull { it.id == document.templateId }?.name
+                                ?.takeIf { it.isNotBlank() }
+                                ?: document.id
+                        },
+                        optionDescription = { document ->
+                            stringResource(
+                                R.string.assistant_hook_sync_target_revision,
+                                stringResource(hookMemoryTableScopeLabelRes(document.scopeType)),
+                                document.revision,
+                            )
+                        },
+                    )
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.assistant_hook_sync_roles),
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    FilterChip(
+                        selected = actionConfig.includeUserMessages,
+                        onClick = {
+                            onActionConfigChange(
+                                actionConfig.copy(includeUserMessages = !actionConfig.includeUserMessages)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_role_user)) },
+                    )
+                    FilterChip(
+                        selected = actionConfig.includeAssistantMessages,
+                        onClick = {
+                            onActionConfigChange(
+                                actionConfig.copy(includeAssistantMessages = !actionConfig.includeAssistantMessages)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_role_assistant)) },
+                    )
+                }
+                HookNumberField(
+                    value = actionConfig.recentMessageCount,
+                    label = stringResource(R.string.assistant_hook_sync_recent_messages),
+                    onValueChange = { onActionConfigChange(actionConfig.copy(recentMessageCount = it)) },
+                )
+                HookNumberField(
+                    value = actionConfig.maxContextChars,
+                    label = stringResource(R.string.assistant_hook_sync_max_context_chars),
+                    onValueChange = { onActionConfigChange(actionConfig.copy(maxContextChars = it)) },
+                )
+                HookNumberField(
+                    value = actionConfig.maxOperations,
+                    label = stringResource(R.string.assistant_hook_sync_max_operations),
+                    onValueChange = { onActionConfigChange(actionConfig.copy(maxOperations = it)) },
+                )
+                HookNumberField(
+                    value = actionConfig.minimumIntervalSeconds,
+                    label = stringResource(R.string.assistant_hook_sync_min_interval_seconds),
+                    onValueChange = { onActionConfigChange(actionConfig.copy(minimumIntervalSeconds = it)) },
+                )
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.assistant_hook_sync_automatic)) },
+                        supportingContent = {
+                            Text(stringResource(R.string.assistant_hook_sync_automatic_description))
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = actionConfig.automatic,
+                                onCheckedChange = {
+                                    onActionConfigChange(actionConfig.copy(automatic = it))
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
+        error?.let { HookEditorErrorText(stringResource(it.stringRes)) }
     }
+}
+
+@Composable
+private fun HookNumberField(
+    value: Int,
+    label: String,
+    onValueChange: (Int) -> Unit,
+) {
+    OutlinedTextField(
+        value = value.toString(),
+        onValueChange = { text -> text.toIntOrNull()?.let(onValueChange) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    )
 }
 
 internal data class HookEditorValidation(
@@ -530,6 +709,12 @@ internal enum class HookEditorFieldError(val stringRes: Int) {
     PROMPT_REQUIRED(R.string.assistant_hook_error_prompt_required),
     TAG_REQUIRED(R.string.assistant_hook_error_tag_required),
     TAG_UNAVAILABLE(R.string.assistant_hook_error_tag_unavailable),
+    TARGET_REQUIRED(R.string.assistant_hook_sync_error_target_required),
+    TARGET_UNAVAILABLE(R.string.assistant_hook_sync_error_target_unavailable),
+    TARGET_GLOBAL_FORBIDDEN(R.string.assistant_hook_sync_error_global_forbidden),
+    TARGET_SCOPE_MISMATCH(R.string.assistant_hook_sync_error_scope_mismatch),
+    ROLE_REQUIRED(R.string.assistant_hook_sync_error_role_required),
+    LIMIT_INVALID(R.string.assistant_hook_sync_error_limit_invalid),
 }
 
 internal fun validateHookEditor(
@@ -539,11 +724,38 @@ internal fun validateHookEditor(
     prompt: String,
     actionConfig: HookActionConfig,
     availableTagIds: Set<Uuid>,
+    availableDocuments: List<MemoryTableDocument> = emptyList(),
+    conversationId: String? = null,
 ): HookEditorValidation {
     val actionError = when (actionConfig) {
         is HookActionConfig.AddConversationTag -> when {
             actionConfig.allowedTagIds.isEmpty() -> HookEditorFieldError.TAG_REQUIRED
             !availableTagIds.containsAll(actionConfig.allowedTagIds) -> HookEditorFieldError.TAG_UNAVAILABLE
+            else -> null
+        }
+        is HookActionConfig.SyncMemoryTable -> when {
+            actionConfig.targetDocumentId.isBlank() -> HookEditorFieldError.TARGET_REQUIRED
+            actionConfig.targetScopeType == MemoryTableScopeType.GLOBAL ->
+                HookEditorFieldError.TARGET_GLOBAL_FORBIDDEN
+            availableDocuments.none { it.id == actionConfig.targetDocumentId } ->
+                HookEditorFieldError.TARGET_UNAVAILABLE
+            availableDocuments.first { it.id == actionConfig.targetDocumentId }.scopeType !=
+                actionConfig.targetScopeType -> HookEditorFieldError.TARGET_SCOPE_MISMATCH
+            actionConfig.targetScopeType == MemoryTableScopeType.CONVERSATION &&
+                availableDocuments.first { it.id == actionConfig.targetDocumentId }.scopeId != conversationId ->
+                HookEditorFieldError.TARGET_SCOPE_MISMATCH
+            !actionConfig.includeUserMessages && !actionConfig.includeAssistantMessages ->
+                HookEditorFieldError.ROLE_REQUIRED
+            actionConfig.recentMessageCount !in
+                HookRuntimeRules.MIN_SYNC_MESSAGE_COUNT..HookRuntimeRules.MAX_SYNC_MESSAGE_COUNT ->
+                HookEditorFieldError.LIMIT_INVALID
+            actionConfig.maxContextChars !in
+                HookRuntimeRules.MIN_SYNC_CONTEXT_CHARS..HookRuntimeRules.MAX_SYNC_CONTEXT_CHARS ->
+                HookEditorFieldError.LIMIT_INVALID
+            actionConfig.maxOperations !in
+                HookRuntimeRules.MIN_SYNC_MAX_OPERATIONS..HookRuntimeRules.MAX_SYNC_MAX_OPERATIONS ->
+                HookEditorFieldError.LIMIT_INVALID
+            actionConfig.minimumIntervalSeconds < 0 -> HookEditorFieldError.LIMIT_INVALID
             else -> null
         }
     }
@@ -560,4 +772,11 @@ internal fun validateHookEditor(
 
 internal fun hookActionLabelRes(actionType: HookActionType): Int = when (actionType) {
     HookActionType.ADD_CONVERSATION_TAG -> R.string.assistant_hook_action_add_tag
+    HookActionType.SYNC_MEMORY_TABLE -> R.string.assistant_hook_action_sync_memory_table
+}
+
+internal fun hookMemoryTableScopeLabelRes(scopeType: MemoryTableScopeType): Int = when (scopeType) {
+    MemoryTableScopeType.GLOBAL -> R.string.assistant_page_memory_scope_global
+    MemoryTableScopeType.ASSISTANT -> R.string.assistant_page_memory_scope_assistant
+    MemoryTableScopeType.CONVERSATION -> R.string.assistant_page_memory_table_scope_conversation
 }

@@ -138,6 +138,8 @@ data class HookRunEntity(
         Index(value = ["run_id", "hook_id", "hook_config_version"], unique = true),
         Index(value = ["run_id", "hook_order"]),
         Index(value = ["status"]),
+        Index(value = ["target_document_id", "ended_at"]),
+        Index(value = ["retry_of_execution_id"]),
     ],
 )
 data class HookExecutionEntity(
@@ -158,6 +160,8 @@ data class HookExecutionEntity(
     val modelId: String,
     @ColumnInfo("action_type")
     val actionType: String,
+    @ColumnInfo("execution_mode", defaultValue = "'AUTO'")
+    val executionMode: String,
     @ColumnInfo("started_at")
     val startedAt: Long?,
     @ColumnInfo("ended_at")
@@ -166,6 +170,28 @@ data class HookExecutionEntity(
     val decision: String?,
     @ColumnInfo("tag_id")
     val tagId: String?,
+    @ColumnInfo("target_document_id")
+    val targetDocumentId: String?,
+    @ColumnInfo("target_template_id")
+    val targetTemplateId: String?,
+    @ColumnInfo("target_scope_type")
+    val targetScopeType: String?,
+    @ColumnInfo("target_scope_id")
+    val targetScopeId: String?,
+    @ColumnInfo("base_revision")
+    val baseRevision: Int?,
+    @ColumnInfo("result_revision")
+    val resultRevision: Int?,
+    @ColumnInfo("operation_count")
+    val operationCount: Int?,
+    @ColumnInfo("operation_summary_json")
+    val operationSummaryJson: String?,
+    @ColumnInfo("diff_summary_json")
+    val diffSummaryJson: String?,
+    @ColumnInfo("retry_of_execution_id")
+    val retryOfExecutionId: String?,
+    @ColumnInfo("idempotency_key")
+    val idempotencyKey: String?,
     val reason: String?,
     @ColumnInfo("reason_truncated", defaultValue = "0")
     val reasonTruncated: Boolean,
@@ -177,6 +203,45 @@ data class HookExecutionEntity(
     val durationMs: Long?,
     @ColumnInfo("lease_token")
     val leaseToken: Long,
+)
+
+@Entity(
+    tableName = "hook_action_cursors",
+    indices = [
+        Index(
+            value = ["hook_id", "hook_config_version", "target_document_id", "source_kind", "source_key"],
+            unique = true,
+        ),
+        Index(value = ["target_document_id", "committed_at"]),
+        Index(value = ["execution_id"], unique = true),
+    ],
+)
+data class HookActionCursorEntity(
+    @PrimaryKey
+    @ColumnInfo("idempotency_key")
+    val idempotencyKey: String,
+    @ColumnInfo("action_type")
+    val actionType: String,
+    @ColumnInfo("hook_id")
+    val hookId: String,
+    @ColumnInfo("hook_config_version")
+    val hookConfigVersion: Long,
+    @ColumnInfo("target_document_id")
+    val targetDocumentId: String,
+    @ColumnInfo("source_kind")
+    val sourceKind: String,
+    @ColumnInfo("source_key")
+    val sourceKey: String,
+    @ColumnInfo("logical_turn_id")
+    val logicalTurnId: String?,
+    @ColumnInfo("cutoff_message_id")
+    val cutoffMessageId: String,
+    @ColumnInfo("execution_id")
+    val executionId: String,
+    @ColumnInfo("result_revision")
+    val resultRevision: Int,
+    @ColumnInfo("committed_at")
+    val committedAt: Long,
 )
 
 data class HookRunWithExecutions(

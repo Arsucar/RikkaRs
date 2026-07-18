@@ -445,11 +445,11 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.AssistantHooks> { key ->
-                                AssistantHooksPage(key.id)
+                                AssistantHooksPage(key.id, key.conversationId)
                             }
 
                             entry<Screen.AssistantHookEditor> { key ->
-                                AssistantHookEditorPage(key.id, key.hookId)
+                                AssistantHookEditorPage(key.id, key.hookId, key.conversationId)
                             }
 
                             entry<Screen.AssistantSubagentProfile> { key ->
@@ -730,10 +730,14 @@ sealed interface Screen : NavKey {
     data class AssistantSubagent(val id: String) : Screen
 
     @Serializable
-    data class AssistantHooks(val id: String) : Screen
+    data class AssistantHooks(val id: String, val conversationId: String? = null) : Screen
 
     @Serializable
-    data class AssistantHookEditor(val id: String, val hookId: String? = null) : Screen
+    data class AssistantHookEditor(
+        val id: String,
+        val hookId: String? = null,
+        val conversationId: String? = null,
+    ) : Screen
 
     @Serializable
     data class AssistantSubagentProfile(

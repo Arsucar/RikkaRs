@@ -289,6 +289,40 @@ interface MemoryTableDAO {
 
     @Query(
         """
+        UPDATE memory_table_documents SET
+            payload_json = :payloadJson,
+            revision = revision + 1,
+            updated_at = :updatedAt
+        WHERE id = :id
+          AND revision = :expectedRevision
+          AND deleted_at IS NULL
+          AND template_id = :expectedTemplateId
+          AND scope_type = :expectedScopeType
+          AND scope_id = :expectedScopeId
+          AND (
+              (:expectedScopeType = 'ASSISTANT' AND :expectedScopeId = :assistantId)
+              OR (
+                  :expectedScopeType = 'CONVERSATION'
+                  AND :conversationId IS NOT NULL
+                  AND :expectedScopeId = :conversationId
+              )
+          )
+        """
+    )
+    suspend fun updateDocumentPayloadCas(
+        id: String,
+        expectedRevision: Int,
+        expectedTemplateId: String,
+        expectedScopeType: String,
+        expectedScopeId: String,
+        assistantId: String,
+        conversationId: String?,
+        payloadJson: String,
+        updatedAt: Long,
+    ): Int
+
+    @Query(
+        """
         UPDATE memory_table_documents
         SET deleted_at = :deletedAt, deleted_by = :deletedBy
         WHERE id = :id AND deleted_at IS NULL

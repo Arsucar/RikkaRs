@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.model.HookDecision
 import me.rerere.rikkahub.data.model.HookDispatchPersistenceResult
 import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionMetadata
+import me.rerere.rikkahub.data.model.HookExecutionMode
 import me.rerere.rikkahub.data.model.HookExecutionRecord
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookRunHistory
@@ -135,11 +136,23 @@ class HookRepository(
                 hookConfigHash = hook.hookConfigHash,
                 modelId = hook.modelId.toString(),
                 actionType = hook.actionType.name,
+                executionMode = hook.executionMode.name,
                 startedAt = null,
                 endedAt = null,
                 status = HookExecutionStatus.QUEUED.name,
                 decision = null,
                 tagId = null,
+                targetDocumentId = null,
+                targetTemplateId = null,
+                targetScopeType = null,
+                targetScopeId = null,
+                baseRevision = null,
+                resultRevision = null,
+                operationCount = null,
+                operationSummaryJson = null,
+                diffSummaryJson = null,
+                retryOfExecutionId = hook.retryOfExecutionId?.toString(),
+                idempotencyKey = null,
                 reason = null,
                 reasonTruncated = false,
                 errorCode = null,
@@ -176,6 +189,36 @@ class HookRepository(
 
     suspend fun isLeaseActive(executionId: Uuid, leaseToken: Long): Boolean =
         dao.isLeaseActive(executionId.toString(), leaseToken)
+
+    suspend fun setExecutionPreparedAudit(
+        executionId: Uuid,
+        leaseToken: Long,
+        targetDocumentId: String,
+        targetTemplateId: String,
+        targetScopeType: String,
+        targetScopeId: String,
+        baseRevision: Int,
+        retryOfExecutionId: Uuid?,
+        idempotencyKey: String,
+    ): Boolean = dao.setExecutionPreparedAudit(
+        executionId = executionId.toString(),
+        leaseToken = leaseToken,
+        targetDocumentId = targetDocumentId,
+        targetTemplateId = targetTemplateId,
+        targetScopeType = targetScopeType,
+        targetScopeId = targetScopeId,
+        baseRevision = baseRevision,
+        retryOfExecutionId = retryOfExecutionId?.toString(),
+        idempotencyKey = idempotencyKey,
+    ) == 1
+
+    suspend fun getExecution(executionId: Uuid): HookExecutionRecord? =
+        dao.getExecution(executionId.toString())?.toModel()
+
+    suspend fun getRun(runId: Uuid): HookRunRecord? = dao.getRun(runId.toString())?.toModel()
+
+    suspend fun hasCommittedCursor(executionId: Uuid): Boolean =
+        dao.getCursorForExecution(executionId.toString()) != null
 
     suspend fun completeSuccess(
         executionId: Uuid,
@@ -301,6 +344,17 @@ class HookRepository(
             status = status,
             decision = decision?.name,
             tagId = tagId?.toString(),
+            targetDocumentId = null,
+            targetTemplateId = null,
+            targetScopeType = null,
+            targetScopeId = null,
+            baseRevision = null,
+            resultRevision = null,
+            operationCount = null,
+            operationSummaryJson = null,
+            diffSummaryJson = null,
+            retryOfExecutionId = null,
+            idempotencyKey = null,
             reason = truncatedReason?.value,
             reasonTruncated = reasonWasTruncated || truncatedReason?.truncated == true,
             errorCode = errorCode?.name,
@@ -357,11 +411,23 @@ private fun HookExecutionEntity.toModel(): HookExecutionRecord = HookExecutionRe
     hookConfigHash = hookConfigHash,
     modelId = Uuid.parse(modelId),
     actionType = HookActionType.valueOf(actionType),
+    executionMode = HookExecutionMode.valueOf(executionMode),
     startedAt = startedAt?.let(Instant::ofEpochMilli),
     endedAt = endedAt?.let(Instant::ofEpochMilli),
     status = HookExecutionStatus.valueOf(status),
     decision = decision?.let(HookDecision::valueOf),
     tagId = tagId?.let(Uuid::parse),
+    targetDocumentId = targetDocumentId,
+    targetTemplateId = targetTemplateId,
+    targetScopeType = targetScopeType?.let(me.rerere.rikkahub.data.model.MemoryTableScopeType::valueOf),
+    targetScopeId = targetScopeId,
+    baseRevision = baseRevision,
+    resultRevision = resultRevision,
+    operationCount = operationCount,
+    operationSummaryJson = operationSummaryJson,
+    diffSummaryJson = diffSummaryJson,
+    retryOfExecutionId = retryOfExecutionId?.let(Uuid::parse),
+    idempotencyKey = idempotencyKey,
     reason = reason,
     reasonTruncated = reasonTruncated,
     errorCode = errorCode?.let(HookErrorCode::valueOf),

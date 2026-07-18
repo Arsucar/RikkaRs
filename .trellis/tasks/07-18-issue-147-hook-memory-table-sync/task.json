@@ -3,7 +3,7 @@
   "name": "issue-147-hook-memory-table-sync",
   "title": "处理 Issue #147 通用 Hook 后处理与记忆表同步",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": "app",
   "package": "material3/material-color-utilities",

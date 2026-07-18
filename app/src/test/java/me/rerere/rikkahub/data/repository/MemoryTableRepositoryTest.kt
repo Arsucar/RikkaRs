@@ -1260,6 +1260,34 @@ class MemoryTableRepositoryTest {
             documents += document
         }
 
+        override suspend fun updateDocumentPayloadCas(
+            id: String,
+            expectedRevision: Int,
+            expectedTemplateId: String,
+            expectedScopeType: String,
+            expectedScopeId: String,
+            assistantId: String,
+            conversationId: String?,
+            payloadJson: String,
+            updatedAt: Long,
+        ): Int {
+            val index = documents.indexOfFirst {
+                it.id == id && it.revision == expectedRevision && it.deletedAt == null &&
+                    it.templateId == expectedTemplateId && it.scopeType == expectedScopeType &&
+                    it.scopeId == expectedScopeId && (
+                    (expectedScopeType == "ASSISTANT" && expectedScopeId == assistantId) ||
+                        (expectedScopeType == "CONVERSATION" && expectedScopeId == conversationId)
+                    )
+            }
+            if (index < 0) return 0
+            documents[index] = documents[index].copy(
+                payloadJson = payloadJson,
+                revision = expectedRevision + 1,
+                updatedAt = updatedAt,
+            )
+            return 1
+        }
+
         override suspend fun deleteDocument(id: String): Int {
             val before = documents.size
             documents.removeAll { it.id == id }

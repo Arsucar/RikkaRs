@@ -67,14 +67,19 @@ import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.ConversationHook
 import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookDecision
+import me.rerere.rikkahub.data.model.HookActionType
+import me.rerere.rikkahub.data.model.HookExecutionRecord
 import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookRunHistory
 import me.rerere.rikkahub.data.model.HookRunStatus
+import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
+import me.rerere.rikkahub.service.hooks.HookOutputException
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.ZoneId
 import kotlin.uuid.Uuid
@@ -218,9 +223,15 @@ fun ConversationDrawerContent(
     onLoadContextPreview: () -> Unit,
     onClearContextPreview: () -> Unit,
     hookHistoryState: UiState<List<HookRunHistory>>,
+    hookPreviewState: UiState<MemoryTableHookPreview>,
+    hookManualRunState: UiState<HookExecutionRecord>,
     hooks: List<ConversationHook>,
     conversationTags: List<ConversationTag>,
     modelNames: Map<Uuid, String>,
+    onPreviewHook: (Uuid) -> Unit,
+    onApplyPreview: (MemoryTableHookPreview) -> Unit,
+    onRunHook: (Uuid) -> Unit,
+    onRetryExecution: (Uuid) -> Unit,
 ) {
     // onDismiss 已由中转菜单移除（不再有关闭按钮），关闭统一走遮罩点击/返回键。
     var screen by remember { mutableStateOf(ConversationDrawerScreen.Menu) }
@@ -272,6 +283,14 @@ fun ConversationDrawerContent(
             hooks = hooks,
             conversationTags = conversationTags,
             modelNames = modelNames,
+            conversationId = conversationId,
+            assistantId = assistantId,
+            previewState = hookPreviewState,
+            manualRunState = hookManualRunState,
+            onPreviewHook = onPreviewHook,
+            onApplyPreview = onApplyPreview,
+            onRunHook = onRunHook,
+            onRetryExecution = onRetryExecution,
             onBack = { screen = ConversationDrawerScreen.Menu },
         )
     }
@@ -283,10 +302,22 @@ private fun ConversationHookHistory(
     hooks: List<ConversationHook>,
     conversationTags: List<ConversationTag>,
     modelNames: Map<Uuid, String>,
+    conversationId: String,
+    assistantId: String,
+    previewState: UiState<MemoryTableHookPreview>,
+    manualRunState: UiState<HookExecutionRecord>,
+    onPreviewHook: (Uuid) -> Unit,
+    onApplyPreview: (MemoryTableHookPreview) -> Unit,
+    onRunHook: (Uuid) -> Unit,
+    onRetryExecution: (Uuid) -> Unit,
     onBack: () -> Unit,
 ) {
     val hooksById = remember(hooks) { hooks.associateBy { it.id } }
     val tagsById = remember(conversationTags) { conversationTags.associateBy { it.id } }
+    val nav = LocalNavController.current
+    val syncHooks = remember(hooks) {
+        hooks.filter { it.actionConfig.actionType == HookActionType.SYNC_MEMORY_TABLE }
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -299,6 +330,77 @@ private fun ConversationHookHistory(
                 Icon(Lucide.ArrowLeft, stringResource(R.string.context_inspector_back))
             }
             Text(stringResource(R.string.hook_history_title), style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = { nav.navigate(Screen.AssistantHooks(assistantId, conversationId)) }) {
+                Icon(HugeIcons.WorkHistory, contentDescription = stringResource(R.string.assistant_hook_settings_title))
+            }
+        }
+        if (syncHooks.isNotEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                syncHooks.forEach { hook ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            hook.name.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.assistant_hook_unnamed),
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        TextButton(onClick = { onPreviewHook(hook.id) }) {
+                            Text(stringResource(R.string.hook_sync_preview))
+                        }
+                        TextButton(onClick = { onRunHook(hook.id) }) {
+                            Text(stringResource(R.string.hook_sync_run_now))
+                        }
+                    }
+                }
+                when (previewState) {
+                    UiState.Idle -> Unit
+                    UiState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    is UiState.Error -> Text(
+                        hookSyncActionError(previewState.error),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is UiState.Success -> {
+                        Text(
+                            stringResource(
+                                R.string.hook_sync_preview_summary,
+                                previewState.data.operationCount,
+                                previewState.data.baseRevision,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            stringResource(R.string.hook_sync_history_diff, previewState.data.diffSummaryJson),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = { onApplyPreview(previewState.data) }) {
+                            Text(stringResource(R.string.hook_sync_apply_preview))
+                        }
+                    }
+                }
+                when (manualRunState) {
+                    UiState.Idle -> Unit
+                    UiState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    is UiState.Error -> Text(
+                        hookSyncActionError(manualRunState.error),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is UiState.Success -> Text(
+                        stringResource(
+                            R.string.hook_sync_action_success,
+                            hookExecutionStatusLabel(manualRunState.data.status),
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
         when (state) {
             UiState.Idle,
@@ -466,6 +568,36 @@ private fun ConversationHookHistory(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
+                                            if (execution.actionType == HookActionType.SYNC_MEMORY_TABLE) {
+                                                execution.targetDocumentId?.let { targetId ->
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.hook_sync_history_target_revision,
+                                                            targetId,
+                                                            execution.baseRevision ?: 0,
+                                                            execution.resultRevision ?: execution.baseRevision ?: 0,
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                                execution.operationSummaryJson?.let { summary ->
+                                                    Text(
+                                                        stringResource(R.string.hook_sync_history_operations, summary),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                                execution.diffSummaryJson?.let { diff ->
+                                                    Text(
+                                                        stringResource(R.string.hook_sync_history_diff, diff),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                                if (execution.status == HookExecutionStatus.FAILED) {
+                                                    TextButton(onClick = { onRetryExecution(execution.executionId) }) {
+                                                        Text(stringResource(R.string.hook_sync_retry))
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -490,7 +622,35 @@ private fun hookErrorMessage(errorCode: HookErrorCode): String = when (errorCode
     HookErrorCode.TAG_NOT_FOUND -> stringResource(R.string.hook_error_tag_not_found)
     HookErrorCode.CONVERSATION_NOT_FOUND -> stringResource(R.string.hook_error_conversation_not_found)
     HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE -> stringResource(R.string.hook_error_source_message_not_active)
+    HookErrorCode.HOOK_DISABLED -> stringResource(R.string.hook_error_hook_disabled)
+    HookErrorCode.MEMORY_TABLE_DISABLED -> stringResource(R.string.hook_error_memory_table_disabled)
+    HookErrorCode.MEMORY_TABLE_AUTO_SYNC_DISABLED ->
+        stringResource(R.string.hook_error_memory_table_auto_sync_disabled)
+    HookErrorCode.MEMORY_TABLE_AUTOMATIC_DISABLED ->
+        stringResource(R.string.hook_error_memory_table_automatic_disabled)
+    HookErrorCode.MEMORY_TABLE_FREQUENCY_LIMIT ->
+        stringResource(R.string.hook_error_memory_table_frequency_limit)
+    HookErrorCode.MEMORY_TABLE_TARGET_NOT_FOUND ->
+        stringResource(R.string.hook_error_memory_table_target_not_found)
+    HookErrorCode.MEMORY_TABLE_TARGET_DELETED ->
+        stringResource(R.string.hook_error_memory_table_target_deleted)
+    HookErrorCode.MEMORY_TABLE_TARGET_CHANGED ->
+        stringResource(R.string.hook_error_memory_table_target_changed)
+    HookErrorCode.MEMORY_TABLE_SCOPE_FORBIDDEN ->
+        stringResource(R.string.hook_error_memory_table_scope_forbidden)
+    HookErrorCode.MEMORY_TABLE_REVISION_CONFLICT ->
+        stringResource(R.string.hook_error_memory_table_revision_conflict)
+    HookErrorCode.MEMORY_TABLE_INVALID_OPERATIONS ->
+        stringResource(R.string.hook_error_memory_table_invalid_operations)
+    HookErrorCode.IDEMPOTENT_REPLAY -> stringResource(R.string.hook_error_idempotent_replay)
+    HookErrorCode.RETRY_NOT_ALLOWED -> stringResource(R.string.hook_error_retry_not_allowed)
     HookErrorCode.ACTION_FAILED -> stringResource(R.string.hook_error_action_failed)
+}
+
+@Composable
+private fun hookSyncActionError(error: Throwable): String {
+    val code = (error as? HookOutputException)?.code ?: HookErrorCode.ACTION_FAILED
+    return stringResource(R.string.hook_sync_action_failed, hookErrorMessage(code))
 }
 
 @Composable

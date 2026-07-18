@@ -130,18 +130,24 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.HookRepository
-import me.rerere.rikkahub.data.repository.ConversationTagRepository
 import me.rerere.rikkahub.data.model.HookActionConfig
 import me.rerere.rikkahub.data.model.HookDispatchPersistenceResult
 import me.rerere.rikkahub.data.model.HookExecutionMetadata
+import me.rerere.rikkahub.data.model.HookExecutionMode
+import me.rerere.rikkahub.data.model.HookExecutionRecord
+import me.rerere.rikkahub.data.model.HookExecutionStatus
+import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookTrigger
 import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.data.model.configurationHash
 import me.rerere.rikkahub.service.hooks.FrozenHookExecution
-import me.rerere.rikkahub.service.hooks.FrozenHookModelRequest
-import me.rerere.rikkahub.service.hooks.HookActionContext
 import me.rerere.rikkahub.service.hooks.HookDispatcher
+import me.rerere.rikkahub.service.hooks.HookFreezeContext
+import me.rerere.rikkahub.service.hooks.HookOutputException
+import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
+import me.rerere.rikkahub.service.hooks.ParsedMemoryTableSyncHookOutput
 import me.rerere.rikkahub.service.hooks.evaluateHookFinalSuccess
+import me.rerere.rikkahub.service.hooks.evaluateHookSourceMessage
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_TOOL
@@ -361,7 +367,6 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val hookRepository: HookRepository,
     private val hookDispatcher: HookDispatcher,
-    private val conversationTagRepository: ConversationTagRepository,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -905,6 +910,7 @@ class ChatService(
                 hookConfigHash = hook.configurationHash(),
                 modelId = hook.modelId,
                 actionType = hook.actionConfig.actionType,
+                executionMode = HookExecutionMode.AUTO,
             )
         }
         val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
@@ -918,26 +924,17 @@ class ChatService(
         if (persistence !is HookDispatchPersistenceResult.Created) return
 
         val frozenExecutions = hooks.zip(metadata).map { (hook, execution) ->
-            val allowedTagIds = (hook.actionConfig as HookActionConfig.AddConversationTag).allowedTagIds
-            val allowedTags = allowedTagIds.mapNotNull { tagId ->
-                conversationTagRepository.getTag(tagId)?.let { tagId to it.displayName }
-            }.toMap()
             FrozenHookExecution(
                 executionId = execution.executionId,
                 hook = hook,
-                request = FrozenHookModelRequest(
-                    modelId = hook.modelId,
-                    prompt = hook.prompt,
-                    messageTextSnapshot = snapshot.text,
-                    allowedTags = allowedTags,
-                ),
-                actionContext = HookActionContext(
-                    conversationId = conversation.id,
+                freezeContext = HookFreezeContext(
+                    conversation = conversation,
+                    assistantId = assistant.id,
+                    logicalTurnId = logicalTurnId,
                     sourceNodeId = snapshot.nodeId,
                     sourceMessageId = snapshot.messageId,
-                    executionId = execution.executionId,
-                    leaseToken = 0,
-                    allowedTagIds = allowedTagIds,
+                    sourceMessageModelId = snapshot.messageModelId,
+                    executionMode = HookExecutionMode.AUTO,
                 ),
             )
         }
@@ -945,6 +942,155 @@ class ChatService(
             hookDispatcher.dispatch(persistence.runId, frozenExecutions)
             runCatching { hookRepository.cleanupHistory(conversation.id) }
         }
+    }
+
+    suspend fun previewMemoryTableHook(conversationId: Uuid, hookId: Uuid): MemoryTableHookPreview =
+        previewMemoryTableHookInternal(
+            conversationId = conversationId,
+            hookId = hookId,
+            cutoffMessageId = null,
+            sourceKey = "manual-preview:${Uuid.random()}",
+            retryOfExecutionId = null,
+        )
+
+    suspend fun applyMemoryTableHookPreview(preview: MemoryTableHookPreview): HookExecutionRecord {
+        val conversation = conversationRepo.getConversationById(preview.conversationId)
+            ?: throw HookOutputException(HookErrorCode.CONVERSATION_NOT_FOUND)
+        val assistant = settingsStore.settingsFlow.value.assistants.firstOrNull { it.id == conversation.assistantId }
+            ?: throw HookOutputException(HookErrorCode.HOOK_DISABLED)
+        val hook = assistant.hooks.firstOrNull { it.id == preview.hookId }
+            ?: throw HookOutputException(HookErrorCode.HOOK_DISABLED)
+        if (hook.configVersion != preview.hookConfigVersion || hook.configurationHash() != preview.hookConfigHash) {
+            throw HookOutputException(HookErrorCode.HOOK_DISABLED)
+        }
+        val snapshot = evaluateHookSourceMessage(conversation, preview.cutoffMessageId)
+            ?: throw HookOutputException(HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE)
+        val logicalTurnId = hookRepository.createLogicalTurn(
+            conversationId = conversation.id,
+            assistantId = assistant.id,
+            sourceNodeId = snapshot.nodeId,
+            sourceMessageId = snapshot.messageId,
+            invocationKind = "HOOK_MANUAL",
+        )
+        val metadata = HookExecutionMetadata(
+            hookId = hook.id,
+            hookOrder = 0,
+            hookConfigVersion = hook.configVersion,
+            hookConfigHash = hook.configurationHash(),
+            modelId = hook.modelId,
+            actionType = hook.actionConfig.actionType,
+            executionMode = HookExecutionMode.MANUAL,
+            retryOfExecutionId = preview.prepared.audit.retryOfExecutionId,
+        )
+        val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
+            logicalTurnId = logicalTurnId,
+            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            nodeId = snapshot.nodeId,
+            messageId = snapshot.messageId,
+            messageModelId = snapshot.messageModelId,
+            hooks = listOf(metadata),
+        ) as? HookDispatchPersistenceResult.Created
+            ?: error("manual hook execution could not be created")
+        hookDispatcher.dispatch(
+            runId = persistence.runId,
+            executions = listOf(
+                FrozenHookExecution(
+                    executionId = metadata.executionId,
+                    hook = hook,
+                    freezeContext = HookFreezeContext(
+                        conversation = conversation,
+                        assistantId = assistant.id,
+                        logicalTurnId = logicalTurnId,
+                        sourceNodeId = snapshot.nodeId,
+                        sourceMessageId = snapshot.messageId,
+                        sourceMessageModelId = snapshot.messageModelId,
+                        executionMode = HookExecutionMode.MANUAL,
+                        sourceKey = preview.sourceKey,
+                        retryOfExecutionId = preview.prepared.audit.retryOfExecutionId,
+                    ),
+                    preparedOverride = preview.prepared.copy(logicalTurnId = logicalTurnId),
+                    outputOverride = ParsedMemoryTableSyncHookOutput(
+                        decision = preview.decision,
+                        baseRevision = preview.baseRevision,
+                        operations = preview.operations,
+                        reason = preview.reason,
+                        reasonTruncated = false,
+                    ),
+                )
+            ),
+        )
+        runCatching { hookRepository.cleanupHistory(conversation.id) }
+        return hookRepository.getExecution(metadata.executionId)
+            ?: error("manual hook execution disappeared: ${metadata.executionId}")
+    }
+
+    suspend fun runMemoryTableHookNow(conversationId: Uuid, hookId: Uuid): HookExecutionRecord =
+        applyMemoryTableHookPreview(previewMemoryTableHook(conversationId, hookId))
+
+    suspend fun retryMemoryTableHookExecution(executionId: Uuid): HookExecutionRecord {
+        val source = hookRepository.getExecution(executionId)
+            ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        if (source.actionType != me.rerere.rikkahub.data.model.HookActionType.SYNC_MEMORY_TABLE ||
+            source.status != HookExecutionStatus.FAILED || hookRepository.hasCommittedCursor(executionId)
+        ) {
+            throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        }
+        val run = hookRepository.getRun(source.runId)
+            ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        val conversation = conversationRepo.getConversationById(run.conversationId)
+            ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        val assistant = settingsStore.settingsFlow.value.assistants.firstOrNull { it.id == conversation.assistantId }
+            ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        val hook = assistant.hooks.firstOrNull { it.id == source.hookId }
+            ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        if (hook.configVersion != source.hookConfigVersion || hook.configurationHash() != source.hookConfigHash) {
+            throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        }
+        val cutoffMessageId = run.messageId ?: throw HookOutputException(HookErrorCode.RETRY_NOT_ALLOWED)
+        return applyMemoryTableHookPreview(
+            previewMemoryTableHookInternal(
+                conversationId = conversation.id,
+                hookId = hook.id,
+                cutoffMessageId = cutoffMessageId,
+                sourceKey = source.idempotencyKey ?: "retry-source:$executionId",
+                retryOfExecutionId = executionId,
+            )
+        )
+    }
+
+    private suspend fun previewMemoryTableHookInternal(
+        conversationId: Uuid,
+        hookId: Uuid,
+        cutoffMessageId: Uuid?,
+        sourceKey: String,
+        retryOfExecutionId: Uuid?,
+    ): MemoryTableHookPreview {
+        val conversation = conversationRepo.getConversationById(conversationId)
+            ?: error("conversation not found: $conversationId")
+        val assistant = settingsStore.settingsFlow.value.assistants.firstOrNull { it.id == conversation.assistantId }
+            ?: error("assistant not found: ${conversation.assistantId}")
+        val hook = assistant.hooks.firstOrNull { it.id == hookId }
+            ?: error("hook not found: $hookId")
+        check(hook.actionConfig is HookActionConfig.SyncMemoryTable) {
+            "hook action is not memory table sync"
+        }
+        val snapshot = cutoffMessageId?.let { evaluateHookSourceMessage(conversation, it) }
+            ?: evaluateHookFinalSuccess(conversation)
+            ?: error("conversation has no completed assistant response")
+        return hookDispatcher.preview(
+            hook = hook,
+            freezeContext = HookFreezeContext(
+                conversation = conversation,
+                assistantId = assistant.id,
+                logicalTurnId = Uuid.random(),
+                sourceNodeId = snapshot.nodeId,
+                sourceMessageId = snapshot.messageId,
+                sourceMessageModelId = snapshot.messageModelId,
+                executionMode = HookExecutionMode.MANUAL,
+                sourceKey = sourceKey,
+                retryOfExecutionId = retryOfExecutionId,
+            ),
+        )
     }
 
     private suspend fun maybeAutoCompressBeforeSend(

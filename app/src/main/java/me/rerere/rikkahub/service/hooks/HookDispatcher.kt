@@ -19,8 +19,9 @@ import kotlin.uuid.Uuid
 data class FrozenHookExecution(
     val executionId: Uuid,
     val hook: ConversationHook,
-    val request: FrozenHookModelRequest,
-    val actionContext: HookActionContext,
+    val freezeContext: HookFreezeContext,
+    val preparedOverride: PreparedHookAction? = null,
+    val outputOverride: ParsedHookOutput? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -38,27 +39,89 @@ class HookDispatcher(
         }
     }
 
+    suspend fun preview(
+        hook: ConversationHook,
+        freezeContext: HookFreezeContext,
+    ): MemoryTableHookPreview {
+        val handler = actionRegistry.requireHandler(hook.actionConfig.actionType)
+        val prepared = when (val preparation = handler.prepare(hook, freezeContext)) {
+            is HookActionPreparation.Ready -> preparation.prepared
+            is HookActionPreparation.Skipped -> throw HookOutputException(preparation.errorCode)
+            is HookActionPreparation.Cancelled -> throw HookOutputException(preparation.errorCode)
+        }
+        val raw = try {
+            modelExecutor.execute(prepared.request)
+        } catch (error: HookOutputException) {
+            throw error
+        } catch (_: Throwable) {
+            throw HookOutputException(HookErrorCode.MODEL_REQUEST_FAILED)
+        }
+        val output = try {
+            handler.parse(raw, prepared)
+        } catch (error: HookOutputException) {
+            throw error
+        } catch (_: Throwable) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        return handler.preview(prepared, output)
+            ?: throw HookOutputException(HookErrorCode.ACTION_FAILED)
+    }
+
     private suspend fun executeOne(frozen: FrozenHookExecution) = coroutineScope {
         val leaseToken = now().coerceAtLeast(1)
-        val executionId = frozen.executionId.toString()
         if (!hookRepository.claimQueued(frozen.executionId, leaseToken)) return@coroutineScope
 
         val worker = async {
+            var fallbackCode = HookErrorCode.ACTION_FAILED
             try {
-                val raw = modelExecutor.execute(frozen.request)
-                if (!hookRepository.isLeaseActive(frozen.executionId, leaseToken)) return@async
-                val parsed = HookOutputParser.parse(raw)
-                if (!hookRepository.isLeaseActive(frozen.executionId, leaseToken)) return@async
                 val handler = actionRegistry.requireHandler(frozen.hook.actionConfig.actionType)
+                val prepared = frozen.preparedOverride ?: when (
+                    val preparation = handler.prepare(frozen.hook, frozen.freezeContext)
+                ) {
+                    is HookActionPreparation.Ready -> preparation.prepared
+                    is HookActionPreparation.Skipped -> {
+                        preparation.audit?.let { audit -> setPreparedAudit(frozen.executionId, leaseToken, audit) }
+                        hookRepository.completeSkipped(
+                            executionId = frozen.executionId,
+                            leaseToken = leaseToken,
+                            reason = preparation.reason,
+                            errorCode = preparation.errorCode,
+                        )
+                        return@async
+                    }
+                    is HookActionPreparation.Cancelled -> {
+                        hookRepository.completeCancelled(
+                            frozen.executionId,
+                            leaseToken,
+                            preparation.errorCode,
+                        )
+                        return@async
+                    }
+                }
+                prepared.audit?.let { audit ->
+                    if (!setPreparedAudit(frozen.executionId, leaseToken, audit)) return@async
+                }
+                if (!hookRepository.isLeaseActive(frozen.executionId, leaseToken)) return@async
+                val parsed = frozen.outputOverride ?: run {
+                    fallbackCode = HookErrorCode.MODEL_REQUEST_FAILED
+                    val raw = modelExecutor.execute(prepared.request)
+                    if (!hookRepository.isLeaseActive(frozen.executionId, leaseToken)) return@async
+                    fallbackCode = HookErrorCode.SCHEMA_MISMATCH
+                    handler.parse(raw, prepared)
+                }
+                if (!hookRepository.isLeaseActive(frozen.executionId, leaseToken)) return@async
+                fallbackCode = HookErrorCode.ACTION_FAILED
                 val result = handler.execute(
-                    frozen.actionContext.copy(leaseToken = leaseToken),
-                    parsed,
+                    executionId = frozen.executionId,
+                    leaseToken = leaseToken,
+                    prepared = prepared,
+                    output = parsed,
                 )
-                finishFromAction(executionId, leaseToken, parsed, result)
+                finishFromAction(frozen.executionId, leaseToken, parsed, result)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                val code = (error as? HookOutputException)?.code ?: HookErrorCode.MODEL_REQUEST_FAILED
+                val code = (error as? HookOutputException)?.code ?: fallbackCode
                 hookRepository.completeFailed(
                     executionId = frozen.executionId,
                     leaseToken = leaseToken,
@@ -81,54 +144,52 @@ class HookDispatcher(
         }
     }
 
+    private suspend fun setPreparedAudit(
+        executionId: Uuid,
+        leaseToken: Long,
+        audit: HookPreparedAudit,
+    ): Boolean = hookRepository.setExecutionPreparedAudit(
+        executionId = executionId,
+        leaseToken = leaseToken,
+        targetDocumentId = audit.targetDocumentId,
+        targetTemplateId = audit.targetTemplateId,
+        targetScopeType = audit.targetScopeType.name,
+        targetScopeId = audit.targetScopeId,
+        baseRevision = audit.baseRevision,
+        retryOfExecutionId = audit.retryOfExecutionId,
+        idempotencyKey = audit.idempotencyKey,
+    )
+
     private suspend fun finishFromAction(
-        executionId: String,
+        executionId: Uuid,
         leaseToken: Long,
         parsed: ParsedHookOutput,
         result: HookActionResult,
     ) {
-        val status: HookExecutionStatus
-        val errorCode: HookErrorCode?
-        val tagId: Uuid?
         when (result) {
-            is HookActionResult.Applied -> {
-                status = HookExecutionStatus.SUCCESS
-                errorCode = null
-                tagId = result.tagId
-            }
-            is HookActionResult.Skipped -> {
-                status = HookExecutionStatus.SKIPPED
-                errorCode = result.errorCode
-                tagId = result.tagId
-            }
-            is HookActionResult.Cancelled -> {
-                status = HookExecutionStatus.CANCELLED
-                errorCode = result.errorCode
-                tagId = parsed.tagId
-            }
-        }
-        when (status) {
-            HookExecutionStatus.SUCCESS -> hookRepository.completeSuccess(
-                executionId = Uuid.parse(executionId),
+            is HookActionResult.Applied -> hookRepository.completeSuccess(
+                executionId = executionId,
                 leaseToken = leaseToken,
                 decision = parsed.decision,
-                tagId = tagId,
+                tagId = result.tagId,
                 reason = parsed.reason,
                 reasonTruncated = parsed.reasonTruncated,
             )
-            HookExecutionStatus.SKIPPED -> hookRepository.completeSkipped(
-                executionId = Uuid.parse(executionId),
+            is HookActionResult.Skipped -> hookRepository.completeSkipped(
+                executionId = executionId,
                 leaseToken = leaseToken,
                 decision = parsed.decision,
-                tagId = tagId,
+                tagId = result.tagId,
                 reason = parsed.reason,
-                errorCode = errorCode,
+                errorCode = result.errorCode,
                 reasonTruncated = parsed.reasonTruncated,
             )
-            HookExecutionStatus.CANCELLED -> hookRepository.completeCancelled(
-                Uuid.parse(executionId), leaseToken, errorCode ?: HookErrorCode.ACTION_FAILED,
+            is HookActionResult.Cancelled -> hookRepository.completeCancelled(
+                executionId,
+                leaseToken,
+                result.errorCode,
             )
-            else -> Unit
+            HookActionResult.Terminalized -> Unit
         }
     }
 }

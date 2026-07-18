@@ -12,6 +12,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.32
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.31 之后）
+
+- **记忆表文档回收站** — 删除记忆表文档时先移入回收站，支持按助手查看、恢复和永久删除；普通读取、注入和写入会隔离已删除文档，并在助手、会话或模板清理时保持快照与所有者生命周期一致。（#146）
+  **Memory-table document trash** — Deleting a memory-table document now moves it to trash with assistant-scoped restore and permanent purge; ordinary reads, injection, and writes exclude trashed documents, while Assistant, Conversation, and template cleanup keeps snapshots and ownership lifecycle consistent. (#146)
+- **Assistant Hook 自动同步记忆表** — Hook 动作扩展为通用处理框架，可选择现有助手级或当前会话级记忆表，在最终回复成功后以有界上下文生成严格 operations；支持手动预览、立即运行、失败重试和脱敏历史，并通过 revision CAS、冻结 schema、幂等 cursor 与单事务审计防止并发覆盖和部分提交。（#147）
+  **Assistant Hook memory-table synchronization** — Hooks now use an action-specific framework that can synchronize an existing Assistant or current-Conversation memory table after a final successful reply using bounded context and strict operations; manual preview, run-now, failed-attempt retry, and sanitized history are included, with revision CAS, frozen-schema checks, durable idempotency cursors, and single-transaction audit preventing concurrent overwrite or partial commit. (#147)
+
 ## v2.3.31
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.30 之后）

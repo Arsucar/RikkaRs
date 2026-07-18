@@ -5,6 +5,9 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.ConversationTagErrorCode
 import me.rerere.rikkahub.data.model.ConversationTagException
 import me.rerere.rikkahub.data.model.HookDecision
+import me.rerere.rikkahub.data.model.ConversationHook
+import me.rerere.rikkahub.data.model.HookActionConfig
+import me.rerere.rikkahub.data.model.HookActionType
 import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ConversationTagRepository
@@ -20,13 +23,52 @@ class AddConversationTagHookAction(
     private val leaseGuard: HookExecutionLeaseGuard,
     private val database: AppDatabase,
 ) : HookActionHandler {
+    override val actionType: HookActionType = HookActionType.ADD_CONVERSATION_TAG
+
+    override suspend fun prepare(
+        hook: ConversationHook,
+        context: HookFreezeContext,
+    ): HookActionPreparation {
+        val config = hook.actionConfig as? HookActionConfig.AddConversationTag
+            ?: return HookActionPreparation.Cancelled(HookErrorCode.ACTION_FAILED)
+        val sourceMessage = context.conversation.currentMessages
+            .firstOrNull { it.id == context.sourceMessageId }
+            ?: return HookActionPreparation.Cancelled(HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE)
+        val allowedTags = config.allowedTagIds.mapNotNull { tagId ->
+            tagRepository.getTag(tagId)?.let { tagId to it.displayName }
+        }.toMap()
+        return HookActionPreparation.Ready(
+            PreparedHookAction.AddConversationTag(
+                request = FrozenHookModelRequest.AddConversationTag(
+                    modelId = hook.modelId,
+                    prompt = hook.prompt,
+                    messageTextSnapshot = sourceMessage.toText(),
+                    allowedTags = allowedTags,
+                ),
+                conversationId = context.conversation.id,
+                sourceNodeId = context.sourceNodeId,
+                sourceMessageId = context.sourceMessageId,
+                allowedTagIds = config.allowedTagIds,
+            )
+        )
+    }
+
+    override fun parse(raw: String, prepared: PreparedHookAction): ParsedHookOutput =
+        HookOutputParser.parse(raw)
+
     override suspend fun execute(
-        context: HookActionContext,
+        executionId: Uuid,
+        leaseToken: Long,
+        prepared: PreparedHookAction,
         output: ParsedHookOutput,
     ): HookActionResult {
-        if (output.decision == HookDecision.SKIP) return HookActionResult.Skipped(null)
-        val tagId = output.tagId ?: return HookActionResult.Skipped(null, HookErrorCode.SCHEMA_MISMATCH)
-        if (!leaseGuard.isActive(context.executionId, context.leaseToken)) {
+        val context = prepared as? PreparedHookAction.AddConversationTag
+            ?: return HookActionResult.Cancelled(HookErrorCode.ACTION_FAILED)
+        val tagOutput = output as? ParsedAddTagHookOutput
+            ?: return HookActionResult.Cancelled(HookErrorCode.SCHEMA_MISMATCH)
+        if (tagOutput.decision == HookDecision.SKIP) return HookActionResult.Skipped(null)
+        val tagId = tagOutput.tagId ?: return HookActionResult.Skipped(null, HookErrorCode.SCHEMA_MISMATCH)
+        if (!leaseGuard.isActive(executionId, leaseToken)) {
             return HookActionResult.Cancelled(HookErrorCode.ACTION_FAILED)
         }
         if (tagId !in context.allowedTagIds) {
@@ -46,7 +88,7 @@ class AddConversationTagHookAction(
         }
         return try {
             val changed = database.withTransaction {
-                if (!leaseGuard.isActive(context.executionId, context.leaseToken)) return@withTransaction null
+                if (!leaseGuard.isActive(executionId, leaseToken)) return@withTransaction null
                 tagRepository.addTag(context.conversationId, tagId)
             } ?: return HookActionResult.Cancelled(HookErrorCode.ACTION_FAILED)
             if (changed) {

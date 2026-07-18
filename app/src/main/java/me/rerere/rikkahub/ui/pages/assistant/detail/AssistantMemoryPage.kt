@@ -435,6 +435,7 @@ private fun AssistantMemoryContent(
                 }
             )
             item(
+                onClick = { navController.navigate(Screen.AssistantHooks(assistantId)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_auto_sync)) },
                 supportingContent = {
                     Text(stringResource(R.string.assistant_page_memory_table_auto_sync_desc))
@@ -442,8 +443,10 @@ private fun AssistantMemoryContent(
                 trailingContent = {
                     Switch(
                         checked = settings.memoryTableAutoSyncEnabled,
-                        onCheckedChange = {},
-                        enabled = false,
+                        onCheckedChange = {
+                            onUpdateSettings(settings.copy(memoryTableAutoSyncEnabled = it))
+                        },
+                        enabled = settings.enableMemoryTable,
                     )
                 }
             )

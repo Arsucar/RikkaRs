@@ -8,12 +8,13 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.data.model.HookActionType
 import me.rerere.rikkahub.service.hooks.AddConversationTagHookAction
 import me.rerere.rikkahub.service.hooks.HookActionRegistry
 import me.rerere.rikkahub.service.hooks.HookDispatcher
 import me.rerere.rikkahub.service.hooks.HookExecutionLeaseGuard
 import me.rerere.rikkahub.service.hooks.ProviderHookModelExecutor
+import me.rerere.rikkahub.service.hooks.MemoryTableHookSyncCommitter
+import me.rerere.rikkahub.service.hooks.SyncMemoryTableHookAction
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenSession
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -31,14 +32,30 @@ val appModule = module {
         HookExecutionLeaseGuard(repository::isLeaseActive)
     }
     single {
+        MemoryTableHookSyncCommitter(
+            database = get(),
+            memoryTableDao = get<me.rerere.rikkahub.data.db.AppDatabase>().memoryTableDao(),
+            snapshotDao = get<me.rerere.rikkahub.data.db.AppDatabase>().memoryTableSnapshotDao(),
+            hookDao = get<me.rerere.rikkahub.data.db.AppDatabase>().hookDao(),
+            json = get(),
+        )
+    }
+    single {
         HookActionRegistry(
-            mapOf(
-                HookActionType.ADD_CONVERSATION_TAG to AddConversationTagHookAction(
+            listOf(
+                AddConversationTagHookAction(
                     conversationRepository = get(),
                     tagRepository = get(),
                     leaseGuard = get(),
                     database = get(),
-                )
+                ),
+                SyncMemoryTableHookAction(
+                    settingsStore = get(),
+                    memoryTableRepository = get(),
+                    hookDao = get<me.rerere.rikkahub.data.db.AppDatabase>().hookDao(),
+                    committer = get(),
+                    json = get(),
+                ),
             )
         )
     }
@@ -118,7 +135,6 @@ val appModule = module {
             folderRepository = get(),
             hookRepository = get(),
             hookDispatcher = get(),
-            conversationTagRepository = get(),
         )
     }
 

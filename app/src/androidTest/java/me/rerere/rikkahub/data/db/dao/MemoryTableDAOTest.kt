@@ -361,6 +361,72 @@ class MemoryTableDAOTest {
         assertEquals(null, dao.getEffectiveDocument("doc-a", "assistant-b", null))
     }
 
+    @Test
+    fun payloadCasAllowsOnlyOneWriterForExpectedActiveRevision() = runBlocking {
+        dao.upsertDocument(
+            document(
+                id = "cas-doc",
+                scopeType = "ASSISTANT",
+                scopeId = "assistant-a",
+                updatedAt = 10,
+                revision = 5,
+                payloadJson = """{"value":"old"}""",
+            )
+        )
+
+        assertEquals(1, updatePayloadCas("cas-doc", 5, "assistant-a", null, "first", 20))
+        assertEquals(0, updatePayloadCas("cas-doc", 5, "assistant-a", null, "second", 30))
+        val stored = dao.getDocument("cas-doc")
+        assertEquals(6, stored?.revision)
+        assertEquals("first", stored?.payloadJson)
+        assertEquals(20L, stored?.updatedAt)
+    }
+
+    @Test
+    fun payloadCasRejectsDeletedGlobalForeignAndWrongConversationTargets() = runBlocking {
+        dao.upsertDocument(
+            document(
+                id = "deleted",
+                scopeType = "ASSISTANT",
+                scopeId = "assistant-a",
+                updatedAt = 10,
+                deletedAt = 11,
+                deletedBy = "user_ui",
+            )
+        )
+        dao.upsertDocument(document("global", "GLOBAL", "__global__", updatedAt = 10))
+        dao.upsertDocument(document("foreign", "ASSISTANT", "assistant-b", updatedAt = 10))
+        dao.upsertDocument(document("conversation", "CONVERSATION", "conversation-a", updatedAt = 10))
+
+        assertEquals(0, updatePayloadCas("deleted", 0, "assistant-a", null, "changed", 20))
+        assertEquals(0, updatePayloadCas("global", 0, "assistant-a", null, "changed", 20))
+        assertEquals(0, updatePayloadCas("foreign", 0, "assistant-a", null, "changed", 20))
+        assertEquals(0, updatePayloadCas("conversation", 0, "assistant-a", "conversation-b", "changed", 20))
+        assertEquals(1, updatePayloadCas("conversation", 0, "assistant-a", "conversation-a", "changed", 20))
+    }
+
+    private suspend fun updatePayloadCas(
+        id: String,
+        expectedRevision: Int,
+        assistantId: String,
+        conversationId: String?,
+        payloadJson: String,
+        updatedAt: Long,
+    ): Int {
+        val document = dao.getDocumentIncludingDeleted(id) ?: error("missing test document $id")
+        return dao.updateDocumentPayloadCas(
+            id = id,
+            expectedRevision = expectedRevision,
+            expectedTemplateId = document.templateId,
+            expectedScopeType = document.scopeType,
+            expectedScopeId = document.scopeId,
+            assistantId = assistantId,
+            conversationId = conversationId,
+            payloadJson = payloadJson,
+            updatedAt = updatedAt,
+        )
+    }
+
     private fun document(
         id: String,
         scopeType: String,

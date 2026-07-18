@@ -451,3 +451,100 @@ val old = getDocument(id) ?: getDocumentIncludingDeleted(id)?.also {
 } ?: error("memory table document not found: $id")
 upsertDocument(old.copy(payloadJson = payload))
 ```
+
+## Scenario: Hook memory-table atomic commit
+
+### 1. Scope / Trigger
+
+Use this contract when a Hook applies generated operations to an existing memory-table document or when changing
+Room CAS, snapshots, cursors, or Sync execution audit.
+
+### 2. Signatures
+
+```kotlin
+suspend fun updateDocumentPayloadCas(
+    id: String,
+    expectedRevision: Int,
+    expectedTemplateId: String,
+    expectedScopeType: String,
+    expectedScopeId: String,
+    assistantId: String,
+    conversationId: String?,
+    payloadJson: String,
+    updatedAt: Long,
+): Int
+
+suspend fun MemoryTableHookSyncCommitter.commit(
+    executionId: Uuid,
+    leaseToken: Long,
+    prepared: PreparedHookAction.SyncMemoryTable,
+    output: ParsedMemoryTableSyncHookOutput,
+)
+```
+
+### 3. Contracts
+
+- V1 writes only active ASSISTANT or current CONVERSATION documents; GLOBAL is rejected in UI, preflight, and SQL CAS.
+- The operation engine validates the complete operation list in memory before persistence. Supported types, exact
+  operation keys, primary/row key, known table/columns, and read-only `updatePolicy` are authoritative.
+- The transaction rechecks active lease, cursor, target deletion, template ID, scope owner, expected revision, and
+  byte-identical frozen schema before applying operations.
+- Snapshot of the old revision, expected-revision CAS, bounded cursor/audit/diff, terminal execution, and run aggregate
+  commit in one Room transaction. Any failed update count or exception rolls all of them back.
+- Cursor natural uniqueness is `(hookId, hookConfigVersion, targetDocumentId, sourceKind, sourceKey)`; the hashed
+  idempotency key may additionally include the cutoff. Both identities must be checked before writing.
+- An insert-ignore cursor race must roll back the attempted payload transaction, then terminalize the new execution as
+  replay in a separate transaction using the existing cursor result revision. It must never commit the attempted CAS.
+
+### 4. Validation & Error Matrix
+
+- Deleted target -> `MEMORY_TABLE_TARGET_DELETED`; CAS row count 0; no snapshot/cursor.
+- Missing/changed template, scope, or frozen schema -> `MEMORY_TABLE_TARGET_CHANGED`; zero write.
+- Foreign owner or GLOBAL -> `MEMORY_TABLE_SCOPE_FORBIDDEN`; CAS row count 0.
+- Expected revision mismatch or concurrent winner -> `MEMORY_TABLE_REVISION_CONFLICT`; only the winner commits.
+- Invalid operation anywhere in a multi-operation list -> `MEMORY_TABLE_INVALID_OPERATIONS`; no partial payload.
+- Inactive lease or terminal execution update count != 1 -> `ACTION_FAILED`; transaction rolls back.
+- Existing cursor -> execution `SKIPPED` / `IDEMPOTENT_REPLAY`; payload and snapshot unchanged.
+
+### 5. Good / Base / Bad Cases
+
+- Good: validate three operations, snapshot revision 7, CAS to revision 8, insert cursor, finish execution and run.
+- Base: decision `skip` records bounded audit at the current revision without payload/snapshot/cursor changes.
+- Good: two executions use revision 7; one CAS succeeds and the other returns conflict with no extra snapshot/cursor.
+- Bad: validate against a freshly edited schema when the model saw the old schema.
+- Bad: write payload in Repository and mark execution success later in Dispatcher.
+
+### 6. Tests Required
+
+- Direct operation-engine success and unknown table/column/type/key/read-only/exact-key/multi-op rollback tests.
+- DAO CAS: same expected revision has one winner; deleted/GLOBAL/foreign/wrong-conversation targets return 0.
+- Room transaction: success asserts payload/revision, old snapshot, cursor, execution audit, and run aggregate together.
+- Room failure: schema change, invalid later operation, lease invalidation, target deletion/change, and CAS conflict assert
+  zero partial state.
+- Replay asserts natural-key and idempotency-key duplicates become `SKIPPED` with the committed result revision.
+- v41->v42 migration preserves AddTag fields, defaults `execution_mode` to `AUTO`, nulls new audit columns, and creates
+  cursor indexes with a clean `PRAGMA foreign_key_check`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+repository.upsertDocument(document.copy(payloadJson = newPayload, revision = revision + 1))
+hookRepository.completeSuccess(executionId)
+```
+
+#### Correct
+
+```kotlin
+database.withTransaction {
+    require(hookDao.isLeaseActive(executionId, leaseToken))
+    require(current.revision == expectedRevision && current.deletedAt == null)
+    require(currentTemplate.schemaJson == prepared.schemaJson)
+    snapshotDao.upsertSnapshot(oldRevisionSnapshot)
+    check(memoryTableDao.updateDocumentPayloadCas(...) == 1)
+    check(hookDao.insertCursorIgnore(cursor) != -1L)
+    check(hookDao.finishExecutionRaw(...) == 1)
+    hookDao.recalculateRun(runId, endedAt)
+}
+```

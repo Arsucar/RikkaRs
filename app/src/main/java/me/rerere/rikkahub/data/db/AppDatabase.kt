@@ -28,6 +28,7 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.GenerationLogicalTurnEntity
 import me.rerere.rikkahub.data.db.entity.GenerationLogicalTurnPendingToolEntity
 import me.rerere.rikkahub.data.db.entity.HookExecutionEntity
+import me.rerere.rikkahub.data.db.entity.HookActionCursorEntity
 import me.rerere.rikkahub.data.db.entity.HookRunEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
@@ -54,6 +55,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         GenerationLogicalTurnPendingToolEntity::class,
         HookRunEntity::class,
         HookExecutionEntity::class,
+        HookActionCursorEntity::class,
         MemoryEntity::class,
         GenMediaEntity::class,
         MessageNodeEntity::class,
@@ -66,7 +68,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryTableSnapshotEntity::class,
         SubagentContextEntity::class,
     ],
-    version = 41,
+    version = 42,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -88,6 +90,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 23, to = 24),
         AutoMigration(from = 39, to = 40, spec = Migration_39_40::class),
         AutoMigration(from = 40, to = 41),
+        AutoMigration(from = 41, to = 42),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

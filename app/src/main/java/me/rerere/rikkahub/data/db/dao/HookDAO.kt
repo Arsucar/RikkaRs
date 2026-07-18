@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.db.entity.GenerationLogicalTurnEntity
 import me.rerere.rikkahub.data.db.entity.GenerationLogicalTurnPendingToolEntity
 import me.rerere.rikkahub.data.db.entity.GenerationLogicalTurnWithPendingTools
 import me.rerere.rikkahub.data.db.entity.HookExecutionEntity
+import me.rerere.rikkahub.data.db.entity.HookActionCursorEntity
 import me.rerere.rikkahub.data.db.entity.HookRunEntity
 import me.rerere.rikkahub.data.db.entity.HookRunWithExecutions
 import me.rerere.rikkahub.data.model.GenerationLogicalTurnStatus
@@ -188,6 +189,9 @@ interface HookDAO {
     @Query("SELECT * FROM hook_executions WHERE execution_id = :executionId")
     suspend fun getExecution(executionId: String): HookExecutionEntity?
 
+    @Query("SELECT * FROM hook_executions WHERE idempotency_key = :idempotencyKey LIMIT 1")
+    suspend fun getExecutionByIdempotencyKey(idempotencyKey: String): HookExecutionEntity?
+
     @Query("SELECT * FROM hook_runs WHERE run_id = :runId")
     suspend fun getRun(runId: String): HookRunEntity?
 
@@ -238,9 +242,45 @@ interface HookDAO {
     @Query(
         """
         UPDATE hook_executions SET
+            target_document_id = :targetDocumentId,
+            target_template_id = :targetTemplateId,
+            target_scope_type = :targetScopeType,
+            target_scope_id = :targetScopeId,
+            base_revision = :baseRevision,
+            retry_of_execution_id = COALESCE(:retryOfExecutionId, retry_of_execution_id),
+            idempotency_key = :idempotencyKey
+        WHERE execution_id = :executionId AND status = 'RUNNING' AND lease_token = :leaseToken
+        """
+    )
+    suspend fun setExecutionPreparedAudit(
+        executionId: String,
+        leaseToken: Long,
+        targetDocumentId: String,
+        targetTemplateId: String,
+        targetScopeType: String,
+        targetScopeId: String,
+        baseRevision: Int,
+        retryOfExecutionId: String?,
+        idempotencyKey: String,
+    ): Int
+
+    @Query(
+        """
+        UPDATE hook_executions SET
             status = :status,
             decision = :decision,
             tag_id = :tagId,
+            target_document_id = COALESCE(:targetDocumentId, target_document_id),
+            target_template_id = COALESCE(:targetTemplateId, target_template_id),
+            target_scope_type = COALESCE(:targetScopeType, target_scope_type),
+            target_scope_id = COALESCE(:targetScopeId, target_scope_id),
+            base_revision = COALESCE(:baseRevision, base_revision),
+            result_revision = :resultRevision,
+            operation_count = :operationCount,
+            operation_summary_json = :operationSummaryJson,
+            diff_summary_json = :diffSummaryJson,
+            retry_of_execution_id = COALESCE(:retryOfExecutionId, retry_of_execution_id),
+            idempotency_key = COALESCE(:idempotencyKey, idempotency_key),
             reason = :reason,
             reason_truncated = :reasonTruncated,
             error_code = :errorCode,
@@ -256,6 +296,17 @@ interface HookDAO {
         status: String,
         decision: String?,
         tagId: String?,
+        targetDocumentId: String?,
+        targetTemplateId: String?,
+        targetScopeType: String?,
+        targetScopeId: String?,
+        baseRevision: Int?,
+        resultRevision: Int?,
+        operationCount: Int?,
+        operationSummaryJson: String?,
+        diffSummaryJson: String?,
+        retryOfExecutionId: String?,
+        idempotencyKey: String?,
         reason: String?,
         reasonTruncated: Boolean,
         errorCode: String?,
@@ -265,6 +316,42 @@ interface HookDAO {
 
     @Query("SELECT status FROM hook_executions WHERE run_id = :runId")
     suspend fun getExecutionStatuses(runId: String): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCursorIgnore(cursor: HookActionCursorEntity): Long
+
+    @Query("SELECT * FROM hook_action_cursors WHERE idempotency_key = :idempotencyKey")
+    suspend fun getCursor(idempotencyKey: String): HookActionCursorEntity?
+
+    @Query(
+        """
+        SELECT * FROM hook_action_cursors
+        WHERE hook_id = :hookId
+          AND hook_config_version = :hookConfigVersion
+          AND target_document_id = :targetDocumentId
+          AND source_kind = :sourceKind
+          AND source_key = :sourceKey
+        LIMIT 1
+        """
+    )
+    suspend fun getCursorForSource(
+        hookId: String,
+        hookConfigVersion: Long,
+        targetDocumentId: String,
+        sourceKind: String,
+        sourceKey: String,
+    ): HookActionCursorEntity?
+
+    @Query("SELECT * FROM hook_action_cursors WHERE execution_id = :executionId LIMIT 1")
+    suspend fun getCursorForExecution(executionId: String): HookActionCursorEntity?
+
+    @Query(
+        """
+        SELECT MAX(committed_at) FROM hook_action_cursors
+        WHERE hook_id = :hookId AND target_document_id = :targetDocumentId
+        """
+    )
+    suspend fun getLatestCursorCommittedAt(hookId: String, targetDocumentId: String): Long?
 
     @Query("SELECT COUNT(*) FROM hook_executions WHERE run_id = :runId AND status = 'FAILED'")
     suspend fun countFailedExecutions(runId: String): Int
@@ -292,6 +379,17 @@ interface HookDAO {
         status: HookExecutionStatus,
         decision: String?,
         tagId: String?,
+        targetDocumentId: String? = null,
+        targetTemplateId: String? = null,
+        targetScopeType: String? = null,
+        targetScopeId: String? = null,
+        baseRevision: Int? = null,
+        resultRevision: Int? = null,
+        operationCount: Int? = null,
+        operationSummaryJson: String? = null,
+        diffSummaryJson: String? = null,
+        retryOfExecutionId: String? = null,
+        idempotencyKey: String? = null,
         reason: String?,
         reasonTruncated: Boolean,
         errorCode: String?,
@@ -306,6 +404,17 @@ interface HookDAO {
             status.name,
             decision,
             tagId,
+            targetDocumentId,
+            targetTemplateId,
+            targetScopeType,
+            targetScopeId,
+            baseRevision,
+            resultRevision,
+            operationCount,
+            operationSummaryJson,
+            diffSummaryJson,
+            retryOfExecutionId,
+            idempotencyKey,
             reason,
             reasonTruncated,
             errorCode,
@@ -343,6 +452,17 @@ interface HookDAO {
             status = HookExecutionStatus.FAILED,
             decision = null,
             tagId = null,
+            targetDocumentId = null,
+            targetTemplateId = null,
+            targetScopeType = null,
+            targetScopeId = null,
+            baseRevision = null,
+            resultRevision = null,
+            operationCount = null,
+            operationSummaryJson = null,
+            diffSummaryJson = null,
+            retryOfExecutionId = null,
+            idempotencyKey = null,
             reason = null,
             reasonTruncated = false,
             errorCode = errorCode,

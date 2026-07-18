@@ -151,8 +151,12 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
     val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
     val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
+    val hookPreviewState by vm.hookPreviewState.collectAsStateWithLifecycle()
+    val hookManualRunState by vm.hookManualRunState.collectAsStateWithLifecycle()
     val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
-    val configuredHooks = remember(setting.assistants) { setting.assistants.flatMap { it.hooks } }
+    val configuredHooks = remember(setting.assistants, conversation.assistantId) {
+        setting.assistants.firstOrNull { it.id == conversation.assistantId }?.hooks.orEmpty()
+    }
     val modelNames = remember(setting.providers) {
         setting.providers.flatMap { it.models }.associate { model ->
             model.id to (model.displayName.ifBlank { model.modelId })
@@ -368,9 +372,15 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             onLoadContextPreview = vm::loadContextPreview,
                             onClearContextPreview = vm::clearContextPreview,
                             hookHistoryState = hookHistoryState,
+                            hookPreviewState = hookPreviewState,
+                            hookManualRunState = hookManualRunState,
                             hooks = configuredHooks,
                             conversationTags = conversationTags,
                             modelNames = modelNames,
+                            onPreviewHook = vm::previewMemoryTableHook,
+                            onApplyPreview = vm::applyMemoryTableHookPreview,
+                            onRunHook = vm::runMemoryTableHookNow,
+                            onRetryExecution = vm::retryMemoryTableHookExecution,
                         )
                     }
                 }

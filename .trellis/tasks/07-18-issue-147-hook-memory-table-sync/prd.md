@@ -20,16 +20,16 @@
 
 ## Acceptance Criteria
 
-- [ ] Dispatcher/Registry 不按具体 Action 硬编码，标签 Hook 序列化、执行、历史和顺序回归通过。
-- [ ] final-success/pending tool/重复 callback/旧分支/取消失败门禁保证每 logical turn/target 至多一次成功写入。
-- [ ] Frozen input 的消息数、角色、分支和字符数有界并可测，不含未授权 system/tool/hidden 内容。
-- [ ] 严格 parser 与本地 validator 拒绝任意 target/scope/tool/未知 table/column/type/PK/updatePolicy 违规，零写入。
-- [ ] 多 op 中途失败完全回滚；同 revision 并发仅一方提交；payload/revision/snapshot/cursor/history/diff 同事务一致。
-- [ ] #146 soft-deleted target、scope/permission 变化、lease 失效、timeout/cancel 均不写。
-- [ ] 自动门控关闭时零模型调用；频率/消息/token 上限可配置并产生可审计 SKIPPED。
-- [ ] 手动 preview 不写库，apply 前重查 revision；失败 retry 不重复已提交 operations。
-- [ ] history 展示 action、target/scope、base/result revision、op 摘要、diff、状态、耗时与 retry relation，正文/raw response 不落库。
-- [ ] DB v41→v42 migration、JVM/Room/Hook/UI 测试、编译与可用设备安装通过，或如实记录环境限制。
+- [x] Dispatcher/Registry 不按具体 Action 硬编码，标签 Hook 序列化、执行、历史和顺序回归通过。
+- [x] final-success/pending tool/重复 callback/旧分支/取消失败门禁保证每 logical turn/target 至多一次成功写入。
+- [x] Frozen input 的消息数、角色、分支和字符数有界并可测，不含未授权 system/tool/hidden 内容。
+- [x] 严格 parser 与本地 validator 拒绝任意 target/scope/tool/未知 table/column/type/PK/updatePolicy 违规，零写入。
+- [x] 多 op 中途失败完全回滚；同 revision 并发仅一方提交；payload/revision/snapshot/cursor/history/diff 同事务一致。
+- [x] #146 soft-deleted target、scope/permission 变化、lease 失效、timeout/cancel 均不写。
+- [x] 自动门控关闭时零模型调用；频率/消息/token 上限可配置并产生可审计 SKIPPED。
+- [x] 手动 preview 不写库，apply 前重查 revision；失败 retry 不重复已提交 operations。
+- [x] history 展示 action、target/scope、base/result revision、op 摘要、diff、状态、耗时与 retry relation，正文/raw response 不落库。
+- [x] DB v41→v42 migration、JVM/Room/Hook/UI 测试、编译与可用设备安装通过，或如实记录环境限制。
 
 ## Confirmed Facts
 
