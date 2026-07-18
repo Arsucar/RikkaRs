@@ -23,6 +23,17 @@ sealed interface FrozenHookModelRequest {
         val allowedTags: Map<Uuid, String>,
     ) : FrozenHookModelRequest
 
+    data class TransitionConversationTags(
+        override val modelId: Uuid,
+        override val prompt: String,
+        val messageTextSnapshot: String,
+        val evidence: GitHubIssueEvidence,
+        val addTagId: Uuid,
+        val addTagName: String,
+        val removeTagId: Uuid,
+        val removeTagName: String,
+    ) : FrozenHookModelRequest
+
     data class SyncMemoryTable(
         override val modelId: Uuid,
         override val prompt: String,
@@ -61,17 +72,19 @@ class ProviderHookModelExecutor(
         )
         val params = backgroundTextGenerationParams(model)
         ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-        return providerHandler.generateText(
+        val raw = providerHandler.generateText(
             providerSetting = provider,
             messages = messages,
             params = params,
-        ).choices.firstOrNull()?.message?.toText()?.trim()
+        ).choices.firstOrNull()?.message?.toText()
             ?: throw HookOutputException(HookErrorCode.MODEL_REQUEST_FAILED)
+        return if (request is FrozenHookModelRequest.TransitionConversationTags) raw else raw.trim()
     }
 }
 
 internal fun buildHookEvaluationPrompt(request: FrozenHookModelRequest): String = when (request) {
     is FrozenHookModelRequest.AddConversationTag -> buildAddTagEvaluationPrompt(request)
+    is FrozenHookModelRequest.TransitionConversationTags -> buildTagTransitionEvaluationPrompt(request)
     is FrozenHookModelRequest.SyncMemoryTable -> buildMemoryTableSyncEvaluationPrompt(request)
 }
 
@@ -101,6 +114,39 @@ private fun buildAddTagEvaluationPrompt(request: FrozenHookModelRequest.AddConve
                 "Use {\"decision\":\"apply\",\"tagId\":\"<uuid>\",\"reason\":\"...\"} to apply, " +
                 "or {\"decision\":\"skip\",\"tagId\":null,\"reason\":\"...\"} to skip. " +
                 "Do not include Markdown fences or any other text."
+        )
+    }
+}
+
+private fun buildTagTransitionEvaluationPrompt(
+    request: FrozenHookModelRequest.TransitionConversationTags,
+): String {
+    val evidenceValue = when (request.evidence.type) {
+        GitHubIssueEvidenceType.ISSUE_URL -> request.evidence.normalizedUrl.orEmpty()
+        GitHubIssueEvidenceType.ISSUE_NUMBER -> "#${request.evidence.issueNumber}"
+    }
+    val configuredPrompt = request.prompt.applyPlaceholders(
+        "content" to request.messageTextSnapshot,
+        "github_issue_evidence" to evidenceValue,
+        "add_tag" to request.addTagName,
+        "remove_tag" to request.removeTagName,
+    )
+    return buildString {
+        appendLine(configuredPrompt.trim())
+        appendLine()
+        appendLine("Frozen final assistant response:")
+        appendLine("<assistant_response>")
+        appendLine(request.messageTextSnapshot)
+        appendLine("</assistant_response>")
+        appendLine()
+        appendLine("Locally verified GitHub Issue creation evidence: $evidenceValue")
+        appendLine("Configured transition: remove '${request.removeTagName}', then add '${request.addTagName}'.")
+        appendLine("The tag IDs and transition scope are fixed locally and cannot be changed by your response.")
+        append(
+            "Return exactly one JSON object with exactly the keys decision and reason. " +
+                "Use {\"decision\":\"apply\",\"reason\":\"...\"} to apply the configured transition, " +
+                "or {\"decision\":\"skip\",\"reason\":\"...\"} to skip. " +
+                "Do not include tag IDs, Markdown fences, whitespace outside the JSON object, or any other text."
         )
     }
 }

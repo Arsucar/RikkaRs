@@ -41,6 +41,10 @@ class ConversationHookTest {
         )
 
         assertEquals(HookActionConfig.AddConversationTag(setOf(tagId)), action)
+        assertEquals(
+            """{"type":"add_conversation_tag","allowedTagIds":["$tagId"]}""",
+            JsonInstant.encodeToString<HookActionConfig>(action),
+        )
     }
 
     @Test
@@ -62,6 +66,24 @@ class ConversationHookTest {
 
         assertTrue(encoded.contains("sync_memory_table"))
         assertEquals(action, restored)
+    }
+
+    @Test
+    fun transitionConversationTagsConfigurationSurvivesRoundTrip() {
+        val action = HookActionConfig.TransitionConversationTags(
+            addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010"),
+            removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020"),
+        )
+
+        val encoded = JsonInstant.encodeToString<HookActionConfig>(action)
+        val restored = JsonInstant.decodeFromString<HookActionConfig>(encoded)
+
+        assertTrue(encoded.contains("transition_conversation_tags"))
+        assertEquals(action, restored)
+        assertEquals(
+            HookActionFilter.GITHUB_ISSUE_COMPLETION,
+            (restored as HookActionConfig.TransitionConversationTags).filter,
+        )
     }
 
     @Test
@@ -150,6 +172,35 @@ class ConversationHookTest {
         assertNotEquals(
             hook.configurationHash(),
             hook.copy(modelId = Uuid.parse("00000000-0000-0000-0000-000000000004")).configurationHash(),
+        )
+    }
+
+    @Test
+    fun everyTransitionConfigurationFieldAffectsHash() {
+        val baseAction = HookActionConfig.TransitionConversationTags(
+            addTagId = Uuid.parse("00000000-0000-0000-0000-000000000010"),
+            removeTagId = Uuid.parse("00000000-0000-0000-0000-000000000020"),
+        )
+        val hook = ConversationHook(
+            id = Uuid.parse("00000000-0000-0000-0000-000000000001"),
+            modelId = Uuid.parse("00000000-0000-0000-0000-000000000002"),
+            prompt = "transition",
+            actionConfig = baseAction,
+        )
+
+        assertNotEquals(
+            hook.configurationHash(),
+            hook.copy(actionConfig = baseAction.copy(addTagId = Uuid.random())).configurationHash(),
+        )
+        assertNotEquals(
+            hook.configurationHash(),
+            hook.copy(actionConfig = baseAction.copy(removeTagId = Uuid.random())).configurationHash(),
+        )
+        assertNotEquals(hook.configurationHash(), hook.copy(prompt = "changed").configurationHash())
+        assertNotEquals(hook.configurationHash(), hook.copy(modelId = Uuid.random()).configurationHash())
+        assertEquals(
+            "5fd421c05e485f72e6391e8785f27d9d5406608531072c2b2e61e61f8a5eb08d",
+            hook.configurationHash(),
         )
     }
 

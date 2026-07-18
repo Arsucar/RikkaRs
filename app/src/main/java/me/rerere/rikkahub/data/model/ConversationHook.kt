@@ -33,6 +33,14 @@ sealed interface HookActionConfig {
     ) : HookActionConfig
 
     @Serializable
+    @SerialName("transition_conversation_tags")
+    data class TransitionConversationTags(
+        val addTagId: Uuid,
+        val removeTagId: Uuid,
+        val filter: HookActionFilter = HookActionFilter.GITHUB_ISSUE_COMPLETION,
+    ) : HookActionConfig
+
+    @Serializable
     @SerialName("sync_memory_table")
     data class SyncMemoryTable(
         val targetDocumentId: String = "",
@@ -50,12 +58,19 @@ sealed interface HookActionConfig {
 @Serializable
 enum class HookActionType {
     ADD_CONVERSATION_TAG,
+    TRANSITION_CONVERSATION_TAGS,
     SYNC_MEMORY_TABLE,
+}
+
+@Serializable
+enum class HookActionFilter {
+    GITHUB_ISSUE_COMPLETION,
 }
 
 val HookActionConfig.actionType: HookActionType
     get() = when (this) {
         is HookActionConfig.AddConversationTag -> HookActionType.ADD_CONVERSATION_TAG
+        is HookActionConfig.TransitionConversationTags -> HookActionType.TRANSITION_CONVERSATION_TAGS
         is HookActionConfig.SyncMemoryTable -> HookActionType.SYNC_MEMORY_TABLE
     }
 
@@ -65,6 +80,11 @@ fun ConversationHook.configurationHash(): String {
             .map { it.toString() }
             .sorted()
             .joinToString(",")
+        is HookActionConfig.TransitionConversationTags -> listOf(
+            action.addTagId.toString(),
+            action.removeTagId.toString(),
+            action.filter.name,
+        ).joinToString("|") { value -> "${value.length}:$value" }
         is HookActionConfig.SyncMemoryTable -> listOf(
             action.targetDocumentId,
             action.targetScopeType.name,
@@ -156,6 +176,9 @@ enum class HookErrorCode {
     SCHEMA_MISMATCH,
     TAG_NOT_ALLOWED,
     TAG_NOT_FOUND,
+    TAG_TRANSITION_CONFLICT,
+    TAG_LIMIT_REACHED,
+    GITHUB_ISSUE_EVIDENCE_NOT_FOUND,
     CONVERSATION_NOT_FOUND,
     SOURCE_MESSAGE_NOT_ACTIVE,
     HOOK_DISABLED,
@@ -284,6 +307,7 @@ object HookRuntimeRules {
     const val MIN_SYNC_MAX_OPERATIONS = 1
     const val MAX_SYNC_MAX_OPERATIONS = 50
     const val MAX_SYNC_RESPONSE_CHARS = 64_000
+    const val MAX_TAG_TRANSITION_RESPONSE_CHARS = 64_000
     const val MAX_SYNC_AUDIT_JSON_CHARS = 8_000
 }
 

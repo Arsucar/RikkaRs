@@ -31,6 +31,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.ConversationHook
+import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
@@ -154,8 +155,19 @@ class AssistantDetailVM(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
 
-    val conversationTags = conversationTagRepository.observeTags()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val conversationTagsReloadRequest = MutableStateFlow(0)
+
+    val conversationTagsUiState = conversationTagsReloadRequest
+        .flatMapLatest {
+            conversationTagRepository.observeTags()
+                .map<List<ConversationTag>, ConversationTagsUiState>(ConversationTagsUiState::Success)
+                .catch { emit(ConversationTagsUiState.Error) }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ConversationTagsUiState.Loading)
+
+    fun reloadConversationTags() {
+        conversationTagsReloadRequest.value++
+    }
 
     val workspaces: StateFlow<List<WorkspaceEntity>> = workspaceRepository
         .listFlow()
@@ -668,3 +680,9 @@ data class MemoryTableRevisionHistory(
     val currentDocument: MemoryTableDocument,
     val snapshots: List<MemoryTableDocumentSnapshot>,
 )
+
+sealed interface ConversationTagsUiState {
+    data object Loading : ConversationTagsUiState
+    data class Success(val tags: List<ConversationTag>) : ConversationTagsUiState
+    data object Error : ConversationTagsUiState
+}

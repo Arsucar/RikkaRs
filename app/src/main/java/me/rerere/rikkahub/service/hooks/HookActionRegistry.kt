@@ -18,21 +18,31 @@ data class HookFreezeContext(
     val logicalTurnId: Uuid,
     val sourceNodeId: Uuid,
     val sourceMessageId: Uuid,
+    val sourceMessageTextSnapshot: String,
     val sourceMessageModelId: Uuid?,
     val executionMode: HookExecutionMode,
     val sourceKey: String = logicalTurnId.toString(),
     val retryOfExecutionId: Uuid? = null,
 )
 
-data class HookPreparedAudit(
-    val targetDocumentId: String,
-    val targetTemplateId: String,
-    val targetScopeType: MemoryTableScopeType,
-    val targetScopeId: String,
-    val baseRevision: Int,
-    val idempotencyKey: String,
-    val retryOfExecutionId: Uuid?,
-)
+sealed interface HookPreparedAudit {
+    data class MemoryTable(
+        val targetDocumentId: String,
+        val targetTemplateId: String,
+        val targetScopeType: MemoryTableScopeType,
+        val targetScopeId: String,
+        val baseRevision: Int,
+        val idempotencyKey: String,
+        val retryOfExecutionId: Uuid?,
+    ) : HookPreparedAudit
+
+    data class ConversationTagTransition(
+        val tagId: Uuid,
+        val operationCount: Int,
+        val operationSummaryJson: String,
+        val diffSummaryJson: String,
+    ) : HookPreparedAudit
+}
 
 sealed interface PreparedHookAction {
     val request: FrozenHookModelRequest
@@ -50,7 +60,7 @@ sealed interface PreparedHookAction {
 
     data class SyncMemoryTable(
         override val request: FrozenHookModelRequest.SyncMemoryTable,
-        override val audit: HookPreparedAudit,
+        override val audit: HookPreparedAudit.MemoryTable,
         val hookId: Uuid,
         val hookConfigVersion: Long,
         val hookConfigHash: String,
@@ -64,6 +74,21 @@ sealed interface PreparedHookAction {
         val schemaJson: String,
         val config: HookActionConfig.SyncMemoryTable,
     ) : PreparedHookAction
+
+    data class TransitionConversationTags(
+        override val request: FrozenHookModelRequest.TransitionConversationTags,
+        override val audit: HookPreparedAudit.ConversationTagTransition,
+        val hookId: Uuid,
+        val hookConfigVersion: Long,
+        val hookConfigHash: String,
+        val assistantId: Uuid,
+        val conversationId: Uuid,
+        val sourceNodeId: Uuid,
+        val sourceMessageId: Uuid,
+        val addTagId: Uuid,
+        val removeTagId: Uuid,
+        val evidence: GitHubIssueEvidence,
+    ) : PreparedHookAction
 }
 
 sealed interface HookActionPreparation {
@@ -72,6 +97,7 @@ sealed interface HookActionPreparation {
         val errorCode: HookErrorCode,
         val reason: String? = null,
         val audit: HookPreparedAudit? = null,
+        val decision: HookDecision? = HookDecision.SKIP,
     ) : HookActionPreparation
 
     data class Cancelled(val errorCode: HookErrorCode) : HookActionPreparation

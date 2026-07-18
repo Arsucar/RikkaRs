@@ -78,6 +78,52 @@ class AssistantHooksPageTest {
             R.string.assistant_hook_action_sync_memory_table,
             hookActionLabelRes(HookActionType.SYNC_MEMORY_TABLE),
         )
+        assertEquals(
+            R.string.assistant_hook_action_transition_tags,
+            hookActionLabelRes(HookActionType.TRANSITION_CONVERSATION_TAGS),
+        )
+    }
+
+    @Test
+    fun transitionValidationRequiresDistinctAvailableTags() {
+        val addTagId = Uuid.random()
+        val removeTagId = Uuid.random()
+        val valid = transitionValidation(addTagId, removeTagId, setOf(addTagId, removeTagId))
+        val same = transitionValidation(addTagId, addTagId, setOf(addTagId))
+        val unavailable = transitionValidation(addTagId, removeTagId, setOf(addTagId))
+
+        assertTrue(valid.canSave)
+        assertEquals(HookEditorFieldError.TRANSITION_TAG_CONFLICT, same.actionError)
+        assertEquals(HookEditorFieldError.TAG_UNAVAILABLE, unavailable.actionError)
+    }
+
+    @Test
+    fun tagCatalogLoadingBlocksTagActionsButNotMemorySync() {
+        val addTagId = Uuid.random()
+        val removeTagId = Uuid.random()
+        val transition = validateHookEditor(
+            name = "Transition",
+            modelIsValid = true,
+            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            prompt = "Decide.",
+            actionConfig = HookActionConfig.TransitionConversationTags(addTagId, removeTagId),
+            availableTagIds = setOf(addTagId, removeTagId),
+            tagCatalogReady = false,
+        )
+        val target = document("assistant", MemoryTableScopeType.ASSISTANT, "assistant-id")
+        val sync = validateHookEditor(
+            name = "Sync",
+            modelIsValid = true,
+            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            prompt = "Sync.",
+            actionConfig = HookActionConfig.SyncMemoryTable(target.id, target.scopeType),
+            availableTagIds = emptySet(),
+            tagCatalogReady = false,
+            availableDocuments = listOf(target),
+        )
+
+        assertEquals(HookEditorFieldError.TAG_CATALOG_UNAVAILABLE, transition.actionError)
+        assertTrue(sync.canSave)
     }
 
     @Test
@@ -155,6 +201,19 @@ class AssistantHooksPageTest {
         ),
         availableDocuments,
         conversationId,
+    )
+
+    private fun transitionValidation(
+        addTagId: Uuid,
+        removeTagId: Uuid,
+        availableTagIds: Set<Uuid>,
+    ) = validateHookEditor(
+        name = "Transition tags",
+        modelIsValid = true,
+        trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+        prompt = "Apply the configured transition.",
+        actionConfig = HookActionConfig.TransitionConversationTags(addTagId, removeTagId),
+        availableTagIds = availableTagIds,
     )
 
     private fun validation(

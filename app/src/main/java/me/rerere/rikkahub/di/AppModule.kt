@@ -11,10 +11,11 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.hooks.AddConversationTagHookAction
 import me.rerere.rikkahub.service.hooks.HookActionRegistry
 import me.rerere.rikkahub.service.hooks.HookDispatcher
-import me.rerere.rikkahub.service.hooks.HookExecutionLeaseGuard
+import me.rerere.rikkahub.service.hooks.ConversationTagHookCommitter
 import me.rerere.rikkahub.service.hooks.ProviderHookModelExecutor
 import me.rerere.rikkahub.service.hooks.MemoryTableHookSyncCommitter
 import me.rerere.rikkahub.service.hooks.SyncMemoryTableHookAction
+import me.rerere.rikkahub.service.hooks.TransitionConversationTagsHookAction
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenSession
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -27,9 +28,14 @@ import org.koin.dsl.module
 
 val appModule = module {
     single { ProviderHookModelExecutor(settingsStore = get(), providerManager = get()) }
-    single<HookExecutionLeaseGuard> {
-        val repository: me.rerere.rikkahub.data.repository.HookRepository = get()
-        HookExecutionLeaseGuard(repository::isLeaseActive)
+    single {
+        ConversationTagHookCommitter(
+            database = get(),
+            hookDao = get<me.rerere.rikkahub.data.db.AppDatabase>().hookDao(),
+            messageNodeDao = get<me.rerere.rikkahub.data.db.AppDatabase>().messageNodeDao(),
+            tagDao = get<me.rerere.rikkahub.data.db.AppDatabase>().conversationTagDao(),
+            tagRepository = get(),
+        )
     }
     single {
         MemoryTableHookSyncCommitter(
@@ -44,10 +50,13 @@ val appModule = module {
         HookActionRegistry(
             listOf(
                 AddConversationTagHookAction(
-                    conversationRepository = get(),
                     tagRepository = get(),
-                    leaseGuard = get(),
-                    database = get(),
+                    committer = get(),
+                ),
+                TransitionConversationTagsHookAction(
+                    settingsStore = get(),
+                    tagRepository = get(),
+                    committer = get(),
                 ),
                 SyncMemoryTableHookAction(
                     settingsStore = get(),

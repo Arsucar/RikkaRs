@@ -118,7 +118,7 @@ class SyncMemoryTableHookAction(
             sourceKey = context.sourceKey,
             cutoffMessageId = context.sourceMessageId,
         )
-        val audit = HookPreparedAudit(
+        val audit = HookPreparedAudit.MemoryTable(
             targetDocumentId = target.id,
             targetTemplateId = target.templateId,
             targetScopeType = target.scopeType,

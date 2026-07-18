@@ -80,6 +80,9 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.service.hooks.HookOutputException
+import me.rerere.rikkahub.service.hooks.ConversationTagTransitionAuditOperation
+import me.rerere.rikkahub.service.hooks.ConversationTagTransitionAuditSummary
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.ZoneId
 import kotlin.uuid.Uuid
@@ -598,6 +601,74 @@ private fun ConversationHookHistory(
                                                     }
                                                 }
                                             }
+                                            if (execution.actionType == HookActionType.TRANSITION_CONVERSATION_TAGS) {
+                                                val summary = execution.operationSummaryJson?.let { value ->
+                                                    runCatching {
+                                                        JsonInstant.decodeFromString<
+                                                            ConversationTagTransitionAuditSummary
+                                                        >(value)
+                                                    }.getOrNull()
+                                                }
+                                                val operations = execution.diffSummaryJson?.let { value ->
+                                                    runCatching {
+                                                        JsonInstant.decodeFromString<
+                                                            List<ConversationTagTransitionAuditOperation>
+                                                        >(value)
+                                                    }.getOrNull()
+                                                }.orEmpty()
+                                                summary?.let { audit ->
+                                                    val removeName = runCatching { Uuid.parse(audit.removeTagId) }
+                                                        .getOrNull()?.let { tagsById[it]?.displayName }
+                                                        ?: stringResource(
+                                                            R.string.hook_history_deleted_tag
+                                                        )
+                                                    val addName = runCatching { Uuid.parse(audit.addTagId) }
+                                                        .getOrNull()?.let { tagsById[it]?.displayName }
+                                                        ?: stringResource(R.string.hook_history_deleted_tag)
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.hook_transition_history_summary,
+                                                            removeName,
+                                                            addName,
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.hook_transition_history_evidence,
+                                                            transitionEvidenceLabel(audit.evidence),
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                                execution.operationCount?.let { count ->
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.hook_transition_history_operation_count,
+                                                            count,
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                                operations.forEach { operation ->
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.hook_transition_history_operation,
+                                                            transitionOperationLabel(operation.type),
+                                                            if (operation.changed) {
+                                                                stringResource(
+                                                                    R.string.hook_transition_history_changed
+                                                                )
+                                                            } else {
+                                                                stringResource(
+                                                                    R.string.hook_transition_history_no_change
+                                                                )
+                                                            },
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -620,6 +691,10 @@ private fun hookErrorMessage(errorCode: HookErrorCode): String = when (errorCode
     HookErrorCode.SCHEMA_MISMATCH -> stringResource(R.string.hook_error_schema_mismatch)
     HookErrorCode.TAG_NOT_ALLOWED -> stringResource(R.string.hook_error_tag_not_allowed)
     HookErrorCode.TAG_NOT_FOUND -> stringResource(R.string.hook_error_tag_not_found)
+    HookErrorCode.TAG_TRANSITION_CONFLICT -> stringResource(R.string.hook_error_tag_transition_conflict)
+    HookErrorCode.TAG_LIMIT_REACHED -> stringResource(R.string.hook_error_tag_limit_reached)
+    HookErrorCode.GITHUB_ISSUE_EVIDENCE_NOT_FOUND ->
+        stringResource(R.string.hook_error_github_issue_evidence_not_found)
     HookErrorCode.CONVERSATION_NOT_FOUND -> stringResource(R.string.hook_error_conversation_not_found)
     HookErrorCode.SOURCE_MESSAGE_NOT_ACTIVE -> stringResource(R.string.hook_error_source_message_not_active)
     HookErrorCode.HOOK_DISABLED -> stringResource(R.string.hook_error_hook_disabled)
@@ -645,6 +720,19 @@ private fun hookErrorMessage(errorCode: HookErrorCode): String = when (errorCode
     HookErrorCode.IDEMPOTENT_REPLAY -> stringResource(R.string.hook_error_idempotent_replay)
     HookErrorCode.RETRY_NOT_ALLOWED -> stringResource(R.string.hook_error_retry_not_allowed)
     HookErrorCode.ACTION_FAILED -> stringResource(R.string.hook_error_action_failed)
+}
+
+@Composable
+private fun transitionEvidenceLabel(value: String): String = when (value) {
+    "issue_url" -> stringResource(R.string.hook_transition_evidence_issue_url)
+    "issue_number" -> stringResource(R.string.hook_transition_evidence_issue_number)
+    else -> stringResource(R.string.hook_transition_evidence_none)
+}
+
+@Composable
+private fun transitionOperationLabel(value: String): String = when (value) {
+    "remove" -> stringResource(R.string.hook_transition_operation_remove)
+    else -> stringResource(R.string.hook_transition_operation_add)
 }
 
 @Composable

@@ -24,7 +24,8 @@
     "07-18-issue-144-room-transaction-oom",
     "07-18-issue-145-memory-template-scope-migration",
     "07-18-issue-146-memory-table-document-trash",
-    "07-18-issue-147-hook-memory-table-sync"
+    "07-18-issue-147-hook-memory-table-sync",
+    "07-18-issue-148-github-issue-hook-tag-transition"
   ],
   "parent": null,
   "relatedFiles": [],

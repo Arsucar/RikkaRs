@@ -365,7 +365,7 @@ class MemoryTableHookSyncCommitterTest {
                 payloadJson = OLD_PAYLOAD,
                 maxOperations = 3,
             ),
-            audit = HookPreparedAudit(
+            audit = HookPreparedAudit.MemoryTable(
                 targetDocumentId = DOCUMENT_ID,
                 targetTemplateId = TEMPLATE_ID,
                 targetScopeType = MemoryTableScopeType.ASSISTANT,

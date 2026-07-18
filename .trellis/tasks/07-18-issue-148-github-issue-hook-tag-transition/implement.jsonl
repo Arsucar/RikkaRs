@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/conversation-tags-and-hooks.md","reason":"Hook action compatibility, lease, history, atomic terminalization and UI contracts"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"New Hook action/editor/history/error text across configured locales"}
+{"file":".trellis/tasks/07-18-issue-148-github-issue-hook-tag-transition/research/current-implementation-audit.md","reason":"Tag transaction, evidence-filter and UI-state gaps"}
+{"file":".trellis/tasks/archive/2026-07/07-18-issue-147-hook-memory-table-sync/design.md","reason":"Action-specific handler and atomic committer precedent"}

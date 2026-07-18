@@ -20,6 +20,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
   **Memory-table document trash** — Deleting a memory-table document now moves it to trash with assistant-scoped restore and permanent purge; ordinary reads, injection, and writes exclude trashed documents, while Assistant, Conversation, and template cleanup keeps snapshots and ownership lifecycle consistent. (#146)
 - **Assistant Hook 自动同步记忆表** — Hook 动作扩展为通用处理框架，可选择现有助手级或当前会话级记忆表，在最终回复成功后以有界上下文生成严格 operations；支持手动预览、立即运行、失败重试和脱敏历史，并通过 revision CAS、冻结 schema、幂等 cursor 与单事务审计防止并发覆盖和部分提交。（#147）
   **Assistant Hook memory-table synchronization** — Hooks now use an action-specific framework that can synchronize an existing Assistant or current-Conversation memory table after a final successful reply using bounded context and strict operations; manual preview, run-now, failed-attempt retry, and sanitized history are included, with revision CAS, frozen-schema checks, durable idempotency cursors, and single-transaction audit preventing concurrent overwrite or partial commit. (#147)
+- **GitHub Issue 完成标签联动** — Assistant Hook 新增受限标签转换动作：仅当当前最终回复同时包含严格 GitHub Issue 引用和明确创建成功语义时，才原子移除“进行中”并添加“完成”标签；证据筛选、模型决定、标签变更与历史审计均采用 fail-closed 边界。（#148）
+  **GitHub Issue completion tag transition** — Assistant Hooks can now atomically remove an in-progress tag and add a completed tag only when the current final response contains both a strict GitHub Issue reference and explicit creation-success wording, with fail-closed evidence filtering, model decisions, tag writes, and structured history audit. (#148)
 
 ## v2.3.31
 

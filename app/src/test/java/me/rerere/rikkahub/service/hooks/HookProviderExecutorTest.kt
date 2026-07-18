@@ -53,4 +53,33 @@ class HookProviderExecutorTest {
         assertTrue(prompt.contains("exactly the keys decision, baseRevision, operations, and reason"))
         assertTrue(prompt.contains("Do not output target ids, scopes, tools"))
     }
+
+    @Test
+    fun tagTransitionPromptKeepsTagAuthorityLocalAndUsesStrictSchema() {
+        val addTagId = Uuid.random()
+        val removeTagId = Uuid.random()
+        val prompt = buildHookEvaluationPrompt(
+            FrozenHookModelRequest.TransitionConversationTags(
+                modelId = Uuid.random(),
+                prompt = "Confirm {{ github_issue_evidence }} from {{ content }}.",
+                messageTextSnapshot = "Created https://github.com/owner/repo/issues/148",
+                evidence = GitHubIssueEvidence(
+                    type = GitHubIssueEvidenceType.ISSUE_URL,
+                    issueNumber = 148,
+                    normalizedUrl = "https://github.com/owner/repo/issues/148",
+                ),
+                addTagId = addTagId,
+                addTagName = "Completed",
+                removeTagId = removeTagId,
+                removeTagName = "In progress",
+            )
+        )
+
+        assertTrue(prompt.contains("https://github.com/owner/repo/issues/148"))
+        assertTrue(prompt.contains("remove 'In progress', then add 'Completed'"))
+        assertTrue(prompt.contains("exactly the keys decision and reason"))
+        assertTrue(prompt.contains("tag IDs and transition scope are fixed locally"))
+        assertTrue(!prompt.contains(addTagId.toString()))
+        assertTrue(!prompt.contains(removeTagId.toString()))
+    }
 }

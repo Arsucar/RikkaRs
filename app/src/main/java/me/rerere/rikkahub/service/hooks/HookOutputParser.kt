@@ -9,6 +9,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import me.rerere.rikkahub.data.model.HookDecision
 import me.rerere.rikkahub.data.model.HookErrorCode
+import me.rerere.rikkahub.data.model.HookRuntimeRules
 import me.rerere.rikkahub.data.model.truncateHookReason
 import kotlin.uuid.Uuid
 
@@ -21,6 +22,12 @@ sealed interface ParsedHookOutput {
 data class ParsedAddTagHookOutput(
     override val decision: HookDecision,
     val tagId: Uuid?,
+    override val reason: String,
+    override val reasonTruncated: Boolean,
+) : ParsedHookOutput
+
+data class ParsedTransitionConversationTagsHookOutput(
+    override val decision: HookDecision,
     override val reason: String,
     override val reasonTruncated: Boolean,
 ) : ParsedHookOutput
@@ -89,12 +96,46 @@ object HookOutputParser {
     }
 }
 
+object TransitionConversationTagsHookOutputParser {
+    private val exactKeys = setOf("decision", "reason")
+    private val strictJson = Json { isLenient = false; ignoreUnknownKeys = false }
+
+    fun parse(raw: String): ParsedTransitionConversationTagsHookOutput {
+        if (raw.length > HookRuntimeRules.MAX_TAG_TRANSITION_RESPONSE_CHARS) {
+            throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        if (raw != raw.trim()) throw HookOutputException(HookErrorCode.INVALID_JSON)
+        val objectValue = runCatching { strictJson.parseToJsonElement(raw) }.getOrElse {
+            throw HookOutputException(HookErrorCode.INVALID_JSON)
+        } as? JsonObject ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        if (objectValue.keys != exactKeys) throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        val decision = when (objectValue["decision"].stringValue()) {
+            "apply" -> HookDecision.APPLY
+            "skip" -> HookDecision.SKIP
+            else -> throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        val truncatedReason = truncateHookReason(objectValue["reason"].stringValue())
+        return ParsedTransitionConversationTagsHookOutput(
+            decision = decision,
+            reason = truncatedReason.value,
+            reasonTruncated = truncatedReason.truncated,
+        )
+    }
+
+    private fun kotlinx.serialization.json.JsonElement?.stringValue(): String {
+        val primitive = this as? JsonPrimitive
+            ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        if (!primitive.isString) throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+        return primitive.contentOrNull ?: throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
+    }
+}
+
 object MemoryTableSyncHookOutputParser {
     private val exactKeys = setOf("decision", "baseRevision", "operations", "reason")
     private val strictJson = Json { isLenient = false; ignoreUnknownKeys = false }
 
     fun parse(raw: String, maxOperations: Int): ParsedMemoryTableSyncHookOutput {
-        if (raw.length > me.rerere.rikkahub.data.model.HookRuntimeRules.MAX_SYNC_RESPONSE_CHARS) {
+        if (raw.length > HookRuntimeRules.MAX_SYNC_RESPONSE_CHARS) {
             throw HookOutputException(HookErrorCode.SCHEMA_MISMATCH)
         }
         if (raw != raw.trim()) throw HookOutputException(HookErrorCode.INVALID_JSON)

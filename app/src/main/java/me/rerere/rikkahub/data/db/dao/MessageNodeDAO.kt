@@ -16,6 +16,11 @@ interface MessageNodeDAO {
     suspend fun getNodeIdsOfConversation(conversationId: String): List<String>
 
     @Query(
+        "SELECT * FROM message_node WHERE conversation_id = :conversationId AND id = :nodeId LIMIT 1"
+    )
+    suspend fun getNode(conversationId: String, nodeId: String): MessageNodeEntity?
+
+    @Query(
         "SELECT COUNT(*) AS nodeCount, " +
             "COALESCE(SUM(LENGTH(messages)), 0) AS messageChars " +
             "FROM message_node WHERE conversation_id = :conversationId"

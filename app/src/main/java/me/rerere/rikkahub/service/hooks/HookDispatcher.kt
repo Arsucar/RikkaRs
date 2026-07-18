@@ -84,6 +84,7 @@ class HookDispatcher(
                         hookRepository.completeSkipped(
                             executionId = frozen.executionId,
                             leaseToken = leaseToken,
+                            decision = preparation.decision,
                             reason = preparation.reason,
                             errorCode = preparation.errorCode,
                         )
@@ -148,17 +149,27 @@ class HookDispatcher(
         executionId: Uuid,
         leaseToken: Long,
         audit: HookPreparedAudit,
-    ): Boolean = hookRepository.setExecutionPreparedAudit(
-        executionId = executionId,
-        leaseToken = leaseToken,
-        targetDocumentId = audit.targetDocumentId,
-        targetTemplateId = audit.targetTemplateId,
-        targetScopeType = audit.targetScopeType.name,
-        targetScopeId = audit.targetScopeId,
-        baseRevision = audit.baseRevision,
-        retryOfExecutionId = audit.retryOfExecutionId,
-        idempotencyKey = audit.idempotencyKey,
-    )
+    ): Boolean = when (audit) {
+        is HookPreparedAudit.MemoryTable -> hookRepository.setExecutionPreparedAudit(
+            executionId = executionId,
+            leaseToken = leaseToken,
+            targetDocumentId = audit.targetDocumentId,
+            targetTemplateId = audit.targetTemplateId,
+            targetScopeType = audit.targetScopeType.name,
+            targetScopeId = audit.targetScopeId,
+            baseRevision = audit.baseRevision,
+            retryOfExecutionId = audit.retryOfExecutionId,
+            idempotencyKey = audit.idempotencyKey,
+        )
+        is HookPreparedAudit.ConversationTagTransition -> hookRepository.setExecutionPreparedAudit(
+            executionId = executionId,
+            leaseToken = leaseToken,
+            tagId = audit.tagId,
+            operationCount = audit.operationCount,
+            operationSummaryJson = audit.operationSummaryJson,
+            diffSummaryJson = audit.diffSummaryJson,
+        )
+    }
 
     private suspend fun finishFromAction(
         executionId: Uuid,

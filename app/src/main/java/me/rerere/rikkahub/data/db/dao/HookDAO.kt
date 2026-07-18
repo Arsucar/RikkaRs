@@ -242,26 +242,34 @@ interface HookDAO {
     @Query(
         """
         UPDATE hook_executions SET
-            target_document_id = :targetDocumentId,
-            target_template_id = :targetTemplateId,
-            target_scope_type = :targetScopeType,
-            target_scope_id = :targetScopeId,
-            base_revision = :baseRevision,
+            tag_id = COALESCE(:tagId, tag_id),
+            target_document_id = COALESCE(:targetDocumentId, target_document_id),
+            target_template_id = COALESCE(:targetTemplateId, target_template_id),
+            target_scope_type = COALESCE(:targetScopeType, target_scope_type),
+            target_scope_id = COALESCE(:targetScopeId, target_scope_id),
+            base_revision = COALESCE(:baseRevision, base_revision),
+            operation_count = COALESCE(:operationCount, operation_count),
+            operation_summary_json = COALESCE(:operationSummaryJson, operation_summary_json),
+            diff_summary_json = COALESCE(:diffSummaryJson, diff_summary_json),
             retry_of_execution_id = COALESCE(:retryOfExecutionId, retry_of_execution_id),
-            idempotency_key = :idempotencyKey
+            idempotency_key = COALESCE(:idempotencyKey, idempotency_key)
         WHERE execution_id = :executionId AND status = 'RUNNING' AND lease_token = :leaseToken
         """
     )
     suspend fun setExecutionPreparedAudit(
         executionId: String,
         leaseToken: Long,
-        targetDocumentId: String,
-        targetTemplateId: String,
-        targetScopeType: String,
-        targetScopeId: String,
-        baseRevision: Int,
+        tagId: String?,
+        targetDocumentId: String?,
+        targetTemplateId: String?,
+        targetScopeType: String?,
+        targetScopeId: String?,
+        baseRevision: Int?,
+        operationCount: Int?,
+        operationSummaryJson: String?,
+        diffSummaryJson: String?,
         retryOfExecutionId: String?,
-        idempotencyKey: String,
+        idempotencyKey: String?,
     ): Int
 
     @Query(
@@ -269,16 +277,16 @@ interface HookDAO {
         UPDATE hook_executions SET
             status = :status,
             decision = :decision,
-            tag_id = :tagId,
+            tag_id = COALESCE(:tagId, tag_id),
             target_document_id = COALESCE(:targetDocumentId, target_document_id),
             target_template_id = COALESCE(:targetTemplateId, target_template_id),
             target_scope_type = COALESCE(:targetScopeType, target_scope_type),
             target_scope_id = COALESCE(:targetScopeId, target_scope_id),
             base_revision = COALESCE(:baseRevision, base_revision),
             result_revision = :resultRevision,
-            operation_count = :operationCount,
-            operation_summary_json = :operationSummaryJson,
-            diff_summary_json = :diffSummaryJson,
+            operation_count = COALESCE(:operationCount, operation_count),
+            operation_summary_json = COALESCE(:operationSummaryJson, operation_summary_json),
+            diff_summary_json = COALESCE(:diffSummaryJson, diff_summary_json),
             retry_of_execution_id = COALESCE(:retryOfExecutionId, retry_of_execution_id),
             idempotency_key = COALESCE(:idempotencyKey, idempotency_key),
             reason = :reason,

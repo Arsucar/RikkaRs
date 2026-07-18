@@ -36,6 +36,33 @@ class HookFinalSuccessGateTest {
         assertNull(evaluateHookFinalSuccess(conversation(empty)))
     }
 
+    @Test
+    fun snapshotUsesOnlyFinalAssistantTextAndExcludesToolOutput() {
+        val oldIssue = assistant("Created GitHub Issue #147")
+        val final = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Text("No issue was created in this turn."),
+                UIMessagePart.Tool(
+                    toolCallId = "call-1",
+                    toolName = "workspace_shell",
+                    input = "{}",
+                    output = listOf(UIMessagePart.Text("Created GitHub Issue #148")),
+                ),
+            ),
+            finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
+        )
+        val conversation = Conversation(
+            assistantId = Uuid.random(),
+            messageNodes = listOf(oldIssue.toMessageNode(), final.toMessageNode()),
+        )
+
+        val snapshot = evaluateHookFinalSuccess(conversation)
+
+        assertEquals("No issue was created in this turn.", snapshot?.text)
+        assertNull(snapshot?.text?.let(::detectGitHubIssueCompletionEvidence))
+    }
+
     private fun assistant(text: String) = UIMessage(
         role = MessageRole.ASSISTANT,
         parts = listOf(UIMessagePart.Text(text)),

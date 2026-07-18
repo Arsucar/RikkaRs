@@ -245,3 +245,73 @@ when (handler.execute(executionId, leaseToken, prepared, parsed)) {
     else -> finishFromAction(...)
 }
 ```
+
+## Scenario: Evidence-gated conversation tag transitions
+
+### 1. Scope / Trigger
+
+Use this contract when a Hook removes one configured conversation tag and adds another only after a final response
+contains deterministic external-completion evidence.
+
+### 2. Signatures
+
+- `HookActionConfig.TransitionConversationTags(addTagId, removeTagId, GITHUB_ISSUE_COMPLETION)` stores stable IDs.
+- `detectGitHubIssueCompletionEvidence(finalAssistantText)` is the provider-before local evidence boundary.
+- `ConversationTagHookCommitter.commitTransition(...)` owns relation writes and execution/run terminalization.
+
+### 3. Contracts
+
+- Evidence input is only the frozen final active Assistant text; old turns, Tool output, prompts, and subagent
+  transcripts are excluded.
+- GitHub evidence requires a strict Issue URL or boundary-safe `#N` plus creation-success language in the same clause
+  within 80 Unicode code points. Markdown code/quotes, URL-contained shorthand, PR/build/order/commit/release markers,
+  negative/plan/failure language, and malformed Issue references fail closed.
+- The provider receives no tools and returns exact raw JSON with only `decision` and `reason`; tag IDs never cross the
+  model authority boundary.
+- Within one Room transaction, the committer rechecks lease, conversation, active source selection, and both tag
+  entities, then removes before adding and terminalizes execution/run. A failed terminal CAS rolls back relations.
+- Prepared and terminal audit stores only bounded action/filter/evidence/tag IDs/change booleans; never text, prompt,
+  raw provider output, Tool output, or credentials.
+
+### 4. Validation & Error Matrix
+
+- No accepted evidence -> `SKIPPED`, decision null, `GITHUB_ISSUE_EVIDENCE_NOT_FOUND`, zero provider/tag calls.
+- Same IDs or stale configured tag -> pre-provider `SKIPPED` with `TAG_TRANSITION_CONFLICT` / `TAG_NOT_FOUND`.
+- Provider skip -> `SKIPPED / SKIP`, zero relation changes, accepted evidence retained in audit.
+- Hook disabled/version/hash changed after provider -> `SKIPPED` with parsed decision and `HOOK_DISABLED`.
+- Apply with 1–2 changed relations -> `SUCCESS / APPLY`; 0 changed -> `SKIPPED / APPLY`.
+- Missing tag after provider or tag limit -> `FAILED` with `TAG_NOT_FOUND` / `TAG_LIMIT_REACHED`; mutations roll back.
+- Missing conversation or inactive source -> `CANCELLED`; lease loss preserves the existing terminal owner.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a 20-tag conversation has the remove relation, so remove-first frees capacity and add succeeds atomically.
+- Base: completed is already present and in-progress already absent; execution is an audited zero-operation skip.
+- Bad: scan the whole conversation or accept `Created https://evil.test/?issue=#148` as shorthand evidence.
+
+### 6. Tests Required
+
+- JVM evidence tests for Markdown delimiters, URL/path/host/number overflow, URL-contained `#N`, negative lexicons,
+  conflicting markers, and exact 80/81-code-point distance.
+- Dispatcher tests proving filter/preflight reject makes zero provider calls, provider skip preserves audit, and
+  post-provider config changes make zero relation writes.
+- Room tests for 0/1/2 changes, 20-tag exchange, missing tag, inactive source, lease loss, tag limit, and terminal-write
+  rollback; assert execution/run rows and unrelated tag relations.
+- Preserve literal AddTag JSON/hash and golden terminal fields after moving AddTag into the shared committer.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```kotlin
+conversation.messages.any { it.toText().contains("#") }
+tagRepository.addTag(conversationId, addTagId)
+hookRepository.completeSuccess(executionId)
+```
+
+#### Correct
+
+```kotlin
+val evidence = detectGitHubIssueCompletionEvidence(frozenFinalText) ?: return auditedSkip()
+conversationTagHookCommitter.commitTransition(executionId, leaseToken, prepared, parsed)
+```

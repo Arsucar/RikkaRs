@@ -81,6 +81,55 @@ class HookOutputParserTest {
     }
 
     @Test
+    fun parsesStrictTagTransitionApplyAndSkip() {
+        val apply = TransitionConversationTagsHookOutputParser.parse(
+            """{"decision":"apply","reason":" verified "}"""
+        )
+        val skip = TransitionConversationTagsHookOutputParser.parse(
+            """{"decision":"skip","reason":"no"}"""
+        )
+
+        assertEquals(HookDecision.APPLY, apply.decision)
+        assertEquals("verified", apply.reason)
+        assertEquals(HookDecision.SKIP, skip.decision)
+    }
+
+    @Test
+    fun tagTransitionParserRejectsDecorationsExtraKeysAndBadDecision() {
+        listOf(
+            " " + """{"decision":"skip","reason":"x"}""",
+            "```json\n{\"decision\":\"skip\",\"reason\":\"x\"}\n```",
+            """{"decision":"SKIP","reason":"x"}""",
+            """{"decision":"skip","reason":"x","tagId":"${Uuid.random()}"}""",
+            """{"decision":"skip","reason":"x","addTagId":"${Uuid.random()}"}""",
+            """{"decision":"skip","reason":"x","removeTagId":"${Uuid.random()}"}""",
+            """{"decision":"skip","reason":"x","filter":"GITHUB_ISSUE_COMPLETION"}""",
+            """{"decision":"skip","reason":1}""",
+        ).forEach { raw ->
+            assertThrows(HookOutputException::class.java) {
+                TransitionConversationTagsHookOutputParser.parse(raw)
+            }
+        }
+    }
+
+    @Test
+    fun tagTransitionParserBoundsAndTruncatesResponse() {
+        val reason = "😀".repeat(501)
+        val parsed = TransitionConversationTagsHookOutputParser.parse(
+            """{"decision":"skip","reason":"$reason"}"""
+        )
+        val oversized = assertThrows(HookOutputException::class.java) {
+            TransitionConversationTagsHookOutputParser.parse(
+                "x".repeat(HookRuntimeRules.MAX_TAG_TRANSITION_RESPONSE_CHARS + 1)
+            )
+        }
+
+        assertEquals(500, parsed.reason.codePointCount(0, parsed.reason.length))
+        assertTrue(parsed.reasonTruncated)
+        assertEquals(HookErrorCode.SCHEMA_MISMATCH, oversized.code)
+    }
+
+    @Test
     fun memoryTableParserRejectsDecorationsAndUnauthorizedFields() {
         listOf(
             " " + validSyncJson(),
