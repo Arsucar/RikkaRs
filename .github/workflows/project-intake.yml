@@ -1,0 +1,36 @@
+name: Add issues and pull requests to roadmap
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+
+# pull_request_target is used only for event metadata. This workflow never checks out,
+# builds, or executes code from a pull request (including external forks).
+permissions:
+  contents: read
+
+concurrency:
+  group: roadmap-intake-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  add-to-roadmap:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_URL: https://github.com/users/Arsucar/projects/2
+      ADD_TO_PROJECT_PAT: ${{ secrets.ADD_TO_PROJECT_PAT }}
+    steps:
+      - name: Explain missing project token
+        if: ${{ env.ADD_TO_PROJECT_PAT == '' }}
+        run: |
+          echo '::notice title=Roadmap intake skipped::Repository secret ADD_TO_PROJECT_PAT is not configured.'
+
+      - name: Add event item to public roadmap
+        if: ${{ env.ADD_TO_PROJECT_PAT != '' && (github.event.issue != null || github.event.pull_request != null) }}
+        uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e # v1.0.2
+        with:
+          project-url: ${{ env.PROJECT_URL }}
+          github-token: ${{ env.ADD_TO_PROJECT_PAT }}

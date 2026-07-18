@@ -1,38 +1,64 @@
 name: Bug Report
-description: 报告APP Bug或者崩溃
+description: 报告 APP Bug 或崩溃
 title: "bug: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢你花时间提交 Bug 报告！请尽量填写完整信息以便我们复现和修复问题。
-        Thanks for taking the time to report a bug! Please fill in as much detail as possible.
+        感谢你提交 Bug 报告。请完整描述问题；提交前请从日志、截图和录屏中移除 Token、密钥、Cookie、账号、对话内容及其他个人信息。
+        Thanks for reporting a bug. Please describe the issue and redact all secrets and personal data before uploading attachments.
 
   - type: textarea
     id: description
     attributes:
-      label: 问题描述 | Problem Description
-      description: 请详细描述你遇到的问题，包括复现步骤。 / Describe the issue in detail, including steps to reproduce.
+      label: 问题描述 | Problem description
+      description: 请简要说明遇到的问题及其影响。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 | Steps to reproduce
+      description: 请从明确的前置条件开始，逐步列出操作。
       placeholder: |
-        1. 进入 ...
+        前置条件：
+        1. 打开 ...
         2. 点击 ...
-        3. 出现了 ...
+        3. 观察到 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为 | Actual behavior
+      description: 实际发生了什么？请包含完整错误提示，但务必脱敏。
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: 期望行为 | Expected Behavior
-      description: 你期望应该发生什么？ / What did you expect to happen?
+      label: 期望行为 | Expected behavior
+      description: 正常情况下应该发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 | Logs
+      description: 请粘贴最小必要日志。上传前删除 Token、API Key、Cookie、账号、设备标识、对话内容、服务地址等敏感信息；无法安全脱敏时请勿上传。
+      render: shell
     validations:
       required: false
 
   - type: textarea
     id: screenshots
     attributes:
-      label: 截图 | Screenshots
-      description: 如有相关截图或录屏，请粘贴到此处。 / Attach relevant screenshots or screen recordings here.
+      label: 截图或录屏 | Screenshots or recordings
+      description: 可拖入相关截图或录屏；上传前请遮盖密钥、账号、对话内容及其他敏感信息。
     validations:
       required: false
