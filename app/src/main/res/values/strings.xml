@@ -1854,6 +1854,15 @@
   <string name="assistant_tools_workspace_write_file_desc">Write workspace files</string>
   <string name="assistant_tools_workspace_edit_file_desc">Apply precise edits to files</string>
   <string name="assistant_tools_workspace_shell_desc">Run shell commands</string>
+  <string name="assistant_tools_workspace_create">Create or manage a workspace</string>
+  <string name="assistant_tools_workspace_missing">The bound workspace no longer exists. Manage workspaces to repair it.</string>
+  <string name="assistant_tools_workspace_disabled">Workspace shell is disabled. Open workspace details to enable it.</string>
+  <string name="assistant_tools_workspace_installing">Workspace shell is still installing.</string>
+  <string name="assistant_tools_workspace_broken">Workspace shell needs repair. Open workspace details.</string>
+  <string name="assistant_tools_workspace_unknown">Workspace shell has an unknown status and is unavailable.</string>
+  <string name="assistant_tools_workspace_binding_saved">Workspace binding saved</string>
+  <string name="assistant_tools_workspace_binding_save_failed">Couldn\'t save the workspace binding</string>
+  <string name="assistant_tools_workspace_invalid_id">This workspace has an invalid ID and cannot be selected</string>
   <string name="assistant_tools_memory_desc">Create, edit, or delete long-term memories</string>
   <string name="assistant_tools_memory_table_desc">Read and update structured memory tables and templates</string>
   <string name="assistant_tools_search_web_desc">Search the web</string>

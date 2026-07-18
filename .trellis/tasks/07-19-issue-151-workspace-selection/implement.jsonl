@@ -1,1 +1,6 @@
 {"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/app/index.md", "reason": "App layer pre-development and quality contracts"}
+{"file": ".trellis/spec/app/ui-localization.md", "reason": "Compose strings and locale delivery contract"}
+{"file": ".trellis/spec/workspace/index.md", "reason": "Workspace module contracts"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Shared UI/runtime capability rule"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "Compose state and coroutine safety"}

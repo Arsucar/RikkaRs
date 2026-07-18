@@ -16,6 +16,7 @@
 | [Workspace Media Preview](./workspace-media-preview.md) | Workspace file viewing, FileProvider handoff, and LINUX read-only contracts |
 | [Memory Capabilities](./memory-capabilities.md) | Independent normal-memory and memory-table persistence, runtime gates, and UI contracts |
 | [Conversation Persistence](./conversation-persistence.md) | Lightweight summaries, paged full reads, bounded encoding batches, and metadata-only diagnostics |
+| [Workspace Tool Capabilities](./workspace-tool-capabilities.md) | Shared workspace binding, readiness, tool availability, and persistence contracts |
 
 ## Pre-Development Checklist
 

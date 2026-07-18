@@ -1862,4 +1862,13 @@
   <string name="hook_error_tag_transition_conflict">Настроенные теги конфликтуют.</string>
   <string name="hook_error_tag_limit_reached">Достигнут лимит тегов беседы.</string>
   <string name="hook_error_github_issue_evidence_not_found">Не найдено доказательство успешного создания GitHub Issue.</string>
+  <string name="assistant_tools_workspace_create">Создать или управлять рабочим пространством</string>
+  <string name="assistant_tools_workspace_missing">Привязанное рабочее пространство больше не существует. Управляйте рабочими пространствами, чтобы исправить это.</string>
+  <string name="assistant_tools_workspace_disabled">Оболочка рабочего пространства отключена. Откройте сведения о рабочем пространстве, чтобы включить её.</string>
+  <string name="assistant_tools_workspace_installing">Оболочка рабочего пространства все еще устанавливается.</string>
+  <string name="assistant_tools_workspace_broken">Оболочка рабочего пространства требует восстановления. Откройте детали рабочего пространства.</string>
+  <string name="assistant_tools_workspace_unknown">Оболочка рабочего пространства имеет неизвестный статус и недоступна.</string>
+  <string name="assistant_tools_workspace_binding_saved">Связывание рабочей области сохранено</string>
+  <string name="assistant_tools_workspace_binding_save_failed">Не удалось сохранить привязку рабочего пространства</string>
+  <string name="assistant_tools_workspace_invalid_id">Это рабочее пространство имеет недопустимый ID и не может быть выбрано.</string>
 </resources>

@@ -652,6 +652,22 @@ class SettingsStore(
         }
     }
 
+    suspend fun updateAssistantWorkspaceBinding(
+        assistantId: Uuid,
+        workspaceId: Uuid?,
+    ): AssistantWorkspaceBindingUpdateResult {
+        val fallbackAssistants = settingsFlow.value.assistants
+        var result = AssistantWorkspaceBindingUpdateResult.NOT_FOUND
+        dataStore.edit { preferences ->
+            result = preferences.writeAssistantWorkspaceBinding(
+                assistantId = assistantId,
+                workspaceId = workspaceId,
+                fallbackAssistants = fallbackAssistants,
+            )
+        }
+        return result
+    }
+
     suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
         val assistant = settingsFlow.value.assistants.firstOrNull { it.id == assistantId } ?: return
         updateAssistantConfig(assistant.copy(enableWebSearch = enabled))
@@ -738,6 +754,30 @@ internal fun MutablePreferences.writeAssistantConfig(
             if (current.id == assistant.id) assistant else current
         }
     )
+}
+
+enum class AssistantWorkspaceBindingUpdateResult {
+    UPDATED,
+    NOT_FOUND,
+}
+
+internal fun MutablePreferences.writeAssistantWorkspaceBinding(
+    assistantId: Uuid,
+    workspaceId: Uuid?,
+    fallbackAssistants: List<Assistant>,
+): AssistantWorkspaceBindingUpdateResult {
+    val assistants = this[SettingsStore.ASSISTANTS]?.let {
+        JsonInstant.decodeFromString<List<Assistant>>(it)
+    } ?: fallbackAssistants
+    if (assistants.none { it.id == assistantId }) {
+        return AssistantWorkspaceBindingUpdateResult.NOT_FOUND
+    }
+    this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(
+        assistants.map { current ->
+            if (current.id == assistantId) current.copy(workspaceId = workspaceId) else current
+        }
+    )
+    return AssistantWorkspaceBindingUpdateResult.UPDATED
 }
 
 internal fun MutablePreferences.writeAssistantArchiveState(

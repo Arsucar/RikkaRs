@@ -121,6 +121,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -158,7 +159,6 @@ import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.workspace.WorkspaceBindMount
-import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -1498,12 +1498,17 @@ class ChatService(
         readOnly: Boolean = false,
         createSkillDirectories: Boolean = true,
     ): List<Tool> {
-        workspace ?: return emptyList()
-        val workspaceId = workspace.id
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+        val capability = resolveWorkspaceToolCapability(
+            workspaceId = workspace?.id,
+            workspaces = listOfNotNull(workspace),
+            readOnly = readOnly,
+        )
+        val resolvedWorkspace = capability.workspace ?: return emptyList()
+        val workspaceId = resolvedWorkspace.id
+        if (!capability.available) {
             Log.d(
                 TAG,
-                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
+                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${resolvedWorkspace.shellStatus}"
             )
             return emptyList()
         }
@@ -1525,9 +1530,9 @@ class ChatService(
                 )
             ) + privateSkillMounts.knownMounts,
             extraBindMounts = privateSkillMounts.bindMounts,
-            approvalOverrides = workspace.toolApprovalOverrides(),
+            approvalOverrides = resolvedWorkspace.toolApprovalOverrides(),
         )
-        return if (readOnly) all.filter { it.name == "workspace_read_file" } else all
+        return all.filter { it.name in capability.availableToolNames }
     }
 
     private fun assistantPrivateSkillMounts(

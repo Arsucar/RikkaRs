@@ -1862,4 +1862,13 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="hook_error_tag_transition_conflict">設定されたタグが競合しています。</string>
   <string name="hook_error_tag_limit_reached">会話のタグ上限に達しました。</string>
   <string name="hook_error_github_issue_evidence_not_found">GitHub Issue の作成成功を示す証拠が見つかりませんでした。</string>
+  <string name="assistant_tools_workspace_create">ワークスペースを作成または管理</string>
+  <string name="assistant_tools_workspace_missing">バインドされたワークスペースはもう存在しません。ワークスペースを管理して修復してください。</string>
+  <string name="assistant_tools_workspace_disabled">ワークスペースシェルが無効になっています。有効にするには、ワークスペースの詳細を開いてください。</string>
+  <string name="assistant_tools_workspace_installing">ワークスペースシェルをインストール中です。</string>
+  <string name="assistant_tools_workspace_broken">ワークスペースシェルの修復が必要です。ワークスペースの詳細を開いてください。</string>
+  <string name="assistant_tools_workspace_unknown">ワークスペースシェルの状態が不明なため、利用できません。</string>
+  <string name="assistant_tools_workspace_binding_saved">ワークスペースバインディングが保存されました</string>
+  <string name="assistant_tools_workspace_binding_save_failed">ワークスペースバインディングを保存できませんでした</string>
+  <string name="assistant_tools_workspace_invalid_id">このワークスペースのIDが無効なため、選択できません</string>
 </resources>

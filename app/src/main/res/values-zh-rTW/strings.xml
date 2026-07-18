@@ -1849,4 +1849,13 @@
   <string name="hook_error_tag_transition_conflict">設定的標籤互相衝突。</string>
   <string name="hook_error_tag_limit_reached">已達到對話標籤數量上限。</string>
   <string name="hook_error_github_issue_evidence_not_found">找不到 GitHub Issue 建立成功的證據。</string>
+  <string name="assistant_tools_workspace_create">建立或管理工作區</string>
+  <string name="assistant_tools_workspace_missing">綁定的工作區已不存在。請管理工作區以進行修復。</string>
+  <string name="assistant_tools_workspace_disabled">工作區 Shell 已停用。開啟工作區詳細資訊以啟用它。</string>
+  <string name="assistant_tools_workspace_installing">工作區 Shell 仍在安裝中。</string>
+  <string name="assistant_tools_workspace_broken">工作區 Shell 需要修復。請開啟工作區詳細資訊。</string>
+  <string name="assistant_tools_workspace_unknown">工作區 Shell 狀態未知，目前無法使用。</string>
+  <string name="assistant_tools_workspace_binding_saved">工作區綁定已儲存</string>
+  <string name="assistant_tools_workspace_binding_save_failed">無法儲存工作區綁定</string>
+  <string name="assistant_tools_workspace_invalid_id">此工作區 ID 無效，無法選取</string>
 </resources>

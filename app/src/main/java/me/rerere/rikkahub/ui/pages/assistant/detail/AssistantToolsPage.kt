@@ -11,11 +11,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -37,7 +44,18 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.WORKSPACE_EDIT_FILE_TOOL
+import me.rerere.rikkahub.data.model.WORKSPACE_READ_FILE_TOOL
+import me.rerere.rikkahub.data.model.WORKSPACE_SHELL_TOOL
+import me.rerere.rikkahub.data.model.WORKSPACE_WRITE_FILE_TOOL
+import me.rerere.rikkahub.data.model.WorkspaceEnableDecision
+import me.rerere.rikkahub.data.model.WorkspaceUnavailableReason
+import me.rerere.rikkahub.data.model.decideWorkspaceEnable
+import me.rerere.rikkahub.data.model.WorkspaceSelectionDecision
+import me.rerere.rikkahub.data.model.decideWorkspaceSelection
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
+import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
+import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -47,7 +65,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
-import kotlin.uuid.Uuid
+import kotlinx.coroutines.launch
 
 /** 单个赋能工具（工具名 + 简述）。 */
 private data class ToolInfo(@StringRes val descriptionRes: Int, val name: String)
@@ -71,10 +89,10 @@ private data class ToolGroupUi(
 )
 
 private val WORKSPACE_TOOLS = listOf(
-    ToolInfo(R.string.assistant_tools_workspace_read_file_desc, "workspace_read_file"),
-    ToolInfo(R.string.assistant_tools_workspace_write_file_desc, "workspace_write_file"),
-    ToolInfo(R.string.assistant_tools_workspace_edit_file_desc, "workspace_edit_file"),
-    ToolInfo(R.string.assistant_tools_workspace_shell_desc, "workspace_shell"),
+    ToolInfo(R.string.assistant_tools_workspace_read_file_desc, WORKSPACE_READ_FILE_TOOL),
+    ToolInfo(R.string.assistant_tools_workspace_write_file_desc, WORKSPACE_WRITE_FILE_TOOL),
+    ToolInfo(R.string.assistant_tools_workspace_edit_file_desc, WORKSPACE_EDIT_FILE_TOOL),
+    ToolInfo(R.string.assistant_tools_workspace_shell_desc, WORKSPACE_SHELL_TOOL),
 )
 private val MEMORY_TOOLS = listOf(
     ToolInfo(R.string.assistant_tools_memory_desc, "memory_tool"),
@@ -113,6 +131,7 @@ private val ALL_TOOL_GROUPS = listOf(
  */
 fun empowermentToolStats(
     assistant: Assistant,
+    workspaces: List<WorkspaceEntity> = emptyList(),
     memoryTableGloballyEnabled: Boolean = true,
 ): Pair<Int, Int> {
     val total = ALL_TOOL_GROUPS.sumOf { it.size }
@@ -123,7 +142,7 @@ fun empowermentToolStats(
         assistantMemoryTableEnabled = assistant.enableMemoryTable,
     )
     if (assistant.enableWebSearch) enabled += SEARCH_TOOLS.size
-    if (assistant.workspaceId != null) enabled += WORKSPACE_TOOLS.size
+    enabled += resolveWorkspaceToolCapability(assistant.workspaceId, workspaces).availableToolNames.size
     if (memoryCapabilities.normalMemoryEnabled) enabled += MEMORY_TOOLS.size
     if (memoryCapabilities.memoryTableEnabled) enabled += MEMORY_TABLE_TOOLS.size
     if (assistant.enableRecentChatsReference) enabled += CONVERSATION_TOOLS.size
@@ -166,6 +185,23 @@ fun AssistantToolsPage(id: String) {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var selectableWorkspaces by remember { mutableStateOf<List<WorkspaceEntity>?>(null) }
+    val bindingSavedMessage = stringResource(R.string.assistant_tools_workspace_binding_saved)
+    val bindingSaveFailedMessage = stringResource(R.string.assistant_tools_workspace_binding_save_failed)
+    val invalidWorkspaceMessage = stringResource(R.string.assistant_tools_workspace_invalid_id)
+
+    LaunchedEffect(vm, bindingSavedMessage, bindingSaveFailedMessage) {
+        vm.workspaceBindingSaveEvents.collect { event ->
+            snackbarHostState.showSnackbar(
+                when (event) {
+                    is WorkspaceBindingSaveEvent.Success -> bindingSavedMessage
+                    WorkspaceBindingSaveEvent.Failure -> bindingSaveFailedMessage
+                }
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -173,6 +209,7 @@ fun AssistantToolsPage(id: String) {
                 title = {
                     val (enabled, total) = empowermentToolStats(
                         assistant = assistant,
+                        workspaces = workspaces,
                         memoryTableGloballyEnabled = settings.enableMemoryTable,
                     )
                     Text(stringResource(R.string.assistant_tools_title_with_count, enabled, total))
@@ -186,12 +223,28 @@ fun AssistantToolsPage(id: String) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         AssistantToolsContent(
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             workspaces = workspaces,
             onUpdate = { vm.update(it) },
+            onSaveWorkspaceBinding = vm::saveWorkspaceBinding,
+            onEnableWorkspace = {
+                when (val decision = decideWorkspaceEnable(workspaces)) {
+                    WorkspaceEnableDecision.CreateOrManage -> navController.navigate(Screen.Workspaces)
+                    WorkspaceEnableDecision.Invalid -> {
+                        scope.launch { snackbarHostState.showSnackbar(invalidWorkspaceMessage) }
+                    }
+                    is WorkspaceEnableDecision.Bind -> vm.saveWorkspaceBinding(decision.workspaceId)
+                    is WorkspaceEnableDecision.Select -> selectableWorkspaces = decision.workspaces
+                }
+            },
+            onRepairWorkspace = { workspace ->
+                if (workspace == null) navController.navigate(Screen.Workspaces)
+                else navController.navigate(Screen.WorkspaceDetail(workspace.id))
+            },
             onSetMemoryEnabled = { vm.setMemoryEnabled(it) },
             onSetMemoryTableEnabled = { vm.setMemoryTableEnabled(it) },
             memoryTableGloballyEnabled = settings.enableMemoryTable,
@@ -199,6 +252,30 @@ fun AssistantToolsPage(id: String) {
                 R.string.assistant_page_memory_table_disabled_global
             ),
             onNavigateSkills = { navController.navigate(Screen.AssistantInjections(id)) },
+        )
+    }
+
+    selectableWorkspaces?.let { selectable ->
+        WorkspaceSelectSheet(
+            assistant = assistant,
+            workspaces = selectable,
+            onSelect = { selectedId ->
+                selectableWorkspaces = null
+                when (val selection = decideWorkspaceSelection(selectedId)) {
+                    WorkspaceSelectionDecision.Cancel -> Unit
+                    WorkspaceSelectionDecision.Invalid -> {
+                        scope.launch { snackbarHostState.showSnackbar(invalidWorkspaceMessage) }
+                    }
+                    is WorkspaceSelectionDecision.Bind -> {
+                        vm.saveWorkspaceBinding(selection.workspaceId)
+                    }
+                }
+            },
+            onManage = {
+                selectableWorkspaces = null
+                navController.navigate(Screen.Workspaces)
+            },
+            onDismiss = { selectableWorkspaces = null },
         )
     }
 }
@@ -209,6 +286,9 @@ private fun AssistantToolsContent(
     assistant: Assistant,
     workspaces: List<WorkspaceEntity>,
     onUpdate: (Assistant) -> Unit,
+    onSaveWorkspaceBinding: (kotlin.uuid.Uuid?) -> Unit,
+    onEnableWorkspace: () -> Unit,
+    onRepairWorkspace: (WorkspaceEntity?) -> Unit,
     onSetMemoryEnabled: (Boolean) -> Unit,
     onSetMemoryTableEnabled: (Boolean) -> Unit,
     memoryTableGloballyEnabled: Boolean,
@@ -219,22 +299,31 @@ private fun AssistantToolsContent(
         memoryTableGloballyEnabled = memoryTableGloballyEnabled,
         assistantMemoryTableEnabled = assistant.enableMemoryTable,
     )
+    val workspaceCapability = resolveWorkspaceToolCapability(assistant.workspaceId, workspaces)
+    val workspaceReason = when (workspaceCapability.unavailableReason) {
+        null -> null
+        WorkspaceUnavailableReason.UNCONFIGURED -> if (workspaces.isEmpty()) {
+            stringResource(R.string.assistant_tools_workspace_create)
+        } else null
+        WorkspaceUnavailableReason.MISSING -> stringResource(R.string.assistant_tools_workspace_missing)
+        WorkspaceUnavailableReason.DISABLED -> stringResource(R.string.assistant_tools_workspace_disabled)
+        WorkspaceUnavailableReason.INSTALLING -> stringResource(R.string.assistant_tools_workspace_installing)
+        WorkspaceUnavailableReason.BROKEN -> stringResource(R.string.assistant_tools_workspace_broken)
+        WorkspaceUnavailableReason.UNKNOWN -> stringResource(R.string.assistant_tools_workspace_unknown)
+    }
     val groups = listOf(
         ToolGroupUi(
             titleRes = R.string.assistant_page_workspace,
             icon = HugeIcons.Folder01,
-            tools = WORKSPACE_TOOLS,
-            enabled = assistant.workspaceId != null,
+            tools = WORKSPACE_TOOLS.filter { it.name in workspaceCapability.availableToolNames },
+            enabled = workspaceCapability.available,
+            checked = workspaceCapability.configured,
+            disabledReason = workspaceReason,
             controlKind = ToolControlKind.TOGGLE,
             onToggle = { on ->
-                if (on) {
-                    workspaces.firstOrNull()?.let { ws ->
-                        onUpdate(assistant.copy(workspaceId = Uuid.parse(ws.id)))
-                    }
-                } else {
-                    onUpdate(assistant.copy(workspaceId = null))
-                }
+                if (on) onEnableWorkspace() else onSaveWorkspaceBinding(null)
             },
+            onNavigate = workspaceReason?.let { { onRepairWorkspace(workspaceCapability.workspace) } },
         ),
         ToolGroupUi(
             titleRes = R.string.assistant_page_memory,

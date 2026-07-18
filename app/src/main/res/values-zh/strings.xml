@@ -2002,4 +2002,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="hook_error_tag_transition_conflict">配置的标签互相冲突。</string>
   <string name="hook_error_tag_limit_reached">已达到会话标签数量上限。</string>
   <string name="hook_error_github_issue_evidence_not_found">未找到 GitHub Issue 创建成功证据。</string>
+  <string name="assistant_tools_workspace_create">创建或管理工作区</string>
+  <string name="assistant_tools_workspace_missing">绑定的工作区已不存在。请管理工作区以修复。</string>
+  <string name="assistant_tools_workspace_disabled">工作区 Shell 已禁用。打开工作区详情以启用它。</string>
+  <string name="assistant_tools_workspace_installing">工作区 Shell 仍在安装中。</string>
+  <string name="assistant_tools_workspace_broken">工作区 Shell 需要修复。请打开工作区详情。</string>
+  <string name="assistant_tools_workspace_unknown">工作区 Shell 状态未知，当前不可用。</string>
+  <string name="assistant_tools_workspace_binding_saved">工作区绑定已保存</string>
+  <string name="assistant_tools_workspace_binding_save_failed">无法保存工作区绑定</string>
+  <string name="assistant_tools_workspace_invalid_id">该工作区 ID 无效，无法选择</string>
 </resources>

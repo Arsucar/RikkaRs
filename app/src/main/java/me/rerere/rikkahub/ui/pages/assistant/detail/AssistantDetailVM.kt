@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,9 +16,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.datastore.AssistantWorkspaceBindingUpdateResult
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getAssistantById
@@ -177,6 +182,28 @@ class AssistantDetailVM(
             started = SharingStarted.Eagerly,
             initialValue = emptyList(),
         )
+
+    private val workspaceBindingSaveMutex = Mutex()
+    private var workspaceBindingRequestId = 0L
+    private val workspaceBindingSaveEventChannel = Channel<WorkspaceBindingSaveEvent>(Channel.BUFFERED)
+    val workspaceBindingSaveEvents = workspaceBindingSaveEventChannel.receiveAsFlow()
+
+    fun saveWorkspaceBinding(workspaceId: Uuid?) {
+        val requestId = ++workspaceBindingRequestId
+        viewModelScope.launch {
+            val result = workspaceBindingSaveMutex.withLock {
+                if (requestId != workspaceBindingRequestId) return@withLock null
+                persistWorkspaceBinding(assistantId, workspaceId) { targetAssistantId, targetWorkspaceId ->
+                    settingsStore.updateAssistantWorkspaceBinding(targetAssistantId, targetWorkspaceId)
+                }
+            }
+            if (result == null) return@launch
+            if (result == WorkspaceBindingSaveEvent.Failure) {
+                Log.e(TAG, "Failed to save workspace binding")
+            }
+            workspaceBindingSaveEventChannel.send(result)
+        }
+    }
 
     fun updateTags(tagIds: List<Uuid>, tags: List<Tag>) {
         viewModelScope.launch {
@@ -617,6 +644,7 @@ class AssistantDetailVM(
             actorAssistantId = assistantId.toString(),
             actorConversationId = conversationId,
         )
+
         Result.success(MemoryTableRevisionHistory(current, snapshots))
     } catch (error: CancellationException) {
         throw error
@@ -690,4 +718,24 @@ sealed interface ConversationTagsUiState {
     data object Loading : ConversationTagsUiState
     data class Success(val tags: List<ConversationTag>) : ConversationTagsUiState
     data object Error : ConversationTagsUiState
+}
+
+sealed interface WorkspaceBindingSaveEvent {
+    data class Success(val workspaceId: Uuid?) : WorkspaceBindingSaveEvent
+    data object Failure : WorkspaceBindingSaveEvent
+}
+
+internal suspend fun persistWorkspaceBinding(
+    assistantId: Uuid,
+    workspaceId: Uuid?,
+    persist: suspend (Uuid, Uuid?) -> AssistantWorkspaceBindingUpdateResult,
+): WorkspaceBindingSaveEvent = try {
+    when (persist(assistantId, workspaceId)) {
+        AssistantWorkspaceBindingUpdateResult.UPDATED -> WorkspaceBindingSaveEvent.Success(workspaceId)
+        AssistantWorkspaceBindingUpdateResult.NOT_FOUND -> WorkspaceBindingSaveEvent.Failure
+    }
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Throwable) {
+    WorkspaceBindingSaveEvent.Failure
 }

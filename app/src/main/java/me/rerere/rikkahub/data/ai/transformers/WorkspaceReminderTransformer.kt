@@ -4,7 +4,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
-import me.rerere.workspace.WorkspaceShellStatus
+import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
 
 /**
  * Workspace 系统提示注入转换器
@@ -22,7 +22,7 @@ class WorkspaceReminderTransformer(
     ): List<UIMessage> {
         val workspace = workspace ?: return messages
         // 与 ChatService.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时注入
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
+        if (!resolveWorkspaceToolCapability(workspace.id, listOf(workspace)).available) return messages
 
         val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)
 

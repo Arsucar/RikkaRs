@@ -57,6 +57,7 @@ fun AssistantDetailPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -146,6 +147,7 @@ fun AssistantDetailPage(id: String) {
                         supportingContent = {
                             val (enabled, total) = empowermentToolStats(
                                 assistant = assistant,
+                                workspaces = workspaces,
                                 memoryTableGloballyEnabled = settings.enableMemoryTable,
                             )
                             Text(stringResource(R.string.assistant_tools_enabled_count, enabled, total))
