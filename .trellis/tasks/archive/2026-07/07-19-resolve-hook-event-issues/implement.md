@@ -9,4 +9,4 @@
 - [x] 将错误事件接入现有 SYNC_MEMORY_TABLE prepare/execute 和 sourceEventId 幂等。
 - [x] 补序列化、路由、关键词、失败状态、子代理终态、记忆事务和 UI 测试。
 - [x] 合并运行资源、Kotlin、JVM、AndroidTest 源码检查并安装 Debug。
-- [ ] 提交推送、双语评论回读、关闭 #158-#162、更新规格并归档。
+- [x] 提交推送、双语评论回读、关闭 #158-#162、更新规格并归档。
