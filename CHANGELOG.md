@@ -16,12 +16,28 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ### 新功能与修复 / Features & Fixes
 
+（暂无）
+
+---
+
+## v2.3.34
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.33 之后）
+
+- **助手工具页体验回归修复** — 恢复设置优先的赋能工具页：用户向计数、长按多选、折叠分组、MCP 默认已配置、诊断/预设收进高级区、内置预设中文名，以及放宽权限时的确认与反馈。（#163）
+  **Assistant tools page UX regression fix** — Restore a settings-first empowerment tools page with user-facing counts, long-press multi-select, collapsible groups, MCP configured-only default, diagnostics/presets under Advanced, localized built-in presets, and confirmation/feedback for permission relaxation. (#163)
+- **子代理记忆表实例注入** — 子代理 Profile 可多选父助手记忆表文档实例，在首次 spawn 时只读注入；遵循对话 isolation；失效 id 静默跳过，且不授予写入工具。（#164）
+  **Subagent memory-table document injection** — Subagent profiles can multi-select parent memory-table document instances for read-only injection on first spawn, honor conversation isolation, skip missing ids safely, and never grant write tools. (#164)
 - **助手工具权限、诊断与连接状态** — 工具支持 INHERIT/ALLOW/ASK/DENY、策略诊断、MCP 安全连接测试、workspace 状态展示和脱敏摘要。（#154 #155 #156）
   **Assistant tool permissions, diagnostics, and connection status** — Add INHERIT/ALLOW/ASK/DENY policies, policy-aware diagnostics, safe MCP connection probes, workspace status display, and redacted summaries. (#154 #155 #156)
 - **工具权限预设与批量操作** — 支持预设保存、重命名、删除、diff 预览、跨助手复制和批量四态设置，并跳过未知工具与私有资源绑定。（#157）
   **Tool permission presets and batch operations** — Add preset save, rename, delete, diff preview, cross-assistant copy, and batch four-state editing while skipping unknown tools and private resource bindings. (#157)
 - **跨层工具回归矩阵** — 增加能力目录、生成装配、持久化兼容、子代理权限和 MCP fake probe 测试。（#152）
   **Cross-layer tool regression matrix** — Add capability catalog, generation assembly, persistence compatibility, subagent policy, and fake MCP probe coverage. (#152)
+- **统一助手工具能力目录与策略** — 稳定工具 ID、配置/可用/生效区分与纯快照，供工具页与生成边界共用。（#153）
+  **Unified assistant tool capability catalog and policy** — Stable tool IDs, configured/available/effective distinctions, and pure snapshots shared by the tools page and generation boundary. (#153)
+- **助手 Workspace 需显式选择** — 绑定 workspace 时要求明确选择，避免误绑。（#151）
+  **Explicit assistant workspace selection** — Require an explicit workspace choice when binding, avoiding accidental bindings. (#151)
 - **版本化 Assistant Hook 事件** — 增加稳定 eventId、Room v43 事件身份、最终文本关键词预筛、工具/Shell 最终失败与子代理结束事件，并复用现有记忆表同步 cursor 保证 sourceEventId 幂等。（#158 #159 #160 #161 #162）
   **Versioned Assistant Hook events** — Add stable event IDs, Room v43 event identity, final-text keyword prefiltering, terminal tool/Shell failure and subagent completion events, while reusing memory-table sync cursors for sourceEventId idempotency. (#158 #159 #160 #161 #162)
 - **终态事件审计与安全收口** — Room v44 持久化事件 payload；工具错误改用结构化 envelope 和稳定 operation hash，取消/后续成功会抑制；子代理严格映射四终态与上下文完整性；错误经验使用受限结构化评估、本地同义键查询和现有 cursor/事务实现新增、更新、跳过及 sourceEventId 幂等。（#160 #161 #162）
