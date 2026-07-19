@@ -2058,4 +2058,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_tools_reason_policy_denied">被助手策略拒绝</string>
   <string name="assistant_tools_permission_effective">有效权限: %s</string>
   <string name="assistant_tools_permission_next_generation">更改将应用于下一次生成。</string>
+  <string name="assistant_hook_trigger_keyword">当关键词匹配</string>
+  <string name="assistant_hook_trigger_keyword_description">字面关键词或短语。空值从不触发。</string>
+  <string name="assistant_hook_trigger_tool_failed">在工具调用最终失败后</string>
+  <string name="assistant_hook_trigger_tool_failed_description">在工具或 Shell 失败后运行是最终状态，不会被取消或恢复。</string>
+  <string name="assistant_hook_trigger_subagent_completed">当子代理任务结束时</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">在子代理结果和上下文快照持久化之后运行。</string>
+  <string name="assistant_hook_trigger_keyword_label">关键词</string>
+  <string name="assistant_hook_error_keyword_required">请输入此触发条件的关键词。</string>
+  <string name="assistant_hook_trigger_keyword_event_description">当最终文本包含配置的关键词或问题引用时运行。</string>
+  <string name="assistant_hook_trigger_final_success_description">在最终助手回复成功持久化后运行。</string>
 </resources>
+

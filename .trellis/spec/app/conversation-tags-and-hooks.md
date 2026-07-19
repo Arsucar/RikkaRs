@@ -14,6 +14,8 @@
 - `ConversationRepository.insertForkConversation(sourceConversationId, fork)` inserts the fork and copies tag relations in one Room transaction.
 - `Assistant.hooks: List<ConversationHook> = emptyList()` preserves old JSON compatibility.
 - `HookRepository.finalizeAndCreateRunExactlyOnce(logicalTurnId, trigger, ..., hooks)` owns exactly-once persistence.
+- Versioned Hook sources create a stable `HookEvent` before persistence. `hook_runs.event_id` is the run identity;
+  one logical turn may create multiple runs when their event IDs differ.
 - `HookRepository.claimQueued(...)`, `isLeaseActive(...)`, terminal completion methods, and `invalidateLeaseAndFailTimeout(...)` own execution state transitions.
 
 ### 3. Contracts
@@ -24,6 +26,12 @@
 - Selected tag IDs are OR with each other and AND with assistant/folder/archive/search filters. Filtering happens in SQL before paging.
 - Whole-Conversation saves must not carry tag collections; otherwise concurrent relationship writes can be lost.
 - A Hook runs only after a persisted logical turn reaches final assistant success with no resumable pending tool.
+- Keyword, tool-failure, and subagent events are emitted only after the final message is persisted and the pending-tool
+  set is empty. Source scans must stay scoped to the current final message so later turns cannot replay historical tools.
+- `KEYWORD_MATCHED` is a local final-text prefilter. A miss creates no run and invokes no provider; matching hooks are
+  grouped by normalized evidence and dispatched separately from final-success hooks.
+- Terminal tool/Shell and subagent events use their stable event ID as `HookFreezeContext.sourceKey`, allowing existing
+  action cursors (including `SYNC_MEMORY_TABLE`) to make retries idempotent without a second action dispatcher.
 - Hook model requests use a frozen in-memory message/prompt/config snapshot. Full prompt, message snapshot, provider output, headers, and credentials never enter Hook Room tables.
 - Tag management Hook output is one JSON object whose key set is exactly `decision`, `operations`, and `reason`. Each operation is `{ "op": "add"|"remove", "tagId": "<uuid>" }` and must stay within the configured allowlist; invalid ops fail closed with zero tag writes.
 - Legacy `add_conversation_tag` / `transition_conversation_tags` configs normalize to `manage_conversation_tags` on load/save. Historical DB `ADD_CONVERSATION_TAG` / `TRANSITION_CONVERSATION_TAGS` enum names remain display-only aliases.

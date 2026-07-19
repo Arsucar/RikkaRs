@@ -14,6 +14,19 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class AssistantHooksPageTest {
+    @Test
+    fun keywordTriggerRequiresLiteralKeyword() {
+        val validation = validateHookEditor(
+            name = "Issue hook",
+            modelIsValid = true,
+            trigger = HookTrigger.KEYWORD_MATCHED,
+            triggerKeyword = "",
+            prompt = "Decide",
+            actionConfig = HookActionConfig.ManageConversationTags(setOf(Uuid.random())),
+            availableTagIds = emptySet(),
+        )
+        assertEquals(HookEditorFieldError.KEYWORD_REQUIRED, validation.triggerError)
+    }
     private val tagId = Uuid.random()
 
     @Test

@@ -1918,4 +1918,15 @@
   <string name="assistant_tools_reason_policy_denied">Отклонено политикой ассистента</string>
   <string name="assistant_tools_permission_effective">Действующее разрешение: %s</string>
   <string name="assistant_tools_permission_next_generation">Изменения применяются к следующему поколению.</string>
+  <string name="assistant_hook_trigger_keyword">Когда ключевое слово совпадает</string>
+  <string name="assistant_hook_trigger_keyword_description">Буквальное ключевое слово или фраза. Пустые значения никогда не срабатывают.</string>
+  <string name="assistant_hook_trigger_tool_failed">После того, как вызов инструмента в конечном итоге не удается</string>
+  <string name="assistant_hook_trigger_tool_failed_description">Запуск после сбоя инструмента или оболочки является окончательным и не отменен и не восстановлен.</string>
+  <string name="assistant_hook_trigger_subagent_completed">Когда заканчивается задача субагента</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">Запускать после того, как результат субагента и снимок контекста будут сохранены.</string>
+  <string name="assistant_hook_trigger_keyword_label">Ключевое слово</string>
+  <string name="assistant_hook_error_keyword_required">Введите ключевое слово для этого триггера.</string>
+  <string name="assistant_hook_trigger_keyword_event_description">Запуск после того, как итоговый текст содержит настроенное ключевое слово или ссылку на проблему.</string>
+  <string name="assistant_hook_trigger_final_success_description">Запускается после успешного сохранения окончательного ответа ассистента.</string>
 </resources>
+

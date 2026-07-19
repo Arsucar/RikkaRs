@@ -8,6 +8,8 @@ import me.rerere.rikkahub.data.model.HookActionType
 import me.rerere.rikkahub.data.model.HookDecision
 import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionMode
+import me.rerere.rikkahub.data.model.HookEvent
+import me.rerere.rikkahub.data.model.HookEventType
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import kotlin.uuid.Uuid
@@ -23,6 +25,11 @@ data class HookFreezeContext(
     val executionMode: HookExecutionMode,
     val sourceKey: String = logicalTurnId.toString(),
     val retryOfExecutionId: Uuid? = null,
+    val eventId: String? = null,
+    val eventType: HookEventType? = null,
+    val eventSchemaVersion: Int = HookEvent.CURRENT_SCHEMA_VERSION,
+    val eventContextId: String? = null,
+    val eventPayloadJson: String? = null,
 )
 
 sealed interface HookPreparedAudit {

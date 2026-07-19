@@ -13,6 +13,8 @@ data class ConversationHook(
     val name: String = "",
     val enabled: Boolean = true,
     val trigger: HookTrigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+    /** Optional literal used by KEYWORD_MATCHED. Blank values never trigger. */
+    val triggerKeyword: String = "",
     val modelId: Uuid,
     val prompt: String = "",
     val actionConfig: HookActionConfig,
@@ -22,7 +24,63 @@ data class ConversationHook(
 @Serializable
 enum class HookTrigger {
     AFTER_ASSISTANT_RESPONSE_SUCCESS,
+    KEYWORD_MATCHED,
+    TOOL_CALL_FINAL_FAILED,
+    SUBAGENT_COMPLETED,
 }
+
+@Serializable
+enum class HookEventType {
+    FINAL_ASSISTANT_RESPONSE_SUCCESS,
+    KEYWORD_MATCHED,
+    TOOL_CALL_FINAL_FAILED,
+    SUBAGENT_COMPLETED,
+}
+
+/** Versioned, non-executable input to the existing Hook dispatcher. */
+@Serializable
+data class HookEvent(
+    val eventId: String,
+    val eventType: HookEventType,
+    val conversationId: Uuid,
+    val logicalTurnId: Uuid?,
+    val sourceMessageId: Uuid?,
+    val contextId: String? = null,
+    val occurredAtEpochMillis: Long,
+    val payload: kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.JsonObject(emptyMap()),
+    val schemaVersion: Int = 1,
+) {
+    companion object {
+        const val CURRENT_SCHEMA_VERSION = 1
+
+        fun stableId(
+            eventType: HookEventType,
+            conversationId: Uuid,
+            logicalTurnId: Uuid?,
+            sourceIdentity: String?,
+            evidence: String = "",
+        ): String {
+            val material = listOf(
+                eventType.name,
+                conversationId.toString(),
+                logicalTurnId?.toString().orEmpty(),
+                sourceIdentity.orEmpty(),
+                evidence.trim().take(500),
+            ).joinToString("|")
+            return MessageDigest.getInstance("SHA-256")
+                .digest(material.toByteArray(Charsets.UTF_8))
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        }
+    }
+}
+
+val HookTrigger.eventType: HookEventType
+    get() = when (this) {
+        HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS -> HookEventType.FINAL_ASSISTANT_RESPONSE_SUCCESS
+        HookTrigger.KEYWORD_MATCHED -> HookEventType.KEYWORD_MATCHED
+        HookTrigger.TOOL_CALL_FINAL_FAILED -> HookEventType.TOOL_CALL_FINAL_FAILED
+        HookTrigger.SUBAGENT_COMPLETED -> HookEventType.SUBAGENT_COMPLETED
+    }
 
 @Serializable
 sealed interface HookActionConfig {
@@ -134,6 +192,7 @@ fun ConversationHook.configurationHash(): String {
         name,
         enabled.toString(),
         trigger.name,
+        triggerKeyword.trim(),
         modelId.toString(),
         prompt,
         normalized.actionType.name,
@@ -238,6 +297,11 @@ data class HookRunRecord(
     val messageModelId: Uuid?,
     val invocationKind: String,
     val trigger: HookTrigger,
+    val eventId: String = "",
+    val eventType: HookEventType = HookEventType.FINAL_ASSISTANT_RESPONSE_SUCCESS,
+    val eventSchemaVersion: Int = HookEvent.CURRENT_SCHEMA_VERSION,
+    val eventContextId: String? = null,
+    val eventOccurredAt: Instant = Instant.EPOCH,
     val configVersion: Long,
     val configHash: String,
     val startedAt: Instant,

@@ -136,19 +136,24 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.data.model.HookActionConfig
+import me.rerere.rikkahub.data.model.ConversationHook
 import me.rerere.rikkahub.data.model.HookDispatchPersistenceResult
 import me.rerere.rikkahub.data.model.HookExecutionMetadata
 import me.rerere.rikkahub.data.model.HookExecutionMode
 import me.rerere.rikkahub.data.model.HookExecutionRecord
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookErrorCode
+import me.rerere.rikkahub.data.model.HookEvent
+import me.rerere.rikkahub.data.model.HookEventType
 import me.rerere.rikkahub.data.model.HookTrigger
 import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.data.model.configurationHash
+import me.rerere.rikkahub.data.model.eventType
 import me.rerere.rikkahub.service.hooks.FrozenHookExecution
 import me.rerere.rikkahub.service.hooks.HookDispatcher
 import me.rerere.rikkahub.service.hooks.HookFreezeContext
 import me.rerere.rikkahub.service.hooks.HookOutputException
+import me.rerere.rikkahub.service.hooks.detectConfiguredHookKeyword
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.service.hooks.ParsedMemoryTableSyncHookOutput
 import me.rerere.rikkahub.service.hooks.evaluateHookFinalSuccess
@@ -898,14 +903,124 @@ class ChatService(
             hookRepository.updatePendingTools(logicalTurnId, pendingToolIds)
             return
         }
+        dispatchStructuredTerminalEvents(logicalTurnId, conversation, assistant)
         val snapshot = evaluateHookFinalSuccess(conversation)
         if (snapshot == null) {
             hookRepository.markTurnFailed(logicalTurnId)
             return
         }
-        val hooks = assistant.hooks.filter {
-            it.enabled && it.trigger == HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS
+        dispatchTerminalEvent(
+            logicalTurnId = logicalTurnId,
+            conversation = conversation,
+            assistant = assistant,
+            sourceNodeId = snapshot.nodeId,
+            sourceMessageId = snapshot.messageId,
+            sourceMessageText = snapshot.text,
+            sourceMessageModelId = snapshot.messageModelId,
+            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            contextId = null,
+            sourceIdentity = snapshot.messageId.toString(),
+            hooksOverride = assistant.hooks.filter {
+                it.enabled && it.trigger == HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS
+            },
+        )
+        assistant.hooks.filter { it.enabled && it.trigger == HookTrigger.KEYWORD_MATCHED }
+            .mapNotNull { hook ->
+                detectConfiguredHookKeyword(snapshot.text, hook.triggerKeyword)?.let { it to hook }
+            }
+            .groupBy({ it.first }, { it.second })
+            .forEach { (evidence, hooks) ->
+                dispatchTerminalEvent(
+                    logicalTurnId = logicalTurnId,
+                    conversation = conversation,
+                    assistant = assistant,
+                    sourceNodeId = snapshot.nodeId,
+                    sourceMessageId = snapshot.messageId,
+                    sourceMessageText = snapshot.text,
+                    sourceMessageModelId = snapshot.messageModelId,
+                    trigger = HookTrigger.KEYWORD_MATCHED,
+                    contextId = null,
+                    sourceIdentity = "${snapshot.messageId}:$evidence",
+                    hooksOverride = hooks,
+                )
+            }
+    }
+
+    private suspend fun dispatchStructuredTerminalEvents(
+        logicalTurnId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+    ) {
+        val sourceMessage = conversation.currentMessages.lastOrNull() ?: return
+        val sourceNode = conversation.getMessageNodeByMessageId(sourceMessage.id) ?: return
+        val tools = sourceMessage.parts.filterIsInstance<UIMessagePart.Tool>()
+        val terminalSubagents = tools.filter { tool ->
+            tool.toolName == "spawn_subagent" && tool.isExecuted &&
+                tool.output.joinToString().contains("context_status", ignoreCase = true) &&
+                !tool.output.joinToString().contains("RUNNING", ignoreCase = true)
         }
+        val failedTools = tools.filter { tool ->
+            if (tool.toolName == "spawn_subagent" || !tool.isExecuted) return@filter false
+            val output = tool.output.joinToString().take(4_000)
+            val nonZeroExit = Regex("\\\"exitCode\\\"\\s*:\\s*(-?\\d+)")
+                .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { it != 0 } == true
+            nonZeroExit || output.contains("\\\"timedOut\\\":true", ignoreCase = true) ||
+                output.contains("\\\"error\\\"", ignoreCase = true)
+        }
+        if (failedTools.isNotEmpty()) {
+            dispatchTerminalEvent(
+                logicalTurnId = logicalTurnId,
+                conversation = conversation,
+                assistant = assistant,
+                sourceNodeId = sourceNode.id,
+                sourceMessageId = sourceMessage.id,
+                sourceMessageText = sourceMessage.toText().take(4_000),
+                sourceMessageModelId = sourceMessage.modelId,
+                trigger = HookTrigger.TOOL_CALL_FINAL_FAILED,
+                contextId = null,
+                sourceIdentity = failedTools.joinToString(",") { it.toolCallId },
+            )
+        }
+        terminalSubagents.forEach { tool ->
+            val output = tool.output.joinToString().take(4_000)
+            val contextId = Regex("context_id[^A-Za-z0-9_-]+([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE)
+                .find(output)?.groupValues?.getOrNull(1)
+            dispatchTerminalEvent(
+                logicalTurnId = logicalTurnId,
+                conversation = conversation,
+                assistant = assistant,
+                sourceNodeId = sourceNode.id,
+                sourceMessageId = sourceMessage.id,
+                sourceMessageText = sourceMessage.toText().take(4_000),
+                sourceMessageModelId = sourceMessage.modelId,
+                trigger = HookTrigger.SUBAGENT_COMPLETED,
+                contextId = contextId,
+                sourceIdentity = "${contextId.orEmpty()}:${tool.toolCallId}",
+            )
+        }
+    }
+
+    private suspend fun dispatchTerminalEvent(
+        logicalTurnId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+        sourceNodeId: Uuid,
+        sourceMessageId: Uuid,
+        sourceMessageText: String,
+        sourceMessageModelId: Uuid?,
+        trigger: HookTrigger,
+        contextId: String?,
+        sourceIdentity: String,
+        hooksOverride: List<ConversationHook>? = null,
+    ) {
+        val hooks = hooksOverride ?: assistant.hooks.filter { it.enabled && it.trigger == trigger }
+        val eventType = trigger.eventType
+        val eventId = HookEvent.stableId(
+            eventType,
+            conversation.id,
+            logicalTurnId,
+            sourceIdentity,
+        )
         val metadata = hooks.mapIndexed { index, hook ->
             HookExecutionMetadata(
                 hookId = hook.id,
@@ -914,20 +1029,28 @@ class ChatService(
                 hookConfigHash = hook.configurationHash(),
                 modelId = hook.modelId,
                 actionType = hook.actionConfig.actionType,
-                executionMode = HookExecutionMode.AUTO,
             )
         }
+        val event = HookEvent(
+            eventId = eventId,
+            eventType = eventType,
+            conversationId = conversation.id,
+            logicalTurnId = logicalTurnId,
+            sourceMessageId = sourceMessageId,
+            contextId = contextId,
+            occurredAtEpochMillis = System.currentTimeMillis(),
+        )
         val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
             logicalTurnId = logicalTurnId,
-            trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
-            nodeId = snapshot.nodeId,
-            messageId = snapshot.messageId,
-            messageModelId = snapshot.messageModelId,
+            trigger = trigger,
+            event = event,
+            nodeId = sourceNodeId,
+            messageId = sourceMessageId,
+            messageModelId = sourceMessageModelId,
             hooks = metadata,
         )
         if (persistence !is HookDispatchPersistenceResult.Created) return
-
-        val frozenExecutions = hooks.zip(metadata).map { (hook, execution) ->
+        val executions = hooks.zip(metadata).map { (hook, execution) ->
             FrozenHookExecution(
                 executionId = execution.executionId,
                 hook = hook,
@@ -935,18 +1058,19 @@ class ChatService(
                     conversation = conversation,
                     assistantId = assistant.id,
                     logicalTurnId = logicalTurnId,
-                    sourceNodeId = snapshot.nodeId,
-                    sourceMessageId = snapshot.messageId,
-                    sourceMessageTextSnapshot = snapshot.text,
-                    sourceMessageModelId = snapshot.messageModelId,
+                    sourceNodeId = sourceNodeId,
+                    sourceMessageId = sourceMessageId,
+                    sourceMessageTextSnapshot = sourceMessageText,
+                    sourceMessageModelId = sourceMessageModelId,
                     executionMode = HookExecutionMode.AUTO,
+                    sourceKey = eventId,
+                    eventId = eventId,
+                    eventType = eventType,
+                    eventContextId = contextId,
                 ),
             )
         }
-        appScope.launch {
-            hookDispatcher.dispatch(persistence.runId, frozenExecutions)
-            runCatching { hookRepository.cleanupHistory(conversation.id) }
-        }
+        appScope.launch { hookDispatcher.dispatch(persistence.runId, executions) }
     }
 
     suspend fun previewMemoryTableHook(conversationId: Uuid, hookId: Uuid): MemoryTableHookPreview =
@@ -990,6 +1114,20 @@ class ChatService(
         val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
             logicalTurnId = logicalTurnId,
             trigger = HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS,
+            event = HookEvent(
+                eventId = HookEvent.stableId(
+                    HookEventType.FINAL_ASSISTANT_RESPONSE_SUCCESS,
+                    conversation.id,
+                    logicalTurnId,
+                    snapshot.messageId.toString(),
+                    preview.sourceKey,
+                ),
+                eventType = HookEventType.FINAL_ASSISTANT_RESPONSE_SUCCESS,
+                conversationId = conversation.id,
+                logicalTurnId = logicalTurnId,
+                sourceMessageId = snapshot.messageId,
+                occurredAtEpochMillis = System.currentTimeMillis(),
+            ),
             nodeId = snapshot.nodeId,
             messageId = snapshot.messageId,
             messageModelId = snapshot.messageModelId,

@@ -310,8 +310,11 @@ fun AssistantHookEditorPage(id: String, hookId: String?, conversationId: String?
         mutableStateOf(initialModelId)
     }
     var prompt by remember(hookId, existing?.configVersion) { mutableStateOf(existing?.prompt.orEmpty()) }
-    val trigger by remember(hookId, existing?.configVersion) {
+    var trigger by remember(hookId, existing?.configVersion) {
         mutableStateOf(existing?.trigger ?: HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS)
+    }
+    var triggerKeyword by remember(hookId, existing?.configVersion) {
+        mutableStateOf(existing?.triggerKeyword.orEmpty())
     }
     val initialNormalized = remember(hookId, existing?.configVersion) {
         existing?.actionConfig?.normalize()
@@ -344,6 +347,7 @@ fun AssistantHookEditorPage(id: String, hookId: String?, conversationId: String?
         name = name,
         modelIsValid = settings.providers.findModelById(modelId)?.type == ModelType.CHAT,
         trigger = trigger,
+        triggerKeyword = triggerKeyword,
         prompt = prompt,
         actionConfig = actionConfig,
         availableTagIds = tags.mapTo(mutableSetOf()) { it.id },
@@ -374,6 +378,7 @@ fun AssistantHookEditorPage(id: String, hookId: String?, conversationId: String?
                                     name = name.trim(),
                                     enabled = existing?.enabled ?: true,
                                     trigger = trigger,
+                                    triggerKeyword = triggerKeyword.trim(),
                                     modelId = modelId,
                                     prompt = prompt,
                                     actionConfig = actionConfig.normalize(),
@@ -417,10 +422,26 @@ fun AssistantHookEditorPage(id: String, hookId: String?, conversationId: String?
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(stringResource(R.string.assistant_hook_trigger), style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        stringResource(R.string.assistant_hook_trigger_final_success),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Select(
+                        options = HookTrigger.entries,
+                        selectedOption = trigger,
+                        onOptionSelected = { trigger = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        optionToString = { option -> stringResource(hookTriggerLabelRes(option)) },
+                        optionDescription = { option -> stringResource(hookTriggerDescriptionRes(option)) },
                     )
+                    if (trigger == HookTrigger.KEYWORD_MATCHED) {
+                        OutlinedTextField(
+                            value = triggerKeyword,
+                            onValueChange = { triggerKeyword = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.assistant_hook_trigger_keyword_label)) },
+                            supportingText = {
+                                Text(stringResource(R.string.assistant_hook_trigger_keyword_description))
+                            },
+                            singleLine = true,
+                        )
+                    }
                     validation.triggerError?.let {
                         HookEditorErrorText(stringResource(it.stringRes))
                     }
@@ -804,6 +825,7 @@ internal enum class HookEditorFieldError(val stringRes: Int) {
     NAME_REQUIRED(R.string.assistant_hook_error_name_required),
     MODEL_REQUIRED(R.string.assistant_hook_error_model_required),
     TRIGGER_UNSUPPORTED(R.string.assistant_hook_error_trigger_unsupported),
+    KEYWORD_REQUIRED(R.string.assistant_hook_error_keyword_required),
     PROMPT_REQUIRED(R.string.assistant_hook_error_prompt_required),
     TAG_REQUIRED(R.string.assistant_hook_error_tag_required),
     TAG_UNAVAILABLE(R.string.assistant_hook_error_tag_unavailable),
@@ -823,6 +845,7 @@ internal fun validateHookEditor(
     name: String,
     modelIsValid: Boolean,
     trigger: HookTrigger,
+    triggerKeyword: String = "",
     prompt: String,
     actionConfig: HookActionConfig,
     availableTagIds: Set<Uuid>,
@@ -869,12 +892,29 @@ internal fun validateHookEditor(
     return HookEditorValidation(
         nameError = HookEditorFieldError.NAME_REQUIRED.takeIf { name.isBlank() },
         modelError = HookEditorFieldError.MODEL_REQUIRED.takeUnless { modelIsValid },
-        triggerError = HookEditorFieldError.TRIGGER_UNSUPPORTED.takeUnless {
-            trigger == HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS
+        triggerError = when {
+            trigger !in HookTrigger.entries -> HookEditorFieldError.TRIGGER_UNSUPPORTED
+            trigger == HookTrigger.KEYWORD_MATCHED && triggerKeyword.isBlank() ->
+                HookEditorFieldError.KEYWORD_REQUIRED
+            else -> null
         },
         promptError = HookEditorFieldError.PROMPT_REQUIRED.takeIf { prompt.isBlank() },
         actionError = actionError,
     )
+}
+
+internal fun hookTriggerLabelRes(trigger: HookTrigger): Int = when (trigger) {
+    HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS -> R.string.assistant_hook_trigger_final_success
+    HookTrigger.KEYWORD_MATCHED -> R.string.assistant_hook_trigger_keyword
+    HookTrigger.TOOL_CALL_FINAL_FAILED -> R.string.assistant_hook_trigger_tool_failed
+    HookTrigger.SUBAGENT_COMPLETED -> R.string.assistant_hook_trigger_subagent_completed
+}
+
+internal fun hookTriggerDescriptionRes(trigger: HookTrigger): Int = when (trigger) {
+    HookTrigger.AFTER_ASSISTANT_RESPONSE_SUCCESS -> R.string.assistant_hook_trigger_final_success_description
+    HookTrigger.KEYWORD_MATCHED -> R.string.assistant_hook_trigger_keyword_event_description
+    HookTrigger.TOOL_CALL_FINAL_FAILED -> R.string.assistant_hook_trigger_tool_failed_description
+    HookTrigger.SUBAGENT_COMPLETED -> R.string.assistant_hook_trigger_subagent_completed_description
 }
 
 internal fun hookActionLabelRes(actionType: HookActionType): Int = when (actionType) {

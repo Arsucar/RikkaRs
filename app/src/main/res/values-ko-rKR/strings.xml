@@ -1918,4 +1918,15 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_tools_reason_policy_denied">어시스턴트 정책에 의해 거부됨</string>
   <string name="assistant_tools_permission_effective">유효 권한: %s</string>
   <string name="assistant_tools_permission_next_generation">변경 사항은 다음 세대에 적용됩니다.</string>
+  <string name="assistant_hook_trigger_keyword">키워드가 일치할 때</string>
+  <string name="assistant_hook_trigger_keyword_description">리터럴 키워드 또는 구문입니다. 빈 값은 절대 트리거되지 않습니다.</string>
+  <string name="assistant_hook_trigger_tool_failed">도구 호출이 최종적으로 실패한 후</string>
+  <string name="assistant_hook_trigger_tool_failed_description">도구 또는 셸 실패가 최종적이며 취소 또는 복구되지 않은 후에 실행됩니다.</string>
+  <string name="assistant_hook_trigger_subagent_completed">서브 에이전트 작업이 종료되면</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">서브에이전트 결과와 컨텍스트 스냅샷이 저장된 후에 실행됩니다.</string>
+  <string name="assistant_hook_trigger_keyword_label">키워드</string>
+  <string name="assistant_hook_error_keyword_required">이 트리거의 키워드를 입력하세요.</string>
+  <string name="assistant_hook_trigger_keyword_event_description">최종 텍스트에 설정된 키워드 또는 이슈 참조가 포함된 후 실행됩니다.</string>
+  <string name="assistant_hook_trigger_final_success_description">최종 어시스턴트 응답이 성공적으로 저장된 후 실행됩니다.</string>
 </resources>
+

@@ -1905,4 +1905,15 @@
   <string name="assistant_tools_reason_policy_denied">被助手政策拒絕</string>
   <string name="assistant_tools_permission_effective">有效權限：%s</string>
   <string name="assistant_tools_permission_next_generation">變更將應用於下一代。</string>
+  <string name="assistant_hook_trigger_keyword">當關鍵字匹配時</string>
+  <string name="assistant_hook_trigger_keyword_description">一個關鍵字或片語。空白值永遠不會觸發。</string>
+  <string name="assistant_hook_trigger_tool_failed">在工具呼叫最終失敗後</string>
+  <string name="assistant_hook_trigger_tool_failed_description">工具或 shell 失敗後運行是最終的，且不被取消或恢復。</string>
+  <string name="assistant_hook_trigger_subagent_completed">當 subagent 任務結束時</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">在子代理結果和上下文快照被持久化後運行。</string>
+  <string name="assistant_hook_trigger_keyword_label">關鍵字</string>
+  <string name="assistant_hook_error_keyword_required">請輸入此觸發的關鍵字。</string>
+  <string name="assistant_hook_trigger_keyword_event_description">在最終文本包含已配置的關鍵字或問題參考後執行。</string>
+  <string name="assistant_hook_trigger_final_success_description">在最終助手回應成功持久化後執行。</string>
 </resources>
+

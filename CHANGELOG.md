@@ -22,6 +22,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
   **Tool permission presets and batch operations** — Add preset save, rename, delete, diff preview, cross-assistant copy, and batch four-state editing while skipping unknown tools and private resource bindings. (#157)
 - **跨层工具回归矩阵** — 增加能力目录、生成装配、持久化兼容、子代理权限和 MCP fake probe 测试。（#152）
   **Cross-layer tool regression matrix** — Add capability catalog, generation assembly, persistence compatibility, subagent policy, and fake MCP probe coverage. (#152)
+- **版本化 Assistant Hook 事件** — 增加稳定 eventId、Room v43 事件身份、最终文本关键词预筛、工具/Shell 最终失败与子代理结束事件，并复用现有记忆表同步 cursor 保证 sourceEventId 幂等。（#158 #159 #160 #161 #162）
+  **Versioned Assistant Hook events** — Add stable event IDs, Room v43 event identity, final-text keyword prefiltering, terminal tool/Shell failure and subagent completion events, while reusing memory-table sync cursors for sourceEventId idempotency. (#158 #159 #160 #161 #162)
 
 ---
 

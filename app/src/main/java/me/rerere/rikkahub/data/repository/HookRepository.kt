@@ -20,6 +20,8 @@ import me.rerere.rikkahub.data.model.HookExecutionMetadata
 import me.rerere.rikkahub.data.model.HookExecutionMode
 import me.rerere.rikkahub.data.model.HookExecutionRecord
 import me.rerere.rikkahub.data.model.HookExecutionStatus
+import me.rerere.rikkahub.data.model.HookEvent
+import me.rerere.rikkahub.data.model.HookEventType
 import me.rerere.rikkahub.data.model.HookRunHistory
 import me.rerere.rikkahub.data.model.HookRunRecord
 import me.rerere.rikkahub.data.model.HookRunStatus
@@ -98,6 +100,7 @@ class HookRepository(
     suspend fun finalizeAndCreateRunExactlyOnce(
         logicalTurnId: Uuid,
         trigger: HookTrigger,
+        event: HookEvent,
         nodeId: Uuid?,
         messageId: Uuid?,
         messageModelId: Uuid?,
@@ -119,6 +122,11 @@ class HookRepository(
                 messageModelId = messageModelId?.toString(),
                 invocationKind = turn.invocationKind,
                 trigger = trigger.name,
+                eventId = event.eventId,
+                eventType = event.eventType.name,
+                eventSchemaVersion = event.schemaVersion,
+                eventContextId = event.contextId,
+                eventOccurredAt = event.occurredAtEpochMillis,
                 configVersion = orderedHooks.maxOf { hook -> hook.hookConfigVersion },
                 configHash = aggregateConfigHash(orderedHooks),
                 startedAt = now,
@@ -165,7 +173,7 @@ class HookRepository(
         return when (
             val result = dao.finalizeAndCreateRunExactlyOnce(
                 logicalTurnId = logicalTurnId.toString(),
-                trigger = trigger.name,
+                eventId = event.eventId,
                 run = run,
                 executions = executions,
                 completedAt = now,
@@ -403,6 +411,11 @@ private fun HookRunEntity.toModel(): HookRunRecord = HookRunRecord(
     messageModelId = messageModelId?.let(Uuid::parse),
     invocationKind = invocationKind,
     trigger = HookTrigger.valueOf(trigger),
+    eventId = eventId,
+    eventType = HookEventType.valueOf(eventType),
+    eventSchemaVersion = eventSchemaVersion,
+    eventContextId = eventContextId,
+    eventOccurredAt = Instant.ofEpochMilli(eventOccurredAt),
     configVersion = configVersion,
     configHash = configHash,
     startedAt = Instant.ofEpochMilli(startedAt),

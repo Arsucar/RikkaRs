@@ -1918,4 +1918,15 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_tools_reason_policy_denied">アシスタントポリシーにより拒否されました</string>
   <string name="assistant_tools_permission_effective">有効な権限: %s</string>
   <string name="assistant_tools_permission_next_generation">変更は次の生成に適用されます。</string>
+  <string name="assistant_hook_trigger_keyword">キーワードが一致したとき</string>
+  <string name="assistant_hook_trigger_keyword_description">リテラルキーワードまたはフレーズ。空の値はトリガーしません。</string>
+  <string name="assistant_hook_trigger_final_success_description">最終アシスタント応答が正常に保存された後に実行します。</string>
+  <string name="assistant_hook_trigger_tool_failed">ツール呼び出しが最終的に失敗した後</string>
+  <string name="assistant_hook_trigger_tool_failed_description">ツールまたはシェルの失敗後の実行は最終的であり、キャンセルも復旧もされません。</string>
+  <string name="assistant_hook_trigger_subagent_completed">サブエージェントのタスクが終了したとき</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">サブエージェントの結果とコンテキストスナップショットが永続化された後に実行します。</string>
+  <string name="assistant_hook_trigger_keyword_label">キーワード</string>
+  <string name="assistant_hook_error_keyword_required">このトリガーのキーワードを入力してください。</string>
+  <string name="assistant_hook_trigger_keyword_event_description">設定されたキーワードまたはイシュー参照が最終テキストに含まれた後に実行されます。</string>
 </resources>
+

@@ -2076,4 +2076,15 @@
   <string name="assistant_tools_reason_policy_denied">Denied by assistant policy</string>
   <string name="assistant_tools_permission_effective">Effective permission: %s</string>
   <string name="assistant_tools_permission_next_generation">Changes apply to the next generation.</string>
+  <string name="assistant_hook_trigger_keyword">When a keyword matches</string>
+  <string name="assistant_hook_trigger_keyword_description">A literal keyword or phrase. Empty values never trigger.</string>
+  <string name="assistant_hook_trigger_tool_failed">After a tool call finally fails</string>
+  <string name="assistant_hook_trigger_tool_failed_description">Run after tool or shell failure is final and not cancelled or recovered.</string>
+  <string name="assistant_hook_trigger_subagent_completed">When a subagent task ends</string>
+  <string name="assistant_hook_trigger_subagent_completed_description">Run after the subagent result and context snapshot are persisted.</string>
+  <string name="assistant_hook_trigger_keyword_label">Keyword</string>
+  <string name="assistant_hook_error_keyword_required">Enter a keyword for this trigger.</string>
+  <string name="assistant_hook_trigger_keyword_event_description">Run after the final text contains the configured keyword or issue reference.</string>
+  <string name="assistant_hook_trigger_final_success_description">Run after the final assistant response is persisted successfully.</string>
 </resources>
+

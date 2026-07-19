@@ -87,7 +87,7 @@ data class GenerationLogicalTurnWithPendingTools(
         ),
     ],
     indices = [
-        Index(value = ["logical_turn_id", "trigger"], unique = true),
+        Index(value = ["event_id"], unique = true),
         Index(value = ["conversation_id", "started_at"]),
         Index(value = ["status"]),
     ],
@@ -111,6 +111,16 @@ data class HookRunEntity(
     @ColumnInfo("invocation_kind")
     val invocationKind: String,
     val trigger: String,
+    @ColumnInfo(name = "event_id", defaultValue = "''")
+    val eventId: String = "",
+    @ColumnInfo(name = "event_type", defaultValue = "'FINAL_ASSISTANT_RESPONSE_SUCCESS'")
+    val eventType: String = "FINAL_ASSISTANT_RESPONSE_SUCCESS",
+    @ColumnInfo(name = "event_schema_version", defaultValue = "1")
+    val eventSchemaVersion: Int = 1,
+    @ColumnInfo("event_context_id")
+    val eventContextId: String? = null,
+    @ColumnInfo(name = "event_occurred_at", defaultValue = "0")
+    val eventOccurredAt: Long = 0,
     @ColumnInfo("config_version")
     val configVersion: Long,
     @ColumnInfo("config_hash")

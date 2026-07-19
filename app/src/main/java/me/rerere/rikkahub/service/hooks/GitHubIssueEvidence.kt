@@ -14,6 +14,22 @@ data class GitHubIssueEvidence(
     val normalizedUrl: String? = null,
 )
 
+/** Bounded local pre-filter used by KEYWORD_MATCHED; it never calls a provider. */
+fun detectConfiguredHookKeyword(text: String, keyword: String): String? {
+    val candidate = keyword.trim()
+    if (candidate.isEmpty() || text.isEmpty()) return null
+    val index = text.indexOf(candidate, ignoreCase = true)
+    if (index < 0) return null
+    val end = index + candidate.length
+    val wordLike = candidate.any { it.isLetterOrDigit() }
+    if (wordLike) {
+        val before = text.getOrNull(index - 1)
+        val after = text.getOrNull(end)
+        if (before?.isLetterOrDigit() == true || after?.isLetterOrDigit() == true) return null
+    }
+    return candidate.take(200)
+}
+
 private data class EvidenceCandidate(
     val start: Int,
     val endExclusive: Int,

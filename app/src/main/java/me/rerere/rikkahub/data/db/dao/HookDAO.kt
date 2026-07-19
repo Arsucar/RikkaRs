@@ -126,19 +126,22 @@ interface HookDAO {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertExecutions(executions: List<HookExecutionEntity>)
 
-    @Query("SELECT * FROM hook_runs WHERE logical_turn_id = :logicalTurnId AND trigger = :trigger LIMIT 1")
-    suspend fun getRunByLogicalTurn(logicalTurnId: String, trigger: String): HookRunEntity?
+    @Query("SELECT * FROM hook_runs WHERE event_id = :eventId LIMIT 1")
+    suspend fun getRunByEventId(eventId: String): HookRunEntity?
 
     @Transaction
     suspend fun finalizeAndCreateRunExactlyOnce(
         logicalTurnId: String,
-        trigger: String,
+        eventId: String,
         run: HookRunEntity?,
         executions: List<HookExecutionEntity>,
         completedAt: Long,
     ): HookRunCreationResult {
-        val existing = getRunByLogicalTurn(logicalTurnId, trigger)
+        val existing = getRunByEventId(eventId)
         if (existing != null) {
+            if (existing.logicalTurnId != logicalTurnId) {
+                return HookRunCreationResult.Duplicate(existing.runId)
+            }
             updateLogicalTurnStatus(
                 logicalTurnId,
                 GenerationLogicalTurnStatus.COMPLETED.name,
@@ -149,7 +152,7 @@ interface HookDAO {
             return HookRunCreationResult.Duplicate(existing.runId)
         }
         val turn = getLogicalTurn(logicalTurnId)?.turn ?: return HookRunCreationResult.TurnNotActive
-        if (turn.status !in ACTIVE_LOGICAL_TURN_STATUSES) return HookRunCreationResult.TurnNotActive
+        if (turn.status !in FINALIZABLE_LOGICAL_TURN_STATUSES) return HookRunCreationResult.TurnNotActive
         if (run == null || executions.isEmpty()) {
             updateLogicalTurnStatus(
                 logicalTurnId,
@@ -161,7 +164,7 @@ interface HookDAO {
             return HookRunCreationResult.NoHooks
         }
         if (insertRunIgnore(run) == -1L) {
-            val raced = getRunByLogicalTurn(logicalTurnId, trigger)
+            val raced = getRunByEventId(eventId)
                 ?: return HookRunCreationResult.TurnNotActive
             updateLogicalTurnStatus(
                 logicalTurnId,
@@ -562,6 +565,11 @@ interface HookDAO {
         private val ACTIVE_LOGICAL_TURN_STATUSES = setOf(
             GenerationLogicalTurnStatus.ACTIVE.name,
             GenerationLogicalTurnStatus.WAITING_FOR_TOOL.name,
+        )
+        private val FINALIZABLE_LOGICAL_TURN_STATUSES = ACTIVE_LOGICAL_TURN_STATUSES + setOf(
+            GenerationLogicalTurnStatus.COMPLETED.name,
+            GenerationLogicalTurnStatus.FAILED.name,
+            GenerationLogicalTurnStatus.INTERRUPTED.name,
         )
         private val TERMINAL_EXECUTION_STATUSES = setOf(
             HookExecutionStatus.SUCCESS,
