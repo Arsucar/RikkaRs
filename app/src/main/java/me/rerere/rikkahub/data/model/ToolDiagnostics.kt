@@ -4,8 +4,10 @@ package me.rerere.rikkahub.data.model
 enum class ToolDiagnosticTarget { NONE, WORKSPACES, SKILLS, MEMORY, MEMORY_TABLE, MCP, ASSISTANT_TOOLS }
 
 /** Stable, UI-independent explanation of one capability decision. */
+enum class ToolDiagnosticCheck { CONFIGURED, AVAILABLE, EFFECTIVE }
+
 data class ToolDiagnosticStep(
-    val code: ToolCapabilityReason,
+    val check: ToolDiagnosticCheck,
     val passed: Boolean,
 )
 
@@ -43,10 +45,9 @@ private fun ToolCapability.repairTarget(): ToolDiagnosticTarget = when (source) 
 /** Builds a deterministic chain; no I/O or raw configuration is consulted. */
 fun ToolCapability.diagnostic(): ToolCapabilityDiagnostic {
     val chain = listOf(
-        ToolDiagnosticStep(reasonCode, reasonCode == ToolCapabilityReason.AVAILABLE),
-        ToolDiagnosticStep(ToolCapabilityReason.DISABLED, configured),
-        ToolDiagnosticStep(ToolCapabilityReason.UNAVAILABLE, available),
-        ToolDiagnosticStep(ToolCapabilityReason.AVAILABLE, effective),
+        ToolDiagnosticStep(ToolDiagnosticCheck.CONFIGURED, configured),
+        ToolDiagnosticStep(ToolDiagnosticCheck.AVAILABLE, available),
+        ToolDiagnosticStep(ToolDiagnosticCheck.EFFECTIVE, effective),
     )
     return ToolCapabilityDiagnostic(this, reasonCode, chain, repairTarget())
 }

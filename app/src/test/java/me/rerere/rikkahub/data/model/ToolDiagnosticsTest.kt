@@ -14,8 +14,8 @@ class ToolDiagnosticsTest {
         val diagnostic = capability.diagnostic()
         assertEquals(ToolCapabilityReason.MISSING, diagnostic.primaryReason)
         assertEquals(ToolDiagnosticTarget.WORKSPACES, diagnostic.repairTarget)
-        assertFalse(diagnostic.reasonChain.first().passed)
-        assertTrue(diagnostic.reasonChain[1].passed)
+        assertTrue(diagnostic.reasonChain.first().passed)
+        assertFalse(diagnostic.reasonChain[1].passed)
         assertFalse(diagnostic.reasonChain[2].passed)
     }
 

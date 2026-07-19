@@ -129,7 +129,7 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
-import me.rerere.rikkahub.data.model.applyAssistantToolPermissions
+import me.rerere.rikkahub.data.model.finalizeGenerationTools
 import me.rerere.rikkahub.data.model.applyToolPermission
 import me.rerere.rikkahub.data.model.ToolPermission
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -1281,7 +1281,7 @@ class ChatService(
             add(templateTransformer)
             add(WorkspaceReminderTransformer(workspace))
         }
-        val tools = applyAssistantToolPermissions(buildGenerationTools(
+        val tools = finalizeGenerationTools(buildGenerationTools(
             settings = settings,
             assistant = assistant,
             model = model,

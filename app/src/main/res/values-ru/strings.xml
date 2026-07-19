@@ -1902,4 +1902,20 @@
   <string name="assistant_tools_connection_status">Статус: %s</string>
   <string name="assistant_tools_presets_title">Предустановки разрешений</string>
   <string name="assistant_tools_preset_apply">Применить</string>
+  <string name="assistant_tools_preset_save">Сохранить текущие разрешения</string>
+  <string name="assistant_tools_preset_copy">Копировать в ассистенты</string>
+  <string name="assistant_tools_preset_batch">Пакетное редактирование выбранных</string>
+  <string name="assistant_tools_preset_name">Название пресета</string>
+  <string name="assistant_tools_preset_preview">Изменений: %1$d; пропущено: %2$d</string>
+  <string name="assistant_tools_preset_relaxation">Это изменение расширяет доступ. Подтвердите, чтобы продолжить.</string>
+  <string name="assistant_tools_preset_targets">Целевые ассистенты</string>
+  <string name="assistant_tools_preset_results">Применено: %1$d; не удалось или пропущено: %2$d</string>
+  <string name="assistant_tools_selected_count">Выбрано: %d</string>
+  <string name="assistant_tools_select_all">Выбрать все инструменты</string>
+  <string name="assistant_tools_diagnostics_details">Подробности</string>
+  <string name="assistant_tools_diagnostics_problems_only">Только проблемы</string>
+  <string name="assistant_tools_diagnostics_repair">Ремонт</string>
+  <string name="assistant_tools_reason_policy_denied">Отклонено политикой ассистента</string>
+  <string name="assistant_tools_permission_effective">Действующее разрешение: %s</string>
+  <string name="assistant_tools_permission_next_generation">Изменения применяются к следующему поколению.</string>
 </resources>

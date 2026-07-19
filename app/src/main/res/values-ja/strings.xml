@@ -1902,4 +1902,20 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_tools_connection_status">ステータス: %s</string>
   <string name="assistant_tools_presets_title">権限プリセット</string>
   <string name="assistant_tools_preset_apply">適用</string>
+  <string name="assistant_tools_preset_save">現在の権限を保存</string>
+  <string name="assistant_tools_preset_copy">アシスタントにコピー</string>
+  <string name="assistant_tools_preset_batch">選択したものを一括編集</string>
+  <string name="assistant_tools_preset_name">プリセット名</string>
+  <string name="assistant_tools_preset_preview">変更: %1$d; スキップ: %2$d</string>
+  <string name="assistant_tools_preset_relaxation">この変更によりアクセスが拡大されます。確認して続行してください。</string>
+  <string name="assistant_tools_preset_targets">対象アシスタント</string>
+  <string name="assistant_tools_preset_results">適用: %1$d; 失敗またはスキップ: %2$d</string>
+  <string name="assistant_tools_selected_count">選択済み: %d</string>
+  <string name="assistant_tools_select_all">すべてのツールを選択</string>
+  <string name="assistant_tools_diagnostics_details">詳細</string>
+  <string name="assistant_tools_diagnostics_problems_only">問題のみ</string>
+  <string name="assistant_tools_diagnostics_repair">修復</string>
+  <string name="assistant_tools_reason_policy_denied">アシスタントポリシーにより拒否されました</string>
+  <string name="assistant_tools_permission_effective">有効な権限: %s</string>
+  <string name="assistant_tools_permission_next_generation">変更は次の生成に適用されます。</string>
 </resources>

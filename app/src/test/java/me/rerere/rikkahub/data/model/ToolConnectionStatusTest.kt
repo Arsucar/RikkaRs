@@ -67,4 +67,10 @@ class ToolConnectionStatusTest {
         assertEquals(ToolConnectionState.NEEDS_AUTHORIZATION, aggregate.state)
         assertEquals(2, aggregate.toolCount)
     }
+
+    @Test
+    fun connectionStatusCarriesCheckTimestamp() {
+        val status = ToolConnectionStatus(ToolConnectionState.SUCCESS, checkedAtEpochMillis = 42L)
+        assertEquals(42L, status.checkedAtEpochMillis)
+    }
 }

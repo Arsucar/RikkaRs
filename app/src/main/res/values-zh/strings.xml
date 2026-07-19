@@ -2042,4 +2042,20 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_tools_connection_status">状态: %s</string>
   <string name="assistant_tools_presets_title">权限预设</string>
   <string name="assistant_tools_preset_apply">应用</string>
+  <string name="assistant_tools_preset_save">保存当前权限</string>
+  <string name="assistant_tools_preset_copy">复制到助手</string>
+  <string name="assistant_tools_preset_batch">批量编辑选中的</string>
+  <string name="assistant_tools_preset_name">预设名称</string>
+  <string name="assistant_tools_preset_preview">更改: %1$d; 跳过: %2$d</string>
+  <string name="assistant_tools_preset_relaxation">此更改扩大了访问权限。确认以继续。</string>
+  <string name="assistant_tools_preset_targets">目标助手</string>
+  <string name="assistant_tools_preset_results">已应用：%1$d；失败或跳过：%2$d</string>
+  <string name="assistant_tools_selected_count">已选择：%d</string>
+  <string name="assistant_tools_select_all">全选工具</string>
+  <string name="assistant_tools_diagnostics_details">详情</string>
+  <string name="assistant_tools_diagnostics_problems_only">仅问题</string>
+  <string name="assistant_tools_diagnostics_repair">修复</string>
+  <string name="assistant_tools_reason_policy_denied">被助手策略拒绝</string>
+  <string name="assistant_tools_permission_effective">有效权限: %s</string>
+  <string name="assistant_tools_permission_next_generation">更改将应用于下一次生成。</string>
 </resources>

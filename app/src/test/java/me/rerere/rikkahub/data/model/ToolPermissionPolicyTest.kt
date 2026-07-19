@@ -35,6 +35,7 @@ class ToolPermissionPolicyTest {
             mapOf("memory:normal" to ToolPermission.DENY),
         )
         assertFalse(projected.capabilities.single().effective)
+        assertEquals(ToolCapabilityReason.POLICY_DENIED, projected.capabilities.single().reasonCode)
         assertEquals(
             setOf("removed:tool"),
             orphanToolPermissionIds(mapOf("removed:tool" to ToolPermission.ASK), setOf("memory:normal")),

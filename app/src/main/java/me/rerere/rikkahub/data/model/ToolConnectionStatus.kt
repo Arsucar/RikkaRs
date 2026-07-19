@@ -20,6 +20,7 @@ data class ToolConnectionStatus(
     val toolCount: Int = 0,
     val message: String? = null,
     val revision: Long = 0L,
+    val checkedAtEpochMillis: Long? = null,
 )
 
 /** Keeps one result per server and rejects results produced for an obsolete config. */
@@ -98,4 +99,4 @@ private fun String.redactConnectionSecrets(): String = replace(
 ).replace(
     Regex("(?i)([?&](?:token|secret|password|key|sig)=)([^&\\s]+)"),
     "$1[redacted]",
-)
+).replace(Regex("https?://[^\\s,;]+", RegexOption.IGNORE_CASE), "[redacted-url]")

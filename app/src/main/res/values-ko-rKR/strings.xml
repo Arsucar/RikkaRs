@@ -1902,4 +1902,20 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_tools_connection_status">상태: %s</string>
   <string name="assistant_tools_presets_title">권한 프리셋</string>
   <string name="assistant_tools_preset_apply">적용</string>
+  <string name="assistant_tools_preset_save">현재 권한 저장</string>
+  <string name="assistant_tools_preset_copy">어시스턴트로 복사</string>
+  <string name="assistant_tools_preset_batch">선택 항목 배치 편집</string>
+  <string name="assistant_tools_preset_name">프리셋 이름</string>
+  <string name="assistant_tools_preset_preview">변경: %1$d; 건너뜀: %2$d</string>
+  <string name="assistant_tools_preset_relaxation">이 변경은 접근 권한을 확장합니다. 계속하려면 확인하세요.</string>
+  <string name="assistant_tools_preset_targets">대상 어시스턴트</string>
+  <string name="assistant_tools_preset_results">적용됨: %1$d; 실패 또는 건너뜀: %2$d</string>
+  <string name="assistant_tools_selected_count">선택됨: %d</string>
+  <string name="assistant_tools_select_all">모든 도구 선택</string>
+  <string name="assistant_tools_diagnostics_details">세부 정보</string>
+  <string name="assistant_tools_diagnostics_problems_only">문제만</string>
+  <string name="assistant_tools_diagnostics_repair">수리</string>
+  <string name="assistant_tools_reason_policy_denied">어시스턴트 정책에 의해 거부됨</string>
+  <string name="assistant_tools_permission_effective">유효 권한: %s</string>
+  <string name="assistant_tools_permission_next_generation">변경 사항은 다음 세대에 적용됩니다.</string>
 </resources>

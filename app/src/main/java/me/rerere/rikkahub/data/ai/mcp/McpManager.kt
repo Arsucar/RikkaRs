@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.ClassDiscriminatorMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -71,7 +72,7 @@ private fun String.redactMcpSecrets(): String = replace(
 ).replace(
     Regex("(?i)([?&](?:token|secret|password|key|sig)=)([^&\\s]+)"),
     "$1[redacted]",
-)
+).replace(Regex("https?://[^\\s,;]+", RegexOption.IGNORE_CASE), "[redacted-url]")
 
 // OAuth 相关常量
 private const val TOKEN_REFRESH_LEEWAY_MS = 60_000L // 令牌到期前 60s 视为需要刷新
@@ -92,12 +93,20 @@ class McpManager(
         withContext(Dispatchers.IO) {
             val probe = Client(clientInfo = Implementation(name = config.commonOptions.name, version = "1.0"))
             try {
-                probe.connect(getTransport(config))
-                val count = probe.listTools().tools.size
+                val enabledNames = config.commonOptions.tools.filter { it.enable }.map { it.name }.toSet()
+                val count = withTimeout(30.seconds) {
+                    runSafeMcpProbe(
+                        connect = { probe.connect(getTransport(config)) },
+                        listToolNames = { probe.listTools().tools.map { it.name } },
+                        close = { probe.close() },
+                        enabledToolNames = enabledNames.takeUnless { config.commonOptions.tools.isEmpty() },
+                    )
+                }
                 ToolConnectionStatus(
                     state = if (count == 0) ToolConnectionState.EMPTY else ToolConnectionState.SUCCESS,
                     toolCount = count,
                     revision = revision,
+                    checkedAtEpochMillis = System.currentTimeMillis(),
                 )
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
@@ -109,9 +118,12 @@ class McpManager(
                 } else {
                     ToolConnectionState.PROTOCOL_ERROR
                 }
-                ToolConnectionStatus(status, message = e.message?.redactMcpSecrets(), revision = revision)
-            } finally {
-                runCatching { probe.close() }
+                ToolConnectionStatus(
+                    status,
+                    message = e.message?.redactMcpSecrets(),
+                    revision = revision,
+                    checkedAtEpochMillis = System.currentTimeMillis(),
+                )
             }
         }
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -149,15 +161,15 @@ class McpManager(
                 .map { settings -> settings.mcpServers }
                 .collect { mcpServerConfigs ->
                     runCatching {
-                        Log.i(TAG, "update configs: $mcpServerConfigs")
+                        Log.i(TAG, "update configs: count=${mcpServerConfigs.size}")
                         val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable && it.commonOptions.name.isNotBlank() }
                         val currentConfigs = clients.keys.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
                             other = newConfigs,
                             eq = { a, b -> a.id == b.id }
                         )
-                        Log.i(TAG, "to_add: $toAdd")
-                        Log.i(TAG, "to_remove: $toRemove")
+                        Log.i(TAG, "to_add: ${toAdd.map { it.id }}")
+                        Log.i(TAG, "to_remove: ${toRemove.map { it.id }}")
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
@@ -212,7 +224,7 @@ class McpManager(
             config = newEntry.key
         }
 
-        Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
+        Log.i(TAG, "callTool: $toolName (server: ${config.commonOptions.name})")
 
         if (client.transport == null) client.connect(getTransport(config))
         val result = client.callTool(
@@ -314,7 +326,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error::class.simpleName}")
             if (isSseStreamGiveUpError(error)) return@onError
             val currentStatus = syncingStatus.value[config.id]
             // 只有在已连接状态下才触发重连
@@ -523,7 +535,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error::class.simpleName}")
             if (isSseStreamGiveUpError(error)) return@onError
             val currentStatus = syncingStatus.value[config.id]
             if (currentStatus == McpStatus.Connected) {
@@ -744,7 +756,7 @@ class McpManager(
             persistOAuthState(config.id, updated)
             config.clone(commonOptions = config.commonOptions.copy(oauth = updated))
         }.getOrElse {
-            Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${it.message}")
+            Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${it::class.simpleName}")
             config // 刷新失败仍用旧令牌尝试，失败会转为 NeedsAuthorization
         }
     }
@@ -788,7 +800,7 @@ class McpManager(
         if (hasManualAuth) return false
         // 主动探测：仅当 server 发布了受保护资源元数据 (protected resource metadata) 时才支持 OAuth
         return runCatching { oauthClient.discoverProtectedResource(config.serverUrl) }
-            .onFailure { Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.message}") }
+            .onFailure { Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it::class.simpleName}") }
             .isSuccess
     }
 

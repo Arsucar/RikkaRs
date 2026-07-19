@@ -1889,4 +1889,20 @@
   <string name="assistant_tools_connection_status">狀態: %s</string>
   <string name="assistant_tools_presets_title">權限預設</string>
   <string name="assistant_tools_preset_apply">套用</string>
+  <string name="assistant_tools_preset_save">保存當前權限</string>
+  <string name="assistant_tools_preset_copy">複製到助手</string>
+  <string name="assistant_tools_preset_batch">批次編輯選取</string>
+  <string name="assistant_tools_preset_name">預設名稱</string>
+  <string name="assistant_tools_preset_preview">變更: %1$d; 略過: %2$d</string>
+  <string name="assistant_tools_preset_relaxation">此變更擴大了存取權限。確認以繼續。</string>
+  <string name="assistant_tools_preset_targets">目標助手</string>
+  <string name="assistant_tools_preset_results">已套用：%1$d；失敗或跳過：%2$d</string>
+  <string name="assistant_tools_selected_count">已選取：%d</string>
+  <string name="assistant_tools_select_all">選擇所有工具</string>
+  <string name="assistant_tools_diagnostics_details">詳細</string>
+  <string name="assistant_tools_diagnostics_problems_only">僅限問題</string>
+  <string name="assistant_tools_diagnostics_repair">修復</string>
+  <string name="assistant_tools_reason_policy_denied">被助手政策拒絕</string>
+  <string name="assistant_tools_permission_effective">有效權限：%s</string>
+  <string name="assistant_tools_permission_next_generation">變更將應用於下一代。</string>
 </resources>

@@ -18,6 +18,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -68,11 +71,16 @@ import me.rerere.rikkahub.data.model.ToolPermission
 import me.rerere.rikkahub.data.model.ToolPermissionPreset
 import me.rerere.rikkahub.data.model.builtInToolPermissionPresets
 import me.rerere.rikkahub.data.model.applyToolPermissionPreset
+import me.rerere.rikkahub.data.model.diffToolPermissionPreset
+import me.rerere.rikkahub.data.model.permissionPresetFromAssistant
 import me.rerere.rikkahub.data.model.orphanToolPermissionIds
 import me.rerere.rikkahub.data.model.stableCapabilityIdForRuntimeName
 import me.rerere.rikkahub.data.model.assistantToolCapabilitySnapshot
 import me.rerere.rikkahub.data.model.diagnostics
 import me.rerere.rikkahub.data.model.ToolConnectionState
+import me.rerere.rikkahub.data.model.ToolDiagnosticTarget
+import me.rerere.rikkahub.data.model.workspaceConnectionStatus
+import me.rerere.rikkahub.data.model.toToolConnectionStatus
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.files.SkillMetadata
@@ -87,6 +95,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlinx.coroutines.launch
+import kotlin.uuid.Uuid
 
 /** 单个赋能工具（工具名 + 简述）。 */
 private data class ToolInfo(
@@ -218,6 +227,15 @@ fun AssistantToolsPage(id: String) {
     val scope = rememberCoroutineScope()
     var selectableWorkspaces by remember { mutableStateOf<List<WorkspaceEntity>?>(null) }
     var selectedCapability by remember { mutableStateOf<me.rerere.rikkahub.data.model.ToolCapability?>(null) }
+    var selectedCapabilityIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var presetToPreview by remember { mutableStateOf<ToolPermissionPreset?>(null) }
+    var showPresetSheet by remember { mutableStateOf(false) }
+    var showSavePresetSheet by remember { mutableStateOf(false) }
+    var showCopyTargetsSheet by remember { mutableStateOf(false) }
+    var showBatchPermissionSheet by remember { mutableStateOf(false) }
+    var presetName by remember { mutableStateOf("") }
+    var editingPreset by remember { mutableStateOf<ToolPermissionPreset?>(null) }
+    var selectedTargetIds by remember { mutableStateOf<Set<Uuid>>(emptySet()) }
     val bindingSavedMessage = stringResource(R.string.assistant_tools_workspace_binding_saved)
     val bindingSaveFailedMessage = stringResource(R.string.assistant_tools_workspace_binding_save_failed)
     val invalidWorkspaceMessage = stringResource(R.string.assistant_tools_workspace_invalid_id)
@@ -265,6 +283,11 @@ fun AssistantToolsPage(id: String) {
                 navigationIcon = {
                     BackButton()
                 },
+                actions = {
+                    TextButton(onClick = { showPresetSheet = true }) {
+                        Text(stringResource(R.string.assistant_tools_presets_title))
+                    }
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -302,21 +325,31 @@ fun AssistantToolsPage(id: String) {
             ),
             onNavigateSkills = { navController.navigate(Screen.AssistantInjections(id)) },
             onSelectCapability = { selectedCapability = it },
+            selectedCapabilityIds = selectedCapabilityIds,
+            onToggleCapabilitySelected = { capabilityId ->
+                selectedCapabilityIds = if (capabilityId in selectedCapabilityIds) {
+                    selectedCapabilityIds - capabilityId
+                } else selectedCapabilityIds + capabilityId
+            },
+            onBatchEdit = { showBatchPermissionSheet = true },
             orphanPermissionIds = orphanPermissionIds,
             onClearOrphanPermissions = { vm.clearOrphanToolPermissions(orphanPermissionIds) },
             mcpServerConfigs = mcpServerConfigs,
+            liveMcpStatuses = mcpStatuses,
             connectionStatuses = toolConnectionStatuses,
             onTestConnection = vm::testMcpConnection,
+            onOpenMcp = { navController.navigate(Screen.AssistantMcp(id)) },
             permissionPresets = permissionPresets,
-            onApplyPreset = { preset ->
-                val result = applyToolPermissionPreset(
-                    preset,
-                    assistant,
-                    capabilitySnapshot.capabilities.map { it.id }.toSet(),
-                    confirmRelaxation = false,
-                )
-                if (result.status == me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED) {
-                    vm.update(assistant.copy(toolPermissions = assistant.toolPermissions + result.changed))
+            onApplyPreset = { preset -> presetToPreview = preset },
+            onOpenPresets = { showPresetSheet = true },
+            onRepairDiagnostic = { target ->
+                when (target) {
+                    ToolDiagnosticTarget.WORKSPACES -> navController.navigate(Screen.Workspaces)
+                    ToolDiagnosticTarget.SKILLS -> navController.navigate(Screen.AssistantInjections(id))
+                    ToolDiagnosticTarget.MEMORY, ToolDiagnosticTarget.MEMORY_TABLE ->
+                        navController.navigate(Screen.AssistantMemory(id))
+                    ToolDiagnosticTarget.MCP -> navController.navigate(Screen.AssistantMcp(id))
+                    ToolDiagnosticTarget.ASSISTANT_TOOLS, ToolDiagnosticTarget.NONE -> Unit
                 }
             },
         )
@@ -329,10 +362,16 @@ fun AssistantToolsPage(id: String) {
         } else {
             stringResource(R.string.assistant_tools_permission_allow)
         }
+        val effectivePermission = when (currentPermission) {
+            ToolPermission.INHERIT -> sourceDefault
+            else -> toolPermissionLabel(currentPermission)
+        }
         ModalBottomSheet(onDismissRequest = { selectedCapability = null }) {
             Column(Modifier.padding(16.dp)) {
                 Text(capability.displayName, style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.assistant_tools_permission_source_default, sourceDefault))
+                Text(stringResource(R.string.assistant_tools_permission_effective, effectivePermission))
+                Text(stringResource(R.string.assistant_tools_permission_next_generation))
                 ToolPermission.entries.forEach { permission ->
                     Row(
                         Modifier.fillMaxWidth().clickable {
@@ -375,6 +414,196 @@ fun AssistantToolsPage(id: String) {
             onDismiss = { selectableWorkspaces = null },
         )
     }
+
+    if (showPresetSheet) {
+        ModalBottomSheet(onDismissRequest = { showPresetSheet = false }) {
+            Column(Modifier.padding(16.dp)) {
+                Text(stringResource(R.string.assistant_tools_presets_title), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = {
+                    editingPreset = null
+                    presetName = ""
+                    showSavePresetSheet = true
+                    showPresetSheet = false
+                }) {
+                    Text(stringResource(R.string.assistant_tools_preset_save))
+                }
+                TextButton(onClick = { showCopyTargetsSheet = true; showPresetSheet = false }) {
+                    Text(stringResource(R.string.assistant_tools_preset_copy))
+                }
+                permissionPresets.forEach { preset ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(preset.name)
+                            Text(preset.description, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { presetToPreview = preset; showPresetSheet = false }) {
+                            Text(stringResource(R.string.assistant_tools_preset_apply))
+                        }
+                        if (preset !in builtInToolPermissionPresets()) {
+                            TextButton(onClick = {
+                                editingPreset = preset
+                                presetName = preset.name
+                                showSavePresetSheet = true
+                                showPresetSheet = false
+                            }) { Text(stringResource(R.string.edit)) }
+                            TextButton(onClick = { vm.deleteToolPermissionPreset(preset.id) }) { Text(stringResource(R.string.delete)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showSavePresetSheet) {
+        ModalBottomSheet(onDismissRequest = {
+            showSavePresetSheet = false
+            editingPreset = null
+            presetName = ""
+        }) {
+            Column(Modifier.padding(16.dp)) {
+                OutlinedTextField(
+                    value = presetName,
+                    onValueChange = { presetName = it.take(128) },
+                    label = { Text(stringResource(R.string.assistant_tools_preset_name)) },
+                    singleLine = true,
+                )
+                Button(
+                    enabled = presetName.isNotBlank(),
+                    onClick = {
+                        val existing = editingPreset
+                        vm.saveToolPermissionPreset(
+                            if (existing == null) {
+                                permissionPresetFromAssistant(
+                                    presetName.trim(),
+                                    assistant,
+                                    capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                                )
+                            } else existing.copy(name = presetName.trim())
+                        )
+                        presetName = ""
+                        editingPreset = null
+                        showSavePresetSheet = false
+                    },
+                ) { Text(stringResource(R.string.assistant_tools_preset_save)) }
+            }
+        }
+    }
+
+    presetToPreview?.let { preset ->
+        val diff = diffToolPermissionPreset(
+            preset,
+            assistant.toolPermissions,
+            capabilitySnapshot.capabilities.map { it.id }.toSet(),
+        )
+        ModalBottomSheet(onDismissRequest = { presetToPreview = null }) {
+            Column(Modifier.padding(16.dp)) {
+                Text(preset.name, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.assistant_tools_preset_preview, diff.changed.size, diff.unknownKeys.size))
+                if (diff.widensAccess) {
+                    Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { presetToPreview = null }) { Text(stringResource(R.string.cancel)) }
+                    Button(onClick = {
+                        val result = applyToolPermissionPreset(
+                            preset,
+                            assistant,
+                            capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                            confirmRelaxation = true,
+                        )
+                        if (result.status in setOf(
+                                me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED,
+                                me.rerere.rikkahub.data.model.ToolPresetApplyStatus.SKIPPED_UNKNOWN,
+                            )) {
+                            vm.update(assistant.copy(toolPermissions = assistant.toolPermissions + result.changed))
+                        }
+                        presetToPreview = null
+                    }) { Text(stringResource(R.string.assistant_tools_preset_apply)) }
+                }
+            }
+        }
+    }
+
+    if (showBatchPermissionSheet) {
+        ModalBottomSheet(onDismissRequest = { showBatchPermissionSheet = false }) {
+            Column(Modifier.padding(16.dp)) {
+                Text(stringResource(R.string.assistant_tools_preset_batch), style = MaterialTheme.typography.titleMedium)
+                ToolPermission.entries.forEach { permission ->
+                    TextButton(onClick = {
+                        scope.launch {
+                            vm.batchSetToolPermissions(
+                                selectedCapabilityIds,
+                                permission,
+                                capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                            )
+                        }
+                        showBatchPermissionSheet = false
+                        selectedCapabilityIds = emptySet()
+                    }) { Text(toolPermissionLabel(permission)) }
+                }
+            }
+        }
+    }
+
+    if (showCopyTargetsSheet) {
+        ModalBottomSheet(onDismissRequest = { showCopyTargetsSheet = false }) {
+            Column(Modifier.padding(16.dp)) {
+                Text(stringResource(R.string.assistant_tools_preset_targets), style = MaterialTheme.typography.titleMedium)
+                val resultFormat = stringResource(R.string.assistant_tools_preset_results)
+                val copyPreset = permissionPresetFromAssistant(
+                    "copy",
+                    assistant,
+                    capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                )
+                val selectedTargets = vmSettings.assistants.filter { it.id in selectedTargetIds }
+                val copyWidensAccess = selectedTargets.any { target ->
+                    diffToolPermissionPreset(
+                        copyPreset,
+                        target.toolPermissions,
+                        capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                    ).widensAccess
+                }
+                vmSettings.assistants.filter { it.id != assistant.id }.forEach { target ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            selectedTargetIds = if (target.id in selectedTargetIds) selectedTargetIds - target.id else selectedTargetIds + target.id
+                        },
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Checkbox(target.id in selectedTargetIds, null)
+                        Text(target.name, Modifier.padding(start = 8.dp))
+                    }
+                }
+                if (copyWidensAccess) {
+                    Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                }
+                Button(onClick = {
+                    scope.launch {
+                        val results = vm.copyToolPermissionsToAssistants(
+                            assistant.id,
+                            selectedTargetIds,
+                            capabilitySnapshot.capabilities.map { it.id }.toSet(),
+                            confirmRelaxation = copyWidensAccess,
+                        )
+                        snackbarHostState.showSnackbar(
+                            resultFormat.format(
+                                results.count { it.status in setOf(
+                                    me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED,
+                                    me.rerere.rikkahub.data.model.ToolPresetApplyStatus.SKIPPED_UNKNOWN,
+                                ) },
+                                results.count { it.status !in setOf(
+                                    me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED,
+                                    me.rerere.rikkahub.data.model.ToolPresetApplyStatus.SKIPPED_UNKNOWN,
+                                ) },
+                            )
+                        )
+                    }
+                    showCopyTargetsSheet = false
+                    selectedTargetIds = emptySet()
+                }) { Text(stringResource(R.string.assistant_tools_preset_copy)) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -393,13 +622,20 @@ private fun AssistantToolsContent(
     memoryTableDisabledReason: String,
     onNavigateSkills: () -> Unit,
     onSelectCapability: (me.rerere.rikkahub.data.model.ToolCapability) -> Unit,
+    selectedCapabilityIds: Set<String>,
+    onToggleCapabilitySelected: (String) -> Unit,
+    onBatchEdit: () -> Unit,
     orphanPermissionIds: Set<String>,
     onClearOrphanPermissions: () -> Unit,
     mcpServerConfigs: List<McpServerConfig>,
+    liveMcpStatuses: Map<kotlin.uuid.Uuid, McpStatus>,
     connectionStatuses: Map<kotlin.uuid.Uuid, me.rerere.rikkahub.data.model.ToolConnectionStatus>,
     onTestConnection: (kotlin.uuid.Uuid) -> Unit,
+    onOpenMcp: () -> Unit,
     permissionPresets: List<ToolPermissionPreset>,
     onApplyPreset: (ToolPermissionPreset) -> Unit,
+    onOpenPresets: () -> Unit,
+    onRepairDiagnostic: (ToolDiagnosticTarget) -> Unit,
 ) {
     val memoryTableState = memoryTableToolUiState(
         memoryTableGloballyEnabled = memoryTableGloballyEnabled,
@@ -533,17 +769,47 @@ private fun AssistantToolsContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val clipboard = LocalClipboardManager.current
-        val diagnosticSummary = snapshot.diagnostics().copySummary()
+        val diagnostics = snapshot.diagnostics()
+        var diagnosticsExpanded by remember { mutableStateOf(false) }
+        var problemsOnly by remember { mutableStateOf(false) }
+        val diagnosticSummary = diagnostics.copySummary()
         CardGroup(title = { Text(stringResource(R.string.assistant_tools_diagnostics_title)) }) {
             item(
                 headlineContent = { Text(diagnosticSummary) },
                 supportingContent = { Text(diagnosticSummary) },
                 trailingContent = {
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(diagnosticSummary)) }) {
-                        Text(stringResource(R.string.assistant_tools_diagnostics_copy))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { diagnosticsExpanded = !diagnosticsExpanded }) {
+                            Text(stringResource(R.string.assistant_tools_diagnostics_details))
+                        }
+                        TextButton(onClick = { problemsOnly = !problemsOnly }) {
+                            Text(stringResource(R.string.assistant_tools_diagnostics_problems_only))
+                        }
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(diagnosticSummary)) }) {
+                            Text(stringResource(R.string.assistant_tools_diagnostics_copy))
+                        }
                     }
                 },
             )
+        }
+        if (diagnosticsExpanded) {
+            diagnostics.diagnostics
+                .filterNot { problemsOnly && it.capability.effective }
+                .forEach { diagnostic ->
+                    CardGroup(title = { Text(diagnostic.capability.displayName) }) {
+                        item(
+                            onClick = { onRepairDiagnostic(diagnostic.repairTarget) },
+                            headlineContent = { Text(diagnostic.primaryReason.name) },
+                            supportingContent = {
+                                Text(
+                                    diagnostic.reasonChain.joinToString(" -> ") { step ->
+                                        "${step.check.name}:${if (step.passed) "ok" else "no"}"
+                                    } + " target=" + diagnostic.repairTarget.name
+                                )
+                            },
+                        )
+                    }
+                }
         }
         if (permissionPresets.isNotEmpty()) {
             CardGroup(title = { Text(stringResource(R.string.assistant_tools_presets_title)) }) {
@@ -560,20 +826,41 @@ private fun AssistantToolsContent(
                 }
             }
         }
-        groups.forEach { group ->
-            ToolGroupCard(group, snapshot, onSelectCapability)
+        if (selectedCapabilityIds.isNotEmpty()) {
+            CardGroup(title = { Text(stringResource(R.string.assistant_tools_selected_count, selectedCapabilityIds.size)) }) {
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_tools_preset_batch)) },
+                    trailingContent = { TextButton(onClick = onBatchEdit) { Text(stringResource(R.string.assistant_tools_preset_batch)) } },
+                )
+            }
         }
-        if (mcpServerConfigs.isNotEmpty()) {
+        groups.forEach { group ->
+            ToolGroupCard(
+                group,
+                snapshot,
+                onSelectCapability,
+                selectedCapabilityIds,
+                onToggleCapabilitySelected,
+            )
+        }
+        val selectedMcpServers = mcpServerConfigs.filter { it.id in assistant.mcpServers }
+        if (selectedMcpServers.isNotEmpty()) {
             CardGroup(title = { Text(stringResource(R.string.assistant_tools_group_mcp)) }) {
-                mcpServerConfigs.forEach { server ->
+                selectedMcpServers.forEach { server ->
+                    val enabledToolCount = server.commonOptions.tools.count { it.enable }
                     val status = connectionStatuses[server.id]
+                        ?: liveMcpStatuses[server.id]?.toToolConnectionStatus(enabledToolCount)
                     item(
+                        onClick = onOpenMcp,
                         headlineContent = { Text(server.commonOptions.name) },
                         supportingContent = {
-                            Text(stringResource(
+                        Text(
+                            stringResource(
                                 R.string.assistant_tools_connection_status,
                                 status?.state?.name ?: ToolConnectionState.IDLE.name,
-                            ))
+                            ) + " tools=" + (status?.toolCount ?: 0) +
+                                (status?.checkedAtEpochMillis?.let { " checked=$it" } ?: "")
+                        )
                         },
                         trailingContent = {
                             TextButton(
@@ -583,6 +870,19 @@ private fun AssistantToolsContent(
                         },
                     )
                 }
+            }
+        }
+        val workspaceStatus = workspaces.firstOrNull { it.id == assistant.workspaceId?.toString() }
+            ?.let { workspaceConnectionStatus(it.shellStatus) }
+        if (workspaceStatus != null) {
+            CardGroup(title = { Text(stringResource(R.string.assistant_page_workspace)) }) {
+                item(
+                    onClick = { onRepairWorkspace(workspaces.firstOrNull { it.id == assistant.workspaceId?.toString() }) },
+                    headlineContent = { Text(stringResource(R.string.assistant_page_workspace)) },
+                    supportingContent = {
+                        Text(stringResource(R.string.assistant_tools_connection_status, workspaceStatus.state.name))
+                    },
+                )
             }
         }
         if (orphanPermissionIds.isNotEmpty()) {
@@ -608,6 +908,8 @@ private fun ToolGroupCard(
     group: ToolGroupUi,
     snapshot: ToolCapabilitySnapshot,
     onSelectCapability: (me.rerere.rikkahub.data.model.ToolCapability) -> Unit,
+    selectedCapabilityIds: Set<String> = emptySet(),
+    onToggleCapabilitySelected: (String) -> Unit = {},
 ) {
     CardGroup(
         title = { Text(stringResource(group.titleRes)) },
@@ -652,6 +954,12 @@ private fun ToolGroupCard(
         group.tools.forEach { tool ->
                 item(
                     onClick = { snapshot.capabilities.firstOrNull { it.id == tool.capabilityId }?.let(onSelectCapability) },
+                    leadingContent = {
+                        Checkbox(
+                            checked = tool.capabilityId in selectedCapabilityIds,
+                            onCheckedChange = { onToggleCapabilitySelected(tool.capabilityId) },
+                        )
+                    },
                     headlineContent = {
                         Text(tool.name, style = MaterialTheme.typography.bodyMedium)
                     },
@@ -681,6 +989,7 @@ private fun ToolCapabilityReason.stringResource(): Int = when (this) {
     ToolCapabilityReason.NEEDS_AUTHORIZATION -> R.string.assistant_tools_reason_needs_authorization
     ToolCapabilityReason.DELEGATE_ONLY -> R.string.assistant_tools_reason_delegate_only
     ToolCapabilityReason.INVALID_CONFIGURATION -> R.string.assistant_tools_reason_invalid_configuration
+    ToolCapabilityReason.POLICY_DENIED -> R.string.assistant_tools_reason_policy_denied
 }
 
 @Composable

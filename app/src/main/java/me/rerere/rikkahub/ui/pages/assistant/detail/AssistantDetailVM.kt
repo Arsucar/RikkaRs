@@ -47,6 +47,9 @@ import me.rerere.rikkahub.data.model.ToolPermission
 import me.rerere.rikkahub.data.model.ToolPermissionPreset
 import me.rerere.rikkahub.data.model.ToolPresetTargetResult
 import me.rerere.rikkahub.data.model.applyToolPermissionPreset
+import me.rerere.rikkahub.data.model.batchToolPermission
+import me.rerere.rikkahub.data.model.isValidForPersistence
+import me.rerere.rikkahub.data.model.permissionPresetFromAssistant
 import me.rerere.rikkahub.data.model.ToolConnectionStatus
 import me.rerere.rikkahub.data.model.ToolConnectionStatusStore
 import me.rerere.rikkahub.data.model.normalizeActionConfig
@@ -80,6 +83,7 @@ class AssistantDetailVM(
     val mcpStatuses = mcpManager.syncingStatus.asStateFlow()
     private val connectionStatusStore = ToolConnectionStatusStore()
     private val connectionJobs = mutableMapOf<Uuid, Job>()
+    private val connectionFingerprints = mutableMapOf<Uuid, Long>()
     private val _toolConnectionStatuses = MutableStateFlow<Map<Uuid, ToolConnectionStatus>>(emptyMap())
     val toolConnectionStatuses: StateFlow<Map<Uuid, ToolConnectionStatus>> = _toolConnectionStatuses.asStateFlow()
 
@@ -132,9 +136,18 @@ class AssistantDetailVM(
         viewModelScope.launch {
             mcpServerConfigs.collect { configs ->
                 val ids = configs.map { it.id }.toSet()
+                configs.forEach { config ->
+                    val fingerprint = config.hashCode().toLong()
+                    if (connectionFingerprints[config.id] != null && connectionFingerprints[config.id] != fingerprint) {
+                        connectionJobs.remove(config.id)?.cancel()
+                        connectionStatusStore.remove(config.id)
+                    }
+                    connectionFingerprints[config.id] = fingerprint
+                }
                 connectionJobs.keys.filterNot { it in ids }.forEach { id ->
                     connectionJobs.remove(id)?.cancel()
                     connectionStatusStore.remove(id)
+                    connectionFingerprints.remove(id)
                 }
                 _toolConnectionStatuses.value = connectionStatusStore.snapshot()
             }
@@ -145,6 +158,7 @@ class AssistantDetailVM(
         val config = mcpServerConfigs.value.firstOrNull { it.id == serverId } ?: return
         if (connectionJobs[serverId]?.isActive == true) return
         val revision = config.hashCode().toLong()
+        connectionFingerprints[serverId] = revision
         connectionStatusStore.begin(serverId, revision)
         _toolConnectionStatuses.value = connectionStatusStore.snapshot()
         connectionJobs[serverId] = viewModelScope.launch {
@@ -364,7 +378,7 @@ class AssistantDetailVM(
     }
 
     fun saveToolPermissionPreset(preset: ToolPermissionPreset) {
-        if (preset.name.isBlank() || preset.name.length > 128 || preset.description.length > 512 || preset.permissions.size > 256) return
+        if (!preset.isValidForPersistence()) return
         viewModelScope.launch {
             settingsStore.update { settings ->
                 settings.copy(toolPermissionPresets = (settings.toolPermissionPresets.filterNot { it.id == preset.id } + preset))
@@ -387,18 +401,55 @@ class AssistantDetailVM(
         confirmRelaxation: Boolean = false,
     ): List<ToolPresetTargetResult> {
         val settings = settingsStore.settingsFlow.value
-        val results = settings.assistants.filter { it.id in assistantIds }.associate { target ->
-            target.id to applyToolPermissionPreset(preset, target, knownCapabilityIds, confirmRelaxation)
+        val results = assistantIds.associateWith { targetId ->
+            settings.assistants.firstOrNull { it.id == targetId }?.let { target ->
+                applyToolPermissionPreset(preset, target, knownCapabilityIds, confirmRelaxation)
+            } ?: ToolPresetTargetResult(targetId, me.rerere.rikkahub.data.model.ToolPresetApplyStatus.TARGET_NOT_FOUND)
         }
         settings.copy(
             assistants = settings.assistants.map { target ->
                 val result = results[target.id]
-                if (result?.status == me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED) {
+                if (result != null && result.status in setOf(
+                        me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED,
+                        me.rerere.rikkahub.data.model.ToolPresetApplyStatus.SKIPPED_UNKNOWN,
+                    )) {
                     target.copy(toolPermissions = target.toolPermissions + result.changed)
                 } else target
             }
         ).let { settingsStore.update(it) }
-        return results.values.toList()
+        return assistantIds.mapNotNull { results[it] }
+    }
+
+    suspend fun copyToolPermissionsToAssistants(
+        sourceAssistantId: Uuid,
+        targetAssistantIds: Set<Uuid>,
+        knownCapabilityIds: Set<String>,
+        confirmRelaxation: Boolean = false,
+    ): List<ToolPresetTargetResult> {
+        val settings = settingsStore.settingsFlow.value
+        val source = settings.assistants.firstOrNull { it.id == sourceAssistantId }
+            ?: return targetAssistantIds.map { ToolPresetTargetResult(it, me.rerere.rikkahub.data.model.ToolPresetApplyStatus.TARGET_NOT_FOUND) }
+        val preset = permissionPresetFromAssistant("copy-$sourceAssistantId", source, knownCapabilityIds)
+        return applyToolPermissionPresetToAssistants(preset, targetAssistantIds, knownCapabilityIds, confirmRelaxation)
+    }
+
+    suspend fun batchSetToolPermissions(
+        capabilityIds: Set<String>,
+        permission: ToolPermission,
+        knownCapabilityIds: Set<String>,
+    ): ToolPresetTargetResult? {
+        val current = settingsStore.settingsFlow.value.assistants.firstOrNull { it.id == assistantId } ?: return null
+        val result = batchToolPermission(current, capabilityIds, permission, knownCapabilityIds)
+        settingsStore.updateAssistantConfig(
+            current.copy(
+                toolPermissions = if (permission == ToolPermission.INHERIT) {
+                    current.toolPermissions - result.changed.keys
+                } else {
+                    current.toolPermissions + result.changed
+                },
+            )
+        )
+        return result
     }
 
     fun setMemoryEnabled(enabled: Boolean) {

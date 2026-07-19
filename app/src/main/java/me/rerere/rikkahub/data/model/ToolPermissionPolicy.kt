@@ -27,6 +27,13 @@ fun applyAssistantToolPermissions(
     tool.applyToolPermission(policy)
 }
 
+/** Shared finalization gate used by generation assembly and cross-layer tests. */
+fun finalizeGenerationTools(
+    tools: List<Tool>,
+    permissions: Map<String, ToolPermission>,
+    capabilityIdFor: (Tool) -> String = { stableCapabilityIdForRuntimeName(it.name) },
+): List<Tool> = applyAssistantToolPermissions(tools, permissions, capabilityIdFor)
+
 fun stableCapabilityIdForRuntimeName(name: String): String = when (name) {
     "search_web" -> "builtin:web_search"
     "scrape_web" -> "builtin:scrape_web"
@@ -50,7 +57,7 @@ fun ToolCapabilitySnapshot.applyPermissions(
         when (permissions[capability.id] ?: ToolPermission.INHERIT) {
             ToolPermission.DENY -> capability.copy(
                 effective = false,
-                reasonCode = ToolCapabilityReason.DISABLED,
+                reasonCode = ToolCapabilityReason.POLICY_DENIED,
             )
             ToolPermission.ASK -> capability.copy(approval = ToolApproval.USER)
             ToolPermission.ALLOW, ToolPermission.INHERIT -> capability

@@ -12,6 +12,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## Unreleased
+
+### 新功能与修复 / Features & Fixes
+
+- **助手工具权限、诊断与连接状态** — 工具支持 INHERIT/ALLOW/ASK/DENY、策略诊断、MCP 安全连接测试、workspace 状态展示和脱敏摘要。（#154 #155 #156）
+  **Assistant tool permissions, diagnostics, and connection status** — Add INHERIT/ALLOW/ASK/DENY policies, policy-aware diagnostics, safe MCP connection probes, workspace status display, and redacted summaries. (#154 #155 #156)
+- **工具权限预设与批量操作** — 支持预设保存、重命名、删除、diff 预览、跨助手复制和批量四态设置，并跳过未知工具与私有资源绑定。（#157）
+  **Tool permission presets and batch operations** — Add preset save, rename, delete, diff preview, cross-assistant copy, and batch four-state editing while skipping unknown tools and private resource bindings. (#157)
+- **跨层工具回归矩阵** — 增加能力目录、生成装配、持久化兼容、子代理权限和 MCP fake probe 测试。（#152）
+  **Cross-layer tool regression matrix** — Add capability catalog, generation assembly, persistence compatibility, subagent policy, and fake MCP probe coverage. (#152)
+
+---
+
 ## v2.3.33
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.32 之后）

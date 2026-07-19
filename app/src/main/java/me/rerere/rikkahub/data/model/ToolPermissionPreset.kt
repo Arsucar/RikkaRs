@@ -12,7 +12,7 @@ data class ToolPermissionPreset(
     val version: Int = 1,
 )
 
-enum class ToolPresetApplyStatus { APPLIED, SKIPPED_UNKNOWN, REJECTED_RELAXATION, INVALID }
+enum class ToolPresetApplyStatus { APPLIED, SKIPPED_UNKNOWN, REJECTED_RELAXATION, TARGET_NOT_FOUND, INVALID }
 
 data class ToolPresetTargetResult(
     val assistantId: Uuid,
@@ -26,6 +26,17 @@ data class ToolPresetDiff(
     val unknownKeys: Set<String>,
     val widensAccess: Boolean,
 )
+
+fun ToolPermissionPreset.isValidForPersistence(): Boolean =
+    version == 1 &&
+        name.isNotBlank() && name.length <= 128 &&
+        description.length <= 512 &&
+        permissions.size <= 256 &&
+        permissions.keys.all { key ->
+            key.isNotBlank() && key.length <= 256 &&
+                !key.startsWith("mcp:") &&
+                (!key.startsWith("skill:") || key == "skill:management")
+        }
 
 fun builtInToolPermissionPresets(): List<ToolPermissionPreset> = listOf(
     ToolPermissionPreset(
@@ -87,10 +98,7 @@ fun applyToolPermissionPreset(
     knownCapabilityIds: Set<String>,
     confirmRelaxation: Boolean = false,
 ): ToolPresetTargetResult {
-    if (preset.version != 1 || preset.name.isBlank() || preset.name.length > 128 ||
-        preset.description.length > 512 || preset.permissions.size > 256 ||
-        preset.permissions.keys.any { it.startsWith("mcp:") || it.startsWith("skill:") && it != "skill:management" }
-    ) {
+    if (!preset.isValidForPersistence()) {
         return ToolPresetTargetResult(assistant.id, ToolPresetApplyStatus.INVALID)
     }
     val diff = diffToolPermissionPreset(preset, assistant.toolPermissions, knownCapabilityIds)
@@ -103,8 +111,43 @@ fun applyToolPermissionPreset(
     }
     return ToolPresetTargetResult(
         assistant.id,
-        ToolPresetApplyStatus.APPLIED,
+        if (diff.unknownKeys.isEmpty()) ToolPresetApplyStatus.APPLIED else ToolPresetApplyStatus.SKIPPED_UNKNOWN,
         changed = diff.changed,
         skippedKeys = diff.unknownKeys,
+    )
+}
+
+/** Copies only stable permission keys; resource bindings and secrets are never part of a preset. */
+fun permissionPresetFromAssistant(
+    name: String,
+    source: Assistant,
+    knownCapabilityIds: Set<String>,
+): ToolPermissionPreset = ToolPermissionPreset(
+    name = name,
+    permissions = source.toolPermissions
+        .filterKeys {
+            it in knownCapabilityIds && !it.startsWith("mcp:") &&
+                (!it.startsWith("skill:") || it == "skill:management")
+        },
+)
+
+fun batchToolPermission(
+    assistant: Assistant,
+    capabilityIds: Set<String>,
+    permission: ToolPermission,
+    knownCapabilityIds: Set<String>,
+): ToolPresetTargetResult {
+    val changed = capabilityIds
+        .filter { it in knownCapabilityIds }
+        .associateWith { permission }
+    return ToolPresetTargetResult(
+        assistant.id,
+        if (capabilityIds.all { it in knownCapabilityIds }) {
+            ToolPresetApplyStatus.APPLIED
+        } else {
+            ToolPresetApplyStatus.SKIPPED_UNKNOWN
+        },
+        changed = changed,
+        skippedKeys = capabilityIds - knownCapabilityIds,
     )
 }

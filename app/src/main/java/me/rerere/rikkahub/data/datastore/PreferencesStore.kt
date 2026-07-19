@@ -60,6 +60,7 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.ToolPermissionPreset
+import me.rerere.rikkahub.data.model.isValidForPersistence
 import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
@@ -78,6 +79,16 @@ private const val MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL = -1
 const val RECENT_CHAT_MODELS_LIMIT = 8
 const val IMAGE_GALLERY_MIN_COLUMNS = 1
 const val IMAGE_GALLERY_MAX_COLUMNS = 6
+private const val TOOL_PERMISSION_PRESET_JSON_MAX_CHARS = 512_000
+private const val TOOL_PERMISSION_PRESET_MAX_COUNT = 128
+
+internal fun decodeToolPermissionPresets(json: String?): List<ToolPermissionPreset> {
+    if (json == null || json.length > TOOL_PERMISSION_PRESET_JSON_MAX_CHARS) return emptyList()
+    return runCatching { JsonInstant.decodeFromString<List<ToolPermissionPreset>>(json) }
+        .getOrDefault(emptyList())
+        .take(TOOL_PERMISSION_PRESET_MAX_COUNT)
+        .filter { it.isValidForPersistence() }
+}
 const val DEFAULT_COMPRESS_TARGET_TOKENS = 2000
 const val DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES = 32
 
@@ -310,9 +321,7 @@ class SettingsStore(
                 presets = preferences[PRESETS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                toolPermissionPresets = preferences[TOOL_PERMISSION_PRESETS]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
+                toolPermissionPresets = decodeToolPermissionPresets(preferences[TOOL_PERMISSION_PRESETS]),
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -587,7 +596,9 @@ class SettingsStore(
             } ?: preferences.remove(SELECTED_ASR_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[PRESETS] = JsonInstant.encodeToString(settings.presets)
-            preferences[TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(settings.toolPermissionPresets)
+            preferences[TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(
+                settings.toolPermissionPresets.take(TOOL_PERMISSION_PRESET_MAX_COUNT).filter { it.isValidForPersistence() }
+            )
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
             preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
