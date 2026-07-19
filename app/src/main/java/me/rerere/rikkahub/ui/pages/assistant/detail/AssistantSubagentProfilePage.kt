@@ -88,6 +88,8 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
     val providers by vm.providers.collectAsStateWithLifecycle()
     val mcpServerConfigs by vm.mcpServerConfigs.collectAsStateWithLifecycle()
     val skills by vm.skills.collectAsStateWithLifecycle()
+    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
+    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -118,6 +120,8 @@ fun AssistantSubagentProfilePage(id: String, profileName: String, createMode: Bo
             mcpServers = mcpServerConfigs,
             skills = skills,
             presets = settings.presets,
+            memoryTableTemplates = memoryTableTemplates,
+            memoryTableDocuments = memoryTableDocuments,
             profileName = profileName,
             createMode = createMode,
             onUpdate = { vm.update(it) },
@@ -134,6 +138,8 @@ internal fun AssistantSubagentProfileContent(
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
     presets: List<Preset>,
+    memoryTableTemplates: List<me.rerere.rikkahub.data.model.MemoryTableTemplate> = emptyList(),
+    memoryTableDocuments: List<me.rerere.rikkahub.data.model.MemoryTableDocument> = emptyList(),
     profileName: String,
     createMode: Boolean,
     onUpdate: (Assistant) -> Unit,
@@ -151,8 +157,12 @@ internal fun AssistantSubagentProfileContent(
     val latestAssistant = rememberUpdatedState(assistant)
     var pathDraft by remember(currentProfileName) { mutableStateOf("") }
 
-    fun persist(transform: (SubagentProfile) -> SubagentProfile) {
-        if (readOnly || isGlobalOnly) return
+    fun persist(
+        transform: (SubagentProfile) -> SubagentProfile,
+        allowGlobalLocalOverride: Boolean = false,
+    ) {
+        if (readOnly) return
+        if (isGlobalOnly && !allowGlobalLocalOverride) return
         val base = latestAssistant.value.subagentProfiles.firstOrNull { it.name == currentProfileName }
             ?: SubagentRegistry.resolveProfile(currentProfileName, latestAssistant.value, globalProfiles)
             ?: SubagentRegistry.effectiveGlobalProfiles(globalProfiles).firstOrNull { it.name == currentProfileName }
@@ -231,10 +241,15 @@ internal fun AssistantSubagentProfileContent(
                 mcpServers = mcpServers,
                 skills = skills,
                 presets = presets,
+                memoryTableTemplates = memoryTableTemplates,
+                memoryTableDocuments = memoryTableDocuments,
                 readOnly = readOnly || isGlobalOnly,
                 pathDraft = pathDraft,
                 onPathDraftChange = { pathDraft = it },
-                onPersist = ::persist,
+                onPersist = { transform -> persist(transform) },
+                onPersistMemoryTableDocuments = { transform ->
+                    persist(transform, allowGlobalLocalOverride = true)
+                },
                 tabPage = page,
             )
         }
@@ -254,14 +269,21 @@ internal fun SubagentProfileForm(
     mcpServers: List<me.rerere.rikkahub.data.ai.mcp.McpServerConfig>,
     skills: List<me.rerere.rikkahub.data.files.SkillMetadata>,
     presets: List<Preset>,
+    memoryTableTemplates: List<me.rerere.rikkahub.data.model.MemoryTableTemplate> = emptyList(),
+    memoryTableDocuments: List<me.rerere.rikkahub.data.model.MemoryTableDocument> = emptyList(),
     readOnly: Boolean,
     pathDraft: String,
     onPathDraftChange: (String) -> Unit,
     onPersist: (transform: (SubagentProfile) -> SubagentProfile) -> Unit,
+    onPersistMemoryTableDocuments: (transform: (SubagentProfile) -> SubagentProfile) -> Unit = onPersist,
     tabPage: Int,
 ) {
     fun persist(transform: (SubagentProfile) -> SubagentProfile) {
         if (!readOnly) onPersist(transform)
+    }
+
+    fun persistMemoryTableDocuments(transform: (SubagentProfile) -> SubagentProfile) {
+        onPersistMemoryTableDocuments(transform)
     }
 
     Column(
@@ -708,6 +730,86 @@ internal fun SubagentProfileForm(
                     )
                 },
             )
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text(stringResource(R.string.subagent_profile_memory_tables)) },
+                description = {
+                    Text(
+                        stringResource(
+                            R.string.subagent_profile_memory_tables_desc,
+                            resolved.injectedMemoryTableDocumentIds.size,
+                        ),
+                    )
+                },
+            ) {
+                // Document injection may create a local override even for global profiles.
+                val memorySelectionReadOnly = false
+                val templatesById = remember(memoryTableTemplates) {
+                    memoryTableTemplates.associateBy { it.id }
+                }
+                if (memoryTableDocuments.isEmpty()) {
+                    Text(
+                        stringResource(R.string.subagent_profile_memory_tables_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        memoryTableDocuments.forEach { document ->
+                            val selected = document.id in resolved.injectedMemoryTableDocumentIds
+                            val label = templatesById[document.templateId]?.name
+                                ?.takeIf { it.isNotBlank() }
+                                ?: document.id.take(8)
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    if (memorySelectionReadOnly) return@FilterChip
+                                    persistMemoryTableDocuments { profile ->
+                                        val next = if (selected) {
+                                            profile.injectedMemoryTableDocumentIds - document.id
+                                        } else {
+                                            profile.injectedMemoryTableDocumentIds + document.id
+                                        }
+                                        profile.copy(injectedMemoryTableDocumentIds = next)
+                                    }
+                                },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                }
+                val missingIds = resolved.injectedMemoryTableDocumentIds -
+                    memoryTableDocuments.mapTo(mutableSetOf()) { it.id }
+                if (missingIds.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.subagent_profile_memory_tables_missing, missingIds.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        missingIds.sorted().forEach { id ->
+                            InputChip(
+                                selected = true,
+                                onClick = {
+                                    if (memorySelectionReadOnly) return@InputChip
+                                    persistMemoryTableDocuments {
+                                        it.copy(injectedMemoryTableDocumentIds = it.injectedMemoryTableDocumentIds - id)
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.subagent_profile_memory_table_invalid, id.take(8))) },
+                                trailingIcon = {
+                                    Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(16.dp))
+                                },
+                            )
+                        }
+                    }
+                }
+            }
             HorizontalDivider()
 
             FormItem(

@@ -242,6 +242,12 @@ internal suspend fun acquireSubagentContext(
 class SubagentHost(
     private val generationHandler: GenerationHandler,
     internal val contextCache: SubagentContextCache = SubagentContextCache(),
+    private val memoryTableInjectionLoader: (suspend (
+        parentAssistant: Assistant,
+        conversationId: Uuid?,
+        selectedDocumentIds: Set<String>,
+        settings: Settings,
+    ) -> List<me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer>)? = null,
 ) {
     fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON) {
         SubagentSessionRegistry.requestCancel(conversationId, reason)
@@ -376,6 +382,19 @@ class SubagentHost(
 
             var generationLimitReached = false
             var messages = acquiredContext.messages
+            val memoryTableTransformers = if (
+                !contextAcquisition.reusedContext &&
+                profile.injectedMemoryTableDocumentIds.isNotEmpty()
+            ) {
+                memoryTableInjectionLoader?.invoke(
+                    parentAssistant,
+                    conversationId,
+                    profile.injectedMemoryTableDocumentIds,
+                    settings,
+                ).orEmpty()
+            } else {
+                emptyList()
+            }
 
             var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
             var run = runToCompletion(
@@ -389,6 +408,7 @@ class SubagentHost(
                 conversationId = conversationId,
                 contextId = contextId,
                 onProgress = onProgress,
+                inputTransformers = memoryTableTransformers,
             )
             steps += 1
             generationLimitReached = run.generationLimitReached
@@ -593,6 +613,7 @@ class SubagentHost(
         contextId: String,
         onProgress: ((String, List<UIMessage>) -> Unit)?,
         enforceToolBudget: Boolean = true,
+        inputTransformers: List<me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer> = emptyList(),
     ): RunCompletion {
         var lastEmitTime = 0L
         var lastSignature = -1
@@ -630,6 +651,7 @@ class SubagentHost(
                 stepsCountdownLabel = "Tool calls",
                 memories = emptyList(),
                 workspaceCwd = workspaceCwd,
+                inputTransformers = inputTransformers,
             ).onEach { chunk ->
                 if (chunk is GenerationChunk.Messages) {
                     finalMessages = chunk.messages

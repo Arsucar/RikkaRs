@@ -1,0 +1,29 @@
+{
+  "id": "resolve-issues-163-164",
+  "name": "resolve-issues-163-164",
+  "title": "Resolve issues 163 and 164",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-20",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-20-assistant-tools-page-ux",
+    "07-20-subagent-memory-table-injection"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

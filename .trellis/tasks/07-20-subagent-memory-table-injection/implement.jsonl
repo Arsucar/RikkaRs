@@ -1,0 +1,8 @@
+{"type":"spec","path":".trellis/spec/app/index.md"}
+{"type":"research","path":".trellis/tasks/07-20-subagent-memory-table-injection/research/01-subagent-config-model-ui.md"}
+{"type":"research","path":".trellis/tasks/07-20-subagent-memory-table-injection/research/02-subagent-invocation-context.md"}
+{"type":"research","path":".trellis/tasks/07-20-subagent-memory-table-injection/research/03-memory-table-injection-pipeline.md"}
+{"type":"research","path":".trellis/tasks/07-20-subagent-memory-table-injection/research/05-implementation-hooks.md"}
+{"type":"prd","path":".trellis/tasks/07-20-subagent-memory-table-injection/prd.md"}
+{"type":"design","path":".trellis/tasks/07-20-subagent-memory-table-injection/design.md"}
+{"type":"implement","path":".trellis/tasks/07-20-subagent-memory-table-injection/implement.md"}

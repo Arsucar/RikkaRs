@@ -37,12 +37,41 @@ class AssistantToolsPageTest {
         )
 
         assertEquals(
-            snapshot.effectiveCount to snapshot.capabilities.size,
+            userFacingToolStats(snapshot),
             empowermentToolStats(
                 assistant, visibleSkills = skills, mcpServerConfigs = listOf(server), mcpStatuses = statuses,
             ),
         )
         assertTrue(snapshot.effectiveRuntimeNames.containsAll(listOf("calendar_query", "calendar_create", "use_skill", "mcp__demo__lookup")))
+    }
+
+    @Test
+    fun userFacingTotalCountsConfiguredOrEffectiveOnly() {
+        val server = McpServerConfig.StreamableHTTPServer(
+            commonOptions = McpCommonOptions(name = "demo", tools = listOf(McpTool(name = "lookup"))),
+        )
+        // MCP server not selected on assistant → tool present but not configured/effective
+        val assistant = Assistant(mcpServers = emptySet())
+        val snapshot = assistantToolCapabilitySnapshot(
+            assistant,
+            true,
+            mcpServerConfigs = listOf(server),
+            mcpStatuses = mapOf(server.id to McpStatus.Connected),
+        )
+        val (_, userTotal) = userFacingToolStats(snapshot)
+        assertTrue(userTotal <= snapshot.capabilities.size)
+        assertTrue(userTotal >= snapshot.effectiveCount)
+    }
+
+    @Test
+    fun longPressEntersSelectionModeAndToggleRemoves() {
+        val entered = selectionModeAfterLongPress(false, emptySet(), "a")
+        assertTrue(entered.first)
+        assertEquals(setOf("a"), entered.second)
+        val toggled = selectionModeAfterLongPress(true, setOf("a"), "a")
+        assertTrue(toggled.first)
+        assertTrue(toggled.second.isEmpty())
+        assertEquals(false to emptySet<String>(), exitSelectionMode())
     }
 
     @Test

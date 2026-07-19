@@ -81,6 +81,8 @@ data class SubagentProfile(
     val mcpServerIds: Set<Uuid> = emptySet(),
     val toolApprovalOverrides: Map<String, Boolean> = emptyMap(),
     val enableMemory: Boolean = false,
+    /** Document instance ids injected read-only into this subagent's context at spawn. */
+    val injectedMemoryTableDocumentIds: Set<String> = emptySet(),
     val summaryMinLength: Int = 200,
     val summaryContinuationAttempts: Int = 1,
 ) {

@@ -282,9 +282,50 @@ val dataSourceModule = module {
     }
 
     single {
+        val memoryTableRepository = get<me.rerere.rikkahub.data.repository.MemoryTableRepository>()
+        val conversationRepository = get<me.rerere.rikkahub.data.repository.ConversationRepository>()
         me.rerere.rikkahub.data.ai.subagent.SubagentHost(
             generationHandler = get(),
             contextCache = me.rerere.rikkahub.data.ai.subagent.SubagentContextCache(store = get()),
+            memoryTableInjectionLoader = { parentAssistant, conversationId, selectedDocumentIds, settings ->
+                val parentEnabled = settings.enableMemoryTable && parentAssistant.enableMemoryTable
+                if (!parentEnabled || selectedDocumentIds.isEmpty()) {
+                    emptyList()
+                } else {
+                    val assistantId = parentAssistant.id.toString()
+                    val isolation = if (conversationId != null) {
+                        conversationRepository.getConversationById(conversationId)?.memoryTableIsolation == true
+                    } else {
+                        false
+                    }
+                    val templates = memoryTableRepository.getEffectiveTemplates(assistantId)
+                    val documents = memoryTableRepository.getEffectiveDocuments(
+                        assistantId = assistantId,
+                        conversationId = conversationId?.toString(),
+                    )
+                    val (resolvedTemplates, resolvedDocuments) =
+                        me.rerere.rikkahub.data.ai.subagent.resolveSubagentMemoryTableInjection(
+                            selectedDocumentIds = selectedDocumentIds,
+                            templates = templates,
+                            documents = documents,
+                            parentMemoryTableEnabled = true,
+                            memoryTableIsolation = isolation,
+                        )
+                    if (resolvedTemplates.isEmpty() || resolvedDocuments.isEmpty()) {
+                        emptyList()
+                    } else {
+                        listOf(
+                            me.rerere.rikkahub.data.ai.transformers.MemoryTableInjectionTransformer(
+                                templates = resolvedTemplates,
+                                documents = resolvedDocuments,
+                                maxDocuments = settings.memoryTableMaxInjectDocuments,
+                                maxTokens = settings.memoryTableMaxInjectTokens,
+                                maxChars = settings.memoryTableMaxInjectChars,
+                            ),
+                        )
+                    }
+                }
+            },
         )
     }
 

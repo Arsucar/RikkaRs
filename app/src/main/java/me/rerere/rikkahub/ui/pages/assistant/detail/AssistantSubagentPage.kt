@@ -189,7 +189,9 @@ private fun AssistantSubagentContent(
                     onClick = {
                         when {
                             entry.isDisabledGlobal -> Unit
-                            entry.isGlobal -> onOpenGlobalProfile(profile.name)
+                            // Always open via assistant page so parent-assistant memory
+                            // table documents are available for injection selection.
+                            // Global-only field editing remains redirected in the form.
                             else -> onOpenProfile(profile.name, false)
                         }
                     },

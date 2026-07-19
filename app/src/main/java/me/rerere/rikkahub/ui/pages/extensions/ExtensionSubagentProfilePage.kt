@@ -32,6 +32,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
 import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.model.MemoryTableDocument
+import me.rerere.rikkahub.data.model.MemoryTableTemplate
+import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.pages.assistant.detail.SubagentProfileForm
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
@@ -47,8 +50,21 @@ fun ExtensionSubagentProfilePage(
     val vm: SettingVM = koinViewModel()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val skillManager: SkillManager = koinInject()
+    val memoryTableRepository: MemoryTableRepository = koinInject()
     var skills by remember { mutableStateOf(emptyList<me.rerere.rikkahub.data.files.SkillMetadata>()) }
+    var memoryTableTemplates by remember { mutableStateOf(emptyList<MemoryTableTemplate>()) }
+    var memoryTableDocuments by remember { mutableStateOf(emptyList<MemoryTableDocument>()) }
     LaunchedEffect(Unit) { skills = skillManager.listSkills() }
+    // Preview selectable documents from the currently selected assistant (global profiles
+    // still store ids; runtime inject resolves against the parent assistant that spawns).
+    LaunchedEffect(settings.assistantId) {
+        val assistantId = settings.assistantId.toString()
+        memoryTableTemplates = memoryTableRepository.getEffectiveTemplates(assistantId)
+        memoryTableDocuments = memoryTableRepository.getEffectiveDocuments(
+            assistantId = assistantId,
+            conversationId = null,
+        )
+    }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -137,6 +153,8 @@ fun ExtensionSubagentProfilePage(
                     mcpServers = settings.mcpServers,
                     skills = skills,
                     presets = settings.presets,
+                    memoryTableTemplates = memoryTableTemplates,
+                    memoryTableDocuments = memoryTableDocuments,
                     readOnly = false,
                     pathDraft = pathDraft,
                     onPathDraftChange = { pathDraft = it },
