@@ -67,7 +67,12 @@ data class Assistant(
     val disabledGlobalSubagents: Set<String> = emptySet(),
     val stepsCountdownThreshold: Int? = null,
     val hooks: List<ConversationHook> = emptyList(),
+    /** Per-tool policy keyed by stable ToolCapabilityCatalog ids. Missing entries inherit defaults. */
+    val toolPermissions: Map<String, ToolPermission> = emptyMap(),
 )
+
+@Serializable
+enum class ToolPermission { INHERIT, ALLOW, ASK, DENY }
 
 @Serializable
 data class QuickMessage(

@@ -122,12 +122,16 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
+import me.rerere.rikkahub.data.model.isValidMcpServerRuntimeName
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
+import me.rerere.rikkahub.data.model.applyAssistantToolPermissions
+import me.rerere.rikkahub.data.model.applyToolPermission
+import me.rerere.rikkahub.data.model.ToolPermission
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.HookRepository
@@ -751,7 +755,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -1277,7 +1281,7 @@ class ChatService(
             add(templateTransformer)
             add(WorkspaceReminderTransformer(workspace))
         }
-        val tools = buildGenerationTools(
+        val tools = applyAssistantToolPermissions(buildGenerationTools(
             settings = settings,
             assistant = assistant,
             model = model,
@@ -1286,7 +1290,7 @@ class ChatService(
             effectiveWorkspaceCwd = effectiveWorkspaceCwd,
             workspace = workspace,
             mode = mode,
-        )
+        ), assistant.toolPermissions)
         val memories = memoryPlan.readOrdinaryMemories {
             memoryRepository.getEffectiveMemories(assistant.id.toString())
         }
@@ -1448,12 +1452,9 @@ class ChatService(
             )
         }
         if (!delegateOnly) {
-            val allMcpTools = mcpManager.getAllAvailableTools()
-            val invalidNames = allMcpTools.map { it.second }.distinct().filter { name ->
-                name.isEmpty() || !name.all {
-                    it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9'
-                }
-            }
+            val allMcpTools = mcpManager.getAllAvailableTools(assistant)
+            val invalidNames = allMcpTools.map { it.second }.distinct()
+                .filterNot(::isValidMcpServerRuntimeName)
             if (invalidNames.isNotEmpty()) {
                 throw GenerationPreparationException.InvalidMcpServerName(
                     invalidNames = invalidNames,
@@ -1464,15 +1465,15 @@ class ChatService(
                 )
             }
             allMcpTools.forEach { (serverId, serverName, tool) ->
-                add(
-                    Tool(
+                val configuredPolicy = assistant.toolPermissions["mcp:$serverId:${tool.name}"]
+                    ?: ToolPermission.INHERIT
+                Tool(
                         name = "mcp__${serverName}__${tool.name}",
                         description = tool.description.orEmpty(),
                         parameters = { tool.inputSchema },
                         needsApproval = { tool.needsApproval },
                         execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
-                    ),
-                )
+                    ).applyToolPermission(configuredPolicy)?.let(::add)
             }
         }
         if (assistant.enableSubagents) {

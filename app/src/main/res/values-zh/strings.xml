@@ -2011,4 +2011,19 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_tools_workspace_binding_saved">工作区绑定已保存</string>
   <string name="assistant_tools_workspace_binding_save_failed">无法保存工作区绑定</string>
   <string name="assistant_tools_workspace_invalid_id">该工作区 ID 无效，无法选择</string>
+  <string name="assistant_tools_group_local">本地工具</string>
+  <string name="assistant_tools_group_mcp">MCP 工具</string>
+  <string name="assistant_tools_local_desc">本地设备能力</string>
+  <string name="assistant_tools_mcp_desc">MCP 服务器能力</string>
+  <string name="assistant_tools_reason_available">可用</string>
+  <string name="assistant_tools_reason_disabled">已禁用</string>
+  <string name="assistant_tools_reason_global_disabled">已被全局设置禁用</string>
+  <string name="assistant_tools_reason_not_selected">此助手未选择</string>
+  <string name="assistant_tools_reason_missing">配置的源缺失</string>
+  <string name="assistant_tools_reason_unavailable">当前不可用</string>
+  <string name="assistant_tools_reason_connecting">连接中</string>
+  <string name="assistant_tools_reason_connection_error">连接错误</string>
+  <string name="assistant_tools_reason_needs_authorization">需要授权</string>
+  <string name="assistant_tools_reason_delegate_only">仅委托模式下不可用</string>
+  <string name="assistant_tools_reason_invalid_configuration">无效的来源配置</string>
 </resources>

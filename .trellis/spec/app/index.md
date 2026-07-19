@@ -17,6 +17,9 @@
 | [Memory Capabilities](./memory-capabilities.md) | Independent normal-memory and memory-table persistence, runtime gates, and UI contracts |
 | [Conversation Persistence](./conversation-persistence.md) | Lightweight summaries, paged full reads, bounded encoding batches, and metadata-only diagnostics |
 | [Workspace Tool Capabilities](./workspace-tool-capabilities.md) | Shared workspace binding, readiness, tool availability, and persistence contracts |
+| [Assistant Tool Capability Catalog](./tool-capability-catalog.md) | Stable tool IDs, availability reasons, approvals, and pure snapshots |
+| [Assistant Tool Permissions](./tool-permissions.md) | Four-state per-tool policy and runtime enforcement |
+| [Tool Diagnostics and Connection Status](./tool-diagnostics-and-connection-status.md) | Read-only diagnostics, redaction, probes, and revision-safe status |
 
 ## Pre-Development Checklist
 
@@ -29,6 +32,7 @@
 - For memory settings, resolve normal memory and memory-table capabilities independently; never wrap table loading, injection, or tools in `Assistant.enableMemory`.
 - For Conversation persistence, keep summary/diff queries lightweight, preserve complete full reads, and bound temporary encoded batches without truncating history.
 - For every new or changed user-visible UI string, provide a string resource and a real Simplified Chinese translation before delivery.
+- For assistant tool summaries, keep configured/available/effective distinct and construct snapshots without I/O.
 
 ## Quality Check
 
@@ -40,3 +44,4 @@
 - For memory capability changes, parameterize all four normal/table combinations and verify Preview and real generation share the same prepared request path.
 - For Conversation persistence changes, test summary sentinel isolation, exact batch/page boundaries, 65+ node full reads, and metadata-only diagnostic formatting.
 - For backup XML-only changes, run `.\gradlew :app:processDebugResources --no-daemon --no-configuration-cache --console=plain`.
+- For tool catalog changes, cover dynamic sources and status reasons, then compare effective names at the generation boundary.

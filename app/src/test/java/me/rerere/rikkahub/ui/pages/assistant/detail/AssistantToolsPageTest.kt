@@ -4,6 +4,14 @@ import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.datastore.AssistantWorkspaceBindingUpdateResult
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import java.io.File
+import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
+import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.McpStatus
+import me.rerere.rikkahub.data.ai.mcp.McpTool
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
+import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.model.assistantToolCapabilitySnapshot
 import me.rerere.workspace.WorkspaceShellStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,6 +20,31 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class AssistantToolsPageTest {
+    @Test
+    fun titleStatsIncludeDynamicLocalSkillAndMcpFromTheSharedSnapshot() {
+        val server = McpServerConfig.StreamableHTTPServer(
+            commonOptions = McpCommonOptions(name = "demo", tools = listOf(McpTool(name = "lookup"))),
+        )
+        val assistant = Assistant(
+            localTools = listOf(LocalToolOption.Calendar),
+            enabledSkills = setOf("alpha"),
+            mcpServers = setOf(server.id),
+        )
+        val skills = listOf(SkillMetadata("alpha", "test", skillDir = File("alpha")))
+        val statuses = mapOf(server.id to McpStatus.Connected)
+        val snapshot = assistantToolCapabilitySnapshot(
+            assistant, true, visibleSkills = skills, mcpServerConfigs = listOf(server), mcpStatuses = statuses,
+        )
+
+        assertEquals(
+            snapshot.effectiveCount to snapshot.capabilities.size,
+            empowermentToolStats(
+                assistant, visibleSkills = skills, mcpServerConfigs = listOf(server), mcpStatuses = statuses,
+            ),
+        )
+        assertTrue(snapshot.effectiveRuntimeNames.containsAll(listOf("calendar_query", "calendar_create", "use_skill", "mcp__demo__lookup")))
+    }
+
     @Test
     fun memoryTableUiPreservesPreferenceWhenGlobalGateIsOff() {
         val state = memoryTableToolUiState(

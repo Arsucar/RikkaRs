@@ -1871,4 +1871,19 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_tools_workspace_binding_saved">ワークスペースバインディングが保存されました</string>
   <string name="assistant_tools_workspace_binding_save_failed">ワークスペースバインディングを保存できませんでした</string>
   <string name="assistant_tools_workspace_invalid_id">このワークスペースのIDが無効なため、選択できません</string>
+  <string name="assistant_tools_group_local">ローカルツール</string>
+  <string name="assistant_tools_group_mcp">MCP ツール</string>
+  <string name="assistant_tools_local_desc">ローカルデバイス機能</string>
+  <string name="assistant_tools_mcp_desc">MCPサーバー機能</string>
+  <string name="assistant_tools_reason_available">利用可能</string>
+  <string name="assistant_tools_reason_disabled">無効</string>
+  <string name="assistant_tools_reason_global_disabled">グローバル設定により無効化されています</string>
+  <string name="assistant_tools_reason_not_selected">このアシスタントでは選択されていません</string>
+  <string name="assistant_tools_reason_missing">設定されたソースがありません</string>
+  <string name="assistant_tools_reason_unavailable">現在利用できません</string>
+  <string name="assistant_tools_reason_connecting">接続中</string>
+  <string name="assistant_tools_reason_connection_error">接続エラー</string>
+  <string name="assistant_tools_reason_needs_authorization">認可が必要です</string>
+  <string name="assistant_tools_reason_delegate_only">委譲専用モードでは利用できません</string>
+  <string name="assistant_tools_reason_invalid_configuration">無効なソース設定</string>
 </resources>

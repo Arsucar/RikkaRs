@@ -56,6 +56,7 @@ val viewModelModule = module {
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),
+            mcpManager = get(),
             conversationTagRepository = get(),
         )
     }

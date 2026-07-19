@@ -48,6 +48,9 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.ToolConnectionStatus
+import me.rerere.rikkahub.data.model.ToolConnectionState
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
@@ -72,6 +75,37 @@ class McpManager(
     private val filesManager: FilesManager,
     private val appEventBus: AppEventBus,
 ) {
+    /**
+     * Explicit, read-only connectivity probe. It performs initialize/authentication and
+     * listTools only; it never invokes a business tool and does not update settings or the
+     * long-lived client map.
+     */
+    suspend fun testConnection(config: McpServerConfig, revision: Long = 0L): ToolConnectionStatus =
+        withContext(Dispatchers.IO) {
+            val probe = Client(clientInfo = Implementation(name = config.commonOptions.name, version = "1.0"))
+            try {
+                probe.connect(getTransport(config))
+                val count = probe.listTools().tools.size
+                ToolConnectionStatus(
+                    state = if (count == 0) ToolConnectionState.EMPTY else ToolConnectionState.SUCCESS,
+                    toolCount = count,
+                    revision = revision,
+                )
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e
+                val status = if (needsAuthorization(config, e)) {
+                    ToolConnectionState.NEEDS_AUTHORIZATION
+                } else if (e is java.net.ConnectException || e is java.net.SocketTimeoutException ||
+                    e is java.io.IOException || e.message.orEmpty().contains("timeout", true)) {
+                    ToolConnectionState.NETWORK_ERROR
+                } else {
+                    ToolConnectionState.PROTOCOL_ERROR
+                }
+                ToolConnectionStatus(status, message = e.message?.replace(Regex("(?i)(authorization|token|secret|password)=?[^ ,;]+"), "$1=[redacted]"), revision = revision)
+            } finally {
+                runCatching { probe.close() }
+            }
+        }
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.MINUTES)
@@ -136,12 +170,15 @@ class McpManager(
         return clients.entries.find { it.key.id == config.id }?.value
     }
 
-    fun getAllAvailableTools(): List<Triple<Uuid, String, McpTool>> {
+    fun getAllAvailableTools(
+        assistant: Assistant = settingsStore.settingsFlow.value.getCurrentAssistant(),
+    ): List<Triple<Uuid, String, McpTool>> {
         val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
         return settings.mcpServers
             .filter {
-                it.commonOptions.enable && it.id in assistant.mcpServers
+                it.commonOptions.enable &&
+                    it.id in assistant.mcpServers &&
+                    syncingStatus.value[it.id] == McpStatus.Connected
             }
             .flatMap { server ->
                 server.commonOptions.tools

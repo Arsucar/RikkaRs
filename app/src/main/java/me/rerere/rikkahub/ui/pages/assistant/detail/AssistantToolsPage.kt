@@ -39,7 +39,6 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -55,6 +54,13 @@ import me.rerere.rikkahub.data.model.WorkspaceSelectionDecision
 import me.rerere.rikkahub.data.model.decideWorkspaceSelection
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
+import me.rerere.rikkahub.data.model.ToolCapabilityReason
+import me.rerere.rikkahub.data.model.ToolCapabilitySnapshot
+import me.rerere.rikkahub.data.model.ToolCapabilitySource
+import me.rerere.rikkahub.data.model.assistantToolCapabilitySnapshot
+import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.McpStatus
+import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -68,7 +74,11 @@ import org.koin.core.parameter.parametersOf
 import kotlinx.coroutines.launch
 
 /** 单个赋能工具（工具名 + 简述）。 */
-private data class ToolInfo(@StringRes val descriptionRes: Int, val name: String)
+private data class ToolInfo(
+    @StringRes val descriptionRes: Int,
+    val name: String,
+    val reasonCode: ToolCapabilityReason? = null,
+)
 
 /** 分类头行状态控件类型。 */
 private enum class ToolControlKind { TOGGLE, ALWAYS_ON, NAVIGATE }
@@ -108,21 +118,10 @@ private val CONVERSATION_TOOLS = listOf(
     ToolInfo(R.string.assistant_tools_recent_chats_desc, "recent_chats"),
     ToolInfo(R.string.assistant_tools_conversation_search_desc, "conversation_search"),
 )
-private val SKILL_TOOLS = listOf(
-    ToolInfo(R.string.assistant_tools_use_skill_desc, "use_skill"),
-)
 private val SUBAGENT_TOOLS = listOf(
     ToolInfo(R.string.assistant_tools_spawn_subagent_desc, "spawn_subagent"),
     ToolInfo(R.string.assistant_tools_ask_btw_desc, "ask_btw"),
     ToolInfo(R.string.assistant_tools_manage_subagent_profile_desc, "manage_subagent_profile"),
-)
-private val FINISH_TOOLS = listOf(
-    ToolInfo(R.string.assistant_tools_finish_work_desc, "finish_work"),
-)
-
-private val ALL_TOOL_GROUPS = listOf(
-    WORKSPACE_TOOLS, MEMORY_TOOLS, MEMORY_TABLE_TOOLS, SEARCH_TOOLS,
-    CONVERSATION_TOOLS, SKILL_TOOLS, SUBAGENT_TOOLS, FINISH_TOOLS,
 )
 
 /**
@@ -133,22 +132,14 @@ fun empowermentToolStats(
     assistant: Assistant,
     workspaces: List<WorkspaceEntity> = emptyList(),
     memoryTableGloballyEnabled: Boolean = true,
+    visibleSkills: List<SkillMetadata> = emptyList(),
+    mcpServerConfigs: List<McpServerConfig> = emptyList(),
+    mcpStatuses: Map<kotlin.uuid.Uuid, McpStatus> = emptyMap(),
 ): Pair<Int, Int> {
-    val total = ALL_TOOL_GROUPS.sumOf { it.size }
-    var enabled = FINISH_TOOLS.size
-    val memoryCapabilities = resolveMemoryCapabilities(
-        normalMemoryEnabled = assistant.enableMemory,
-        settingsMemoryTableEnabled = memoryTableGloballyEnabled,
-        assistantMemoryTableEnabled = assistant.enableMemoryTable,
+    val snapshot = assistantToolCapabilitySnapshot(
+        assistant, memoryTableGloballyEnabled, workspaces, visibleSkills, mcpServerConfigs, mcpStatuses,
     )
-    if (assistant.enableWebSearch) enabled += SEARCH_TOOLS.size
-    enabled += resolveWorkspaceToolCapability(assistant.workspaceId, workspaces).availableToolNames.size
-    if (memoryCapabilities.normalMemoryEnabled) enabled += MEMORY_TOOLS.size
-    if (memoryCapabilities.memoryTableEnabled) enabled += MEMORY_TABLE_TOOLS.size
-    if (assistant.enableRecentChatsReference) enabled += CONVERSATION_TOOLS.size
-    if (assistant.enabledSkills.isNotEmpty()) enabled += SKILL_TOOLS.size
-    if (assistant.enableSubagents) enabled += SUBAGENT_TOOLS.size
-    return enabled to total
+    return snapshot.effectiveCount to snapshot.capabilities.size
 }
 
 internal data class MemoryTableToolUiState(
@@ -182,9 +173,29 @@ fun AssistantToolsPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
+    val skills by vm.skills.collectAsStateWithLifecycle()
+    val mcpServerConfigs by vm.mcpServerConfigs.collectAsStateWithLifecycle()
+    val mcpStatuses by vm.mcpStatuses.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val capabilitySnapshot = remember(
+        assistant,
+        settings.enableMemoryTable,
+        workspaces,
+        skills,
+        mcpServerConfigs,
+        mcpStatuses,
+    ) {
+        assistantToolCapabilitySnapshot(
+            assistant,
+            settings.enableMemoryTable,
+            workspaces,
+            skills,
+            mcpServerConfigs,
+            mcpStatuses,
+        )
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var selectableWorkspaces by remember { mutableStateOf<List<WorkspaceEntity>?>(null) }
@@ -207,11 +218,8 @@ fun AssistantToolsPage(id: String) {
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    val (enabled, total) = empowermentToolStats(
-                        assistant = assistant,
-                        workspaces = workspaces,
-                        memoryTableGloballyEnabled = settings.enableMemoryTable,
-                    )
+                    val enabled = capabilitySnapshot.effectiveCount
+                    val total = capabilitySnapshot.capabilities.size
                     Text(stringResource(R.string.assistant_tools_title_with_count, enabled, total))
                 },
                 navigationIcon = {
@@ -248,6 +256,7 @@ fun AssistantToolsPage(id: String) {
             onSetMemoryEnabled = { vm.setMemoryEnabled(it) },
             onSetMemoryTableEnabled = { vm.setMemoryTableEnabled(it) },
             memoryTableGloballyEnabled = settings.enableMemoryTable,
+            snapshot = capabilitySnapshot,
             memoryTableDisabledReason = stringResource(
                 R.string.assistant_page_memory_table_disabled_global
             ),
@@ -292,6 +301,7 @@ private fun AssistantToolsContent(
     onSetMemoryEnabled: (Boolean) -> Unit,
     onSetMemoryTableEnabled: (Boolean) -> Unit,
     memoryTableGloballyEnabled: Boolean,
+    snapshot: ToolCapabilitySnapshot,
     memoryTableDisabledReason: String,
     onNavigateSkills: () -> Unit,
 ) {
@@ -311,11 +321,29 @@ private fun AssistantToolsContent(
         WorkspaceUnavailableReason.BROKEN -> stringResource(R.string.assistant_tools_workspace_broken)
         WorkspaceUnavailableReason.UNKNOWN -> stringResource(R.string.assistant_tools_workspace_unknown)
     }
+    fun dynamicTools(
+        source: ToolCapabilitySource,
+        description: Int,
+        configuredOnly: Boolean = true,
+    ) = snapshot.capabilities
+        .filter { it.source == source && (!configuredOnly || it.configured) }
+        .map { ToolInfo(description, it.displayName, it.reasonCode.takeUnless { reason -> reason == ToolCapabilityReason.AVAILABLE }) }
+    fun catalogTools(source: ToolCapabilitySource, tools: List<ToolInfo>) = tools.map { tool ->
+        val capability = snapshot.capabilities.firstOrNull {
+            it.source == source && it.runtimeName == tool.name
+        }
+        tool.copy(
+            reasonCode = capability?.reasonCode?.takeUnless { it == ToolCapabilityReason.AVAILABLE },
+        )
+    }
+    val visibleEnabledSkills = snapshot.capabilities.count {
+        it.source == ToolCapabilitySource.SKILL && it.id != "skill:management" && it.effective
+    }
     val groups = listOf(
         ToolGroupUi(
             titleRes = R.string.assistant_page_workspace,
             icon = HugeIcons.Folder01,
-            tools = WORKSPACE_TOOLS.filter { it.name in workspaceCapability.availableToolNames },
+            tools = catalogTools(ToolCapabilitySource.WORKSPACE, WORKSPACE_TOOLS),
             enabled = workspaceCapability.available,
             checked = workspaceCapability.configured,
             disabledReason = workspaceReason,
@@ -328,7 +356,7 @@ private fun AssistantToolsContent(
         ToolGroupUi(
             titleRes = R.string.assistant_page_memory,
             icon = HugeIcons.Brain02,
-            tools = MEMORY_TOOLS,
+            tools = catalogTools(ToolCapabilitySource.MEMORY, MEMORY_TOOLS),
             enabled = assistant.enableMemory,
             controlKind = ToolControlKind.TOGGLE,
             onToggle = onSetMemoryEnabled,
@@ -336,7 +364,7 @@ private fun AssistantToolsContent(
         ToolGroupUi(
             titleRes = R.string.assistant_page_memory_table_title,
             icon = HugeIcons.Database02,
-            tools = MEMORY_TABLE_TOOLS,
+            tools = catalogTools(ToolCapabilitySource.MEMORY_TABLE, MEMORY_TABLE_TOOLS),
             enabled = memoryTableState.active,
             checked = memoryTableState.checked,
             controlEnabled = memoryTableState.controlEnabled,
@@ -347,7 +375,7 @@ private fun AssistantToolsContent(
         ToolGroupUi(
             titleRes = R.string.common_search,
             icon = HugeIcons.Search01,
-            tools = SEARCH_TOOLS,
+            tools = catalogTools(ToolCapabilitySource.BUILTIN, SEARCH_TOOLS),
             enabled = assistant.enableWebSearch,
             controlKind = ToolControlKind.TOGGLE,
             onToggle = { on -> onUpdate(assistant.copy(enableWebSearch = on)) },
@@ -355,7 +383,7 @@ private fun AssistantToolsContent(
         ToolGroupUi(
             titleRes = R.string.assistant_tools_group_conversations,
             icon = HugeIcons.Message02,
-            tools = CONVERSATION_TOOLS,
+            tools = catalogTools(ToolCapabilitySource.BUILTIN, CONVERSATION_TOOLS),
             enabled = assistant.enableRecentChatsReference,
             controlKind = ToolControlKind.TOGGLE,
             onToggle = { on -> onUpdate(assistant.copy(enableRecentChatsReference = on)) },
@@ -363,26 +391,40 @@ private fun AssistantToolsContent(
         ToolGroupUi(
             titleRes = R.string.assistant_extensions_page_tab_skills,
             icon = HugeIcons.Puzzle,
-            tools = SKILL_TOOLS,
-            enabled = assistant.enabledSkills.isNotEmpty(),
+            tools = dynamicTools(ToolCapabilitySource.SKILL, R.string.assistant_tools_use_skill_desc),
+            enabled = visibleEnabledSkills > 0,
             controlKind = ToolControlKind.NAVIGATE,
-            badge = assistant.enabledSkills.size.takeIf { it > 0 }?.toString(),
+            badge = visibleEnabledSkills.takeIf { it > 0 }?.toString(),
             onNavigate = onNavigateSkills,
+        ),
+        ToolGroupUi(
+            titleRes = R.string.assistant_tools_group_local,
+            icon = HugeIcons.Database02,
+            tools = dynamicTools(ToolCapabilitySource.LOCAL, R.string.assistant_tools_local_desc) +
+                dynamicTools(ToolCapabilitySource.CALENDAR, R.string.assistant_tools_local_desc),
+            enabled = snapshot.capabilities.any {
+                it.source in setOf(ToolCapabilitySource.LOCAL, ToolCapabilitySource.CALENDAR) && it.effective
+            },
+            controlKind = ToolControlKind.ALWAYS_ON,
+        ),
+        ToolGroupUi(
+            titleRes = R.string.assistant_tools_group_mcp,
+            icon = HugeIcons.Connect,
+            tools = dynamicTools(
+                ToolCapabilitySource.MCP,
+                R.string.assistant_tools_mcp_desc,
+                configuredOnly = false,
+            ),
+            enabled = snapshot.capabilities.any { it.source == ToolCapabilitySource.MCP && it.effective },
+            controlKind = ToolControlKind.ALWAYS_ON,
         ),
         ToolGroupUi(
             titleRes = R.string.assistant_page_tab_subagent,
             icon = HugeIcons.Connect,
-            tools = SUBAGENT_TOOLS,
+            tools = catalogTools(ToolCapabilitySource.SUBAGENT, SUBAGENT_TOOLS),
             enabled = assistant.enableSubagents,
             controlKind = ToolControlKind.TOGGLE,
             onToggle = { on -> onUpdate(assistant.copy(enableSubagents = on)) },
-        ),
-        ToolGroupUi(
-            titleRes = R.string.assistant_tools_group_finish,
-            icon = HugeIcons.Tick02,
-            tools = FINISH_TOOLS,
-            enabled = true,
-            controlKind = ToolControlKind.ALWAYS_ON,
         ),
     )
 
@@ -441,18 +483,35 @@ private fun ToolGroupCard(group: ToolGroupUi) {
                 }
             },
         )
-        // 工具行：仅在分类启用时展开
-        if (group.enabled) {
-            group.tools.forEach { tool ->
+        group.tools.forEach { tool ->
                 item(
                     headlineContent = {
                         Text(tool.name, style = MaterialTheme.typography.bodyMedium)
                     },
                     supportingContent = {
-                        Text(stringResource(tool.descriptionRes), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            tool.reasonCode?.let { reason ->
+                                stringResource(reason.stringResource())
+                            } ?: stringResource(tool.descriptionRes),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     },
                 )
-            }
         }
     }
+}
+
+@StringRes
+private fun ToolCapabilityReason.stringResource(): Int = when (this) {
+    ToolCapabilityReason.AVAILABLE -> R.string.assistant_tools_reason_available
+    ToolCapabilityReason.DISABLED -> R.string.assistant_tools_reason_disabled
+    ToolCapabilityReason.GLOBAL_DISABLED -> R.string.assistant_tools_reason_global_disabled
+    ToolCapabilityReason.NOT_SELECTED -> R.string.assistant_tools_reason_not_selected
+    ToolCapabilityReason.MISSING -> R.string.assistant_tools_reason_missing
+    ToolCapabilityReason.UNAVAILABLE -> R.string.assistant_tools_reason_unavailable
+    ToolCapabilityReason.CONNECTING -> R.string.assistant_tools_reason_connecting
+    ToolCapabilityReason.CONNECTION_ERROR -> R.string.assistant_tools_reason_connection_error
+    ToolCapabilityReason.NEEDS_AUTHORIZATION -> R.string.assistant_tools_reason_needs_authorization
+    ToolCapabilityReason.DELEGATE_ONLY -> R.string.assistant_tools_reason_delegate_only
+    ToolCapabilityReason.INVALID_CONFIGURATION -> R.string.assistant_tools_reason_invalid_configuration
 }

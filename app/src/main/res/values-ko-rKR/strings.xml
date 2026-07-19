@@ -1871,4 +1871,19 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_tools_workspace_binding_saved">워크스페이스 바인딩 저장됨</string>
   <string name="assistant_tools_workspace_binding_save_failed">워크스페이스 연결을 저장하지 못했습니다</string>
   <string name="assistant_tools_workspace_invalid_id">이 워크스페이스의 ID가 유효하지 않아 선택할 수 없습니다.</string>
+  <string name="assistant_tools_group_local">로컬 도구</string>
+  <string name="assistant_tools_group_mcp">MCP 도구</string>
+  <string name="assistant_tools_local_desc">로컬 기기 기능</string>
+  <string name="assistant_tools_mcp_desc">MCP 서버 기능</string>
+  <string name="assistant_tools_reason_available">사용 가능</string>
+  <string name="assistant_tools_reason_disabled">비활성화됨</string>
+  <string name="assistant_tools_reason_global_disabled">전역 설정에 의해 비활성화됨</string>
+  <string name="assistant_tools_reason_not_selected">이 어시스턴트에 대해 선택되지 않음</string>
+  <string name="assistant_tools_reason_missing">구성된 소스가 누락되었습니다</string>
+  <string name="assistant_tools_reason_unavailable">현재 사용할 수 없음</string>
+  <string name="assistant_tools_reason_connecting">연결 중</string>
+  <string name="assistant_tools_reason_connection_error">연결 오류</string>
+  <string name="assistant_tools_reason_needs_authorization">인증 필요</string>
+  <string name="assistant_tools_reason_delegate_only">대리인 전용 모드에서 사용할 수 없습니다</string>
+  <string name="assistant_tools_reason_invalid_configuration">잘못된 소스 구성</string>
 </resources>

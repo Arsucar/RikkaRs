@@ -58,6 +58,9 @@ fun AssistantDetailPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
+    val skills by vm.skills.collectAsStateWithLifecycle()
+    val mcpServerConfigs by vm.mcpServerConfigs.collectAsStateWithLifecycle()
+    val mcpStatuses by vm.mcpStatuses.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -149,6 +152,9 @@ fun AssistantDetailPage(id: String) {
                                 assistant = assistant,
                                 workspaces = workspaces,
                                 memoryTableGloballyEnabled = settings.enableMemoryTable,
+                                visibleSkills = skills,
+                                mcpServerConfigs = mcpServerConfigs,
+                                mcpStatuses = mcpStatuses,
                             )
                             Text(stringResource(R.string.assistant_tools_enabled_count, enabled, total))
                         },

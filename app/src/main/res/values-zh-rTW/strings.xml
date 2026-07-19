@@ -1858,4 +1858,19 @@
   <string name="assistant_tools_workspace_binding_saved">工作區綁定已儲存</string>
   <string name="assistant_tools_workspace_binding_save_failed">無法儲存工作區綁定</string>
   <string name="assistant_tools_workspace_invalid_id">此工作區 ID 無效，無法選取</string>
+  <string name="assistant_tools_group_local">本地工具</string>
+  <string name="assistant_tools_group_mcp">MCP 工具</string>
+  <string name="assistant_tools_local_desc">本機裝置功能</string>
+  <string name="assistant_tools_mcp_desc">MCP 服务器能力</string>
+  <string name="assistant_tools_reason_available">可用</string>
+  <string name="assistant_tools_reason_disabled">已停用</string>
+  <string name="assistant_tools_reason_global_disabled">已由全域設定停用</string>
+  <string name="assistant_tools_reason_not_selected">未為此助手選取</string>
+  <string name="assistant_tools_reason_missing">已設定的來源遺失</string>
+  <string name="assistant_tools_reason_unavailable">目前無法使用</string>
+  <string name="assistant_tools_reason_connecting">連線中</string>
+  <string name="assistant_tools_reason_connection_error">連線錯誤</string>
+  <string name="assistant_tools_reason_needs_authorization">需要授權</string>
+  <string name="assistant_tools_reason_delegate_only">僅限委派模式中無法使用</string>
+  <string name="assistant_tools_reason_invalid_configuration">無效的來源配置</string>
 </resources>

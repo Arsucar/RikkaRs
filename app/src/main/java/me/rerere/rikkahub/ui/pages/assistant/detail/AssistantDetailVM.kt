@@ -32,6 +32,7 @@ import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
@@ -62,12 +63,14 @@ class AssistantDetailVM(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
+    mcpManager: McpManager,
     conversationTagRepository: ConversationTagRepository,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
 
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
+    val mcpStatuses = mcpManager.syncingStatus.asStateFlow()
 
     private val _assistantPrivateSkills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val assistantPrivateSkills = _assistantPrivateSkills.asStateFlow()
@@ -302,8 +305,8 @@ class AssistantDetailVM(
     }
 
     private fun loadSkillsNow() {
-        _skills.value = skillManager.listSkillsForAssistant(assistantId)
-        _assistantPrivateSkills.value = skillManager.listAssistantSkills(assistantId)
+        _skills.value = skillManager.listSkillsForAssistant(assistantId, createIfMissing = false)
+        _assistantPrivateSkills.value = skillManager.listAssistantSkills(assistantId, createIfMissing = false)
     }
 
     fun saveAssistantSkill(name: String, content: String, onResult: (Boolean) -> Unit) {

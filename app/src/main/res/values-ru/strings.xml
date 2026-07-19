@@ -1871,4 +1871,19 @@
   <string name="assistant_tools_workspace_binding_saved">Связывание рабочей области сохранено</string>
   <string name="assistant_tools_workspace_binding_save_failed">Не удалось сохранить привязку рабочего пространства</string>
   <string name="assistant_tools_workspace_invalid_id">Это рабочее пространство имеет недопустимый ID и не может быть выбрано.</string>
+  <string name="assistant_tools_group_local">Локальные инструменты</string>
+  <string name="assistant_tools_group_mcp">MCP инструменты</string>
+  <string name="assistant_tools_local_desc">Возможность локального устройства</string>
+  <string name="assistant_tools_mcp_desc">Возможность MCP сервера</string>
+  <string name="assistant_tools_reason_available">Доступно</string>
+  <string name="assistant_tools_reason_disabled">Отключено</string>
+  <string name="assistant_tools_reason_global_disabled">Отключено глобальной настройкой</string>
+  <string name="assistant_tools_reason_not_selected">Не выбран для этого ассистента</string>
+  <string name="assistant_tools_reason_missing">Настроенный источник отсутствует</string>
+  <string name="assistant_tools_reason_unavailable">Недоступно</string>
+  <string name="assistant_tools_reason_connecting">Подключение</string>
+  <string name="assistant_tools_reason_connection_error">Ошибка подключения</string>
+  <string name="assistant_tools_reason_needs_authorization">Требуется авторизация</string>
+  <string name="assistant_tools_reason_delegate_only">Недоступно в режиме только делегата</string>
+  <string name="assistant_tools_reason_invalid_configuration">Некорректная конфигурация источника</string>
 </resources>

@@ -59,6 +59,7 @@ import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.model.ToolPermissionPreset
 import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
@@ -180,6 +181,7 @@ class SettingsStore(
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val PRESETS = stringPreferencesKey("presets")
+        val TOOL_PERMISSION_PRESETS = stringPreferencesKey("tool_permission_presets")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val IMAGE_QUICK_MESSAGES = stringPreferencesKey("image_quick_messages")
@@ -306,6 +308,9 @@ class SettingsStore(
                 } ?: emptyList(),
                 presetsStoreExists = preferences[PRESETS] != null,
                 presets = preferences[PRESETS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                toolPermissionPresets = preferences[TOOL_PERMISSION_PRESETS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 lorebooks = preferences[LOREBOOKS]?.let {
@@ -582,6 +587,7 @@ class SettingsStore(
             } ?: preferences.remove(SELECTED_ASR_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[PRESETS] = JsonInstant.encodeToString(settings.presets)
+            preferences[TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(settings.toolPermissionPresets)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
             preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
@@ -915,6 +921,7 @@ data class Settings(
     @Transient
     val presetsStoreExists: Boolean = false,
     val presets: List<Preset> = emptyList(),
+    val toolPermissionPresets: List<ToolPermissionPreset> = emptyList(),
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
     val imageQuickMessages: List<QuickMessage> = emptyList(),
