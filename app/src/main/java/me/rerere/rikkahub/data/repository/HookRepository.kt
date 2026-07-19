@@ -97,6 +97,12 @@ class HookRepository(
         System.currentTimeMillis(),
     )
 
+    suspend fun markTurnCompleted(logicalTurnId: Uuid): Boolean = dao.closeLogicalTurn(
+        logicalTurnId.toString(),
+        GenerationLogicalTurnStatus.COMPLETED,
+        System.currentTimeMillis(),
+    )
+
     suspend fun finalizeAndCreateRunExactlyOnce(
         logicalTurnId: Uuid,
         trigger: HookTrigger,
@@ -105,6 +111,7 @@ class HookRepository(
         messageId: Uuid?,
         messageModelId: Uuid?,
         hooks: List<HookExecutionMetadata>,
+        closeTurn: Boolean = true,
     ): HookDispatchPersistenceResult {
         val turn = dao.getLogicalTurn(logicalTurnId.toString())?.turn
             ?: return HookDispatchPersistenceResult.TurnNotActive
@@ -127,6 +134,7 @@ class HookRepository(
                 eventSchemaVersion = event.schemaVersion,
                 eventContextId = event.contextId,
                 eventOccurredAt = event.occurredAtEpochMillis,
+                eventPayloadJson = event.payload.toString(),
                 configVersion = orderedHooks.maxOf { hook -> hook.hookConfigVersion },
                 configHash = aggregateConfigHash(orderedHooks),
                 startedAt = now,
@@ -177,6 +185,7 @@ class HookRepository(
                 run = run,
                 executions = executions,
                 completedAt = now,
+                closeTurn = closeTurn,
             )
         ) {
             is HookRunCreationResult.Created -> HookDispatchPersistenceResult.Created(
@@ -412,10 +421,11 @@ private fun HookRunEntity.toModel(): HookRunRecord = HookRunRecord(
     invocationKind = invocationKind,
     trigger = HookTrigger.valueOf(trigger),
     eventId = eventId,
-    eventType = HookEventType.valueOf(eventType),
+    eventType = HookEventType.entries.firstOrNull { it.name == eventType } ?: HookEventType.UNKNOWN,
     eventSchemaVersion = eventSchemaVersion,
     eventContextId = eventContextId,
     eventOccurredAt = Instant.ofEpochMilli(eventOccurredAt),
+    eventPayloadJson = eventPayloadJson,
     configVersion = configVersion,
     configHash = configHash,
     startedAt = Instant.ofEpochMilli(startedAt),

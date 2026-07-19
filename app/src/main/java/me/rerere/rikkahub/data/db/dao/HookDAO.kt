@@ -136,36 +136,54 @@ interface HookDAO {
         run: HookRunEntity?,
         executions: List<HookExecutionEntity>,
         completedAt: Long,
+        closeTurn: Boolean = true,
     ): HookRunCreationResult {
         val existing = getRunByEventId(eventId)
         if (existing != null) {
             if (existing.logicalTurnId != logicalTurnId) {
                 return HookRunCreationResult.Duplicate(existing.runId)
             }
-            updateLogicalTurnStatus(
-                logicalTurnId,
-                GenerationLogicalTurnStatus.COMPLETED.name,
-                completedAt,
-                completedAt,
-            )
-            deletePendingTools(logicalTurnId)
+            if (closeTurn) {
+                updateLogicalTurnStatus(
+                    logicalTurnId,
+                    GenerationLogicalTurnStatus.COMPLETED.name,
+                    completedAt,
+                    completedAt,
+                )
+                deletePendingTools(logicalTurnId)
+            }
             return HookRunCreationResult.Duplicate(existing.runId)
         }
         val turn = getLogicalTurn(logicalTurnId)?.turn ?: return HookRunCreationResult.TurnNotActive
         if (turn.status !in FINALIZABLE_LOGICAL_TURN_STATUSES) return HookRunCreationResult.TurnNotActive
         if (run == null || executions.isEmpty()) {
-            updateLogicalTurnStatus(
-                logicalTurnId,
-                GenerationLogicalTurnStatus.COMPLETED.name,
-                completedAt,
-                completedAt,
-            )
-            deletePendingTools(logicalTurnId)
+            if (closeTurn) {
+                updateLogicalTurnStatus(
+                    logicalTurnId,
+                    GenerationLogicalTurnStatus.COMPLETED.name,
+                    completedAt,
+                    completedAt,
+                )
+                deletePendingTools(logicalTurnId)
+            }
             return HookRunCreationResult.NoHooks
         }
         if (insertRunIgnore(run) == -1L) {
             val raced = getRunByEventId(eventId)
                 ?: return HookRunCreationResult.TurnNotActive
+            if (closeTurn) {
+                updateLogicalTurnStatus(
+                    logicalTurnId,
+                    GenerationLogicalTurnStatus.COMPLETED.name,
+                    completedAt,
+                    completedAt,
+                )
+                deletePendingTools(logicalTurnId)
+            }
+            return HookRunCreationResult.Duplicate(raced.runId)
+        }
+        insertExecutions(executions)
+        if (closeTurn) {
             updateLogicalTurnStatus(
                 logicalTurnId,
                 GenerationLogicalTurnStatus.COMPLETED.name,
@@ -173,16 +191,7 @@ interface HookDAO {
                 completedAt,
             )
             deletePendingTools(logicalTurnId)
-            return HookRunCreationResult.Duplicate(raced.runId)
         }
-        insertExecutions(executions)
-        updateLogicalTurnStatus(
-            logicalTurnId,
-            GenerationLogicalTurnStatus.COMPLETED.name,
-            completedAt,
-            completedAt,
-        )
-        deletePendingTools(logicalTurnId)
         return HookRunCreationResult.Created(run.runId, executions.map { it.executionId })
     }
 

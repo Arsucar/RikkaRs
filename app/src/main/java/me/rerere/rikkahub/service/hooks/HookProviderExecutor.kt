@@ -50,6 +50,7 @@ sealed interface FrozenHookModelRequest {
         val schemaJson: String,
         val payloadJson: String,
         val maxOperations: Int,
+        val errorExperience: Boolean = false,
     ) : FrozenHookModelRequest
 }
 
@@ -220,6 +221,22 @@ private fun buildMemoryTableSyncEvaluationPrompt(request: FrozenHookModelRequest
         appendLine(request.payloadJson)
         appendLine("</payload>")
         appendLine()
+        if (request.errorExperience) {
+            appendLine(
+                "Return exactly one JSON object with exactly the keys should_remember, deduplication_key, " +
+                    "symptom, root_cause, correction, scope, tools, commands, and reason."
+            )
+            appendLine(
+                "should_remember must be a boolean. The five text fields must be bounded plain strings; tools and " +
+                    "commands must be arrays of bounded plain strings. Use empty strings/arrays when unavailable."
+            )
+            append(
+                "Set should_remember=false for transient network failures, cancellation, recovered intermediate " +
+                    "failures, insufficient evidence, or content that cannot be safely generalized. " +
+                    "Do not include secrets, credentials, URLs, file-system paths, raw tool output, Markdown, or other text."
+            )
+            return@buildString
+        }
         appendLine(
             "Return exactly one JSON object with exactly the keys decision, baseRevision, operations, and reason."
         )

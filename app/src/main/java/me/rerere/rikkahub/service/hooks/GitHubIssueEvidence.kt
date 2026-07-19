@@ -14,10 +14,53 @@ data class GitHubIssueEvidence(
     val normalizedUrl: String? = null,
 )
 
+data class ConfiguredHookKeywordEvidence(
+    val matchedPattern: String,
+    val matchedText: String,
+    val matchType: String,
+    val normalizedEvidence: String,
+    val normalizedUrl: String? = null,
+)
+
 /** Bounded local pre-filter used by KEYWORD_MATCHED; it never calls a provider. */
-fun detectConfiguredHookKeyword(text: String, keyword: String): String? {
+fun detectConfiguredHookKeyword(text: String, keyword: String): String? =
+    detectConfiguredHookKeywordEvidence(text, keyword)?.normalizedEvidence
+
+fun detectConfiguredHookKeywordEvidence(text: String, keyword: String): ConfiguredHookKeywordEvidence? {
     val candidate = keyword.trim()
     if (candidate.isEmpty() || text.isEmpty()) return null
+    if (candidate.equals("issue", ignoreCase = true) || candidate.equals("issues", ignoreCase = true)) {
+        val match = Regex(
+            "(?i)https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\\d+/?|(?<![\\p{L}\\p{N}_])#\\d+\\b|\\bissues?\\b"
+        ).find(text) ?: return null
+        val matched = match.value
+        if (matched.startsWith("http", ignoreCase = true)) {
+            val uri = runCatching { URI(matched.trimEnd('/', '.', ',', ';', ':')) }.getOrNull() ?: return null
+            val normalizedUrl = URI(
+                "https",
+                null,
+                uri.host.lowercase(Locale.ROOT),
+                -1,
+                uri.rawPath.trimEnd('/').lowercase(Locale.ROOT),
+                uri.rawQuery,
+                uri.rawFragment,
+            ).toASCIIString().trimEnd('/')
+            return ConfiguredHookKeywordEvidence(
+                matchedPattern = candidate.take(200),
+                matchedText = matched.take(200),
+                matchType = "ISSUE_URL",
+                normalizedEvidence = normalizedUrl,
+                normalizedUrl = normalizedUrl,
+            )
+        }
+        val normalized = matched.lowercase(Locale.ROOT)
+        return ConfiguredHookKeywordEvidence(
+            matchedPattern = candidate.take(200),
+            matchedText = matched.take(200),
+            matchType = if (normalized.startsWith('#')) "ISSUE_NUMBER" else "KEYWORD",
+            normalizedEvidence = normalized.take(200),
+        )
+    }
     val index = text.indexOf(candidate, ignoreCase = true)
     if (index < 0) return null
     val end = index + candidate.length
@@ -27,7 +70,12 @@ fun detectConfiguredHookKeyword(text: String, keyword: String): String? {
         val after = text.getOrNull(end)
         if (before?.isLetterOrDigit() == true || after?.isLetterOrDigit() == true) return null
     }
-    return candidate.take(200)
+    return ConfiguredHookKeywordEvidence(
+        matchedPattern = candidate.take(200),
+        matchedText = text.substring(index, end).take(200),
+        matchType = "KEYWORD",
+        normalizedEvidence = candidate.lowercase(Locale.ROOT).take(200),
+    )
 }
 
 private data class EvidenceCandidate(

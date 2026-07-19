@@ -1928,5 +1928,12 @@
   <string name="assistant_hook_error_keyword_required">Введите ключевое слово для этого триггера.</string>
   <string name="assistant_hook_trigger_keyword_event_description">Запуск после того, как итоговый текст содержит настроенное ключевое слово или ссылку на проблему.</string>
   <string name="assistant_hook_trigger_final_success_description">Запускается после успешного сохранения окончательного ответа ассистента.</string>
+  <string name="hook_error_memory_experience_not_durable">Этот сбой был пропущен, так как он не является долговечным повторно используемым знанием.</string>
+  <string name="hook_error_memory_experience_source_missing">Ошибка не имеет стабильного идентификатора исходного события.</string>
+  <string name="hook_error_memory_experience_context_insufficient">Опыт ошибки был пропущен, так как его контекст недостаточен.</string>
+  <string name="hook_error_memory_experience_redaction_failed">Опыт ошибки был пропущен, так как конфиденциальные данные не удалось безопасно скрыть.</string>
+  <string name="hook_error_memory_experience_dedup_failed">Не удалось проверить существующую память на наличие эквивалентного опыта.</string>
+  <string name="hook_error_memory_experience_schema_unsupported">Выбранная схема таблицы памяти не может хранить дедуплицированный опыт ошибки.</string>
+  <string name="hook_error_memory_experience_write_failed">Не удалось записать данные об ошибке в таблицу памяти.</string>
 </resources>
 

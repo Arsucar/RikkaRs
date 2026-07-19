@@ -2086,5 +2086,12 @@
   <string name="assistant_hook_error_keyword_required">Enter a keyword for this trigger.</string>
   <string name="assistant_hook_trigger_keyword_event_description">Run after the final text contains the configured keyword or issue reference.</string>
   <string name="assistant_hook_trigger_final_success_description">Run after the final assistant response is persisted successfully.</string>
+  <string name="hook_error_memory_experience_not_durable">This failure was skipped because it is not durable reusable knowledge.</string>
+  <string name="hook_error_memory_experience_source_missing">The error experience has no stable source event ID.</string>
+  <string name="hook_error_memory_experience_context_insufficient">The error experience was skipped because its context is insufficient.</string>
+  <string name="hook_error_memory_experience_redaction_failed">The error experience was skipped because sensitive evidence could not be safely redacted.</string>
+  <string name="hook_error_memory_experience_dedup_failed">The existing memory could not be checked for an equivalent experience.</string>
+  <string name="hook_error_memory_experience_schema_unsupported">The selected memory table schema cannot store a deduplicated error experience.</string>
+  <string name="hook_error_memory_experience_write_failed">The error experience could not be written to the memory table.</string>
 </resources>
 

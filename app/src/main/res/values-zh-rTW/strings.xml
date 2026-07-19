@@ -1915,5 +1915,12 @@
   <string name="assistant_hook_error_keyword_required">請輸入此觸發的關鍵字。</string>
   <string name="assistant_hook_trigger_keyword_event_description">在最終文本包含已配置的關鍵字或問題參考後執行。</string>
   <string name="assistant_hook_trigger_final_success_description">在最終助手回應成功持久化後執行。</string>
+  <string name="hook_error_memory_experience_not_durable">此失敗已被略過，因為其並非持久的可重複使用知識。</string>
+  <string name="hook_error_memory_experience_source_missing">該錯誤體驗沒有穩定的來源事件ID。</string>
+  <string name="hook_error_memory_experience_context_insufficient">該錯誤體驗因上下文不足而被跳過。</string>
+  <string name="hook_error_memory_experience_redaction_failed">該錯誤體驗已被跳過，因為無法安全地遮蔽敏感證據。</string>
+  <string name="hook_error_memory_experience_dedup_failed">無法檢查現有記憶中是否存在等效的經驗。</string>
+  <string name="hook_error_memory_experience_schema_unsupported">所選的記憶表格結構無法儲存已去重的錯誤經驗。</string>
+  <string name="hook_error_memory_experience_write_failed">錯誤體驗無法寫入記憶表。</string>
 </resources>
 

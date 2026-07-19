@@ -35,6 +35,7 @@ enum class HookEventType {
     KEYWORD_MATCHED,
     TOOL_CALL_FINAL_FAILED,
     SUBAGENT_COMPLETED,
+    UNKNOWN,
 }
 
 /** Versioned, non-executable input to the existing Hook dispatcher. */
@@ -282,6 +283,13 @@ enum class HookErrorCode {
     MEMORY_TABLE_SCOPE_FORBIDDEN,
     MEMORY_TABLE_REVISION_CONFLICT,
     MEMORY_TABLE_INVALID_OPERATIONS,
+    MEMORY_EXPERIENCE_NOT_DURABLE,
+    MEMORY_EXPERIENCE_SOURCE_MISSING,
+    MEMORY_EXPERIENCE_CONTEXT_INSUFFICIENT,
+    MEMORY_EXPERIENCE_REDACTION_FAILED,
+    MEMORY_EXPERIENCE_DEDUP_FAILED,
+    MEMORY_EXPERIENCE_SCHEMA_UNSUPPORTED,
+    MEMORY_EXPERIENCE_WRITE_FAILED,
     IDEMPOTENT_REPLAY,
     RETRY_NOT_ALLOWED,
     ACTION_FAILED,
@@ -302,6 +310,7 @@ data class HookRunRecord(
     val eventSchemaVersion: Int = HookEvent.CURRENT_SCHEMA_VERSION,
     val eventContextId: String? = null,
     val eventOccurredAt: Instant = Instant.EPOCH,
+    val eventPayloadJson: String = "{}",
     val configVersion: Long,
     val configHash: String,
     val startedAt: Instant,

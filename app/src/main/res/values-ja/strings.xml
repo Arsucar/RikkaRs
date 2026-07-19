@@ -1928,5 +1928,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_hook_trigger_keyword_label">キーワード</string>
   <string name="assistant_hook_error_keyword_required">このトリガーのキーワードを入力してください。</string>
   <string name="assistant_hook_trigger_keyword_event_description">設定されたキーワードまたはイシュー参照が最終テキストに含まれた後に実行されます。</string>
+  <string name="hook_error_memory_experience_not_durable">この失敗は、永続的な再利用可能な知識ではないためスキップされました。</string>
+  <string name="hook_error_memory_experience_source_missing">エラーエクスペリエンスに安定したソースイベントIDがありません。</string>
+  <string name="hook_error_memory_experience_context_insufficient">そのエラー経験は、上下文が不十分なためスキップされました。</string>
+  <string name="hook_error_memory_experience_redaction_failed">機密証拠を安全に秘匿処理できなかったため、エラー体験はスキップされました。</string>
+  <string name="hook_error_memory_experience_dedup_failed">既存のメモリで同等の経験を確認できませんでした。</string>
+  <string name="hook_error_memory_experience_schema_unsupported">選択されたメモリテーブルスキーマでは、重複排除されたエラー経験を保存できません。</string>
+  <string name="hook_error_memory_experience_write_failed">エラー体験をメモリテーブルに書き込めませんでした。</string>
 </resources>
 

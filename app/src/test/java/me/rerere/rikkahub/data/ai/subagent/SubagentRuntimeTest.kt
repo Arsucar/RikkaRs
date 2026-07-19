@@ -31,6 +31,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SubagentRuntimeTest {
+    private class TimeoutFailure : Exception("deadline exceeded")
     private val json: Json = JsonInstant
 
     @Test
@@ -46,10 +47,25 @@ class SubagentRuntimeTest {
             transcript = listOf(SubagentTranscriptStep.Text("ok")),
             contextId = "context-1",
             contextStatus = SubagentStatus.COMPLETED,
+            contextCompleteness = SubagentContextCompleteness.FULL,
+            startedAtEpochMillis = 100L,
+            endedAtEpochMillis = 200L,
         )
         val encoded = json.encodeToString(SubagentResult.serializer(), result)
         val decoded = json.decodeFromString(SubagentResult.serializer(), encoded)
         assertEquals(result, decoded)
+    }
+
+    @Test
+    fun timeoutFailureIsDistinctFromUserCancellation() {
+        assertEquals(
+            SubagentFailureDisposition.TIMED_OUT,
+            classifySubagentFailure(TimeoutFailure(), reusedContext = false),
+        )
+        assertEquals(
+            SubagentFailureDisposition.INTERRUPTED,
+            classifySubagentFailure(CancellationException("user stop"), reusedContext = false),
+        )
     }
 
     @Test

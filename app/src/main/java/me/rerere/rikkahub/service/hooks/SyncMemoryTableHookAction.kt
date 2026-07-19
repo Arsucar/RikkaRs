@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.service.hooks
 
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.HookDAO
@@ -17,10 +19,12 @@ import me.rerere.rikkahub.data.model.HookActionType
 import me.rerere.rikkahub.data.model.HookDecision
 import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionMode
+import me.rerere.rikkahub.data.model.HookEvent
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookRuntimeRules
 import me.rerere.rikkahub.data.model.MemoryTableOperationException
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
+import me.rerere.rikkahub.data.model.HookEventType
 import me.rerere.rikkahub.data.model.applyValidatedMemoryTableOperations
 import me.rerere.rikkahub.data.model.configurationHash
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
@@ -64,6 +68,32 @@ class SyncMemoryTableHookAction(
             }
         }
         validateSyncConfig(config)?.let { return HookActionPreparation.Skipped(it) }
+        val errorExperience = context.eventType == HookEventType.TOOL_CALL_FINAL_FAILED ||
+            context.eventType == HookEventType.SUBAGENT_COMPLETED
+        if (context.eventSchemaVersion != HookEvent.CURRENT_SCHEMA_VERSION || context.eventType == HookEventType.UNKNOWN) {
+            return HookActionPreparation.Skipped(HookErrorCode.SCHEMA_MISMATCH)
+        }
+        if (errorExperience && context.eventId.isNullOrBlank()) {
+            return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_SOURCE_MISSING)
+        }
+        if (context.eventPayloadJson != null) {
+            val payload = runCatching { json.parseToJsonElement(context.eventPayloadJson).jsonObject }
+                .getOrNull()
+                ?: return HookActionPreparation.Skipped(HookErrorCode.SCHEMA_MISMATCH)
+            if (payload["redactionFailed"]?.toString() == "true") {
+                return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_REDACTION_FAILED)
+            }
+            if (errorExperience && context.eventType == HookEventType.SUBAGENT_COMPLETED) {
+                val status = payload["finalStatus"]?.toString()?.trim('"')?.uppercase()
+                val succeeded = payload["succeeded"]?.toString() == "true"
+                if (succeeded || status in setOf("COMPLETED", "SUCCESS", "SUCCEEDED", "CANCELLED", "CANCELED")) {
+                    return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_NOT_DURABLE)
+                }
+                if (status !in setOf("FAILED", "ERROR", "TIMED_OUT", "INTERRUPTED", "TIMEOUT")) {
+                    return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_CONTEXT_INSUFFICIENT)
+                }
+            }
+        }
         val conversationId = context.conversation.id.toString()
         val actorConversationId = conversationId.takeIf {
             config.targetScopeType == MemoryTableScopeType.CONVERSATION
@@ -104,12 +134,45 @@ class SyncMemoryTableHookAction(
                 return HookActionPreparation.Skipped(HookErrorCode.MEMORY_TABLE_FREQUENCY_LIMIT)
             }
         }
-        val messages = freezeMemoryTableHookMessages(
+        val frozenMessages = freezeMemoryTableHookMessages(
             conversation = context.conversation,
             cutoffMessageId = context.sourceMessageId,
             config = config,
         )
-        if (messages.isEmpty()) return HookActionPreparation.Skipped(HookErrorCode.SCHEMA_MISMATCH)
+        if (frozenMessages.isEmpty()) return HookActionPreparation.Skipped(
+            if (errorExperience) HookErrorCode.MEMORY_EXPERIENCE_CONTEXT_INSUFFICIENT else HookErrorCode.SCHEMA_MISMATCH,
+        )
+        val messages = if (errorExperience) {
+            frozenMessages.map { message ->
+                val safe = sanitizeMemoryExperienceText(message.text)
+                    ?: return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_REDACTION_FAILED)
+                message.copy(text = safe)
+            }
+        } else {
+            frozenMessages
+        }
+        val eventPrompt = buildString {
+            append(hook.prompt)
+            if (context.eventType != null) {
+                append("\n\nHook event metadata (sanitized, bounded):\n")
+                append("eventType=").append(context.eventType.name)
+                append("\nsourceEventId=").append(context.eventId.orEmpty())
+                context.eventPayloadJson?.take(4_000)?.let { payload ->
+                    val safePayload = if (errorExperience) sanitizeMemoryExperienceText(payload) else payload
+                    if (errorExperience && safePayload == null) {
+                        return HookActionPreparation.Skipped(HookErrorCode.MEMORY_EXPERIENCE_REDACTION_FAILED)
+                    }
+                    append("\npayload=").append(safePayload)
+                }
+                if (errorExperience) {
+                    append("\nThis is an error-experience evaluation. Return the exact structured schema " +
+                        "{should_remember,deduplication_key,symptom,root_cause,correction,scope,tools,commands,reason}. " +
+                        "Set should_remember=false for transient, cancelled, self-recovered, unsafe, or insufficient evidence.")
+                } else {
+                    append("\nOnly create durable memory operations when this failure is reusable; otherwise return decision=skip.")
+                }
+            }
+        }
         val idempotencyKey = memoryTableHookIdempotencyKey(
             hookId = hook.id,
             configVersion = hook.configVersion,
@@ -131,13 +194,14 @@ class SyncMemoryTableHookAction(
             PreparedHookAction.SyncMemoryTable(
                 request = FrozenHookModelRequest.SyncMemoryTable(
                     modelId = hook.modelId,
-                    prompt = hook.prompt,
+                    prompt = eventPrompt,
                     messages = messages,
                     targetDocumentId = target.id,
                     baseRevision = target.revision,
                     schemaJson = template.schemaJson,
                     payloadJson = target.payloadJson,
                     maxOperations = config.maxOperations,
+                    errorExperience = errorExperience,
                 ),
                 audit = audit,
                 hookId = hook.id,
@@ -149,6 +213,10 @@ class SyncMemoryTableHookAction(
                 cutoffMessageId = context.sourceMessageId,
                 sourceKind = context.executionMode.name,
                 sourceKey = context.sourceKey,
+                eventId = context.eventId,
+                eventType = context.eventType,
+                eventOccurredAtEpochMillis = context.eventOccurredAtEpochMillis.takeIf { errorExperience },
+                errorExperience = errorExperience,
                 target = target,
                 schemaJson = template.schemaJson,
                 config = config,
@@ -159,7 +227,15 @@ class SyncMemoryTableHookAction(
     override fun parse(raw: String, prepared: PreparedHookAction): ParsedHookOutput {
         val sync = prepared as? PreparedHookAction.SyncMemoryTable
             ?: throw HookOutputException(HookErrorCode.ACTION_FAILED)
-        return MemoryTableSyncHookOutputParser.parse(raw, sync.config.maxOperations)
+        return if (sync.errorExperience) {
+            MemoryExperienceHookOutputParser.parse(
+                raw = raw,
+                prepared = sync,
+                nowEpochMillis = now(),
+            )
+        } else {
+            MemoryTableSyncHookOutputParser.parse(raw, sync.config.maxOperations)
+        }
     }
 
     override suspend fun preview(
@@ -229,8 +305,17 @@ class SyncMemoryTableHookAction(
                 prepared = sync,
                 output = parsed,
             )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: HookOutputException) {
+            throw error
         } catch (error: MemoryTableOperationException) {
             throw HookOutputException(HookErrorCode.MEMORY_TABLE_INVALID_OPERATIONS)
+        } catch (_: Throwable) {
+            throw HookOutputException(
+                if (sync.errorExperience) HookErrorCode.MEMORY_EXPERIENCE_WRITE_FAILED
+                else HookErrorCode.ACTION_FAILED,
+            )
         }
         return HookActionResult.Terminalized
     }
@@ -270,6 +355,16 @@ class SyncMemoryTableHookAction(
         config.minimumIntervalSeconds < 0 -> HookErrorCode.SCHEMA_MISMATCH
         else -> null
     }
+}
+
+private val unsafeMemoryExperiencePattern = Regex(
+    "(?i)(authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|cookie|password|secret|bearer\\s+|https?://|(?:[A-Za-z]:)?[/\\\\])",
+)
+
+internal fun sanitizeMemoryExperienceText(value: String): String? {
+    val bounded = value.trim().take(2_000)
+    if (bounded.isBlank() || unsafeMemoryExperiencePattern.containsMatchIn(bounded)) return null
+    return bounded
 }
 
 class MemoryTableHookSyncCommitter(

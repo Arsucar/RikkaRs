@@ -59,9 +59,13 @@ import me.rerere.rikkahub.data.ai.toContextPreview
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -69,6 +73,7 @@ import me.rerere.rikkahub.data.ai.subagent.SubagentHost
 import me.rerere.rikkahub.data.ai.subagent.SubagentSessionRegistry
 import me.rerere.rikkahub.data.ai.subagent.SubagentResult
 import me.rerere.rikkahub.data.ai.subagent.SubagentStatus
+import me.rerere.rikkahub.data.ai.subagent.SubagentContextCompleteness
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentTranscriptStep
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
@@ -153,7 +158,7 @@ import me.rerere.rikkahub.service.hooks.FrozenHookExecution
 import me.rerere.rikkahub.service.hooks.HookDispatcher
 import me.rerere.rikkahub.service.hooks.HookFreezeContext
 import me.rerere.rikkahub.service.hooks.HookOutputException
-import me.rerere.rikkahub.service.hooks.detectConfiguredHookKeyword
+import me.rerere.rikkahub.service.hooks.detectConfiguredHookKeywordEvidence
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.service.hooks.ParsedMemoryTableSyncHookOutput
 import me.rerere.rikkahub.service.hooks.evaluateHookFinalSuccess
@@ -169,6 +174,7 @@ import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.workspace.WorkspaceBindMount
 import java.time.Instant
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
@@ -926,10 +932,12 @@ class ChatService(
         )
         assistant.hooks.filter { it.enabled && it.trigger == HookTrigger.KEYWORD_MATCHED }
             .mapNotNull { hook ->
-                detectConfiguredHookKeyword(snapshot.text, hook.triggerKeyword)?.let { it to hook }
+                detectConfiguredHookKeywordEvidence(snapshot.text, hook.triggerKeyword)?.let { it to hook }
             }
-            .groupBy({ it.first }, { it.second })
-            .forEach { (evidence, hooks) ->
+            .groupBy { it.first.normalizedEvidence }
+            .forEach { (_, matches) ->
+                val evidence = matches.first().first
+                val hooks = matches.map { it.second }
                 dispatchTerminalEvent(
                     logicalTurnId = logicalTurnId,
                     conversation = conversation,
@@ -940,10 +948,18 @@ class ChatService(
                     sourceMessageModelId = snapshot.messageModelId,
                     trigger = HookTrigger.KEYWORD_MATCHED,
                     contextId = null,
-                    sourceIdentity = "${snapshot.messageId}:$evidence",
+                    sourceIdentity = "${snapshot.messageId}:${evidence.normalizedEvidence}",
                     hooksOverride = hooks,
+                    eventPayload = buildJsonObject {
+                        put("sourceMessageId", snapshot.messageId.toString())
+                        put("matchedPattern", evidence.matchedPattern)
+                        put("matchedText", sanitizeEventText(evidence.matchedText))
+                        put("matchType", evidence.matchType)
+                        evidence.normalizedUrl?.let { put("normalizedUrl", it) }
+                    },
                 )
             }
+        hookRepository.markTurnCompleted(logicalTurnId)
     }
 
     private suspend fun dispatchStructuredTerminalEvents(
@@ -954,18 +970,27 @@ class ChatService(
         val sourceMessage = conversation.currentMessages.lastOrNull() ?: return
         val sourceNode = conversation.getMessageNodeByMessageId(sourceMessage.id) ?: return
         val tools = sourceMessage.parts.filterIsInstance<UIMessagePart.Tool>()
-        val terminalSubagents = tools.filter { tool ->
-            tool.toolName == "spawn_subagent" && tool.isExecuted &&
-                tool.output.joinToString().contains("context_status", ignoreCase = true) &&
-                !tool.output.joinToString().contains("RUNNING", ignoreCase = true)
+        val terminalSubagents = tools.mapNotNull(::parseTerminalSubagentEvidence)
+        val parsedFailures = tools.mapIndexedNotNull { index, tool ->
+            parseTerminalToolFailure(tool)?.copy(index = index)
         }
-        val failedTools = tools.filter { tool ->
-            if (tool.toolName == "spawn_subagent" || !tool.isExecuted) return@filter false
-            val output = tool.output.joinToString().take(4_000)
-            val nonZeroExit = Regex("\\\"exitCode\\\"\\s*:\\s*(-?\\d+)")
-                .find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { it != 0 } == true
-            nonZeroExit || output.contains("\\\"timedOut\\\":true", ignoreCase = true) ||
-                output.contains("\\\"error\\\"", ignoreCase = true)
+        val failedTools = parsedFailures.filter { failure ->
+            tools.drop(failure.index + 1).none { later ->
+                toolOperationKey(later) == failure.operationKey && isStructuredToolSuccess(later)
+            }
+        }.map { failure ->
+            val attemptCount = tools.take(failure.index + 1).count {
+                toolOperationKey(it) == failure.operationKey
+            }
+            failure.copy(
+                payload = buildJsonObject {
+                    failure.payload.forEach { (key, value) -> put(key, value) }
+                    put("attemptCount", attemptCount)
+                    put("retryCount", (attemptCount - 1).coerceAtLeast(0))
+                    put("wasAutoRetried", attemptCount > 1)
+                    put("wasSelfRecovered", false)
+                }
+            )
         }
         if (failedTools.isNotEmpty()) {
             dispatchTerminalEvent(
@@ -979,12 +1004,26 @@ class ChatService(
                 trigger = HookTrigger.TOOL_CALL_FINAL_FAILED,
                 contextId = null,
                 sourceIdentity = failedTools.joinToString(",") { it.toolCallId },
+                eventPayload = buildJsonObject {
+                    put("source", "MAIN_CONVERSATION")
+                    put("parentTaskId", "")
+                    put("subagentId", "")
+                    put("finalStatus", "FAILED")
+                    put("attemptCount", failedTools.sumOf {
+                        it.payload["attemptCount"]?.jsonPrimitive?.intOrNull ?: 1
+                    })
+                    put("retryCount", failedTools.sumOf {
+                        it.payload["retryCount"]?.jsonPrimitive?.intOrNull ?: 0
+                    })
+                    put("wasAutoRetried", failedTools.any {
+                        (it.payload["retryCount"]?.jsonPrimitive?.intOrNull ?: 0) > 0
+                    })
+                    put("wasSelfRecovered", false)
+                    put("failures", JsonArray(failedTools.map { it.payload }))
+                },
             )
         }
-        terminalSubagents.forEach { tool ->
-            val output = tool.output.joinToString().take(4_000)
-            val contextId = Regex("context_id[^A-Za-z0-9_-]+([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE)
-                .find(output)?.groupValues?.getOrNull(1)
+        terminalSubagents.forEach { evidence ->
             dispatchTerminalEvent(
                 logicalTurnId = logicalTurnId,
                 conversation = conversation,
@@ -994,11 +1033,168 @@ class ChatService(
                 sourceMessageText = sourceMessage.toText().take(4_000),
                 sourceMessageModelId = sourceMessage.modelId,
                 trigger = HookTrigger.SUBAGENT_COMPLETED,
-                contextId = contextId,
-                sourceIdentity = "${contextId.orEmpty()}:${tool.toolCallId}",
+                contextId = evidence.contextId,
+                sourceIdentity = "${evidence.contextId.orEmpty()}:${evidence.toolCallId}",
+                eventPayload = evidence.payload,
             )
         }
     }
+
+    private data class TerminalToolFailureEvidence(
+        val toolCallId: String,
+        val toolName: String,
+        val operationKey: String,
+        val payload: JsonObject,
+        val index: Int = -1,
+    )
+
+    private data class TerminalSubagentEvidence(
+        val toolCallId: String,
+        val contextId: String?,
+        val payload: JsonObject,
+    )
+
+    private fun parseTerminalToolFailure(tool: UIMessagePart.Tool): TerminalToolFailureEvidence? {
+        if (tool.toolName == "spawn_subagent" || !tool.isExecuted ||
+            tool.approvalState is ToolApprovalState.Denied
+        ) return null
+        val output = parseToolOutputObject(tool) ?: return null
+        val status = output["status"]?.jsonPrimitive?.contentOrNull?.uppercase()
+        if (status in setOf("CANCELLED", "CANCELED", "SUCCESS", "SUCCEEDED")) return null
+        val timedOut = output["timedOut"]?.jsonPrimitive?.booleanOrNull == true
+        val exitCode = output["exitCode"]?.jsonPrimitive?.intOrNull
+        val rawError = output["error"]?.jsonPrimitive?.contentOrNull
+            ?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+        val failed = timedOut || (exitCode != null && exitCode != 0) ||
+            status in setOf("FAILED", "ERROR") || rawError != null
+        if (!failed) return null
+        val failureKind = when {
+            timedOut -> "TIMEOUT"
+            exitCode != null && exitCode != 0 -> "SHELL_NON_ZERO"
+            else -> "TOOL_ERROR"
+        }
+        return TerminalToolFailureEvidence(
+            toolCallId = tool.toolCallId,
+            toolName = tool.toolName,
+            operationKey = toolOperationKey(tool),
+            payload = buildJsonObject {
+                put("toolCallId", tool.toolCallId.take(200))
+                put("toolName", tool.toolName.take(200))
+                put("finalStatus", "FAILED")
+                put("errorKind", failureKind)
+                exitCode?.let { put("exitCode", it) }
+                put("timedOut", timedOut)
+                rawError?.let { put("errorMessage", sanitizeEventText(it)) }
+            },
+        )
+    }
+
+    private fun toolOperationKey(tool: UIMessagePart.Tool): String {
+        val material = "${tool.toolName}\u0000${tool.input}"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(material.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return "${tool.toolName}:$digest"
+    }
+
+    private fun isStructuredToolSuccess(tool: UIMessagePart.Tool): Boolean {
+        if (!tool.isExecuted || tool.approvalState is ToolApprovalState.Denied) return false
+        val output = parseToolOutputObject(tool) ?: return false
+        val status = output["status"]?.jsonPrimitive?.contentOrNull?.uppercase()
+        val exitCode = output["exitCode"]?.jsonPrimitive?.intOrNull
+        val timedOut = output["timedOut"]?.jsonPrimitive?.booleanOrNull == true
+        val error = output["error"]?.jsonPrimitive?.contentOrNull
+            ?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+        return !timedOut && error == null && (exitCode == 0 || status in setOf("SUCCESS", "SUCCEEDED"))
+    }
+
+    private fun parseTerminalSubagentEvidence(tool: UIMessagePart.Tool): TerminalSubagentEvidence? {
+        if (tool.toolName != "spawn_subagent" || !tool.isExecuted) return null
+        val output = parseToolOutputObject(tool) ?: return null
+        val status = output["context_status"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: return null
+        if (status !in setOf(
+                SubagentStatus.COMPLETED.name,
+                SubagentStatus.FAILED.name,
+                SubagentStatus.INTERRUPTED.name,
+                SubagentStatus.TIMED_OUT.name,
+            )
+        ) return null
+        val contextId = output["context_id"]?.jsonPrimitive?.contentOrNull
+        val truncated = output["truncated"]?.jsonPrimitive?.booleanOrNull == true
+        val metadata = tool.output.filterIsInstance<UIMessagePart.Text>().firstOrNull()?.metadata
+        val rawAvailableContext = metadata?.get("subagent_transcript")?.toString()
+        val contextBoundedByEvent = rawAvailableContext?.length?.let { it > 4_000 } == true
+        val reportedCompleteness = output["context_completeness"]?.jsonPrimitive?.contentOrNull?.uppercase()
+        val completeness = if (contextId.isNullOrBlank()) {
+            SubagentContextCompleteness.UNAVAILABLE.name
+        } else {
+            val reported = SubagentContextCompleteness.entries.firstOrNull { it.name == reportedCompleteness }
+                ?: SubagentContextCompleteness.UNAVAILABLE
+            if (reported == SubagentContextCompleteness.FULL && contextBoundedByEvent) {
+                SubagentContextCompleteness.BOUNDED_FULL.name
+            } else {
+                reported.name
+            }
+        }
+        val truncationReason = output["truncation_reason"]?.jsonPrimitive?.contentOrNull
+            ?: "event payload bounded to 4000 characters".takeIf { contextBoundedByEvent }
+        val result = output["summary"]?.jsonPrimitive?.contentOrNull
+        val error = output["error"]?.jsonPrimitive?.contentOrNull
+        return TerminalSubagentEvidence(
+            toolCallId = tool.toolCallId,
+            contextId = contextId,
+            payload = buildJsonObject {
+                put("toolCallId", tool.toolCallId.take(200))
+                put("contextId", contextId.orEmpty().take(200))
+                put("parentTaskId", tool.toolCallId.take(200))
+                put("subagentId", contextId.orEmpty().take(200))
+                put("finalStatus", status)
+                put("succeeded", output["succeeded"]?.jsonPrimitive?.booleanOrNull == true)
+                put("contextCompleteness", completeness)
+                put("truncated", truncated)
+                put(
+                    "omittedParts",
+                    if (completeness == SubagentContextCompleteness.FULL.name) "" else
+                        (truncationReason ?: "full context unavailable").take(500),
+                )
+                truncationReason?.let { put("truncation", sanitizeEventText(it)) }
+                output["started_at"]?.jsonPrimitive?.longOrNull?.let { put("startedAt", it) }
+                output["ended_at"]?.jsonPrimitive?.longOrNull?.let { put("endedAt", it) }
+                result?.let { put("result", sanitizeEventText(it)) }
+                error?.let { put("error", sanitizeEventText(it)) }
+                metadata?.get("subagent_task")?.jsonPrimitive?.contentOrNull?.let {
+                    put("task", sanitizeEventText(it))
+                }
+                metadata?.get("subagent_profile")?.jsonPrimitive?.contentOrNull?.let {
+                    put("profile", sanitizeEventText(it))
+                }
+                rawAvailableContext?.let {
+                    put("availableContext", sanitizeEventText(it, maxChars = 4_000))
+                }
+                metadata?.get("subagent_tool_calls")?.jsonPrimitive?.intOrNull?.let {
+                    put("toolCallCount", it)
+                }
+            },
+        )
+    }
+
+    private fun parseToolOutputObject(tool: UIMessagePart.Tool): JsonObject? = tool.output
+        .filterIsInstance<UIMessagePart.Text>()
+        .asSequence()
+        .mapNotNull { part ->
+            runCatching { json.parseToJsonElement(part.text).jsonObject }.getOrNull()
+        }
+        .firstOrNull()
+
+    private fun sanitizeEventText(value: String, maxChars: Int = 500): String = value
+        .replace(
+            Regex("(?i)\\\"?(authorization|api[-_]?key|token|cookie|password|secret)\\\"?\\s*[:=]\\s*\\\"?[^\\s,;}] +\\\"?".replace("] +", "]+")),
+            "$1=[REDACTED]",
+        )
+        .replace(Regex("(?i)bearer\\s+[A-Za-z0-9._~+/-]+"), "Bearer [REDACTED]")
+        .replace(Regex("(?i)https?://[^\\s,;]+"), "[URL_REDACTED]")
+        .replace(Regex("(?:[A-Za-z]:)?[/\\\\](?:[^\\s/\\\\]+[/\\\\]){1,}[^\\s]+"), "[PATH_REDACTED]")
+        .take(maxChars)
 
     private suspend fun dispatchTerminalEvent(
         logicalTurnId: Uuid,
@@ -1012,8 +1208,10 @@ class ChatService(
         contextId: String?,
         sourceIdentity: String,
         hooksOverride: List<ConversationHook>? = null,
+        eventPayload: JsonObject = JsonObject(emptyMap()),
     ) {
         val hooks = hooksOverride ?: assistant.hooks.filter { it.enabled && it.trigger == trigger }
+        if (hooks.isEmpty()) return
         val eventType = trigger.eventType
         val eventId = HookEvent.stableId(
             eventType,
@@ -1039,6 +1237,14 @@ class ChatService(
             sourceMessageId = sourceMessageId,
             contextId = contextId,
             occurredAtEpochMillis = System.currentTimeMillis(),
+            payload = buildJsonObject {
+                eventPayload.forEach { (key, value) -> put(key, value) }
+                put("eventId", eventId)
+                put("schemaVersion", HookEvent.CURRENT_SCHEMA_VERSION)
+                put("conversationId", conversation.id.toString())
+                put("logicalTurnId", logicalTurnId.toString())
+                put("contextId", contextId.orEmpty())
+            },
         )
         val persistence = hookRepository.finalizeAndCreateRunExactlyOnce(
             logicalTurnId = logicalTurnId,
@@ -1048,6 +1254,7 @@ class ChatService(
             messageId = sourceMessageId,
             messageModelId = sourceMessageModelId,
             hooks = metadata,
+            closeTurn = false,
         )
         if (persistence !is HookDispatchPersistenceResult.Created) return
         val executions = hooks.zip(metadata).map { (hook, execution) ->
@@ -1067,6 +1274,8 @@ class ChatService(
                     eventId = eventId,
                     eventType = eventType,
                     eventContextId = contextId,
+                    eventOccurredAtEpochMillis = event.occurredAtEpochMillis,
+                    eventPayloadJson = event.payload.toString(),
                 ),
             )
         }

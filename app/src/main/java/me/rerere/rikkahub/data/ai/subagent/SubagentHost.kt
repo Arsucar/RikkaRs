@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.subagent
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.fold
 import kotlinx.coroutines.flow.onEach
@@ -60,6 +61,7 @@ internal enum class SubagentFailureDisposition {
     INTERRUPTED,
     FAILED,
     CONTEXT_TOO_LONG,
+    TIMED_OUT,
 }
 
 internal fun classifySubagentFailure(
@@ -69,10 +71,16 @@ internal fun classifySubagentFailure(
     if (reusedContext && isContextTooLongError(error)) {
         return SubagentFailureDisposition.CONTEXT_TOO_LONG
     }
+    if (error is TimeoutCancellationException || error.javaClass.simpleName.contains("Timeout")) {
+        return SubagentFailureDisposition.TIMED_OUT
+    }
     if (error is CancellationException) return SubagentFailureDisposition.INTERRUPTED
 
     var current: Throwable? = error
     while (current != null) {
+        if (current is TimeoutCancellationException || current.javaClass.simpleName.contains("Timeout")) {
+            return SubagentFailureDisposition.TIMED_OUT
+        }
         if (current is IOException || current is HttpException) {
             return SubagentFailureDisposition.INTERRUPTED
         }
@@ -292,6 +300,7 @@ class SubagentHost(
         reuseContextId: String?,
         onProgress: ((String, List<UIMessage>) -> Unit)?,
     ): SubagentResult {
+        val startedAtEpochMillis = System.currentTimeMillis()
         val profile = SubagentRegistry.resolveProfile(
             profileName,
             parentAssistant,
@@ -464,6 +473,18 @@ class SubagentHost(
                 transcript = transcript,
                 contextId = contextId,
                 contextStatus = SubagentStatus.COMPLETED,
+                contextCompleteness = if (truncated || generationLimitReached) {
+                    SubagentContextCompleteness.BOUNDED_FULL
+                } else {
+                    SubagentContextCompleteness.FULL
+                },
+                truncationReason = when {
+                    generationLimitReached -> "GENERATION_LIMIT"
+                    truncated -> "MODEL_OR_TOOL_BUDGET"
+                    else -> null
+                },
+                startedAtEpochMillis = startedAtEpochMillis,
+                endedAtEpochMillis = System.currentTimeMillis(),
             )
             contextCache.finish(
                 contextId = contextId,
@@ -482,10 +503,10 @@ class SubagentHost(
                 failure,
                 reusedContext = contextAcquisition.reusedContext,
             )
-            val status = if (disposition == SubagentFailureDisposition.INTERRUPTED) {
-                SubagentStatus.INTERRUPTED
-            } else {
-                SubagentStatus.FAILED
+            val status = when (disposition) {
+                SubagentFailureDisposition.INTERRUPTED -> SubagentStatus.INTERRUPTED
+                SubagentFailureDisposition.TIMED_OUT -> SubagentStatus.TIMED_OUT
+                else -> SubagentStatus.FAILED
             }
             val error = if (disposition == SubagentFailureDisposition.CONTEXT_TOO_LONG) {
                 "${SubagentContextErrorCode.CONTEXT_TOO_LONG}: cached subagent context is too long for the provider"
@@ -502,7 +523,9 @@ class SubagentHost(
             )
             lastMessages = persisted?.messages ?: lastMessages
             totalUsage = persisted?.usage ?: totalUsage
-            if (failure is CancellationException) throw failure
+            if (failure is CancellationException && disposition != SubagentFailureDisposition.TIMED_OUT) {
+                throw failure
+            }
             SubagentResult(
                 profileName = profile.name,
                 summary = "",
@@ -517,6 +540,14 @@ class SubagentHost(
                 transcript = buildTranscript(lastMessages),
                 contextId = contextId,
                 contextStatus = status,
+                contextCompleteness = if (lastMessages.isEmpty()) {
+                    SubagentContextCompleteness.UNAVAILABLE
+                } else {
+                    SubagentContextCompleteness.PARTIAL
+                },
+                truncationReason = error,
+                startedAtEpochMillis = startedAtEpochMillis,
+                endedAtEpochMillis = System.currentTimeMillis(),
             )
         }
     }

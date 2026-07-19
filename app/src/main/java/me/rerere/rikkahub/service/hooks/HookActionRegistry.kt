@@ -29,6 +29,7 @@ data class HookFreezeContext(
     val eventType: HookEventType? = null,
     val eventSchemaVersion: Int = HookEvent.CURRENT_SCHEMA_VERSION,
     val eventContextId: String? = null,
+    val eventOccurredAtEpochMillis: Long? = null,
     val eventPayloadJson: String? = null,
 )
 
@@ -87,6 +88,10 @@ sealed interface PreparedHookAction {
         val cutoffMessageId: Uuid,
         val sourceKind: String,
         val sourceKey: String,
+        val eventId: String? = null,
+        val eventType: HookEventType? = null,
+        val eventOccurredAtEpochMillis: Long? = null,
+        val errorExperience: Boolean = false,
         val target: MemoryTableDocument,
         val schemaJson: String,
         val config: HookActionConfig.SyncMemoryTable,

@@ -97,6 +97,15 @@ data class SubagentProfile(
 }
 
 @Serializable
+enum class SubagentContextCompleteness {
+    FULL,
+    BOUNDED_FULL,
+    SUMMARIZED,
+    PARTIAL,
+    UNAVAILABLE,
+}
+
+@Serializable
 data class SubagentResult(
     @SerialName("profile_name") val profileName: String,
     @SerialName("summary") val summary: String,
@@ -114,6 +123,11 @@ data class SubagentResult(
     @SerialName("transcript") val transcript: List<SubagentTranscriptStep> = emptyList(),
     @SerialName("context_id") val contextId: String? = null,
     @SerialName("context_status") val contextStatus: SubagentStatus? = null,
+    @SerialName("context_completeness") val contextCompleteness: SubagentContextCompleteness =
+        SubagentContextCompleteness.UNAVAILABLE,
+    @SerialName("truncation_reason") val truncationReason: String? = null,
+    @SerialName("started_at") val startedAtEpochMillis: Long? = null,
+    @SerialName("ended_at") val endedAtEpochMillis: Long? = null,
 )
 
 @Serializable

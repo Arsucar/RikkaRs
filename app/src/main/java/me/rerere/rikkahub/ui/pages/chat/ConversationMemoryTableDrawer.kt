@@ -732,6 +732,20 @@ private fun hookErrorMessage(errorCode: HookErrorCode): String = when (errorCode
         stringResource(R.string.hook_error_memory_table_revision_conflict)
     HookErrorCode.MEMORY_TABLE_INVALID_OPERATIONS ->
         stringResource(R.string.hook_error_memory_table_invalid_operations)
+    HookErrorCode.MEMORY_EXPERIENCE_NOT_DURABLE ->
+        stringResource(R.string.hook_error_memory_experience_not_durable)
+    HookErrorCode.MEMORY_EXPERIENCE_SOURCE_MISSING ->
+        stringResource(R.string.hook_error_memory_experience_source_missing)
+    HookErrorCode.MEMORY_EXPERIENCE_CONTEXT_INSUFFICIENT ->
+        stringResource(R.string.hook_error_memory_experience_context_insufficient)
+    HookErrorCode.MEMORY_EXPERIENCE_REDACTION_FAILED ->
+        stringResource(R.string.hook_error_memory_experience_redaction_failed)
+    HookErrorCode.MEMORY_EXPERIENCE_DEDUP_FAILED ->
+        stringResource(R.string.hook_error_memory_experience_dedup_failed)
+    HookErrorCode.MEMORY_EXPERIENCE_SCHEMA_UNSUPPORTED ->
+        stringResource(R.string.hook_error_memory_experience_schema_unsupported)
+    HookErrorCode.MEMORY_EXPERIENCE_WRITE_FAILED ->
+        stringResource(R.string.hook_error_memory_experience_write_failed)
     HookErrorCode.IDEMPOTENT_REPLAY -> stringResource(R.string.hook_error_idempotent_replay)
     HookErrorCode.RETRY_NOT_ALLOWED -> stringResource(R.string.hook_error_retry_not_allowed)
     HookErrorCode.ACTION_FAILED -> stringResource(R.string.hook_error_action_failed)

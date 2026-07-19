@@ -167,6 +167,10 @@ fun createSubagentTools(
                 put("subagent_streaming", JsonPrimitive(false))
                 result.contextId?.let { put("subagent_context_id", JsonPrimitive(it)) }
                 result.contextStatus?.let { put("subagent_context_status", JsonPrimitive(it.name)) }
+                put("subagent_context_completeness", JsonPrimitive(result.contextCompleteness.name))
+                result.truncationReason?.let { put("subagent_truncation_reason", JsonPrimitive(it)) }
+                result.startedAtEpochMillis?.let { put("subagent_started_at", JsonPrimitive(it)) }
+                result.endedAtEpochMillis?.let { put("subagent_ended_at", JsonPrimitive(it)) }
             }
             val slimPayload = buildJsonObject {
                 put("profile_name", JsonPrimitive(result.profileName))
@@ -178,6 +182,10 @@ fun createSubagentTools(
                 put("truncated", JsonPrimitive(result.truncated))
                 result.contextId?.let { put("context_id", JsonPrimitive(it)) }
                 result.contextStatus?.let { put("context_status", JsonPrimitive(it.name)) }
+                put("context_completeness", JsonPrimitive(result.contextCompleteness.name))
+                result.truncationReason?.let { put("truncation_reason", JsonPrimitive(it)) }
+                result.startedAtEpochMillis?.let { put("started_at", JsonPrimitive(it)) }
+                result.endedAtEpochMillis?.let { put("ended_at", JsonPrimitive(it)) }
             }.toString()
             listOf(UIMessagePart.Text(text = slimPayload, metadata = finalMetadata))
         },

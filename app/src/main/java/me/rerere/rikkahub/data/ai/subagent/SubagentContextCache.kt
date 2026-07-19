@@ -24,6 +24,7 @@ enum class SubagentStatus {
     COMPLETED,
     FAILED,
     INTERRUPTED,
+    TIMED_OUT,
 }
 
 @Serializable

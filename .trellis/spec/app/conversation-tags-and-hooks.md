@@ -16,6 +16,9 @@
 - `HookRepository.finalizeAndCreateRunExactlyOnce(logicalTurnId, trigger, ..., hooks)` owns exactly-once persistence.
 - Versioned Hook sources create a stable `HookEvent` before persistence. `hook_runs.event_id` is the run identity;
   one logical turn may create multiple runs when their event IDs differ.
+- Event batches keep the logical turn open while each event is inserted exactly once, then close the turn once after
+  all final-success, keyword, tool-failure, and subagent events have been considered. A source with no matching Hook
+  must not close or mutate the turn by itself.
 - `HookRepository.claimQueued(...)`, `isLeaseActive(...)`, terminal completion methods, and `invalidateLeaseAndFailTimeout(...)` own execution state transitions.
 
 ### 3. Contracts
@@ -30,6 +33,11 @@
   set is empty. Source scans must stay scoped to the current final message so later turns cannot replay historical tools.
 - `KEYWORD_MATCHED` is a local final-text prefilter. A miss creates no run and invokes no provider; matching hooks are
   grouped by normalized evidence and dispatched separately from final-success hooks.
+- Run history stores a bounded, allow-listed event payload. Tool envelopes must parse structured exit/error fields and
+  suppress denied/cancelled operations; subagent payloads record terminal status, bounded context completeness, and
+  truncation reason without raw credentials, arbitrary URLs, or workspace paths. A keyword event may retain only a
+  canonical GitHub Issue URL because #159 makes that URL an explicit evidence field; it is parsed and normalized
+  locally before persistence.
 - Terminal tool/Shell and subagent events use their stable event ID as `HookFreezeContext.sourceKey`, allowing existing
   action cursors (including `SYNC_MEMORY_TABLE`) to make retries idempotent without a second action dispatcher.
 - Hook model requests use a frozen in-memory message/prompt/config snapshot. Full prompt, message snapshot, provider output, headers, and credentials never enter Hook Room tables.
@@ -37,6 +45,12 @@
 - Legacy `add_conversation_tag` / `transition_conversation_tags` configs normalize to `manage_conversation_tags` on load/save. Historical DB `ADD_CONVERSATION_TAG` / `TRANSITION_CONVERSATION_TAGS` enum names remain display-only aliases.
 - A timeout invalidates the lease before cancelling work. Parser and action writes must recheck the active lease so late results cannot write tags or overwrite terminal state.
 - `generationDoneFlow` remains a UI notification mechanism and is not a Hook success or history source.
+- Error-experience `SYNC_MEMORY_TABLE` evaluation uses the exact keys `should_remember`, `deduplication_key`,
+  `symptom`, `root_cause`, `correction`, `scope`, `tools`, `commands`, and `reason`. The local mapper requires a
+  writable target schema with a deduplication key and at least one durable content column, maps only declared columns,
+  and fails closed when the payload cannot be queried, evidence cannot be sanitized, or context is insufficient.
+  Equivalent rows update their bounded evidence/time/count fields when those columns exist; source event identity is
+  still enforced by the existing Hook action cursor, so a replay cannot increment twice.
 
 ### 4. Validation & Error Matrix
 

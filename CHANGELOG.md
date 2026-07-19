@@ -24,6 +24,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
   **Cross-layer tool regression matrix** — Add capability catalog, generation assembly, persistence compatibility, subagent policy, and fake MCP probe coverage. (#152)
 - **版本化 Assistant Hook 事件** — 增加稳定 eventId、Room v43 事件身份、最终文本关键词预筛、工具/Shell 最终失败与子代理结束事件，并复用现有记忆表同步 cursor 保证 sourceEventId 幂等。（#158 #159 #160 #161 #162）
   **Versioned Assistant Hook events** — Add stable event IDs, Room v43 event identity, final-text keyword prefiltering, terminal tool/Shell failure and subagent completion events, while reusing memory-table sync cursors for sourceEventId idempotency. (#158 #159 #160 #161 #162)
+- **终态事件审计与安全收口** — Room v44 持久化事件 payload；工具错误改用结构化 envelope 和稳定 operation hash，取消/后续成功会抑制；子代理严格映射四终态与上下文完整性；错误经验使用受限结构化评估、本地同义键查询和现有 cursor/事务实现新增、更新、跳过及 sourceEventId 幂等。（#160 #161 #162）
+  **Terminal event audit and secure finalization** — Persist event payloads in Room v44; use structured tool envelopes and stable operation hashes with cancellation/later-success suppression; strictly map four subagent terminal states and context completeness; evaluate error experiences through a constrained schema, local equivalent-key lookup, and existing cursors/transactions for insert, update, skip, and sourceEventId idempotency. (#160 #161 #162)
 
 ---
 

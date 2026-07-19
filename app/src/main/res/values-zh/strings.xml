@@ -2068,5 +2068,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_hook_error_keyword_required">请输入此触发条件的关键词。</string>
   <string name="assistant_hook_trigger_keyword_event_description">当最终文本包含配置的关键词或问题引用时运行。</string>
   <string name="assistant_hook_trigger_final_success_description">在最终助手回复成功持久化后运行。</string>
+  <string name="hook_error_memory_experience_not_durable">此失败已被跳过，因为它不是持久的可复用知识。</string>
+  <string name="hook_error_memory_experience_source_missing">错误体验没有稳定的来源事件ID。</string>
+  <string name="hook_error_memory_experience_context_insufficient">错误体验因上下文不足而被跳过。</string>
+  <string name="hook_error_memory_experience_redaction_failed">因无法安全地编辑敏感证据，已跳过错误体验。</string>
+  <string name="hook_error_memory_experience_dedup_failed">无法检查现有记忆是否存在等效经验。</string>
+  <string name="hook_error_memory_experience_schema_unsupported">所选的记忆表模式无法存储去重后的错误经验。</string>
+  <string name="hook_error_memory_experience_write_failed">错误体验无法写入记忆表。</string>
 </resources>
 

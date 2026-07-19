@@ -1928,5 +1928,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_hook_error_keyword_required">이 트리거의 키워드를 입력하세요.</string>
   <string name="assistant_hook_trigger_keyword_event_description">최종 텍스트에 설정된 키워드 또는 이슈 참조가 포함된 후 실행됩니다.</string>
   <string name="assistant_hook_trigger_final_success_description">최종 어시스턴트 응답이 성공적으로 저장된 후 실행됩니다.</string>
+  <string name="hook_error_memory_experience_not_durable">이 실패는 내구성 있는 재사용 가능한 지식이 아니므로 건너뛰어졌습니다.</string>
+  <string name="hook_error_memory_experience_source_missing">오류 경험에 안정적인 소스 이벤트 ID가 없습니다.</string>
+  <string name="hook_error_memory_experience_context_insufficient">오류 경험은 컨텍스트가 불충분하여 생략되었습니다.</string>
+  <string name="hook_error_memory_experience_redaction_failed">민감한 증거를 안전하게 편집할 수 없어 오류 경험이 건너뛰어졌습니다.</string>
+  <string name="hook_error_memory_experience_dedup_failed">기존 메모리에서 동등한 경험을 확인할 수 없었습니다.</string>
+  <string name="hook_error_memory_experience_schema_unsupported">선택한 메모리 테이블 스키마는 중복 제거된 오류 경험을 저장할 수 없습니다.</string>
+  <string name="hook_error_memory_experience_write_failed">오류 경험을 메모리 테이블에 기록할 수 없습니다.</string>
 </resources>
 

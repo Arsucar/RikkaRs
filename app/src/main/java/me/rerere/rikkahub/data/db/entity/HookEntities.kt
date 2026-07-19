@@ -121,6 +121,8 @@ data class HookRunEntity(
     val eventContextId: String? = null,
     @ColumnInfo(name = "event_occurred_at", defaultValue = "0")
     val eventOccurredAt: Long = 0,
+    @ColumnInfo(name = "event_payload_json", defaultValue = "'{}'")
+    val eventPayloadJson: String = "{}",
     @ColumnInfo("config_version")
     val configVersion: Long,
     @ColumnInfo("config_hash")
