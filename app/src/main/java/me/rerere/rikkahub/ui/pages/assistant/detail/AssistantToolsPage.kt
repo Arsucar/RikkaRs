@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -951,14 +953,31 @@ private fun AssistantToolsContent(
         if (advancedExpanded) {
             CardGroup(title = { Text(stringResource(R.string.assistant_tools_diagnostics_title)) }) {
                 item(
-                    headlineContent = { Text(readableDiagnostics) },
-                    supportingContent = {
-                        if (problemCount > 0) {
-                            Text(stringResource(R.string.assistant_tools_diagnostics_problems_count, problemCount))
+                    headlineContent = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = readableDiagnostics,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (problemCount > 0) {
+                                Text(
+                                    stringResource(
+                                        R.string.assistant_tools_diagnostics_problems_count,
+                                        problemCount,
+                                    ),
+                                )
+                            }
                         }
                     },
-                    trailingContent = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    supportingContent = {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
                             TextButton(onClick = { diagnosticsExpanded = !diagnosticsExpanded }) {
                                 Text(stringResource(R.string.assistant_tools_diagnostics_details))
                             }
