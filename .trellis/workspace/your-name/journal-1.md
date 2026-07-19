@@ -1393,3 +1393,37 @@ Completed and pushed versioned Hook events, keyword prefilter, terminal tool/sub
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: Subagent memory table injection + tools UX
+
+**Date**: 2026-07-20
+**Task**: Subagent memory table injection + tools UX
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented document-instance memory table injection for subagents with isolation, fixed empty list for global profiles, restored tools page UX, verified tests and installDebug.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `15160606` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
