@@ -1325,3 +1325,37 @@ Implemented evidence-gated GitHub Issue tag transitions with atomic Hook audit, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: Assistant tool capability catalog and policies
+
+**Date**: 2026-07-19
+**Task**: Assistant tool capability catalog and policies
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented the unified assistant tool capability catalog, policy enforcement, diagnostics, connection status, permission presets, localized reasons, and focused JVM coverage; archived issue #153 task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c9e1adce` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
-- **Last Active**: 2026-07-18
+- **Total Sessions**: 35
+- **Last Active**: 2026-07-19
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1327 | Active |
+| `journal-1.md` | ~1361 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-07-19 | Assistant tool capability catalog and policies | `c9e1adce` | `release/rikka-arsucar` |
 | 34 | 2026-07-18 | Complete Issue 148 Hook tag transition | `17e12b98` | `release/rikka-arsucar` |
 | 33 | 2026-07-18 | Issue 146 memory table document trash | `6be60cb0` | `release/rikka-arsucar` |
 | 32 | 2026-07-17 | Release v2.3.31 | `2e6765d1` | `release/rikka-arsucar` |
