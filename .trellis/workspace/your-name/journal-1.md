@@ -1359,3 +1359,37 @@ Implemented the unified assistant tool capability catalog, policy enforcement, d
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: Complete Hook terminal events and issue delivery
+
+**Date**: 2026-07-19
+**Task**: Complete Hook terminal events and issue delivery
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Completed and pushed versioned Hook events, keyword prefilter, terminal tool/subagent events, and structured error-experience memory sync. Added Room v44 payload migration, schema-safe dedup/update/skip behavior, six-locale History errors, and regression tests. Verified resources, 731 JVM tests, AndroidTest source compilation, and USB debug install on ebc3de22. Posted and reread independent Chinese/English delivery comments, then closed GitHub issues #158-#162; lint remains unclaimed due 109 historical baseline errors.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `673c903c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
