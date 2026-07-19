@@ -1,0 +1,109 @@
+# 轻量试装包：对任意分支 / commit 手动出 arm64 release APK。
+# 用法：Actions → PR / Branch APK → Run workflow → 可选填 ref（空则用所选 branch）
+# 产物：Artifacts，不覆盖 nightly、不 bump 版本、不发 Release。
+# 关联：Closes #167
+name: PR / Branch APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "分支名或 commit SHA（留空则用上方 Branch 选择）"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-apk-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve ref
+        id: ref
+        run: |
+          REF="${{ github.event.inputs.ref }}"
+          if [ -z "$REF" ]; then
+            REF="${{ github.ref_name }}"
+          fi
+          echo "value=$REF" >> "$GITHUB_OUTPUT"
+          echo "Building ref: $REF"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.value }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Prepare signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is missing"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > rikka-arsucar-release.jks
+          cat >> local.properties << EOF
+          storeFile=rikka-arsucar-release.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+      - name: Assemble release
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Short SHA
+        id: meta
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "ref_slug=$(echo '${{ steps.ref.outputs.value }}' | tr '/:' '--' | tr -cd '[:alnum:]._-')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikka-arsucar-${{ steps.meta.outputs.ref_slug }}-${{ steps.meta.outputs.sha }}-${{ github.run_id }}
+          path: app/build/outputs/apk/release/*arm64-v8a*release*.apk
+          if-no-files-found: error
+          retention-days: 14
