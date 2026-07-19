@@ -21,6 +21,7 @@ Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）�
 
 - Trellis skill 文件优先读仓库内 `.agents/skills/<skill>/SKILL.md`，不要尝试全局路径 `C:/Users/Administrator/.codex/skills/.system/trellis-*`。
 - 查看任务用 `python ./.trellis/scripts/get_context.py`；列任务用 `Get-ChildItem .trellis/tasks -Directory | Where-Object { $_.Name -ne 'archive' }`。
+- 目标明确、风险较低且通常只修改 1–2 个文件的小任务，默认不创建 Trellis 任务，也不再询问用户是否创建；直接修改并做相称验证。新功能、复杂行为变更、跨模块修改或需要方案取舍的工作仍应按 Trellis 流程先征得建任务同意。
 - Windows 下若 `rg` 不存在，改用 `Get-ChildItem -Recurse -File` / `Select-String`；排除 archive 用 `-notlike '*\archive\*'`，不要用易刷屏的正则 `-notmatch '\archive\'`。
 - PowerShell 字符串里变量后紧跟冒号时写 `$($name):` 或 `${name}:`，不要写 `$name:`，避免触发变量作用域解析错误。
 - PowerShell 多路径递归用 `Get-ChildItem -Path @('path1','path2') -Recurse -File`，不要写 `Get-ChildItem path1 path2 -Recurse`。
@@ -32,13 +33,15 @@ Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）�
 - 主代理只在极简修改、无法派发或最终整合收尾时直接操作；若主代理执行最后一步且包含源代码修改，最后必须执行「本地验证与装到设备」流程。
 - 多个子代理并行时，只有最后一个检查子代理允许运行 Gradle 编译、测试或 lint；其他实现/审查子代理只做代码修改、检索或静态审查，避免主机内存耗尽。
 - 所有 Gradle 编译、测试、lint、安装命令必须带 `--no-daemon`，避免守护进程堵塞或残留。
+- 普通 app 功能修改在开发过程中优先运行聚焦测试；最终资源处理、Kotlin 编译、完整 JVM 单测和 AndroidTest 源码编译尽量合并到同一次 Gradle 调用，减少重复启动成本。
+- 不要为每个普通任务默认运行全量 `:app:lintDebug`。仅在正式发版、Manifest/Gradle/SDK/API/大范围 Compose 或资源等 lint 高风险修改、lint 基线治理、定期质量检查，或用户明确要求时运行；每轮最多运行一次并给予足够超时时间，已确认仅为历史基线问题时不要重复运行。
 
 ## 本地验证与装到设备
 
 用户说「装到手机/设备」「真机验证」「改完安装」，或完成 **app 模块**功能改动且未明确只要编译时，助手应执行安装验收（Windows 下同样用 `.\gradlew`）：
 
 1. 确认设备：先执行 `adb devices`；若没有状态为 `device` 的设备，先执行 `adb connect 100.99.129.110:5555`，再重新执行 `adb devices`。
-2. 连接后仍没有状态为 `device` 的设备：说明情况并只做编译，不执行安装。
+2. 连接后仍没有状态为 `device` 的设备：停止重复重连，执行 `.\gradlew --no-daemon :app:assembleDebug`，将 `app/build/outputs/apk/debug/app-debug.apk` 上传到 GoFile；GoFile 不可用时可改用其他免费临时文件渠道。向用户返回下载链接、SHA-256、对应 commit、包名 `me.arsucar.rikka.debug` 和人工验收清单。上传失败时如实报告本地 APK 路径和错误，不得声称已安装或通过真机验证。
 3. 用户只要快速编译、不要装包：`.\gradlew --no-daemon :app:compileDebugKotlin`。
 4. 有可用设备时默认执行：`.\gradlew --no-daemon :app:installDebug`（assemble + adb install）。Debug 包名一般为 `me.arsucar.rikka.debug`。
 5. 安装失败时先执行 `adb connect 100.99.129.110:5555` 重新连接固定端口，再重试 `.\gradlew --no-daemon :app:installDebug` 一次。
