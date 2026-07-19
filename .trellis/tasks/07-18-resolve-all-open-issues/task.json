@@ -3,7 +3,7 @@
   "name": "resolve-all-open-issues",
   "title": "处理全部 GitHub open issues",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": "material3/material-color-utilities",

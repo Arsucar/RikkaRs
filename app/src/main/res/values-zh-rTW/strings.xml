@@ -1873,4 +1873,20 @@
   <string name="assistant_tools_reason_needs_authorization">需要授權</string>
   <string name="assistant_tools_reason_delegate_only">僅限委派模式中無法使用</string>
   <string name="assistant_tools_reason_invalid_configuration">無效的來源配置</string>
+  <string name="assistant_tools_permission_saved">工具權限已儲存</string>
+  <string name="assistant_tools_permission_save_failed">無法儲存工具權限</string>
+  <string name="assistant_tools_permission_source_default">來源預設批准：%s</string>
+  <string name="assistant_tools_permission_inherit">繼承</string>
+  <string name="assistant_tools_permission_allow">允許</string>
+  <string name="assistant_tools_permission_ask">每次詢問</string>
+  <string name="assistant_tools_permission_deny">拒絕</string>
+  <string name="assistant_tools_permission_orphans_clear">清除不可用的權限</string>
+  <string name="assistant_tools_permission_orphans_title">無法使用的工具權限</string>
+  <string name="assistant_tools_permission_orphans_description">這些權限屬於不再可用的工具。</string>
+  <string name="assistant_tools_diagnostics_title">工具診斷</string>
+  <string name="assistant_tools_diagnostics_copy">複製安全摘要</string>
+  <string name="assistant_tools_connection_test">測試連線</string>
+  <string name="assistant_tools_connection_status">狀態: %s</string>
+  <string name="assistant_tools_presets_title">權限預設</string>
+  <string name="assistant_tools_preset_apply">套用</string>
 </resources>

@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.ToolPermission
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 
@@ -328,5 +329,39 @@ class SubagentPermissionTest {
             workspaceToolsFactory = { emptyList() },
         )
         assertEquals(1, result.count { it.name == "finish_work" })
+    }
+
+    @Test
+    fun parentDenyRemovesWorkspaceAndExtraLocalTools() {
+        val result = buildSubagentTools(
+            profile = profile(inherit = true),
+            depth = 0,
+            maxDepth = 2,
+            parentTools = listOf(mockTool("workspace_read_file"), mockTool("get_time_info")),
+            workspaceToolsFactory = { workspaceMocks() },
+            extraLocalToolsProvider = { listOf(mockTool("get_time_info")) },
+            parentToolPermissions = mapOf(
+                "workspace:workspace_read_file" to ToolPermission.DENY,
+                "local:get_time_info" to ToolPermission.DENY,
+            ),
+        )
+
+        assertFalse(result.any { it.name == "workspace_read_file" })
+        assertFalse(result.any { it.name == "get_time_info" })
+        assertTrue(result.any { it.name == "finish_work" })
+    }
+
+    @Test
+    fun parentAskSurvivesProfileAutoApproval() {
+        val result = buildSubagentTools(
+            profile = profile(approval = WorkspaceApproval.AUTO),
+            depth = 0,
+            maxDepth = 2,
+            parentTools = emptyList(),
+            workspaceToolsFactory = { workspaceMocks() },
+            parentToolPermissions = mapOf("workspace:workspace_shell" to ToolPermission.ASK),
+        )
+
+        assertTrue(result.first { it.name == "workspace_shell" }.needsApproval(buildJsonObject {}))
     }
 }

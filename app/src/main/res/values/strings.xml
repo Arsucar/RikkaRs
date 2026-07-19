@@ -2044,4 +2044,20 @@
   <string name="hook_error_tag_transition_conflict">The configured tags conflict.</string>
   <string name="hook_error_tag_limit_reached">The conversation tag limit was reached.</string>
   <string name="hook_error_github_issue_evidence_not_found">No GitHub Issue creation-success evidence was found.</string>
+  <string name="assistant_tools_permission_saved">Tool permission saved</string>
+  <string name="assistant_tools_permission_save_failed">Could not save tool permission</string>
+  <string name="assistant_tools_permission_source_default">Source default approval: %s</string>
+  <string name="assistant_tools_permission_inherit">Inherit</string>
+  <string name="assistant_tools_permission_allow">Allow</string>
+  <string name="assistant_tools_permission_ask">Ask every time</string>
+  <string name="assistant_tools_permission_deny">Deny</string>
+  <string name="assistant_tools_permission_orphans_description">These permissions belong to tools that are no longer available.</string>
+  <string name="assistant_tools_permission_orphans_title">Unavailable tool permissions</string>
+  <string name="assistant_tools_permission_orphans_clear">Clear unavailable permissions</string>
+  <string name="assistant_tools_diagnostics_title">Tool diagnostics</string>
+  <string name="assistant_tools_diagnostics_copy">Copy safe summary</string>
+  <string name="assistant_tools_connection_test">Test connection</string>
+  <string name="assistant_tools_connection_status">Status: %s</string>
+  <string name="assistant_tools_presets_title">Permission presets</string>
+  <string name="assistant_tools_preset_apply">Apply</string>
 </resources>

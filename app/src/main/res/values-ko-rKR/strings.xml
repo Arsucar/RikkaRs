@@ -1886,4 +1886,20 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_tools_reason_needs_authorization">인증 필요</string>
   <string name="assistant_tools_reason_delegate_only">대리인 전용 모드에서 사용할 수 없습니다</string>
   <string name="assistant_tools_reason_invalid_configuration">잘못된 소스 구성</string>
+  <string name="assistant_tools_permission_saved">도구 권한 저장됨</string>
+  <string name="assistant_tools_permission_save_failed">도구 권한을 저장할 수 없습니다.</string>
+  <string name="assistant_tools_permission_source_default">소스 기본 승인: %s</string>
+  <string name="assistant_tools_permission_inherit">상속</string>
+  <string name="assistant_tools_permission_allow">허용</string>
+  <string name="assistant_tools_permission_ask">매번 묻기</string>
+  <string name="assistant_tools_permission_deny">거부</string>
+  <string name="assistant_tools_permission_orphans_clear">사용 불가능한 권한 지우기</string>
+  <string name="assistant_tools_permission_orphans_title">사용할 수 없는 도구 권한</string>
+  <string name="assistant_tools_permission_orphans_description">이 권한은 더 이상 사용할 수 없는 도구에 속합니다.</string>
+  <string name="assistant_tools_diagnostics_title">도구 진단</string>
+  <string name="assistant_tools_diagnostics_copy">안전한 요약 복사</string>
+  <string name="assistant_tools_connection_test">연결 테스트</string>
+  <string name="assistant_tools_connection_status">상태: %s</string>
+  <string name="assistant_tools_presets_title">권한 프리셋</string>
+  <string name="assistant_tools_preset_apply">적용</string>
 </resources>

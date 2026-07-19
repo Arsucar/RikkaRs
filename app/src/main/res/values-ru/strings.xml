@@ -1886,4 +1886,20 @@
   <string name="assistant_tools_reason_needs_authorization">Требуется авторизация</string>
   <string name="assistant_tools_reason_delegate_only">Недоступно в режиме только делегата</string>
   <string name="assistant_tools_reason_invalid_configuration">Некорректная конфигурация источника</string>
+  <string name="assistant_tools_permission_saved">Разрешение инструмента сохранено</string>
+  <string name="assistant_tools_permission_save_failed">Не удалось сохранить разрешение инструмента</string>
+  <string name="assistant_tools_permission_source_default">Источник: одобрение по умолчанию: %s</string>
+  <string name="assistant_tools_permission_inherit">Наследовать</string>
+  <string name="assistant_tools_permission_allow">Разрешить</string>
+  <string name="assistant_tools_permission_ask">Спрашивать каждый раз</string>
+  <string name="assistant_tools_permission_deny">Отказать</string>
+  <string name="assistant_tools_permission_orphans_clear">Очистить недоступные разрешения</string>
+  <string name="assistant_tools_permission_orphans_title">Недоступные разрешения инструментов</string>
+  <string name="assistant_tools_permission_orphans_description">Эти разрешения принадлежат инструментам, которые больше недоступны.</string>
+  <string name="assistant_tools_diagnostics_title">Диагностика инструментов</string>
+  <string name="assistant_tools_diagnostics_copy">Копировать безопасную сводку</string>
+  <string name="assistant_tools_connection_test">Тест подключения</string>
+  <string name="assistant_tools_connection_status">Статус: %s</string>
+  <string name="assistant_tools_presets_title">Предустановки разрешений</string>
+  <string name="assistant_tools_preset_apply">Применить</string>
 </resources>

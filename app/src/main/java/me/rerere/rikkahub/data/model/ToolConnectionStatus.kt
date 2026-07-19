@@ -92,4 +92,10 @@ fun McpStatus.toToolConnectionStatus(toolCount: Int = 0, revision: Long = 0L): T
     )
 }
 
-private fun String.redactConnectionSecrets(): String = replace(Regex("(?i)(authorization|token|secret|password)=?[^ ,;]+"), "$1=[redacted]")
+private fun String.redactConnectionSecrets(): String = replace(
+    Regex("(?i)(authorization|token|secret|password|cookie)(\\s*[:=]\\s*)([^\\s,;}&]+)"),
+    "$1$2[redacted]",
+).replace(
+    Regex("(?i)([?&](?:token|secret|password|key|sig)=)([^&\\s]+)"),
+    "$1[redacted]",
+)

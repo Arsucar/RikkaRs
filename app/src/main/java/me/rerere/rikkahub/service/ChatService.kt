@@ -2652,6 +2652,7 @@ class ChatService(
                         emptyList()
                     }
                 },
+                parentToolPermissions = assistant.toolPermissions,
             ),
         )
     }

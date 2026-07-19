@@ -1886,4 +1886,20 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_tools_reason_needs_authorization">認可が必要です</string>
   <string name="assistant_tools_reason_delegate_only">委譲専用モードでは利用できません</string>
   <string name="assistant_tools_reason_invalid_configuration">無効なソース設定</string>
+  <string name="assistant_tools_permission_saved">ツール権限を保存しました</string>
+  <string name="assistant_tools_permission_save_failed">ツール権限の保存に失敗しました</string>
+  <string name="assistant_tools_permission_source_default">ソースのデフォルト承認: %s</string>
+  <string name="assistant_tools_permission_inherit">継承</string>
+  <string name="assistant_tools_permission_allow">許可</string>
+  <string name="assistant_tools_permission_ask">毎回確認する</string>
+  <string name="assistant_tools_permission_deny">拒否</string>
+  <string name="assistant_tools_permission_orphans_clear">利用不可の権限をクリア</string>
+  <string name="assistant_tools_permission_orphans_title">利用不可のツール権限</string>
+  <string name="assistant_tools_permission_orphans_description">これらの権限は、利用できなくなったツールに属しています。</string>
+  <string name="assistant_tools_diagnostics_title">ツール診断</string>
+  <string name="assistant_tools_diagnostics_copy">安全なサマリーをコピー</string>
+  <string name="assistant_tools_connection_test">接続テスト</string>
+  <string name="assistant_tools_connection_status">ステータス: %s</string>
+  <string name="assistant_tools_presets_title">権限プリセット</string>
+  <string name="assistant_tools_preset_apply">適用</string>
 </resources>

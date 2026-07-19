@@ -9,6 +9,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.ToolPermission
+import me.rerere.rikkahub.data.model.applyAssistantToolPermissions
 import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
 import me.rerere.rikkahub.data.ai.tools.createFinishWorkTool
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
@@ -124,6 +126,7 @@ fun buildSubagentTools(
     workspaceToolsFactory: (WorkspaceAccess) -> List<Tool>,
     spawnToolBuilder: (() -> Tool)? = null,
     extraLocalToolsProvider: () -> List<Tool> = { emptyList() },
+    parentToolPermissions: Map<String, ToolPermission> = emptyMap(),
 ): List<Tool> {
     val workspaceTools = workspaceToolsFactory(profile.workspaceAccess)
     val base = if (profile.inheritTools) {
@@ -150,5 +153,7 @@ fun buildSubagentTools(
     } else {
         withoutExcludedWorkspace
     }
-    return (withSpawn + createFinishWorkTool()).distinctBy { it.name }
+    // Profile/workspace settings may narrow the parent, never restore a parent DENY.
+    val parentFiltered = applyAssistantToolPermissions(withSpawn, parentToolPermissions)
+    return (parentFiltered + createFinishWorkTool()).distinctBy { it.name }
 }

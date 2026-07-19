@@ -65,6 +65,14 @@ private const val MAX_RECONNECT_ATTEMPTS = 5
 private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
 
+private fun String.redactMcpSecrets(): String = replace(
+    Regex("(?i)(authorization|token|secret|password|cookie)(\\s*[:=]\\s*)([^\\s,;}&]+)"),
+    "$1$2[redacted]",
+).replace(
+    Regex("(?i)([?&](?:token|secret|password|key|sig)=)([^&\\s]+)"),
+    "$1[redacted]",
+)
+
 // OAuth 相关常量
 private const val TOKEN_REFRESH_LEEWAY_MS = 60_000L // 令牌到期前 60s 视为需要刷新
 private val OAUTH_CALLBACK_TIMEOUT = 5.minutes
@@ -101,7 +109,7 @@ class McpManager(
                 } else {
                     ToolConnectionState.PROTOCOL_ERROR
                 }
-                ToolConnectionStatus(status, message = e.message?.replace(Regex("(?i)(authorization|token|secret|password)=?[^ ,;]+"), "$1=[redacted]"), revision = revision)
+                ToolConnectionStatus(status, message = e.message?.redactMcpSecrets(), revision = revision)
             } finally {
                 runCatching { probe.close() }
             }
@@ -403,7 +411,7 @@ class McpManager(
             runCatching {
                 sync(config)
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "Failed to close MCP client ${config.id}: ${it::class.simpleName}")
                 if (needsAuthorization(config, it)) {
                     setStatus(config, McpStatus.NeedsAuthorization)
                 } else {
@@ -424,7 +432,7 @@ class McpManager(
             }
             clients.remove(entry.key)
             syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(entry.key.id) })
-            Log.i(TAG, "removeClient: ${entry.key} / ${entry.key.commonOptions.name}")
+            Log.i(TAG, "removeClient: ${entry.key.id} / ${entry.key.commonOptions.name}")
         }
         reconnectAttempts.remove(config.id)
     }

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import me.rerere.rikkahub.utils.JsonInstant
 
 class ToolPermissionPresetTest {
     @Test
@@ -36,8 +37,32 @@ class ToolPermissionPresetTest {
 
     @Test
     fun legacyAssistantDefaultsToInheritWithoutMigration() {
-        val legacy = Assistant()
+        val legacy = JsonInstant.decodeFromString<Assistant>("{}")
         assertTrue(legacy.toolPermissions.isEmpty())
         assertEquals(ToolPermission.INHERIT, resolveToolPermission("memory:normal", ToolPermission.INHERIT))
+    }
+
+    @Test
+    fun askToAllowRequiresExplicitConfirmation() {
+        val preset = ToolPermissionPreset(name = "relax", permissions = mapOf("memory:normal" to ToolPermission.ALLOW))
+        val assistant = Assistant(toolPermissions = mapOf("memory:normal" to ToolPermission.ASK))
+        assertEquals(
+            ToolPresetApplyStatus.REJECTED_RELAXATION,
+            applyToolPermissionPreset(preset, assistant, setOf("memory:normal")).status,
+        )
+    }
+
+    @Test
+    fun invalidVersionAndOversizedMetadataAreRejected() {
+        val assistant = Assistant()
+        val known = setOf("memory:normal")
+        assertEquals(
+            ToolPresetApplyStatus.INVALID,
+            applyToolPermissionPreset(ToolPermissionPreset(name = "x", version = 2), assistant, known).status,
+        )
+        assertEquals(
+            ToolPresetApplyStatus.INVALID,
+            applyToolPermissionPreset(ToolPermissionPreset(name = "x".repeat(129)), assistant, known).status,
+        )
     }
 }

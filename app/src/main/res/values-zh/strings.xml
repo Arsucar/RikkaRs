@@ -2026,4 +2026,20 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_tools_reason_needs_authorization">需要授权</string>
   <string name="assistant_tools_reason_delegate_only">仅委托模式下不可用</string>
   <string name="assistant_tools_reason_invalid_configuration">无效的来源配置</string>
+  <string name="assistant_tools_permission_saved">工具权限已保存</string>
+  <string name="assistant_tools_permission_save_failed">无法保存工具权限</string>
+  <string name="assistant_tools_permission_source_default">来源默认批准: %s</string>
+  <string name="assistant_tools_permission_inherit">继承</string>
+  <string name="assistant_tools_permission_allow">允许</string>
+  <string name="assistant_tools_permission_ask">每次询问</string>
+  <string name="assistant_tools_permission_deny">拒绝</string>
+  <string name="assistant_tools_permission_orphans_clear">清除不可用的权限</string>
+  <string name="assistant_tools_permission_orphans_title">不可用的工具权限</string>
+  <string name="assistant_tools_permission_orphans_description">这些权限属于不再可用的工具。</string>
+  <string name="assistant_tools_diagnostics_title">工具诊断</string>
+  <string name="assistant_tools_diagnostics_copy">复制安全摘要</string>
+  <string name="assistant_tools_connection_test">测试连接</string>
+  <string name="assistant_tools_connection_status">状态: %s</string>
+  <string name="assistant_tools_presets_title">权限预设</string>
+  <string name="assistant_tools_preset_apply">应用</string>
 </resources>

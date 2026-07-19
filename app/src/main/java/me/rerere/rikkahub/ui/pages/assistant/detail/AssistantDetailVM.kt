@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -42,6 +43,12 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.model.ToolPermission
+import me.rerere.rikkahub.data.model.ToolPermissionPreset
+import me.rerere.rikkahub.data.model.ToolPresetTargetResult
+import me.rerere.rikkahub.data.model.applyToolPermissionPreset
+import me.rerere.rikkahub.data.model.ToolConnectionStatus
+import me.rerere.rikkahub.data.model.ToolConnectionStatusStore
 import me.rerere.rikkahub.data.model.normalizeActionConfig
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_USER_UI
@@ -63,7 +70,7 @@ class AssistantDetailVM(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
-    mcpManager: McpManager,
+    private val mcpManager: McpManager,
     conversationTagRepository: ConversationTagRepository,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
@@ -71,6 +78,10 @@ class AssistantDetailVM(
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
     val mcpStatuses = mcpManager.syncingStatus.asStateFlow()
+    private val connectionStatusStore = ToolConnectionStatusStore()
+    private val connectionJobs = mutableMapOf<Uuid, Job>()
+    private val _toolConnectionStatuses = MutableStateFlow<Map<Uuid, ToolConnectionStatus>>(emptyMap())
+    val toolConnectionStatuses: StateFlow<Map<Uuid, ToolConnectionStatus>> = _toolConnectionStatuses.asStateFlow()
 
     private val _assistantPrivateSkills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val assistantPrivateSkills = _assistantPrivateSkills.asStateFlow()
@@ -116,6 +127,40 @@ class AssistantDetailVM(
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
+
+    init {
+        viewModelScope.launch {
+            mcpServerConfigs.collect { configs ->
+                val ids = configs.map { it.id }.toSet()
+                connectionJobs.keys.filterNot { it in ids }.forEach { id ->
+                    connectionJobs.remove(id)?.cancel()
+                    connectionStatusStore.remove(id)
+                }
+                _toolConnectionStatuses.value = connectionStatusStore.snapshot()
+            }
+        }
+    }
+
+    fun testMcpConnection(serverId: Uuid) {
+        val config = mcpServerConfigs.value.firstOrNull { it.id == serverId } ?: return
+        if (connectionJobs[serverId]?.isActive == true) return
+        val revision = config.hashCode().toLong()
+        connectionStatusStore.begin(serverId, revision)
+        _toolConnectionStatuses.value = connectionStatusStore.snapshot()
+        connectionJobs[serverId] = viewModelScope.launch {
+            val result = runCatching { mcpManager.testConnection(config, revision) }
+                .getOrElse { error ->
+                    ToolConnectionStatus(
+                        state = me.rerere.rikkahub.data.model.ToolConnectionState.ERROR,
+                        message = error::class.simpleName,
+                        revision = revision,
+                    )
+                }
+            connectionStatusStore.publish(serverId, result)
+            _toolConnectionStatuses.value = connectionStatusStore.snapshot()
+            connectionJobs.remove(serverId)
+        }
+    }
 
     private val memoryTableTrashReloadRequest = MutableStateFlow(0)
 
@@ -190,6 +235,11 @@ class AssistantDetailVM(
     private var workspaceBindingRequestId = 0L
     private val workspaceBindingSaveEventChannel = Channel<WorkspaceBindingSaveEvent>(Channel.BUFFERED)
     val workspaceBindingSaveEvents = workspaceBindingSaveEventChannel.receiveAsFlow()
+
+    private val toolPermissionSaveMutex = Mutex()
+    private var toolPermissionRequestId = 0L
+    private val toolPermissionSaveEventChannel = Channel<ToolPermissionSaveEvent>(Channel.BUFFERED)
+    val toolPermissionSaveEvents = toolPermissionSaveEventChannel.receiveAsFlow()
 
     fun saveWorkspaceBinding(workspaceId: Uuid?) {
         val requestId = ++workspaceBindingRequestId
@@ -276,6 +326,79 @@ class AssistantDetailVM(
             }
             settingsStore.updateAssistantConfig(prunedAssistant)
         }
+    }
+
+    fun saveToolPermission(capabilityId: String, permission: ToolPermission) {
+        val requestId = ++toolPermissionRequestId
+        viewModelScope.launch {
+            val event = toolPermissionSaveMutex.withLock {
+                if (requestId != toolPermissionRequestId) return@withLock null
+                persistToolPermission(assistantId, capabilityId, permission) { targetId, id, value ->
+                    val current = settingsStore.settingsFlow.value.assistants.firstOrNull { it.id == targetId }
+                        ?: error("Assistant not found")
+                    val updated = if (value == ToolPermission.INHERIT) {
+                        current.toolPermissions - id
+                    } else {
+                        current.toolPermissions + (id to value)
+                    }
+                    settingsStore.updateAssistantConfig(current.copy(toolPermissions = updated))
+                }
+            } ?: return@launch
+            toolPermissionSaveEventChannel.send(event)
+        }
+    }
+
+    fun clearOrphanToolPermissions(capabilityIds: Set<String>) {
+        if (capabilityIds.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                val current = settingsStore.settingsFlow.value.assistants.first { it.id == assistantId }
+                settingsStore.updateAssistantConfig(
+                    current.copy(toolPermissions = current.toolPermissions - capabilityIds),
+                )
+            }.fold(
+                onSuccess = { toolPermissionSaveEventChannel.send(ToolPermissionSaveEvent.Success) },
+                onFailure = { toolPermissionSaveEventChannel.send(ToolPermissionSaveEvent.Failure) },
+            )
+        }
+    }
+
+    fun saveToolPermissionPreset(preset: ToolPermissionPreset) {
+        if (preset.name.isBlank() || preset.name.length > 128 || preset.description.length > 512 || preset.permissions.size > 256) return
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(toolPermissionPresets = (settings.toolPermissionPresets.filterNot { it.id == preset.id } + preset))
+            }
+        }
+    }
+
+    fun deleteToolPermissionPreset(presetId: Uuid) {
+        viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(toolPermissionPresets = settings.toolPermissionPresets.filterNot { it.id == presetId })
+            }
+        }
+    }
+
+    suspend fun applyToolPermissionPresetToAssistants(
+        preset: ToolPermissionPreset,
+        assistantIds: Set<Uuid>,
+        knownCapabilityIds: Set<String>,
+        confirmRelaxation: Boolean = false,
+    ): List<ToolPresetTargetResult> {
+        val settings = settingsStore.settingsFlow.value
+        val results = settings.assistants.filter { it.id in assistantIds }.associate { target ->
+            target.id to applyToolPermissionPreset(preset, target, knownCapabilityIds, confirmRelaxation)
+        }
+        settings.copy(
+            assistants = settings.assistants.map { target ->
+                val result = results[target.id]
+                if (result?.status == me.rerere.rikkahub.data.model.ToolPresetApplyStatus.APPLIED) {
+                    target.copy(toolPermissions = target.toolPermissions + result.changed)
+                } else target
+            }
+        ).let { settingsStore.update(it) }
+        return results.values.toList()
     }
 
     fun setMemoryEnabled(enabled: Boolean) {
@@ -726,6 +849,25 @@ sealed interface ConversationTagsUiState {
 sealed interface WorkspaceBindingSaveEvent {
     data class Success(val workspaceId: Uuid?) : WorkspaceBindingSaveEvent
     data object Failure : WorkspaceBindingSaveEvent
+}
+
+sealed interface ToolPermissionSaveEvent {
+    data object Success : ToolPermissionSaveEvent
+    data object Failure : ToolPermissionSaveEvent
+}
+
+internal suspend fun persistToolPermission(
+    assistantId: Uuid,
+    capabilityId: String,
+    permission: ToolPermission,
+    persist: suspend (Uuid, String, ToolPermission) -> Unit,
+): ToolPermissionSaveEvent = try {
+    persist(assistantId, capabilityId, permission)
+    ToolPermissionSaveEvent.Success
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Throwable) {
+    ToolPermissionSaveEvent.Failure
 }
 
 internal suspend fun persistWorkspaceBinding(

@@ -74,7 +74,9 @@ fun diffToolPermissionPreset(
     val changed = known.filter { (key, value) -> current[key] != value }
     val widens = changed.any { (key, value) ->
         val existing = current[key] ?: ToolPermission.INHERIT
-        existing == ToolPermission.DENY && value != ToolPermission.DENY
+        (existing == ToolPermission.DENY && value != ToolPermission.DENY) ||
+            (existing == ToolPermission.ASK && value == ToolPermission.ALLOW) ||
+            (existing == ToolPermission.INHERIT && value == ToolPermission.ALLOW)
     }
     return ToolPresetDiff(changed, unknown, widens)
 }
@@ -85,7 +87,8 @@ fun applyToolPermissionPreset(
     knownCapabilityIds: Set<String>,
     confirmRelaxation: Boolean = false,
 ): ToolPresetTargetResult {
-    if (preset.version != 1 || preset.name.isBlank() || preset.permissions.size > 256 ||
+    if (preset.version != 1 || preset.name.isBlank() || preset.name.length > 128 ||
+        preset.description.length > 512 || preset.permissions.size > 256 ||
         preset.permissions.keys.any { it.startsWith("mcp:") || it.startsWith("skill:") && it != "skill:management" }
     ) {
         return ToolPresetTargetResult(assistant.id, ToolPresetApplyStatus.INVALID)
