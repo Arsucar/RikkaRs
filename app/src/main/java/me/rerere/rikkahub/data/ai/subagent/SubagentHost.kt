@@ -404,6 +404,17 @@ class SubagentHost(
             } else {
                 emptyList()
             }
+            val memoryTableInjected = memoryTableTransformers.isNotEmpty()
+            val memoryTableSkipReason = when {
+                memoryTableInjected -> null
+                contextAcquisition.reusedContext -> "reused_context"
+                profile.injectedMemoryTableDocumentIds.isEmpty() -> "not_configured"
+                else -> "not_resolved" // parent memory table off, isolation, missing docs, loader empty
+            }
+            transferredContext = checkNotNull(transferredContext).copy(
+                memoryTableInjected = memoryTableInjected,
+                memoryTableSkipReason = memoryTableSkipReason,
+            )
 
             var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
             var run = runToCompletion(

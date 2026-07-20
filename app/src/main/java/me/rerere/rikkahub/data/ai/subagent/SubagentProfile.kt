@@ -127,8 +127,19 @@ data class SubagentTransferredContext(
     @SerialName("model_id") val modelId: String? = null,
     @SerialName("cwd") val cwd: String? = null,
     @SerialName("enable_memory") val enableMemory: Boolean = false,
+    /**
+     * Configured profile document ids selected for read-only inject (not necessarily resolved).
+     * Actual inject outcome is [memoryTableInjected] / [memoryTableSkipReason].
+     */
     @SerialName("injected_memory_table_document_ids")
     val injectedMemoryTableDocumentIds: List<String> = emptyList(),
+    /** True when at least one memory-table input transformer was built for this spawn. */
+    @SerialName("memory_table_injected") val memoryTableInjected: Boolean = false,
+    /**
+     * Machine reason when not injected:
+     * `not_configured` | `reused_context` | `not_resolved`; null when injected.
+     */
+    @SerialName("memory_table_skip_reason") val memoryTableSkipReason: String? = null,
     /** Always false for parent conversation history; reused context may still have prior child turns. */
     @SerialName("includes_parent_history") val includesParentHistory: Boolean = false,
     @SerialName("reused_context") val reusedContext: Boolean = false,

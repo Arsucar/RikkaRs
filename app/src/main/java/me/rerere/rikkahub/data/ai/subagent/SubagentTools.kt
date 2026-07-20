@@ -217,6 +217,13 @@ fun createSubagentTools(
                     buildJsonArray { memoryIds.forEach { add(it) } },
                 )
                 put(
+                    "subagent_memory_table_injected",
+                    JsonPrimitive(transferred?.memoryTableInjected ?: false),
+                )
+                transferred?.memoryTableSkipReason?.takeIf { it.isNotBlank() }?.let {
+                    put("subagent_memory_table_skip_reason", JsonPrimitive(it))
+                }
+                put(
                     "subagent_includes_parent_history",
                     JsonPrimitive(transferred?.includesParentHistory ?: false),
                 )

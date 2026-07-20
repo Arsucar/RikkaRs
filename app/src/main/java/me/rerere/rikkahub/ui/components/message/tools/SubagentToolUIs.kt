@@ -297,6 +297,8 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
     val contextId = meta?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull
     val enableMemory = meta?.metaBoolean("subagent_enable_memory")
     val memoryTableIds = meta.metaStringList("subagent_memory_table_ids")
+    val memoryInjected = meta?.metaBoolean("subagent_memory_table_injected")
+    val memorySkipReason = meta?.get("subagent_memory_table_skip_reason")?.jsonPrimitive?.contentOrNull
     val includesParentHistory = meta?.metaBoolean("subagent_includes_parent_history")
     val reusedContext = meta?.metaBoolean("subagent_reused_context")
 
@@ -320,6 +322,8 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
         !contextId.isNullOrBlank() ||
         enableMemory != null ||
         memoryTableIds.isNotEmpty() ||
+        memoryInjected != null ||
+        !memorySkipReason.isNullOrBlank() ||
         includesParentHistory != null ||
         reusedContext != null
 
@@ -494,7 +498,30 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
                 )
             }
             SubagentContextField(
-                stringResource(R.string.subagent_tool_ui_context_memory_table),
+                stringResource(R.string.subagent_tool_ui_context_memory_table_status),
+                when (memoryInjected) {
+                    true -> stringResource(R.string.subagent_tool_ui_context_memory_table_injected_yes)
+                    false -> stringResource(R.string.subagent_tool_ui_context_memory_table_injected_no)
+                    null -> stringResource(R.string.subagent_tool_ui_context_empty)
+                },
+            )
+            memorySkipReason?.takeIf { it.isNotBlank() }?.let { reason ->
+                val reasonLabel = when (reason) {
+                    "not_configured" ->
+                        stringResource(R.string.subagent_tool_ui_context_memory_table_reason_not_configured)
+                    "reused_context" ->
+                        stringResource(R.string.subagent_tool_ui_context_memory_table_reason_reused_context)
+                    "not_resolved" ->
+                        stringResource(R.string.subagent_tool_ui_context_memory_table_reason_not_resolved)
+                    else -> reason
+                }
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_memory_table_reason),
+                    reasonLabel,
+                )
+            }
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_memory_table_configured_ids),
                 if (memoryTableIds.isEmpty()) {
                     stringResource(R.string.subagent_tool_ui_context_memory_table_empty)
                 } else {

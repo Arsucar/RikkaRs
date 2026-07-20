@@ -164,7 +164,15 @@
   <string name="subagent_tool_ui_context_reused_context">上下文复用</string>
   <string name="subagent_tool_ui_context_reused_context_value">可能包含此前子代理轮次；仍不含主会话 history</string>
   <string name="subagent_tool_ui_context_memory_table">记忆表注入</string>
-  <string name="subagent_tool_ui_context_memory_table_empty">未注入文档 id</string>
+  <string name="subagent_tool_ui_context_memory_table_empty">未配置文档 id</string>
+  <string name="subagent_tool_ui_context_memory_table_status">注入状态</string>
+  <string name="subagent_tool_ui_context_memory_table_injected_yes">已注入</string>
+  <string name="subagent_tool_ui_context_memory_table_injected_no">未注入</string>
+  <string name="subagent_tool_ui_context_memory_table_reason">原因</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_not_configured">未配置</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_reused_context">复用上下文跳过</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_not_resolved">未能解析（记忆表关闭、隔离、文档缺失等）</string>
+  <string name="subagent_tool_ui_context_memory_table_configured_ids">配置的文档 id</string>
   <string name="subagent_tool_ui_context_empty">（空）</string>
   <string name="subagent_tool_ui_reasoning_label">思维链</string>
   <string name="subagent_tool_ui_tool_call">%1$s (%2$s → %3$s)</string>

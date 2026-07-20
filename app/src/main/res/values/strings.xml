@@ -166,7 +166,15 @@
   <string name="subagent_tool_ui_context_reused_context">Context reuse</string>
   <string name="subagent_tool_ui_context_reused_context_value">Prior subagent turns may exist in this context; still no parent conversation history</string>
   <string name="subagent_tool_ui_context_memory_table">Memory table inject</string>
-  <string name="subagent_tool_ui_context_memory_table_empty">No document ids injected</string>
+  <string name="subagent_tool_ui_context_memory_table_empty">No document ids configured</string>
+  <string name="subagent_tool_ui_context_memory_table_status">Inject status</string>
+  <string name="subagent_tool_ui_context_memory_table_injected_yes">Injected</string>
+  <string name="subagent_tool_ui_context_memory_table_injected_no">Not injected</string>
+  <string name="subagent_tool_ui_context_memory_table_reason">Reason</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_not_configured">Not configured</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_reused_context">Skipped (reused context)</string>
+  <string name="subagent_tool_ui_context_memory_table_reason_not_resolved">Not resolved (memory table off, isolation, missing docs, etc.)</string>
+  <string name="subagent_tool_ui_context_memory_table_configured_ids">Configured document ids</string>
   <string name="subagent_tool_ui_context_empty">(empty)</string>
   <string name="subagent_tool_ui_reasoning_label">Reasoning</string>
   <string name="subagent_tool_ui_tool_call">%1$s (%2$s → %3$s)</string>

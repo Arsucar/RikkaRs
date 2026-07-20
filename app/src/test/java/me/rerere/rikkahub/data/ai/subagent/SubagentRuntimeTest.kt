@@ -237,7 +237,9 @@ class SubagentRuntimeTest {
                         modelId = "gpt-test",
                         cwd = "/workspace",
                         enableMemory = false,
-                        injectedMemoryTableDocumentIds = emptyList(),
+                        injectedMemoryTableDocumentIds = listOf("doc-a", "doc-b"),
+                        memoryTableInjected = true,
+                        memoryTableSkipReason = null,
                         includesParentHistory = false,
                         reusedContext = false,
                     ),
@@ -277,6 +279,10 @@ class SubagentRuntimeTest {
         assertEquals("/workspace", meta["subagent_cwd"]?.jsonPrimitive?.contentOrNull)
         assertEquals(false, meta["subagent_includes_parent_history"]?.jsonPrimitive?.booleanOrNull)
         assertEquals(false, meta["subagent_enable_memory"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(true, meta["subagent_memory_table_injected"]?.jsonPrimitive?.booleanOrNull)
+        assertNull(meta["subagent_memory_table_skip_reason"])
+        assertTrue(meta["subagent_memory_table_ids"].toString().contains("doc-a"))
+        assertTrue(meta["subagent_memory_table_ids"].toString().contains("doc-b"))
         assertTrue(meta["subagent_child_tools"].toString().contains("workspace_read_file"))
         assertTrue(meta["subagent_skills"].toString().contains("skill-a"))
         assertTrue(meta["subagent_mcp_servers"].toString().contains(mcpId.toString()))
@@ -285,11 +291,49 @@ class SubagentRuntimeTest {
     }
 
     @Test
+    fun spawnSubagentTool_writesMemoryTableSkipReasonMetadata() = runBlocking {
+        val tool = createSubagentTools(
+            json = json,
+            spawn = { _, _, _, _ ->
+                SubagentResult(
+                    profileName = "explore",
+                    summary = "done",
+                    succeeded = true,
+                    transferredContext = SubagentTransferredContext(
+                        injectedMemoryTableDocumentIds = listOf("doc-x"),
+                        memoryTableInjected = false,
+                        memoryTableSkipReason = "reused_context",
+                        reusedContext = true,
+                    ),
+                )
+            },
+            askBtw = { "answer" },
+            getProfiles = { listOf(SubagentProfile(name = "explore")) },
+        ).first { it.name == "spawn_subagent" }
+
+        val output = tool.execute(
+            buildJsonObject {
+                put("profile_name", "explore")
+                put("task", "continue")
+            },
+        ).single() as UIMessagePart.Text
+        val meta = output.metadata!!
+
+        assertEquals(false, meta["subagent_memory_table_injected"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals("reused_context", meta["subagent_memory_table_skip_reason"]?.jsonPrimitive?.contentOrNull)
+        assertTrue(meta["subagent_memory_table_ids"].toString().contains("doc-x"))
+        assertEquals(true, meta["subagent_reused_context"]?.jsonPrimitive?.booleanOrNull)
+    }
+
+    @Test
     fun subagentTransferredContext_serializationRoundTrip() {
         val ctx = SubagentTransferredContext(
             systemPrompt = "sys",
             childToolNames = listOf("a", "b"),
             skills = listOf("s"),
+            injectedMemoryTableDocumentIds = listOf("doc-1"),
+            memoryTableInjected = true,
+            memoryTableSkipReason = null,
             includesParentHistory = false,
         )
         val result = SubagentResult(
@@ -303,6 +347,28 @@ class SubagentRuntimeTest {
             json.encodeToString(SubagentResult.serializer(), result),
         )
         assertEquals(ctx, decoded.transferredContext)
+        assertEquals(true, decoded.transferredContext?.memoryTableInjected)
+        assertNull(decoded.transferredContext?.memoryTableSkipReason)
+        assertEquals(listOf("doc-1"), decoded.transferredContext?.injectedMemoryTableDocumentIds)
+
+        val skipCtx = SubagentTransferredContext(
+            memoryTableInjected = false,
+            memoryTableSkipReason = "not_resolved",
+        )
+        val skipDecoded = json.decodeFromString(
+            SubagentTransferredContext.serializer(),
+            json.encodeToString(SubagentTransferredContext.serializer(), skipCtx),
+        )
+        assertEquals(false, skipDecoded.memoryTableInjected)
+        assertEquals("not_resolved", skipDecoded.memoryTableSkipReason)
+
+        // Backward compatible: old payloads without new fields deserialize to defaults.
+        val legacy = json.decodeFromString(
+            SubagentTransferredContext.serializer(),
+            """{"system_prompt":"old"}""",
+        )
+        assertEquals(false, legacy.memoryTableInjected)
+        assertNull(legacy.memoryTableSkipReason)
     }
 
     @Test
