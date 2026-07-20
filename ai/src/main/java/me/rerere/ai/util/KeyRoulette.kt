@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.WeakHashMap
 
 interface KeyRoulette {
     fun next(keys: String, providerId: String = ""): String
@@ -15,7 +16,7 @@ interface KeyRoulette {
          * LRU 轮询，持久化存储到 cacheDir/lru_key_roulette.json
          * 通过 providerId 区分同类型的多个 provider 实例，在 next() 调用时传入
          */
-        fun lru(context: Context): KeyRoulette = LruKeyRoulette(context)
+        fun lru(context: Context): KeyRoulette = lruKeyRoulette(File(context.cacheDir, LRU_CACHE_FILE))
     }
 }
 
@@ -48,9 +49,16 @@ private object LruFileLock
 
 // 文件结构: Map<providerId, Map<apiKey, lastUsedTimestamp>>
 private typealias LruCache = Map<String, Map<String, Long>>
+private val lruMemoryCache = WeakHashMap<File, LruCache>()
+
+internal fun lruKeyRoulette(
+    cacheFile: File,
+    nowMillis: () -> Long = System::currentTimeMillis,
+): KeyRoulette = LruKeyRoulette(cacheFile, nowMillis)
 
 private class LruKeyRoulette(
-    private val context: Context,
+    private val cacheFile: File,
+    private val nowMillis: () -> Long,
 ) : KeyRoulette {
 
     override fun next(keys: String, providerId: String): String {
@@ -58,7 +66,7 @@ private class LruKeyRoulette(
         if (keyList.isEmpty()) return keys
 
         synchronized(LruFileLock) {
-            val now = System.currentTimeMillis()
+            val now = nowMillis()
             val allCache = loadCache().toMutableMap()
 
             // 取本 provider 的记录，过滤掉已过期条目和不在当前 key 列表中的条目
@@ -84,18 +92,19 @@ private class LruKeyRoulette(
     }
 
     private fun loadCache(): LruCache {
+        lruMemoryCache[cacheFile]?.let { return it }
+
         return try {
-            val file = File(context.cacheDir, LRU_CACHE_FILE)
-            if (!file.exists()) return emptyMap()
-            Json.decodeFromString(file.readText())
+            if (!cacheFile.exists()) emptyMap() else Json.decodeFromString<LruCache>(cacheFile.readText())
         } catch (_: Exception) {
-            emptyMap()
-        }
+            emptyMap<String, Map<String, Long>>()
+        }.also { lruMemoryCache[cacheFile] = it }
     }
 
     private fun saveCache(cache: LruCache) {
+        lruMemoryCache[cacheFile] = cache
         try {
-            File(context.cacheDir, LRU_CACHE_FILE).writeText(Json.encodeToString(cache))
+            cacheFile.writeText(Json.encodeToString(cache))
         } catch (_: Exception) {
         }
     }
