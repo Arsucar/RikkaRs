@@ -24,16 +24,17 @@
   `profile-2026-07-21-02-45-37.html`
 
 ## 最终指标（收尾阶段填写）
-- 冷构建样本：___ s / ___ s / ___ s
-- 冷构建中位数：___ s（变化：___%）
-- APK 大小：___ bytes（变化：___%）
-- detekt/ktlint：___ warnings（变化：___% / N/A）
-- assembleDebug：___
-- JVM tests：___ / ___
-- 设备安装验收：___
+- 冷构建样本：240.570 s / 245.547 s / 252.214 s
+- 冷构建中位数：245.547 s（变化：-4.36%，20% 目标未达成）
+- APK 大小：82,141,867 bytes（变化：+0.002%，SHA-256 `3661534C...0FFCC2`）
+- detekt/ktlint：N/A（baseline 未配置任务）
+- assembleDebug：PASS（最终 `assembleDebug test`，wall 37.838 s）
+- JVM tests：960 tests / 0 failures、0 errors、3 skipped
+- 设备安装验收：PASS，`ebc3de22`；offline `100.99.129.110:5555` 跳过
+- Android Lint：FAIL，180 errors / 61 warnings / 1 hint；未修改 baseline
 
 ## 当前阶段：阶段 2 — P1 运行时性能
-## 当前状态：P0 B1 已提交；执行低风险、有测试保护的运行时候选
+## 当前状态：候选执行与最终验证完成，待提交最终报告
 
 ## 决策记录
 | 时间 | 决策 | 证据 / 原因 | 影响 |
@@ -58,6 +59,9 @@
 | 2026-07-21 | R4 assemble / install | `assembleDebug`; `:app:installDebug` | wall 38.241 s；安装到 `ebc3de22`；APK 未增大 | PASS |
 | 2026-07-21 | T2 workspace 临时目录清理 | `:workspace:testDebugUnitTest --tests me.rerere.workspace.WorkspaceChangedFileScannerTest` | 11 场景 PASS；每次测试后删除临时目录 | ACCEPTED（待提交） |
 | 2026-07-21 | T2 assemble | `.\gradlew --no-daemon assembleDebug` | wall 17.999 s，PASS | PASS |
+| 2026-07-21 | Final cold builds | 同 baseline 冷构建命令三次 | 240.570 s / 245.547 s / 252.214 s；median 245.547 s（-4.36%） | PASS，目标未达成 |
+| 2026-07-21 | Final gate | `assembleDebug test :app:lintDebug`；随后 `assembleDebug test` | tests/assemble PASS；lint 180 errors、61 warnings、1 hint；独立 gate PASS | Lint gap recorded |
+| 2026-07-21 | Final install | `.\gradlew --no-daemon :app:installDebug` | `ebc3de22` 安装成功；offline 设备跳过 | PASS |
 
 ## 已完成
 - [x] 创建 Prompt.md、Plan.md、Implement.md、Documentation.md
@@ -68,10 +72,13 @@
 - [x] B1 并行 Gradle 冷构建中位数改善 4.62%，APK 零变化，测试与安装通过
 - [x] R1 Markdown Web 模板按 AssetManager 弱键缓存，聚焦测试、assemble、安装通过
 - [x] T2 workspace scanner 测试统一清理临时目录，聚焦测试与 assemble 通过
+- [x] 完成最终三次冷构建、APK、JVM tests、lint 及设备验收记录
+- [x] 生成 `OPTIMIZATION_NOTES.md` 与 `OPTIMIZATION_REPORT.md`
 
 ## 跳过 / 阻塞
 - B2：`web:buildWebUi` 连续两次 UP-TO-DATE，未发现可优化的重复构建。
 - detekt/ktlint：baseline 未配置，指标 N/A；不新增工具。
+- Android Lint：已有 baseline 外 180 errors / 61 warnings / 1 hint；未在本轮扩大范围修复。
 
 ## 下一步
-- 提交 T2 测试资源清理，并继续验证 P1/P2 候选，跳过缺少可执行证据或兼容性保护的高风险改动。
+- 暂存并检查最终 notes/report，运行最终提交前的 `assembleDebug` 门禁，然后提交 `docs: add overnight optimization report`。
