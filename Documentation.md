@@ -32,8 +32,8 @@
 - JVM tests：___ / ___
 - 设备安装验收：___
 
-## 当前阶段：阶段 0 — 基线与候选清单
-## 当前状态：baseline 完成，候选清单已建立，进入 P0 测量
+## 当前阶段：阶段 2 — P1 运行时性能
+## 当前状态：P0 B1 已提交；执行低风险、有测试保护的运行时候选
 
 ## 决策记录
 | 时间 | 决策 | 证据 / 原因 | 影响 |
@@ -49,9 +49,11 @@
 | 2026-07-21 | Baseline JVM tests | `.\gradlew --no-daemon test` | wall 56.104 s | PASS |
 | 2026-07-21 | Baseline 冷构建 3 次 | `clean assembleDebug --profile --no-build-cache --no-configuration-cache` | median 256.737 s | PASS |
 | 2026-07-21 | B2 web 增量性 | 两次 `.\gradlew --no-daemon :web:preBuild --info` | `buildWebUi` 与 `preBuild` 均 UP-TO-DATE；22 s / 10 s | SKIP（无重跑证据） |
-| 2026-07-21 | B1 并行冷构建 3 次 | 同冷构建命令 + `--parallel` | 241.007 s / 244.862 s / 248.219 s；median 244.862 s，较 baseline -4.62% | ACCEPTED（待提交） |
+| 2026-07-21 | B1 并行冷构建 3 次 | 同冷构建命令 + `--parallel` | 241.007 s / 244.862 s / 248.219 s；median 244.862 s，较 baseline -4.62% | `a8575336` |
 | 2026-07-21 | B1 候选 assemble / test | `.\gradlew --no-daemon assembleDebug`; `.\gradlew --no-daemon test` | 45.515 s / 58.931 s，均 PASS | PASS |
 | 2026-07-21 | B1 设备安装 | `.\gradlew --no-daemon :app:installDebug` | `ebc3de22` 安装成功；offline 设备跳过 | PASS |
+| 2026-07-21 | R1 Markdown Web 模板缓存 | 聚焦 `MarkdownWebTest` | 首次因误用 `kotlin.test` 编译失败；改用仓库 JUnit4 后 2 tests PASS | ACCEPTED（待提交） |
+| 2026-07-21 | R1 assemble / install | `assembleDebug`; `:app:installDebug` | wall 24.720 s；安装到 `ebc3de22` | PASS |
 
 ## 已完成
 - [x] 创建 Prompt.md、Plan.md、Implement.md、Documentation.md
@@ -59,11 +61,12 @@
 - [x] 定义可比测量与候选级回滚规则
 - [x] 完成 baseline assemble、JVM tests、三次冷构建、APK 与设备可用性采集
 - [x] 创建 `OPTIMIZATION_PLAN.md` 并完成 B2 增量性证据检查
+- [x] B1 并行 Gradle 冷构建中位数改善 4.62%，APK 零变化，测试与安装通过
 
 ## 跳过 / 阻塞
 - B2：`web:buildWebUi` 连续两次 UP-TO-DATE，未发现可优化的重复构建。
 - detekt/ktlint：baseline 未配置，指标 N/A；不新增工具。
 
 ## 下一步
-- 测量 `org.gradle.parallel=true` 对相同冷构建协议的影响。
-- 将 B1 `org.gradle.parallel=true` 作为独立提交保留，并在后续继续评估依赖边界与运行时候选。
+- 提交 R1 Markdown Web 模板缓存；收益机制已由缓存测试证明，但未声称 Perfetto 定量改善。
+- 继续验证 P1/P2 候选，跳过缺少可执行证据或兼容性保护的高风险改动。

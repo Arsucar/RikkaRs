@@ -4,6 +4,15 @@ import android.content.Context
 import androidx.compose.material3.ColorScheme
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toCssHex
+import java.util.WeakHashMap
+
+private val markdownTemplateCache = WeakHashMap<Any, String>()
+private val markdownTemplateCacheLock = Any()
+
+internal fun loadCachedMarkdownTemplate(key: Any, loader: () -> String): String =
+    synchronized(markdownTemplateCacheLock) {
+        markdownTemplateCache[key] ?: loader().also { markdownTemplateCache[key] = it }
+    }
 
 /**
  * Build HTML page for markdown preview with support for:
@@ -13,7 +22,9 @@ import me.rerere.rikkahub.utils.toCssHex
  * - Syntax highlighting via highlight.js
  */
 fun buildMarkdownPreviewHtml(context: Context, markdown: String, colorScheme: ColorScheme): String {
-    val htmlTemplate = context.assets.open("html/mark.html").bufferedReader().use { it.readText() }
+    val htmlTemplate = loadCachedMarkdownTemplate(context.assets) {
+        context.assets.open("html/mark.html").bufferedReader().use { it.readText() }
+    }
 
     return htmlTemplate
         .replace("{{MARKDOWN_BASE64}}", markdown.base64Encode())
