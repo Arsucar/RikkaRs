@@ -2106,5 +2106,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="hook_error_memory_experience_dedup_failed">无法检查现有记忆是否存在等效经验。</string>
   <string name="hook_error_memory_experience_schema_unsupported">所选的记忆表模式无法存储去重后的错误经验。</string>
   <string name="hook_error_memory_experience_write_failed">错误体验无法写入记忆表。</string>
+  <string name="subagent_tool_ui_cancelled">子代理已取消</string>
+  <string name="setting_provider_page_paste_from_clipboard">从剪贴板粘贴</string>
+  <string name="setting_provider_page_import_name_title">提供商名称</string>
+  <string name="setting_provider_page_import_name_hint">为此提供商输入显示名称</string>
+  <string name="setting_provider_page_import_invalid_format">导入格式无效</string>
+  <string name="setting_provider_page_clipboard_empty">剪贴板为空</string>
+  <string name="workspace_cwd_set_assistant_default">设为助手默认值</string>
 </resources>
 
