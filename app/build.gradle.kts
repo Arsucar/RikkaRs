@@ -91,6 +91,8 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".pr"
             versionNameSuffix = "-pr"
+            // 库模块无 prTest variant 时回退到 release
+            matchingFallbacks += listOf("release")
             // 桌面显示名区分正式版（Manifest 用 @string/app_name）
             resValue("string", "app_name", "RikkaRs PR")
             buildConfigField(
