@@ -48,16 +48,22 @@
 | 2026-07-21 | Baseline 默认 assemble | `.\gradlew --no-daemon assembleDebug` | wall 38.060 s | PASS |
 | 2026-07-21 | Baseline JVM tests | `.\gradlew --no-daemon test` | wall 56.104 s | PASS |
 | 2026-07-21 | Baseline 冷构建 3 次 | `clean assembleDebug --profile --no-build-cache --no-configuration-cache` | median 256.737 s | PASS |
+| 2026-07-21 | B2 web 增量性 | 两次 `.\gradlew --no-daemon :web:preBuild --info` | `buildWebUi` 与 `preBuild` 均 UP-TO-DATE；22 s / 10 s | SKIP（无重跑证据） |
+| 2026-07-21 | B1 并行冷构建 3 次 | 同冷构建命令 + `--parallel` | 241.007 s / 244.862 s / 248.219 s；median 244.862 s，较 baseline -4.62% | ACCEPTED（待提交） |
+| 2026-07-21 | B1 候选 assemble / test | `.\gradlew --no-daemon assembleDebug`; `.\gradlew --no-daemon test` | 45.515 s / 58.931 s，均 PASS | PASS |
+| 2026-07-21 | B1 设备安装 | `.\gradlew --no-daemon :app:installDebug` | `ebc3de22` 安装成功；offline 设备跳过 | PASS |
 
 ## 已完成
 - [x] 创建 Prompt.md、Plan.md、Implement.md、Documentation.md
 - [x] 对齐依赖替换、dead code、模块重构和 baseline profile 的授权边界
 - [x] 定义可比测量与候选级回滚规则
+- [x] 完成 baseline assemble、JVM tests、三次冷构建、APK 与设备可用性采集
+- [x] 创建 `OPTIMIZATION_PLAN.md` 并完成 B2 增量性证据检查
 
 ## 跳过 / 阻塞
-- （无）
+- B2：`web:buildWebUi` 连续两次 UP-TO-DATE，未发现可优化的重复构建。
+- detekt/ktlint：baseline 未配置，指标 N/A；不新增工具。
 
 ## 下一步
 - 测量 `org.gradle.parallel=true` 对相同冷构建协议的影响。
-- 检查 `web:buildWebUi` 连续运行的增量结果与原因。
-- 只保留可重复、有证据且验证通过的 P0 候选。
+- 将 B1 `org.gradle.parallel=true` 作为独立提交保留，并在后续继续评估依赖边界与运行时候选。

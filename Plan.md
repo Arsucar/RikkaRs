@@ -1,19 +1,19 @@
 # 优化计划（按优先级）
 
 ## 阶段 0：基线与候选清单
-- [ ] 阅读 AGENTS.md、Trellis 指南及 Prompt.md / Plan.md / Implement.md / Documentation.md
-- [ ] 记录分支、commit、JDK、Gradle/AGP、主机环境和初始 `git status`
-- [ ] 运行 baseline assembleDebug、test 和仓库已有的 detekt/ktlint 任务
-- [ ] 按 Prompt.md 测量三次冷构建并记录中位数
-- [ ] 选定 APK 产物，记录路径、变体、ABI、精确字节数和 SHA-256
-- [ ] 分析模块依赖图、插件、编译器任务和热点代码
-- [ ] 创建 `OPTIMIZATION_PLAN.md`，为每个候选记录证据、预期收益、风险和验证方式
+- [x] 阅读 AGENTS.md、Trellis 指南及 Prompt.md / Plan.md / Implement.md / Documentation.md
+- [x] 记录分支、commit、JDK、Gradle/AGP、主机环境和初始 `git status`
+- [x] 运行 baseline assembleDebug、test 和仓库已有的 detekt/ktlint 任务（detekt/ktlint N/A）
+- [x] 按 Prompt.md 测量三次冷构建并记录中位数
+- [x] 选定 APK 产物，记录路径、变体、ABI、精确字节数和 SHA-256
+- [x] 分析模块依赖图、插件、编译器任务和热点代码
+- [x] 创建 `OPTIMIZATION_PLAN.md`，为每个候选记录证据、预期收益、风险和验证方式
 
 验证：baseline 可复现；若 baseline 构建或测试本身失败，先记录为阻塞，不把历史失败归因于优化。
 
 ## 阶段 1：P0 构建性能
-- [ ] 审查根目录与各模块 Gradle 配置、插件应用和任务配置
-- [ ] 评估 configuration cache、build cache、parallel execution 和 JVM 参数
+- [x] 审查根目录与各模块 Gradle 配置、插件应用和任务配置
+- [x] 评估 configuration cache、build cache、parallel execution 和 JVM 参数
 - [ ] 检查 `api` / `implementation` 泄漏与不必要的模块依赖
 - [ ] 评估 kapt → KSP 或其他插件迁移，记录迁移成本与实测收益
 - [ ] 移除确认无用的插件、依赖和生成任务
