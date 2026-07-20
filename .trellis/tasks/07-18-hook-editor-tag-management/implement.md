@@ -10,38 +10,38 @@
 
 ### Phase A — Domain / config
 
-1. [ ] `ConversationHook.kt`：新增 `ManageConversationTags`；`HookActionType.MANAGE_CONVERSATION_TAGS`
-2. [ ] 旧 `add_conversation_tag` / `transition_conversation_tags` 解码 → normalize 为 Manage（自定义 serializer 或加载边界函数）
-3. [ ] `configurationHash` 分支覆盖 Manage；Sync 不变
-4. [ ] `actionType` 扩展与历史 `parseStoredActionType` 别名（ADD/TRANSITION 只读映射）
-5. [ ] 单测：`ConversationHookTest` 旧 golden JSON、新 round-trip、hash 排序不变性
+1. [x] `ConversationHook.kt`：新增 `ManageConversationTags`；`HookActionType.MANAGE_CONVERSATION_TAGS`
+2. [x] 旧 `add_conversation_tag` / `transition_conversation_tags` 解码 → normalize 为 Manage（`normalize()` + 保存边界）
+3. [x] `configurationHash` 分支覆盖 Manage；Sync 不变
+4. [x] `actionType` 扩展与历史 `parseStoredHookActionType` 别名（ADD/TRANSITION 枚举常量保留可读）
+5. [x] 单测：`ConversationHookTest` 旧 golden JSON、新 round-trip、hash 排序不变性
 
 ### Phase B — Runtime
 
-6. [ ] `HookRuntimeRules`：`MAX_TAG_MANAGE_OPS`（建议 8）及响应长度常量
-7. [ ] `ManageConversationTagsHookOutputParser`：strict keys `decision|operations|reason`
-8. [ ] `FrozenHookModelRequest.ManageConversationTags` + `buildManageTagsEvaluationPrompt`
-9. [ ] `ManageConversationTagsHookAction`：prepare / parse / execute（无证据门控；C1 整单 fail-closed）
-10. [ ] `ConversationTagHookCommitter.commitManageTags`：单事务 multi-op
-11. [ ] 注册表 / DI：注册 Manage；移除 Add/Transition 注册
-12. [ ] 清理或内联废弃 handler；全库搜 exhaustive `when`
-13. [ ] 单测：parser、allowlist 越权、整单拒绝、0 变更 SKIPPED、commit 顺序
+6. [x] `HookRuntimeRules`：`MAX_TAG_MANAGE_OPS`（8）及 `MAX_TAG_MANAGE_RESPONSE_CHARS`
+7. [x] `ManageConversationTagsHookOutputParser`：strict keys `decision|operations|reason`
+8. [x] `FrozenHookModelRequest.ManageConversationTags` + `buildManageTagsEvaluationPrompt`
+9. [x] `ManageConversationTagsHookAction`：prepare / parse / execute（无证据门控；C1 整单 fail-closed；`validateManageTagOperations`）
+10. [x] `ConversationTagHookCommitter.commitManageTags`：单事务 multi-op
+11. [x] 注册表 / DI：注册 Manage；移除 Add/Transition 注册
+12. [x] 废弃 handler 文件仍保留（未注册）；exhaustive `when` 已覆盖 legacy 展示别名
+13. [x] 单测：parser apply/skip/非法 shape/上限/multi-op；`ManageConversationTagsHookActionTest` fail-closed gate；manage prompt 无 evidence；hash/编辑器校验
 
 ### Phase C — UI
 
-14. [ ] `AssistantHookEditorPage`：Select 仅 Manage | Sync；删三 chip 与 Transition 面板
-15. [ ] allowlist 真多选；校验走 `validateHookEditor`
-16. [ ] 评估提示词默认折叠/压缩
-17. [ ] 列表摘要：allowlist 名称；删 transition 副行
-18. [ ] History：新类型展示 + 旧枚举不崩溃；Sync Preview/Run/Retry 条件不变
-19. [ ] strings：`values` + 简体中文；更新 `hookActionLabelRes`
+14. [x] `AssistantHookEditorPage`：Select 仅 Manage | Sync；删三 chip 与 Transition 面板
+15. [x] allowlist 真多选；校验走 `validateHookEditor`
+16. [x] 评估提示词默认折叠/压缩（`promptExpanded` 默认 false）
+17. [x] 列表摘要：allowlist 名称；删 transition 副行
+18. [x] History：新类型展示 + 旧枚举不崩溃；Sync Preview/Run/Retry 条件不变
+19. [x] strings：`values` + 简体中文（`values-zh`）；更新 `hookActionLabelRes`
 
 ### Phase D — Spec / quality
 
-20. [ ] 更新 `.trellis/spec/app/conversation-tags-and-hooks.md`（UI + multi-op；evidence scenario 标 superseded）
-21. [ ] `AssistantHooksPageTest` / 相关 dispatcher 测试适配
-22. [ ] 聚焦 JVM 测试 + `compileDebugKotlin --no-daemon`
-23. [ ] 有设备：`adb` + `installDebug --no-daemon` 验收编辑页
+20. [x] 更新 `.trellis/spec/app/conversation-tags-and-hooks.md`（UI + multi-op；evidence scenario 标 superseded）
+21. [x] `AssistantHooksPageTest` / parser / ConversationHookTest / Manage gate tests 已适配
+22. [x] 聚焦 JVM 测试 + `compileDebugKotlin --no-daemon`（2026-07-20 check 通过）
+23. [ ] 有设备：`adb` + `installDebug --no-daemon` 验收编辑页（check 有源码改动；装机留给主会话）
 
 ## Validation commands
 
@@ -79,11 +79,30 @@ adb devices
 
 ## Review gates
 
-- [ ] PRD 验收 1–8 可映射到测试/手工步骤
-- [ ] 无 Issue 硬门控调用路径
-- [ ] 旧 Add/Transition JSON 仍可加载并保存为 Manage
-- [ ] Sync Preview/Run/Retry 仍可用
-- [ ] 子代理仅最后检查步编译
+- [x] PRD 验收 1–8 可映射到代码/测试（#150 已于 v2.3.33 关闭；本 check 补 fail-closed 单测）
+- [x] 无 Issue 硬门控调用路径（Manage prepare 不调用 `detectGitHubIssueCompletionEvidence`；旧 Transition handler 未注册）
+- [x] 旧 Add/Transition JSON 仍可加载并保存为 Manage
+- [x] Sync Preview/Run/Retry 仍可用（history 仅 `SYNC_MEMORY_TABLE`）
+- [x] 子代理仅最后检查步编译
+
+## Check verification (2026-07-20)
+
+```powershell
+.\gradlew --no-daemon :app:testDebugUnitTest `
+  --tests "me.rerere.rikkahub.data.model.ConversationHookTest" `
+  --tests "me.rerere.rikkahub.service.hooks.*" `
+  --tests "me.rerere.rikkahub.ui.pages.assistant.detail.AssistantHooksPageTest" `
+  :app:compileDebugKotlin
+# BUILD SUCCESSFUL
+# Feature commit: 0f078ae1
+# Check deltas: validateManageTagOperations + ManageConversationTagsHookActionTest + parser/prompt coverage
+```
+
+## Known residual (non-blocking)
+
+- `commitManageTags` Room 事务路径仍主要靠 androidTest 历史套件（`ConversationTagHookCommitterTest` 仍以旧 actionType 字符串 seed）；JVM 层已覆盖 C1 fail-closed gate。
+- 旧 `AddConversationTagHookAction` / `TransitionConversationTagsHookAction` 源文件未删除但未注册。
+- History UI 对 Manage 审计 JSON 优先尝试旧 Transition summary 解码，失败则回退 raw operations 展示（可接受）。
 
 ## Dispatch notes
 

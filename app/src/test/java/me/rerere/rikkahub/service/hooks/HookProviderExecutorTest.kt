@@ -25,6 +25,27 @@ class HookProviderExecutorTest {
     }
 
     @Test
+    fun manageTagsPromptUsesMultiOpSchemaAndNoEvidenceGate() {
+        val tagId = Uuid.random()
+        val prompt = buildHookEvaluationPrompt(
+            FrozenHookModelRequest.ManageConversationTags(
+                modelId = Uuid.random(),
+                prompt = "Apply tag strategy from the response.",
+                messageTextSnapshot = "Work finished without issue URLs.",
+                allowedTags = mapOf(tagId to "Completed"),
+            )
+        )
+
+        assertTrue(prompt.contains("Work finished without issue URLs."))
+        assertTrue(prompt.contains(tagId.toString()))
+        assertTrue(prompt.contains("Completed"))
+        assertTrue(prompt.contains("exactly the keys decision, operations, and reason"))
+        assertTrue(prompt.contains("Prefer remove before add"))
+        assertTrue(!prompt.contains("github_issue_evidence"))
+        assertTrue(!prompt.contains("exactly the keys decision and reason"))
+    }
+
+    @Test
     fun memoryTablePromptContainsOnlyFrozenBoundedInputsAndStrictOutputContract() {
         val userMessageId = Uuid.random()
         val assistantMessageId = Uuid.random()

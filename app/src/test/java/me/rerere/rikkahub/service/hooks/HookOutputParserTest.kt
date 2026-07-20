@@ -214,6 +214,36 @@ class HookOutputParserTest {
         }
     }
 
+    @Test
+    fun manageTagsParserRejectsTooManyOperations() {
+        val ops = (1..HookRuntimeRules.MAX_TAG_MANAGE_OPS + 1).joinToString(",") { index ->
+            val tagId = Uuid.parse("00000000-0000-0000-0000-${index.toString().padStart(12, '0')}")
+            """{"op":"add","tagId":"$tagId"}"""
+        }
+        val error = assertThrows(HookOutputException::class.java) {
+            ManageConversationTagsHookOutputParser.parse(
+                """{"decision":"apply","operations":[$ops],"reason":"too many"}"""
+            )
+        }
+        assertEquals(HookErrorCode.SCHEMA_MISMATCH, error.code)
+    }
+
+    @Test
+    fun manageTagsParserAcceptsMultiOpWithinLimit() {
+        val first = Uuid.parse("00000000-0000-0000-0000-000000000001")
+        val second = Uuid.parse("00000000-0000-0000-0000-000000000002")
+        val parsed = ManageConversationTagsHookOutputParser.parse(
+            """{"decision":"apply","operations":[{"op":"remove","tagId":"$first"},{"op":"add","tagId":"$second"}],"reason":"swap"}"""
+        )
+
+        assertEquals(HookDecision.APPLY, parsed.decision)
+        assertEquals(2, parsed.operations.size)
+        assertEquals(TagManageOpKind.REMOVE, parsed.operations[0].kind)
+        assertEquals(first, parsed.operations[0].tagId)
+        assertEquals(TagManageOpKind.ADD, parsed.operations[1].kind)
+        assertEquals(second, parsed.operations[1].tagId)
+    }
+
     private fun validSyncJson(): String =
         """{"decision":"skip","baseRevision":1,"operations":[],"reason":"x"}"""
 }

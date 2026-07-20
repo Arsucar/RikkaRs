@@ -59,25 +59,52 @@ class ManageConversationTagsHookAction(
         if (manageOutput.decision == HookDecision.SKIP) {
             return HookActionResult.Skipped(null)
         }
-        if (manageOutput.operations.isEmpty()) {
-            return HookActionResult.Skipped(null, HookErrorCode.SCHEMA_MISMATCH)
-        }
-        for (op in manageOutput.operations) {
-            if (op.tagId !in context.allowedTagIds) {
-                return HookActionResult.Skipped(op.tagId, HookErrorCode.TAG_NOT_ALLOWED)
-            }
-            if (tagRepository.getTag(op.tagId) == null) {
-                return HookActionResult.Skipped(op.tagId, HookErrorCode.TAG_NOT_FOUND)
-            }
-        }
-        val seen = mutableSetOf<Pair<TagManageOpKind, Uuid>>()
-        for (op in manageOutput.operations) {
-            val key = op.kind to op.tagId
-            if (!seen.add(key)) {
-                return HookActionResult.Skipped(op.tagId, HookErrorCode.SCHEMA_MISMATCH)
-            }
+        val existingTagIds = manageOutput.operations
+            .map { it.tagId }
+            .toSet()
+            .filter { tagId -> tagRepository.getTag(tagId) != null }
+            .toSet()
+        val rejection = validateManageTagOperations(
+            operations = manageOutput.operations,
+            allowedTagIds = context.allowedTagIds,
+            existingTagIds = existingTagIds,
+        )
+        if (rejection != null) {
+            return HookActionResult.Skipped(rejection.tagId, rejection.errorCode)
         }
         committer.commitManageTags(executionId, leaseToken, context, manageOutput)
         return HookActionResult.Terminalized
     }
 }
+
+/**
+ * Fail-closed pre-write checks for multi-op tag management (C1).
+ * Any illegal op rejects the entire batch with zero tag writes.
+ */
+internal fun validateManageTagOperations(
+    operations: List<TagManageOperation>,
+    allowedTagIds: Set<Uuid>,
+    existingTagIds: Set<Uuid>,
+): ManageTagOperationRejection? {
+    if (operations.isEmpty()) {
+        return ManageTagOperationRejection(null, HookErrorCode.SCHEMA_MISMATCH)
+    }
+    val seen = mutableSetOf<Pair<TagManageOpKind, Uuid>>()
+    for (op in operations) {
+        if (op.tagId !in allowedTagIds) {
+            return ManageTagOperationRejection(op.tagId, HookErrorCode.TAG_NOT_ALLOWED)
+        }
+        if (op.tagId !in existingTagIds) {
+            return ManageTagOperationRejection(op.tagId, HookErrorCode.TAG_NOT_FOUND)
+        }
+        if (!seen.add(op.kind to op.tagId)) {
+            return ManageTagOperationRejection(op.tagId, HookErrorCode.SCHEMA_MISMATCH)
+        }
+    }
+    return null
+}
+
+internal data class ManageTagOperationRejection(
+    val tagId: Uuid?,
+    val errorCode: HookErrorCode,
+)
