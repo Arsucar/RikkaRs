@@ -1495,3 +1495,42 @@ Verified #150 ManageConversationTags already shipped; extracted fail-closed ops 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: Overnight measured optimization
+
+**Date**: 2026-07-21
+**Task**: Overnight measured optimization
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Established reproducible baseline; accepted Gradle parallelism, Markdown template caching, LRU key cache, and workspace test cleanup; recorded final metrics, lint gap, skipped candidates, and device/test verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `de7d45e8` | (see git log) |
+| `a8575336` | (see git log) |
+| `9e225402` | (see git log) |
+| `fe91967d` | (see git log) |
+| `a3316a88` | (see git log) |
+| `e54e7e92` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

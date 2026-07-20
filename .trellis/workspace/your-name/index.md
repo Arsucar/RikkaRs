@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 39
-- **Last Active**: 2026-07-20
+- **Total Sessions**: 40
+- **Last Active**: 2026-07-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1497 | Active |
+| `journal-1.md` | ~1536 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 40 | 2026-07-21 | Overnight measured optimization | `de7d45e8`, `a8575336`, `9e225402`, `fe91967d`, `a3316a88`, `e54e7e92` | `release/rikka-arsucar` |
 | 39 | 2026-07-20 | Hook editor tag management archive | `e5676b45` | `release/rikka-arsucar` |
 | 38 | 2026-07-20 | Hook editor tag management archive | `e5676b45` | `release/rikka-arsucar` |
 | 37 | 2026-07-20 | Subagent memory table injection + tools UX | `15160606` | `release/rikka-arsucar` |
