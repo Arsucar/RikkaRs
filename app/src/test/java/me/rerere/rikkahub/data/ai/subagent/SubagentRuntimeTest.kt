@@ -4,6 +4,7 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -207,6 +208,101 @@ class SubagentRuntimeTest {
         assertEquals("context-1", output.metadata?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull)
         assertTrue(output.text.contains("\"context_id\":\"context-1\""))
         assertTrue(output.text.contains("\"context_status\":\"COMPLETED\""))
+    }
+
+    @Test
+    fun spawnSubagentTool_writesFullTransferredContextMetadata() = runBlocking {
+        val mcpId = Uuid.random()
+        val tool = createSubagentTools(
+            json = json,
+            spawn = { _, _, _, _ ->
+                SubagentResult(
+                    profileName = "explore",
+                    summary = "done",
+                    succeeded = true,
+                    depth = 1,
+                    maxToolCalls = 16,
+                    contextId = "ctx-full",
+                    transferredContext = SubagentTransferredContext(
+                        systemPrompt = "child system",
+                        workspaceAccess = WorkspaceAccess.READ_ONLY.name,
+                        workspaceApproval = WorkspaceApproval.INHERIT.name,
+                        canSpawn = false,
+                        inheritTools = true,
+                        excludedTools = listOf("spawn_subagent"),
+                        allowedPathPrefixes = listOf("/workspace"),
+                        childToolNames = listOf("workspace_read_file", "workspace_shell"),
+                        skills = listOf("skill-a"),
+                        mcpServerIds = listOf(mcpId.toString()),
+                        modelId = "gpt-test",
+                        cwd = "/workspace",
+                        enableMemory = false,
+                        injectedMemoryTableDocumentIds = emptyList(),
+                        includesParentHistory = false,
+                        reusedContext = false,
+                    ),
+                )
+            },
+            askBtw = { "answer" },
+            getProfiles = {
+                listOf(
+                    SubagentProfile(
+                        name = "explore",
+                        systemPrompt = "profile system",
+                        workspaceAccess = WorkspaceAccess.READ_ONLY,
+                    ),
+                )
+            },
+        ).first { it.name == "spawn_subagent" }
+
+        val output = tool.execute(
+            buildJsonObject {
+                put("profile_name", "explore")
+                put("task", "inspect")
+                put("description", "label")
+            },
+        ).single() as UIMessagePart.Text
+        val meta = output.metadata!!
+
+        assertEquals("inspect", meta["subagent_task"]?.jsonPrimitive?.contentOrNull)
+        assertEquals("label", meta["subagent_description"]?.jsonPrimitive?.contentOrNull)
+        assertEquals("child system", meta["subagent_system_prompt"]?.jsonPrimitive?.contentOrNull)
+        assertTrue(meta["subagent_system_prompt_note"]?.jsonPrimitive?.contentOrNull?.contains("profile.systemPrompt") == true)
+        assertEquals(WorkspaceAccess.READ_ONLY.name, meta["subagent_workspace_access"]?.jsonPrimitive?.contentOrNull)
+        assertEquals(WorkspaceApproval.INHERIT.name, meta["subagent_workspace_approval"]?.jsonPrimitive?.contentOrNull)
+        assertEquals(false, meta["subagent_can_spawn"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(true, meta["subagent_inherit_tools"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals("1", meta["subagent_depth"]?.jsonPrimitive?.contentOrNull)
+        assertEquals("gpt-test", meta["subagent_model_id"]?.jsonPrimitive?.contentOrNull)
+        assertEquals("/workspace", meta["subagent_cwd"]?.jsonPrimitive?.contentOrNull)
+        assertEquals(false, meta["subagent_includes_parent_history"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(false, meta["subagent_enable_memory"]?.jsonPrimitive?.booleanOrNull)
+        assertTrue(meta["subagent_child_tools"].toString().contains("workspace_read_file"))
+        assertTrue(meta["subagent_skills"].toString().contains("skill-a"))
+        assertTrue(meta["subagent_mcp_servers"].toString().contains(mcpId.toString()))
+        assertTrue(meta["subagent_path_prefixes"].toString().contains("/workspace"))
+        assertTrue(meta["subagent_excluded_tools"].toString().contains("spawn_subagent"))
+    }
+
+    @Test
+    fun subagentTransferredContext_serializationRoundTrip() {
+        val ctx = SubagentTransferredContext(
+            systemPrompt = "sys",
+            childToolNames = listOf("a", "b"),
+            skills = listOf("s"),
+            includesParentHistory = false,
+        )
+        val result = SubagentResult(
+            profileName = "explore",
+            summary = "ok",
+            succeeded = true,
+            transferredContext = ctx,
+        )
+        val decoded = json.decodeFromString(
+            SubagentResult.serializer(),
+            json.encodeToString(SubagentResult.serializer(), result),
+        )
+        assertEquals(ctx, decoded.transferredContext)
     }
 
     @Test

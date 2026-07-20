@@ -47,7 +47,10 @@ import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Tools
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -276,16 +279,51 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
     val profileName = meta?.get("subagent_profile")?.jsonPrimitive?.contentOrNull
         ?: context.arguments.getStringContent("profile_name")
     val systemPrompt = meta?.get("subagent_system_prompt")?.jsonPrimitive?.contentOrNull
+    val systemPromptNote = meta?.get("subagent_system_prompt_note")?.jsonPrimitive?.contentOrNull
+        ?: stringResource(R.string.subagent_tool_ui_context_system_note)
     val workspaceAccess = meta?.get("subagent_workspace_access")?.jsonPrimitive?.contentOrNull
+    val workspaceApproval = meta?.get("subagent_workspace_approval")?.jsonPrimitive?.contentOrNull
+    val canSpawn = meta?.metaBoolean("subagent_can_spawn")
+    val inheritTools = meta?.metaBoolean("subagent_inherit_tools")
+    val maxToolCalls = meta?.get("subagent_max_tool_calls")?.jsonPrimitive?.contentOrNull
+    val excludedTools = meta.metaStringList("subagent_excluded_tools")
+    val pathPrefixes = meta.metaStringList("subagent_path_prefixes")
+    val childTools = meta.metaStringList("subagent_child_tools")
+    val skills = meta.metaStringList("subagent_skills")
+    val mcpServers = meta.metaStringList("subagent_mcp_servers")
+    val depth = meta?.get("subagent_depth")?.jsonPrimitive?.contentOrNull
+    val modelId = meta?.get("subagent_model_id")?.jsonPrimitive?.contentOrNull
+    val cwd = meta?.get("subagent_cwd")?.jsonPrimitive?.contentOrNull
+    val contextId = meta?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull
+    val enableMemory = meta?.metaBoolean("subagent_enable_memory")
+    val memoryTableIds = meta.metaStringList("subagent_memory_table_ids")
+    val includesParentHistory = meta?.metaBoolean("subagent_includes_parent_history")
+    val reusedContext = meta?.metaBoolean("subagent_reused_context")
 
-    if (task.isNullOrBlank() &&
-        description.isNullOrBlank() &&
-        profileName.isNullOrBlank() &&
-        systemPrompt.isNullOrBlank() &&
-        workspaceAccess.isNullOrBlank()
-    ) {
-        return
-    }
+    val hasAny = !task.isNullOrBlank() ||
+        !description.isNullOrBlank() ||
+        !profileName.isNullOrBlank() ||
+        !systemPrompt.isNullOrBlank() ||
+        !workspaceAccess.isNullOrBlank() ||
+        !workspaceApproval.isNullOrBlank() ||
+        canSpawn != null ||
+        inheritTools != null ||
+        !maxToolCalls.isNullOrBlank() ||
+        excludedTools.isNotEmpty() ||
+        pathPrefixes.isNotEmpty() ||
+        childTools.isNotEmpty() ||
+        skills.isNotEmpty() ||
+        mcpServers.isNotEmpty() ||
+        !depth.isNullOrBlank() ||
+        !modelId.isNullOrBlank() ||
+        !cwd.isNullOrBlank() ||
+        !contextId.isNullOrBlank() ||
+        enableMemory != null ||
+        memoryTableIds.isNotEmpty() ||
+        includesParentHistory != null ||
+        reusedContext != null
+
+    if (!hasAny) return
 
     var expanded by remember(context.tool.toolCallId) { mutableStateOf(false) }
     Text(
@@ -303,25 +341,183 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            profileName?.takeIf { it.isNotBlank() }?.let {
-                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_profile), it)
-            }
-            workspaceAccess?.takeIf { it.isNotBlank() }?.let {
-                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_workspace), it)
-            }
+            // 1. Task + description
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_section_task))
             task?.takeIf { it.isNotBlank() }?.let {
                 SubagentContextField(stringResource(R.string.subagent_tool_ui_context_task), it)
             }
             description?.takeIf { it.isNotBlank() }?.let {
                 SubagentContextField(stringResource(R.string.subagent_tool_ui_context_description), it)
             }
-            systemPrompt?.takeIf { it.isNotBlank() }?.let {
-                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_system_prompt), it)
+
+            // 2. Subagent system
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_section_system))
+            if (!systemPrompt.isNullOrBlank()) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_system_prompt),
+                    systemPrompt,
+                )
+            } else {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_system_prompt),
+                    stringResource(R.string.subagent_tool_ui_context_empty),
+                )
+            }
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_system_note_label),
+                systemPromptNote,
+            )
+
+            // 3. Profile constraints
+            SubagentContextSectionTitle(
+                stringResource(R.string.subagent_tool_ui_context_profile_constraints),
+            )
+            profileName?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_profile), it)
+            }
+            workspaceAccess?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_workspace), it)
+            }
+            workspaceApproval?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_workspace_approval),
+                    it,
+                )
+            }
+            maxToolCalls?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_max_tool_calls),
+                    it,
+                )
+            }
+            canSpawn?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_can_spawn),
+                    it.toString(),
+                )
+            }
+            inheritTools?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_inherit_tools),
+                    it.toString(),
+                )
+            }
+            if (excludedTools.isNotEmpty()) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_excluded_tools),
+                    excludedTools.joinToString(", "),
+                )
+            }
+            if (pathPrefixes.isNotEmpty()) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_path_prefixes),
+                    pathPrefixes.joinToString("\n"),
+                )
+            }
+            enableMemory?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_enable_memory),
+                    it.toString(),
+                )
+            }
+
+            // 4. Actual child tools
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_tools))
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_child_tools),
+                if (childTools.isEmpty()) {
+                    stringResource(R.string.subagent_tool_ui_context_empty)
+                } else {
+                    childTools.joinToString(", ")
+                },
+            )
+
+            // 5. Skills + MCP
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_skills_mcp))
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_skills),
+                if (skills.isEmpty()) {
+                    stringResource(R.string.subagent_tool_ui_context_empty)
+                } else {
+                    skills.joinToString(", ")
+                },
+            )
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_mcp),
+                if (mcpServers.isEmpty()) {
+                    stringResource(R.string.subagent_tool_ui_context_empty)
+                } else {
+                    mcpServers.joinToString("\n")
+                },
+            )
+
+            // 6. Metadata
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_metadata))
+            depth?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_depth), it)
+            }
+            modelId?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_model), it)
+            }
+            if (pathPrefixes.isNotEmpty()) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_path_prefixes),
+                    pathPrefixes.joinToString("\n"),
+                )
+            }
+            cwd?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(stringResource(R.string.subagent_tool_ui_context_cwd), it)
+            }
+            contextId?.takeIf { it.isNotBlank() }?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_context_id),
+                    it,
+                )
+            }
+
+            // 7. Negative notes
+            SubagentContextSectionTitle(stringResource(R.string.subagent_tool_ui_context_negative))
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_no_parent_history),
+                if (includesParentHistory == true) {
+                    stringResource(R.string.subagent_tool_ui_context_false_unexpected)
+                } else {
+                    stringResource(R.string.subagent_tool_ui_context_no_parent_history_value)
+                },
+            )
+            if (reusedContext == true) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_reused_context),
+                    stringResource(R.string.subagent_tool_ui_context_reused_context_value),
+                )
+            }
+            SubagentContextField(
+                stringResource(R.string.subagent_tool_ui_context_memory_table),
+                if (memoryTableIds.isEmpty()) {
+                    stringResource(R.string.subagent_tool_ui_context_memory_table_empty)
+                } else {
+                    memoryTableIds.joinToString(", ")
+                },
+            )
+            enableMemory?.let {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_enable_memory),
+                    it.toString(),
+                )
             }
         }
     }
+}
+
+@Composable
+private fun SubagentContextSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
 }
 
 @Composable
@@ -339,6 +535,27 @@ private fun SubagentContextField(label: String, value: String) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
+    }
+}
+
+private fun JsonObject.metaBoolean(key: String): Boolean? {
+    val el = this[key] ?: return null
+    val primitive = el as? JsonPrimitive ?: return null
+    return primitive.booleanOrNull
+        ?: primitive.contentOrNull?.toBooleanStrictOrNull()
+}
+
+private fun JsonObject?.metaStringList(key: String): List<String> {
+    val el = this?.get(key) ?: return emptyList()
+    return when (el) {
+        is JsonArray -> el.mapNotNull { item ->
+            (item as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        }
+        is JsonPrimitive -> {
+            val raw = el.contentOrNull.orEmpty()
+            if (raw.isBlank()) emptyList() else raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        }
+        else -> emptyList()
     }
 }
 

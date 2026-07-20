@@ -370,6 +370,7 @@ class SubagentHost(
         var steps = 0
         var totalToolLoopSteps = 0
         var lastMessages = acquiredContext.messages
+        var transferredContext: SubagentTransferredContext? = null
 
         return runCatching {
             onProgress?.invoke(contextId, acquiredContext.messages)
@@ -378,6 +379,14 @@ class SubagentHost(
                 ?: parentModel
             val childAssistant = buildChildAssistant(profile, parentAssistant, depth, maxDepth)
             val childTools = sandboxToolsForSubagent(buildChildTools(childAssistant, depth))
+            transferredContext = captureTransferredContext(
+                profile = profile,
+                childAssistant = childAssistant,
+                childTools = childTools,
+                childModel = childModel,
+                workspaceCwd = workspaceCwd,
+                reusedContext = contextAcquisition.reusedContext,
+            )
             Log.i(TAG, "spawn: subagent '${profile.name}' (depth=$depth) started")
 
             var generationLimitReached = false
@@ -505,6 +514,7 @@ class SubagentHost(
                 },
                 startedAtEpochMillis = startedAtEpochMillis,
                 endedAtEpochMillis = System.currentTimeMillis(),
+                transferredContext = transferredContext,
             )
             contextCache.finish(
                 contextId = contextId,
@@ -568,8 +578,39 @@ class SubagentHost(
                 truncationReason = error,
                 startedAtEpochMillis = startedAtEpochMillis,
                 endedAtEpochMillis = System.currentTimeMillis(),
+                transferredContext = transferredContext,
             )
         }
+    }
+
+    private fun captureTransferredContext(
+        profile: SubagentProfile,
+        childAssistant: Assistant,
+        childTools: List<Tool>,
+        childModel: Model,
+        workspaceCwd: String?,
+        reusedContext: Boolean,
+    ): SubagentTransferredContext {
+        val childCanSpawn = childAssistant.enableSubagents
+        return SubagentTransferredContext(
+            systemPrompt = childAssistant.systemPrompt,
+            workspaceAccess = profile.workspaceAccess.name,
+            workspaceApproval = profile.workspaceApproval.name,
+            canSpawn = childCanSpawn,
+            inheritTools = profile.inheritTools,
+            excludedTools = profile.excludedTools.sorted(),
+            allowedPathPrefixes = profile.allowedPathPrefixes,
+            childToolNames = childTools.map { it.name }.distinct().sorted(),
+            skills = childAssistant.enabledSkills.sorted(),
+            mcpServerIds = childAssistant.mcpServers.map { it.toString() }.sorted(),
+            modelId = childModel.modelId.takeIf { it.isNotBlank() }
+                ?: childModel.id.toString(),
+            cwd = workspaceCwd,
+            enableMemory = profile.enableMemory,
+            injectedMemoryTableDocumentIds = profile.injectedMemoryTableDocumentIds.sorted(),
+            includesParentHistory = false,
+            reusedContext = reusedContext,
+        )
     }
 
     suspend fun askBtw(

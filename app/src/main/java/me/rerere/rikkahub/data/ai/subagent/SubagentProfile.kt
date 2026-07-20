@@ -107,6 +107,33 @@ enum class SubagentContextCompleteness {
     UNAVAILABLE,
 }
 
+/**
+ * Snapshot of what a child subagent actually received / was configured with at spawn.
+ * Used for the tool UI "transmitted context" panel (issue #166). Optional fields stay empty
+ * on early failures (profile not found, depth limit, context acquire fail).
+ */
+@Serializable
+data class SubagentTransferredContext(
+    @SerialName("system_prompt") val systemPrompt: String = "",
+    @SerialName("workspace_access") val workspaceAccess: String? = null,
+    @SerialName("workspace_approval") val workspaceApproval: String? = null,
+    @SerialName("can_spawn") val canSpawn: Boolean? = null,
+    @SerialName("inherit_tools") val inheritTools: Boolean? = null,
+    @SerialName("excluded_tools") val excludedTools: List<String> = emptyList(),
+    @SerialName("allowed_path_prefixes") val allowedPathPrefixes: List<String> = emptyList(),
+    @SerialName("child_tool_names") val childToolNames: List<String> = emptyList(),
+    @SerialName("skills") val skills: List<String> = emptyList(),
+    @SerialName("mcp_server_ids") val mcpServerIds: List<String> = emptyList(),
+    @SerialName("model_id") val modelId: String? = null,
+    @SerialName("cwd") val cwd: String? = null,
+    @SerialName("enable_memory") val enableMemory: Boolean = false,
+    @SerialName("injected_memory_table_document_ids")
+    val injectedMemoryTableDocumentIds: List<String> = emptyList(),
+    /** Always false for parent conversation history; reused context may still have prior child turns. */
+    @SerialName("includes_parent_history") val includesParentHistory: Boolean = false,
+    @SerialName("reused_context") val reusedContext: Boolean = false,
+)
+
 @Serializable
 data class SubagentResult(
     @SerialName("profile_name") val profileName: String,
@@ -130,6 +157,8 @@ data class SubagentResult(
     @SerialName("truncation_reason") val truncationReason: String? = null,
     @SerialName("started_at") val startedAtEpochMillis: Long? = null,
     @SerialName("ended_at") val endedAtEpochMillis: Long? = null,
+    /** Full child-side context package for UI / debugging (issue #166). */
+    @SerialName("transferred_context") val transferredContext: SubagentTransferredContext? = null,
 )
 
 @Serializable

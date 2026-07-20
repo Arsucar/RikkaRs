@@ -146,17 +146,84 @@ fun createSubagentTools(
             val profileSnapshot = getProfiles().firstOrNull { it.name == profileName }
             val result = spawn(profileName, task, description, reuseContextId)
             val listSerializer = ListSerializer(SubagentTranscriptStep.serializer())
+            val transferred = result.transferredContext
             val finalMetadata = buildJsonObject {
                 put("subagent_transcript", json.encodeToJsonElement(listSerializer, result.transcript))
                 put("subagent_profile", JsonPrimitive(result.profileName))
                 put("subagent_task", JsonPrimitive(task))
                 if (description.isNotBlank()) put("subagent_description", JsonPrimitive(description))
-                profileSnapshot?.systemPrompt?.takeIf { it.isNotBlank() }?.let {
-                    put("subagent_system_prompt", JsonPrimitive(it))
+                // Prefer assembled child system from spawn; fall back to profile snapshot.
+                val systemPrompt = transferred?.systemPrompt?.takeIf { it.isNotBlank() }
+                    ?: profileSnapshot?.systemPrompt?.takeIf { it.isNotBlank() }
+                systemPrompt?.let { put("subagent_system_prompt", JsonPrimitive(it)) }
+                put(
+                    "subagent_system_prompt_note",
+                    JsonPrimitive(
+                        "Child system = profile.systemPrompt. Tool-level Tool.systemPrompt fragments " +
+                            "are concatenated by the generation path; parent agent system is never injected.",
+                    ),
+                )
+                val workspaceAccess = transferred?.workspaceAccess
+                    ?: profileSnapshot?.workspaceAccess?.name
+                workspaceAccess?.let { put("subagent_workspace_access", JsonPrimitive(it)) }
+                val workspaceApproval = transferred?.workspaceApproval
+                    ?: profileSnapshot?.workspaceApproval?.name
+                workspaceApproval?.let { put("subagent_workspace_approval", JsonPrimitive(it)) }
+                val canSpawn = transferred?.canSpawn ?: profileSnapshot?.canSpawn
+                canSpawn?.let { put("subagent_can_spawn", JsonPrimitive(it)) }
+                val inheritTools = transferred?.inheritTools ?: profileSnapshot?.inheritTools
+                inheritTools?.let { put("subagent_inherit_tools", JsonPrimitive(it)) }
+                val excludedTools = transferred?.excludedTools
+                    ?: profileSnapshot?.excludedTools?.sorted().orEmpty()
+                put(
+                    "subagent_excluded_tools",
+                    buildJsonArray { excludedTools.forEach { add(it) } },
+                )
+                val pathPrefixes = transferred?.allowedPathPrefixes
+                    ?: profileSnapshot?.allowedPathPrefixes.orEmpty()
+                put(
+                    "subagent_path_prefixes",
+                    buildJsonArray { pathPrefixes.forEach { add(it) } },
+                )
+                put(
+                    "subagent_child_tools",
+                    buildJsonArray { transferred?.childToolNames.orEmpty().forEach { add(it) } },
+                )
+                val skills = transferred?.skills
+                    ?: profileSnapshot?.enabledSkills?.sorted().orEmpty()
+                put(
+                    "subagent_skills",
+                    buildJsonArray { skills.forEach { add(it) } },
+                )
+                val mcpServers = transferred?.mcpServerIds
+                    ?: profileSnapshot?.mcpServerIds?.map { it.toString() }?.sorted().orEmpty()
+                put(
+                    "subagent_mcp_servers",
+                    buildJsonArray { mcpServers.forEach { add(it) } },
+                )
+                put("subagent_depth", JsonPrimitive(result.depth))
+                transferred?.modelId?.takeIf { it.isNotBlank() }?.let {
+                    put("subagent_model_id", JsonPrimitive(it))
                 }
-                profileSnapshot?.workspaceAccess?.let {
-                    put("subagent_workspace_access", JsonPrimitive(it.name))
+                transferred?.cwd?.takeIf { it.isNotBlank() }?.let {
+                    put("subagent_cwd", JsonPrimitive(it))
                 }
+                val enableMemory = transferred?.enableMemory ?: profileSnapshot?.enableMemory ?: false
+                put("subagent_enable_memory", JsonPrimitive(enableMemory))
+                val memoryIds = transferred?.injectedMemoryTableDocumentIds
+                    ?: profileSnapshot?.injectedMemoryTableDocumentIds?.sorted().orEmpty()
+                put(
+                    "subagent_memory_table_ids",
+                    buildJsonArray { memoryIds.forEach { add(it) } },
+                )
+                put(
+                    "subagent_includes_parent_history",
+                    JsonPrimitive(transferred?.includesParentHistory ?: false),
+                )
+                put(
+                    "subagent_reused_context",
+                    JsonPrimitive(transferred?.reusedContext ?: false),
+                )
                 put("subagent_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_loop_steps", JsonPrimitive(result.toolLoopSteps))
                 put("subagent_tool_calls", JsonPrimitive(result.toolCallCount))

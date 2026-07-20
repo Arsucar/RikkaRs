@@ -274,6 +274,21 @@ internal fun isStreamingSubagentTool(part: UIMessagePart.Tool): Boolean {
     return textPart?.metadata?.get("subagent_streaming")?.jsonPrimitive?.contentOrNull == "true"
 }
 
+/** Keys rewritten on every streaming progress tick (do not preserve stale values). */
+private val STREAMING_SUBAGENT_PROGRESS_KEYS = setOf(
+    "subagent_transcript",
+    "subagent_profile",
+    "subagent_steps",
+    "subagent_tool_loop_steps",
+    "subagent_tool_calls",
+    "subagent_succeeded",
+    "subagent_streaming",
+    "subagent_context_id",
+    "subagent_context_status",
+    "subagent_task",
+    "subagent_description",
+)
+
 internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation {
     val updatedMessages = this.currentMessages.map { message ->
         if (message.role != MessageRole.ASSISTANT) return@map message
@@ -2289,29 +2304,6 @@ class ChatService(
                     0
                 }
             }
-            val transcriptMetadata = buildJsonObject {
-                put("subagent_transcript", json.encodeToJsonElement(listSerializer, transcript))
-                put("subagent_profile", JsonPrimitive(profileName))
-                put("subagent_steps", JsonPrimitive(loopSteps))
-                put("subagent_tool_loop_steps", JsonPrimitive(loopSteps))
-                put("subagent_tool_calls", JsonPrimitive(toolCalls))
-                put("subagent_succeeded", JsonPrimitive(false))
-                put("subagent_streaming", JsonPrimitive(true))
-                put("subagent_context_id", JsonPrimitive(contextId))
-                put("subagent_context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
-            }
-            val partialOutputText = buildJsonObject {
-                put("profile_name", JsonPrimitive(profileName))
-                put("succeeded", JsonPrimitive(false))
-                put("streaming", JsonPrimitive(true))
-                put("context_id", JsonPrimitive(contextId))
-                put("context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
-            }.toString()
-            val partialOutput = UIMessagePart.Text(
-                text = partialOutputText,
-                metadata = transcriptMetadata,
-            )
-
             updateConversationState(conversationId) { conversation ->
                 val messages = conversation.currentMessages
                 val lastAssistantIndex = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
@@ -2329,7 +2321,74 @@ class ChatService(
                     }
                     message.copy(parts = message.parts.map { part ->
                         if (part is UIMessagePart.Tool && matchesTool(part)) {
-                            part.copy(output = listOf(partialOutput))
+                            // Preserve task/description and other transferred-context keys from
+                            // prior progress / tool input so streaming updates do not wipe them.
+                            val priorMeta = part.output
+                                .filterIsInstance<UIMessagePart.Text>()
+                                .firstOrNull()
+                                ?.metadata
+                            val taskFromInput = part.input.let { input ->
+                                runCatching {
+                                    json.parseToJsonElement(input).jsonObject["task"]
+                                        ?.jsonPrimitive?.contentOrNull
+                                }.getOrNull()
+                            }
+                            val descriptionFromInput = part.input.let { input ->
+                                runCatching {
+                                    json.parseToJsonElement(input).jsonObject["description"]
+                                        ?.jsonPrimitive?.contentOrNull
+                                }.getOrNull()
+                            }
+                            val transcriptMetadata = buildJsonObject {
+                                priorMeta?.forEach { (key, value) ->
+                                    // Overwrite progress/runtime keys below; keep everything else.
+                                    if (key !in STREAMING_SUBAGENT_PROGRESS_KEYS) {
+                                        put(key, value)
+                                    }
+                                }
+                                put(
+                                    "subagent_transcript",
+                                    json.encodeToJsonElement(listSerializer, transcript),
+                                )
+                                put("subagent_profile", JsonPrimitive(profileName))
+                                put("subagent_steps", JsonPrimitive(loopSteps))
+                                put("subagent_tool_loop_steps", JsonPrimitive(loopSteps))
+                                put("subagent_tool_calls", JsonPrimitive(toolCalls))
+                                put("subagent_succeeded", JsonPrimitive(false))
+                                put("subagent_streaming", JsonPrimitive(true))
+                                put("subagent_context_id", JsonPrimitive(contextId))
+                                put(
+                                    "subagent_context_status",
+                                    JsonPrimitive(SubagentStatus.RUNNING.name),
+                                )
+                                val task = priorMeta?.get("subagent_task")
+                                    ?.jsonPrimitive?.contentOrNull
+                                    ?: taskFromInput
+                                if (!task.isNullOrBlank()) {
+                                    put("subagent_task", JsonPrimitive(task))
+                                }
+                                val description = priorMeta?.get("subagent_description")
+                                    ?.jsonPrimitive?.contentOrNull
+                                    ?: descriptionFromInput
+                                if (!description.isNullOrBlank()) {
+                                    put("subagent_description", JsonPrimitive(description))
+                                }
+                            }
+                            val partialOutputText = buildJsonObject {
+                                put("profile_name", JsonPrimitive(profileName))
+                                put("succeeded", JsonPrimitive(false))
+                                put("streaming", JsonPrimitive(true))
+                                put("context_id", JsonPrimitive(contextId))
+                                put("context_status", JsonPrimitive(SubagentStatus.RUNNING.name))
+                            }.toString()
+                            part.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        text = partialOutputText,
+                                        metadata = transcriptMetadata,
+                                    ),
+                                ),
+                            )
                         } else {
                             part
                         }
