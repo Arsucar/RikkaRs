@@ -52,10 +52,12 @@
 | 2026-07-21 | B1 并行冷构建 3 次 | 同冷构建命令 + `--parallel` | 241.007 s / 244.862 s / 248.219 s；median 244.862 s，较 baseline -4.62% | `a8575336` |
 | 2026-07-21 | B1 候选 assemble / test | `.\gradlew --no-daemon assembleDebug`; `.\gradlew --no-daemon test` | 45.515 s / 58.931 s，均 PASS | PASS |
 | 2026-07-21 | B1 设备安装 | `.\gradlew --no-daemon :app:installDebug` | `ebc3de22` 安装成功；offline 设备跳过 | PASS |
-| 2026-07-21 | R1 Markdown Web 模板缓存 | 聚焦 `MarkdownWebTest` | 首次因误用 `kotlin.test` 编译失败；改用仓库 JUnit4 后 2 tests PASS | ACCEPTED（待提交） |
+| 2026-07-21 | R1 Markdown Web 模板缓存 | 聚焦 `MarkdownWebTest` | 首次因误用 `kotlin.test` 编译失败；改用仓库 JUnit4 后 2 tests PASS | `9e225402` |
 | 2026-07-21 | R1 assemble / install | `assembleDebug`; `:app:installDebug` | wall 24.720 s；安装到 `ebc3de22` | PASS |
-| 2026-07-21 | R4 KeyRoulette 聚焦测试 | `:ai:testDebugUnitTest --tests me.rerere.ai.util.KeyRouletteTest` | 首两次因 Kotlin 泛型推断编译失败；显式 `LruCache` 类型后 3 tests PASS（含 8 线程公平轮换） | ACCEPTED（待提交） |
+| 2026-07-21 | R4 KeyRoulette 聚焦测试 | `:ai:testDebugUnitTest --tests me.rerere.ai.util.KeyRouletteTest` | 首两次因 Kotlin 泛型推断编译失败；显式 `LruCache` 类型后 3 tests PASS（含 8 线程公平轮换） | `fe91967d` |
 | 2026-07-21 | R4 assemble / install | `assembleDebug`; `:app:installDebug` | wall 38.241 s；安装到 `ebc3de22`；APK 未增大 | PASS |
+| 2026-07-21 | T2 workspace 临时目录清理 | `:workspace:testDebugUnitTest --tests me.rerere.workspace.WorkspaceChangedFileScannerTest` | 11 场景 PASS；每次测试后删除临时目录 | ACCEPTED（待提交） |
+| 2026-07-21 | T2 assemble | `.\gradlew --no-daemon assembleDebug` | wall 17.999 s，PASS | PASS |
 
 ## 已完成
 - [x] 创建 Prompt.md、Plan.md、Implement.md、Documentation.md
@@ -65,11 +67,11 @@
 - [x] 创建 `OPTIMIZATION_PLAN.md` 并完成 B2 增量性证据检查
 - [x] B1 并行 Gradle 冷构建中位数改善 4.62%，APK 零变化，测试与安装通过
 - [x] R1 Markdown Web 模板按 AssetManager 弱键缓存，聚焦测试、assemble、安装通过
+- [x] T2 workspace scanner 测试统一清理临时目录，聚焦测试与 assemble 通过
 
 ## 跳过 / 阻塞
 - B2：`web:buildWebUi` 连续两次 UP-TO-DATE，未发现可优化的重复构建。
 - detekt/ktlint：baseline 未配置，指标 N/A；不新增工具。
 
 ## 下一步
-- 提交 R4 KeyRoulette 进程内缓存；收益机制是每缓存文件减少重复读/解析，未声称运行时 wall 定量改善。
-- 继续验证 P1/P2 候选，跳过缺少可执行证据或兼容性保护的高风险改动。
+- 提交 T2 测试资源清理，并继续验证 P1/P2 候选，跳过缺少可执行证据或兼容性保护的高风险改动。

@@ -3,15 +3,26 @@ package me.rerere.workspace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assume.assumeNoException
+import org.junit.After
 import org.junit.Test
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 
 class WorkspaceChangedFileScannerTest {
+    private val tempDirectories = mutableListOf<File>()
+
+    @After
+    fun deleteTempDirectories() {
+        tempDirectories.forEach(File::deleteRecursively)
+    }
+
+    private fun createTempDirectory(prefix: String): File =
+        Files.createTempDirectory(prefix).toFile().also(tempDirectories::add)
+
     @Test
     fun scanReturnsStableWorkspacePathsForRecentRegularFiles() {
-        val root = Files.createTempDirectory("workspace-scan").toFile()
+        val root = createTempDirectory("workspace-scan")
         val startedAt = System.currentTimeMillis()
         File(root, "z.txt").apply { writeText("z"); setLastModified(startedAt) }
         File(root, "nested/a.txt").apply {
@@ -29,7 +40,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun scanPrunesLargeIgnoredDirectories() {
-        val root = Files.createTempDirectory("workspace-scan-pruned").toFile()
+        val root = createTempDirectory("workspace-scan-pruned")
         val startedAt = System.currentTimeMillis()
         File(root, ".git/objects/object").apply {
             requireNotNull(parentFile).mkdirs()
@@ -53,7 +64,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun scanTimeoutReturnsNoPartialResults() {
-        val root = Files.createTempDirectory("workspace-scan-timeout").toFile()
+        val root = createTempDirectory("workspace-scan-timeout")
         File(root, "file.txt").writeText("content")
         var now = 0L
         val scanner = WorkspaceChangedFileScanner(timeoutMillis = 1L, nanoTime = { now.also { now += 2_000_000L } })
@@ -63,7 +74,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun scanExcludesSymbolicLinks() {
-        val root = Files.createTempDirectory("workspace-scan-symlink").toFile()
+        val root = createTempDirectory("workspace-scan-symlink")
         val target = File(root, "target.txt").apply { writeText("target") }
         val link = File(root, "link.txt").toPath()
         try {
@@ -80,7 +91,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun scanAppliesStableChangedFileLimit() {
-        val root = Files.createTempDirectory("workspace-scan-limit").toFile()
+        val root = createTempDirectory("workspace-scan-limit")
         listOf("c.txt", "a.txt", "b.txt").forEach { name -> File(root, name).writeText(name) }
 
         assertEquals(
@@ -91,7 +102,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun scanDowngradesExpectedIoFailureButDoesNotSwallowFatalErrors() {
-        val root = Files.createTempDirectory("workspace-scan-errors").toFile()
+        val root = createTempDirectory("workspace-scan-errors")
         val ioScanner = WorkspaceChangedFileScanner(fileTreeWalker = { _, _ -> throw IOException("failed") })
         val fatalScanner = WorkspaceChangedFileScanner(fileTreeWalker = { _, _ -> throw OutOfMemoryError("fatal") })
 
@@ -101,7 +112,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun managerAddsChangedFilesOnlyToSuccessfulCommands() {
-        val baseDir = Files.createTempDirectory("workspace-manager-scan").toFile()
+        val baseDir = createTempDirectory("workspace-manager-scan")
         val runner = object : WorkspaceShellRunner {
             override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
                 File(context.filesDir, "generated.txt").apply {
@@ -122,7 +133,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun managerReportsModifiedExistingFileFromNestedWorkingDirectory() {
-        val baseDir = Files.createTempDirectory("workspace-manager-modified-scan").toFile()
+        val baseDir = createTempDirectory("workspace-manager-modified-scan")
         val runner = object : WorkspaceShellRunner {
             override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
                 File(context.workingDir, "existing.txt").apply {
@@ -147,7 +158,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun managerPreservesFailedCommandResultWithoutScanning() {
-        val baseDir = Files.createTempDirectory("workspace-manager-failed-scan").toFile()
+        val baseDir = createTempDirectory("workspace-manager-failed-scan")
         val runner = object : WorkspaceShellRunner {
             override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
                 File(context.filesDir, "side-effect.txt").writeText("created")
@@ -168,7 +179,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun managerPreservesTimedOutCommandResultWithoutScanning() {
-        val baseDir = Files.createTempDirectory("workspace-manager-timeout-scan").toFile()
+        val baseDir = createTempDirectory("workspace-manager-timeout-scan")
         val runner = object : WorkspaceShellRunner {
             override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
                 File(context.filesDir, "side-effect.txt").writeText("created")
@@ -193,7 +204,7 @@ class WorkspaceChangedFileScannerTest {
 
     @Test
     fun managerPreservesSuccessfulCommandResultWhenScanFails() {
-        val baseDir = Files.createTempDirectory("workspace-manager-scan-failure").toFile()
+        val baseDir = createTempDirectory("workspace-manager-scan-failure")
         val runner = object : WorkspaceShellRunner {
             override fun execute(context: WorkspaceShellContext) = WorkspaceCommandResult(
                 exitCode = 0,

@@ -34,7 +34,7 @@ is accepted only after evidence, comparable measurement, focused verification, `
 | A2 | P3 | `useLegacyPackaging=true` for native libraries | Potential packaging/install-size improvement | High: native/workspace loader behavior | Identical APK diff and device terminal/workspace smoke test | Pending evidence |
 | A3 | P3 | Review R8 keep rules/resources/baseline profile | Remove over-keep or improve startup only with release/device proof | High: reflection/startup regressions | Same variant analysis, install and startup verification | Pending evidence |
 | T1 | P4 | Add regression tests for accepted behavior changes | Prevent optimization regressions | Low | Affected module test tasks and final `test` | Pending |
-| T2 | P4 | Replace leaking temp-dir setup / real-time test waits when evidence supports it | Improve deterministic cleanup and reduce flakiness | Low/medium test semantics | Repeated focused test execution | Pending |
+| T2 | P4 | Replace leaking temp-dir setup / real-time test waits when evidence supports it | Delete workspace scanner test directories after each test to prevent disk pollution | Low | Focused workspace test and assemble | Accepted: 11 scenarios pass; cleanup hook added; no production behavior change |
 
 ## Rejection rules
 
