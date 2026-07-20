@@ -86,6 +86,29 @@ android {
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
             buildConfigField("String", "GITHUB_API_TOKEN", "\"${project.findProperty("github.api.token")?.toString() ?: ""}\"")
         }
+        // CI 试装包：独立 applicationId，可与正式版并存，不会覆盖安装 me.arsucar.rikka
+        create("prTest") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".pr"
+            versionNameSuffix = "-pr"
+            // 桌面显示名区分正式版（Manifest 用 @string/app_name）
+            resValue("string", "app_name", "RikkaRs PR")
+            buildConfigField(
+                "String",
+                "VERSION_NAME",
+                "\"${android.defaultConfig.versionName}-pr\"",
+            )
+            buildConfigField(
+                "String",
+                "VERSION_CODE",
+                "\"${android.defaultConfig.versionCode}\"",
+            )
+            buildConfigField(
+                "String",
+                "GITHUB_API_TOKEN",
+                "\"${project.findProperty("github.api.token")?.toString() ?: ""}\"",
+            )
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
