@@ -290,7 +290,7 @@ val dataSourceModule = module {
             memoryTableInjectionLoader = { parentAssistant, conversationId, selectedDocumentIds, settings ->
                 val parentEnabled = settings.enableMemoryTable && parentAssistant.enableMemoryTable
                 if (!parentEnabled || selectedDocumentIds.isEmpty()) {
-                    emptyList()
+                    me.rerere.rikkahub.data.ai.subagent.SubagentMemoryTableInjectLoad()
                 } else {
                     val assistantId = parentAssistant.id.toString()
                     val isolation = if (conversationId != null) {
@@ -303,6 +303,11 @@ val dataSourceModule = module {
                         assistantId = assistantId,
                         conversationId = conversationId?.toString(),
                     )
+                    val labels = me.rerere.rikkahub.data.ai.subagent.buildSubagentMemoryTableLabels(
+                        selectedDocumentIds = selectedDocumentIds,
+                        templates = templates,
+                        documents = documents,
+                    )
                     val (resolvedTemplates, resolvedDocuments) =
                         me.rerere.rikkahub.data.ai.subagent.resolveSubagentMemoryTableInjection(
                             selectedDocumentIds = selectedDocumentIds,
@@ -311,7 +316,7 @@ val dataSourceModule = module {
                             parentMemoryTableEnabled = true,
                             memoryTableIsolation = isolation,
                         )
-                    if (resolvedTemplates.isEmpty() || resolvedDocuments.isEmpty()) {
+                    val transformers = if (resolvedTemplates.isEmpty() || resolvedDocuments.isEmpty()) {
                         emptyList()
                     } else {
                         listOf(
@@ -324,6 +329,10 @@ val dataSourceModule = module {
                             ),
                         )
                     }
+                    me.rerere.rikkahub.data.ai.subagent.SubagentMemoryTableInjectLoad(
+                        transformers = transformers,
+                        labels = labels,
+                    )
                 }
             },
         )

@@ -297,6 +297,7 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
     val contextId = meta?.get("subagent_context_id")?.jsonPrimitive?.contentOrNull
     val enableMemory = meta?.metaBoolean("subagent_enable_memory")
     val memoryTableIds = meta.metaStringList("subagent_memory_table_ids")
+    val memoryTableLabels = meta.metaStringList("subagent_memory_table_labels")
     val memoryInjected = meta?.metaBoolean("subagent_memory_table_injected")
     val memorySkipReason = meta?.get("subagent_memory_table_skip_reason")?.jsonPrimitive?.contentOrNull
     val includesParentHistory = meta?.metaBoolean("subagent_includes_parent_history")
@@ -321,6 +322,7 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
         !cwd.isNullOrBlank() ||
         !contextId.isNullOrBlank() ||
         enableMemory != null ||
+        memoryTableLabels.isNotEmpty() ||
         memoryTableIds.isNotEmpty() ||
         memoryInjected != null ||
         !memorySkipReason.isNullOrBlank() ||
@@ -520,14 +522,22 @@ private fun SubagentTransferredContextSection(context: ToolUIContext) {
                     reasonLabel,
                 )
             }
+            val memoryDocsDisplay = when {
+                memoryTableLabels.isNotEmpty() -> memoryTableLabels.joinToString("\n")
+                memoryTableIds.isNotEmpty() -> memoryTableIds.joinToString("\n")
+                else -> stringResource(R.string.subagent_tool_ui_context_memory_table_empty)
+            }
             SubagentContextField(
-                stringResource(R.string.subagent_tool_ui_context_memory_table_configured_ids),
-                if (memoryTableIds.isEmpty()) {
-                    stringResource(R.string.subagent_tool_ui_context_memory_table_empty)
-                } else {
-                    memoryTableIds.joinToString(", ")
-                },
+                stringResource(R.string.subagent_tool_ui_context_memory_table_docs),
+                memoryDocsDisplay,
             )
+            // Secondary raw ids only when labels are shown (ids alone already cover the fallback path).
+            if (memoryTableLabels.isNotEmpty() && memoryTableIds.isNotEmpty()) {
+                SubagentContextField(
+                    stringResource(R.string.subagent_tool_ui_context_memory_table_configured_ids),
+                    memoryTableIds.joinToString("\n"),
+                )
+            }
             enableMemory?.let {
                 SubagentContextField(
                     stringResource(R.string.subagent_tool_ui_context_enable_memory),

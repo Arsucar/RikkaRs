@@ -216,6 +216,13 @@ fun createSubagentTools(
                     "subagent_memory_table_ids",
                     buildJsonArray { memoryIds.forEach { add(it) } },
                 )
+                val memoryLabels = transferred?.memoryTableLabels.orEmpty()
+                if (memoryLabels.isNotEmpty()) {
+                    put(
+                        "subagent_memory_table_labels",
+                        buildJsonArray { memoryLabels.forEach { add(it) } },
+                    )
+                }
                 put(
                     "subagent_memory_table_injected",
                     JsonPrimitive(transferred?.memoryTableInjected ?: false),

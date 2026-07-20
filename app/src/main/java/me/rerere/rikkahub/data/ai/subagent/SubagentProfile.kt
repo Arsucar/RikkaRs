@@ -133,6 +133,11 @@ data class SubagentTransferredContext(
      */
     @SerialName("injected_memory_table_document_ids")
     val injectedMemoryTableDocumentIds: List<String> = emptyList(),
+    /**
+     * Human-readable labels for configured/resolved memory table docs
+     * (template name preferred over raw UUID).
+     */
+    @SerialName("memory_table_labels") val memoryTableLabels: List<String> = emptyList(),
     /** True when at least one memory-table input transformer was built for this spawn. */
     @SerialName("memory_table_injected") val memoryTableInjected: Boolean = false,
     /**

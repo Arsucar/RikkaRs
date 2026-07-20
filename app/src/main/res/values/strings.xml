@@ -174,6 +174,7 @@
   <string name="subagent_tool_ui_context_memory_table_reason_not_configured">Not configured</string>
   <string name="subagent_tool_ui_context_memory_table_reason_reused_context">Skipped (reused context)</string>
   <string name="subagent_tool_ui_context_memory_table_reason_not_resolved">Not resolved (memory table off, isolation, missing docs, etc.)</string>
+  <string name="subagent_tool_ui_context_memory_table_docs">Memory tables</string>
   <string name="subagent_tool_ui_context_memory_table_configured_ids">Configured document ids</string>
   <string name="subagent_tool_ui_context_empty">(empty)</string>
   <string name="subagent_tool_ui_reasoning_label">Reasoning</string>

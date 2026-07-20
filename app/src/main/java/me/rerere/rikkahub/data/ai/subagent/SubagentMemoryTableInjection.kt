@@ -1,8 +1,46 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
+
+/**
+ * Result of loading memory-table injection transformers for a subagent spawn,
+ * plus human-readable labels for the transmitted-context UI.
+ */
+data class SubagentMemoryTableInjectLoad(
+    val transformers: List<InputMessageTransformer> = emptyList(),
+    /**
+     * Human labels for configured/resolved docs, e.g. "Default Table"
+     * or short id / "abcdef12 (missing)" when the template name is unavailable.
+     */
+    val labels: List<String> = emptyList(),
+)
+
+/**
+ * Build readable labels for configured memory-table document ids.
+ * Prefer template name (same as profile page chips); fall back to short id;
+ * mark configured ids that cannot be found as missing.
+ */
+fun buildSubagentMemoryTableLabels(
+    selectedDocumentIds: Set<String>,
+    templates: List<MemoryTableTemplate>,
+    documents: List<MemoryTableDocument>,
+): List<String> {
+    if (selectedDocumentIds.isEmpty()) return emptyList()
+    val templatesById = templates.associateBy { it.id }
+    val documentsById = documents.associateBy { it.id }
+    return selectedDocumentIds.sorted().map { id ->
+        val doc = documentsById[id]
+        if (doc == null) {
+            "${id.take(8)} (missing)"
+        } else {
+            templatesById[doc.templateId]?.name?.takeIf { it.isNotBlank() }
+                ?: id.take(8)
+        }
+    }
+}
 
 /**
  * Resolve selected memory table **document instances** into templates/documents

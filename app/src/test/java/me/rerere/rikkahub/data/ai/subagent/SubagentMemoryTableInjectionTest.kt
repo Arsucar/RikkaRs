@@ -90,6 +90,38 @@ class SubagentMemoryTableInjectionTest {
     }
 
     @Test
+    fun buildLabelsPrefersTemplateNameAndMarksMissing() {
+        // Sorted by configured id: d1, d2, missing-uuid-xxxx
+        val labels = buildSubagentMemoryTableLabels(
+            selectedDocumentIds = setOf("d2", "missing-uuid-xxxx", "d1"),
+            templates = templates,
+            documents = documents,
+        )
+        assertEquals(listOf("A", "B", "missing- (missing)"), labels)
+    }
+
+    @Test
+    fun buildLabelsFallsBackToShortIdWithoutTemplateName() {
+        val unlabeled = listOf(
+            MemoryTableTemplate(id = "t1", name = "  "),
+        )
+        val docs = listOf(
+            MemoryTableDocument(
+                id = "abcdef12-3456-7890",
+                templateId = "t1",
+                scopeType = MemoryTableScopeType.ASSISTANT,
+                scopeId = "a",
+            ),
+        )
+        val labels = buildSubagentMemoryTableLabels(
+            selectedDocumentIds = setOf("abcdef12-3456-7890"),
+            templates = unlabeled,
+            documents = docs,
+        )
+        assertEquals(listOf("abcdef12"), labels)
+    }
+
+    @Test
     fun profileRoundTripKeepsInjectedDocumentIds() {
         val profile = SubagentProfile(
             name = "researcher",

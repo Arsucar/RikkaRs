@@ -238,6 +238,7 @@ class SubagentRuntimeTest {
                         cwd = "/workspace",
                         enableMemory = false,
                         injectedMemoryTableDocumentIds = listOf("doc-a", "doc-b"),
+                        memoryTableLabels = listOf("Default Table", "Notes"),
                         memoryTableInjected = true,
                         memoryTableSkipReason = null,
                         includesParentHistory = false,
@@ -283,6 +284,8 @@ class SubagentRuntimeTest {
         assertNull(meta["subagent_memory_table_skip_reason"])
         assertTrue(meta["subagent_memory_table_ids"].toString().contains("doc-a"))
         assertTrue(meta["subagent_memory_table_ids"].toString().contains("doc-b"))
+        assertTrue(meta["subagent_memory_table_labels"].toString().contains("Default Table"))
+        assertTrue(meta["subagent_memory_table_labels"].toString().contains("Notes"))
         assertTrue(meta["subagent_child_tools"].toString().contains("workspace_read_file"))
         assertTrue(meta["subagent_skills"].toString().contains("skill-a"))
         assertTrue(meta["subagent_mcp_servers"].toString().contains(mcpId.toString()))
@@ -332,6 +335,7 @@ class SubagentRuntimeTest {
             childToolNames = listOf("a", "b"),
             skills = listOf("s"),
             injectedMemoryTableDocumentIds = listOf("doc-1"),
+            memoryTableLabels = listOf("Default Table"),
             memoryTableInjected = true,
             memoryTableSkipReason = null,
             includesParentHistory = false,
@@ -350,6 +354,7 @@ class SubagentRuntimeTest {
         assertEquals(true, decoded.transferredContext?.memoryTableInjected)
         assertNull(decoded.transferredContext?.memoryTableSkipReason)
         assertEquals(listOf("doc-1"), decoded.transferredContext?.injectedMemoryTableDocumentIds)
+        assertEquals(listOf("Default Table"), decoded.transferredContext?.memoryTableLabels)
 
         val skipCtx = SubagentTransferredContext(
             memoryTableInjected = false,
@@ -361,6 +366,7 @@ class SubagentRuntimeTest {
         )
         assertEquals(false, skipDecoded.memoryTableInjected)
         assertEquals("not_resolved", skipDecoded.memoryTableSkipReason)
+        assertTrue(skipDecoded.memoryTableLabels.isEmpty())
 
         // Backward compatible: old payloads without new fields deserialize to defaults.
         val legacy = json.decodeFromString(
@@ -369,6 +375,7 @@ class SubagentRuntimeTest {
         )
         assertEquals(false, legacy.memoryTableInjected)
         assertNull(legacy.memoryTableSkipReason)
+        assertTrue(legacy.memoryTableLabels.isEmpty())
     }
 
     @Test

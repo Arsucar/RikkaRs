@@ -247,7 +247,7 @@ class SubagentHost(
         conversationId: Uuid?,
         selectedDocumentIds: Set<String>,
         settings: Settings,
-    ) -> List<me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer>)? = null,
+    ) -> SubagentMemoryTableInjectLoad)? = null,
 ) {
     fun requestCancel(conversationId: Uuid, reason: String = SUBAGENT_STOPPED_REASON) {
         SubagentSessionRegistry.requestCancel(conversationId, reason)
@@ -391,7 +391,7 @@ class SubagentHost(
 
             var generationLimitReached = false
             var messages = acquiredContext.messages
-            val memoryTableTransformers = if (
+            val memoryTableLoad = if (
                 !contextAcquisition.reusedContext &&
                 profile.injectedMemoryTableDocumentIds.isNotEmpty()
             ) {
@@ -400,10 +400,11 @@ class SubagentHost(
                     conversationId,
                     profile.injectedMemoryTableDocumentIds,
                     settings,
-                ).orEmpty()
+                ) ?: SubagentMemoryTableInjectLoad()
             } else {
-                emptyList()
+                SubagentMemoryTableInjectLoad()
             }
+            val memoryTableTransformers = memoryTableLoad.transformers
             val memoryTableInjected = memoryTableTransformers.isNotEmpty()
             val memoryTableSkipReason = when {
                 memoryTableInjected -> null
@@ -414,6 +415,7 @@ class SubagentHost(
             transferredContext = checkNotNull(transferredContext).copy(
                 memoryTableInjected = memoryTableInjected,
                 memoryTableSkipReason = memoryTableSkipReason,
+                memoryTableLabels = memoryTableLoad.labels,
             )
 
             var preAssistantCount = messages.count { it.role == MessageRole.ASSISTANT }
