@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides and pre-modification rules for optimization changes"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicate helpers when consolidating modules/deps"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Module boundary and api/implementation changes cross layers"}
+{"file": ".trellis/spec/guides/repository-hygiene.md", "reason": "Keep temp device/debug artifacts out of commits"}
+{"file": ".trellis/spec/app/index.md", "reason": "App-layer quality checklist for compile/test after app changes"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/prd.md", "reason": "Requirements and acceptance for Plan resume"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/design.md", "reason": "Execution model and Plan-to-work mapping"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/implement.md", "reason": "Ordered checklist starting at P0 api/implementation"}
+{"file": "Plan.md", "reason": "Authoritative completion checklist"}
+{"file": "OPTIMIZATION_PLAN.md", "reason": "Candidate ledger and prior skip/accept status"}
+{"file": "OPTIMIZATION_NOTES.md", "reason": "Prior skip rationale to strengthen not replace"}
+{"file": "OPTIMIZATION_REPORT.md", "reason": "Premature report to revise after full Plan coverage"}

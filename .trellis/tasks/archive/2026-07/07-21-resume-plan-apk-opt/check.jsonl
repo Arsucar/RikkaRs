@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Quality and thinking-guide compliance on review"}
+{"file": ".trellis/spec/guides/repository-hygiene.md", "reason": "No temp/debug artifacts staged"}
+{"file": ".trellis/spec/app/index.md", "reason": "App compile/test verification expectations"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/prd.md", "reason": "Acceptance criteria and honest reporting rules"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/design.md", "reason": "Gates: no stage-6 until Plan resolved; evidence-rich skips"}
+{"file": ".trellis/tasks/07-21-resume-plan-apk-opt/implement.md", "reason": "Validation commands and review gates"}
+{"file": "Plan.md", "reason": "Verify checkboxes match actual residual work completion"}
+{"file": "OPTIMIZATION_PLAN.md", "reason": "Ledger status must match implemented/skipped evidence"}
+{"file": "OPTIMIZATION_REPORT.md", "reason": "Report claims must match measurements and Plan coverage"}
