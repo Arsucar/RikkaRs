@@ -136,6 +136,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+    val inputDraftLoading by vm.inputDraftLoading.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -412,6 +413,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 chatListState = chatListState,
                                 enableWebSearch = enableWebSearch,
                                 currentChatModel = currentChatModel,
+                                inputDraftLoading = inputDraftLoading,
                                 bigScreen = true,
                                 errors = errors,
                                 onDismissError = { vm.dismissError(it) },
@@ -444,6 +446,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 chatListState = chatListState,
                                 enableWebSearch = enableWebSearch,
                                 currentChatModel = currentChatModel,
+                                inputDraftLoading = inputDraftLoading,
                                 bigScreen = false,
                                 errors = errors,
                                 onDismissError = { vm.dismissError(it) },
@@ -480,6 +483,7 @@ private fun ChatPageContent(
     chatListState: LazyListState,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
+    inputDraftLoading: Boolean,
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
@@ -585,6 +589,12 @@ private fun ChatPageContent(
                         vm.stopGeneration()
                     },
                     enableSearch = enableWebSearch,
+                    inputDraftLoading = inputDraftLoading,
+                    inputDraftEnabled = conversation.currentMessages.isNotEmpty(),
+                    onGenerateInputDraft = {
+                        vm.generateInputDraft(conversation)
+                    },
+                    onCancelInputDraft = vm::cancelInputDraft,
                     onToggleSearch = {
                         vm.toggleWebSearch()
                     },

@@ -1982,5 +1982,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_cwd_set_assistant_default">アシスタントのデフォルトとして設定</string>
   <string name="subagent_step_tool">ツール呼び出し</string>
   <string name="extensions_subagents_open">サブエージェントプロファイルを開く</string>
+  <string name="input_draft_generate">返信の下書きを作成</string>
+  <string name="input_draft_cancel">返信の下書き作成をキャンセル</string>
+  <string name="input_draft_empty_conversation">会話のコンテキストがまだありません</string>
+  <string name="input_draft_model_unavailable">提案モデルまたは高速モデルを選択してください</string>
+  <string name="error_title_generate_input_draft">返信の下書きを生成できませんでした</string>
 </resources>
 

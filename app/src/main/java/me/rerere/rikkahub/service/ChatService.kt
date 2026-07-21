@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
@@ -42,11 +43,13 @@ import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
+import me.rerere.ai.ui.handleMessageChunk
 
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_INPUT_DRAFT_PROMPT
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.ai.GenerationPreparationMode
@@ -2084,6 +2087,46 @@ class ChatService(
         }.onFailure {
             it.printStackTrace()
         }
+    }
+
+    /** Streams a user-side reply draft without mutating or persisting the conversation. */
+    suspend fun generateInputDraft(
+        conversationId: Uuid,
+        conversation: Conversation,
+        onStreamUpdate: (String) -> Unit,
+    ): String {
+        require(conversation.id == conversationId) { "Conversation ID mismatch" }
+        require(conversation.currentMessages.isNotEmpty()) {
+            context.getString(R.string.input_draft_empty_conversation)
+        }
+        val settings = settingsStore.settingsFlow.first()
+        val model = settings.findModelById(
+            settings.suggestionModelId,
+            fallback = settings.fastModelId,
+        ) ?: error(context.getString(R.string.input_draft_model_unavailable))
+        val provider = model.findProvider(settings.providers)
+            ?: error(context.getString(R.string.input_draft_model_unavailable))
+        val providerHandler = providerManager.getProviderByType(provider)
+        val prompt = DEFAULT_INPUT_DRAFT_PROMPT.applyPlaceholders(
+            "locale" to Locale.getDefault().displayName,
+            "content" to conversation.currentMessages
+                .takeLast(8)
+                .joinToString("\n\n") { it.summaryAsText(maxLength = 500) },
+        )
+        var messages = listOf(UIMessage.user(prompt))
+        var draft = ""
+        val params = backgroundTextGenerationParams(model)
+        ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
+        providerHandler.streamText(
+            providerSetting = provider,
+            messages = messages,
+            params = params,
+        ).collect { chunk ->
+            messages = messages.handleMessageChunk(chunk, model)
+            draft = messages.lastOrNull()?.toText()?.trimStart().orEmpty()
+            onStreamUpdate(draft)
+        }
+        return draft.trim()
     }
 
     // ---- 压缩对话历史 ----

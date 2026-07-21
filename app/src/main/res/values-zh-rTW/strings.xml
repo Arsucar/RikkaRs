@@ -1996,5 +1996,10 @@
   <string name="workspace_cwd_set_assistant_default">設為助手預設</string>
   <string name="subagent_step_tool">工具呼叫</string>
   <string name="extensions_subagents_open">開啟子代理設定檔</string>
+  <string name="input_draft_generate">撰寫回覆草稿</string>
+  <string name="input_draft_cancel">取消回覆草稿</string>
+  <string name="input_draft_empty_conversation">尚無對話上下文</string>
+  <string name="input_draft_model_unavailable">請先選擇建議模型或快速模型</string>
+  <string name="error_title_generate_input_draft">回覆草稿生成失敗</string>
 </resources>
 
