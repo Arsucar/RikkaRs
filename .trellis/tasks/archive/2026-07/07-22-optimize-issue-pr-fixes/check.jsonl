@@ -1,0 +1,6 @@
+{"file":".trellis/spec/app/index.md","reason":"App quality gates and compile expectations."}
+{"file":".trellis/spec/app/memory-capabilities.md","reason":"Verify real CAS and snapshot behavior."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Verify resource coverage and placeholders."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Review cancellation, late callbacks, and state ownership."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace end-to-end data and error propagation."}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Run the required UI verification matrix."}
