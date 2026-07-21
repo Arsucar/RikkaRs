@@ -222,6 +222,7 @@ dependencies {
     // okhttp
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
+    implementation(libs.okhttp.logging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization.json)
 
@@ -271,6 +272,13 @@ dependencies {
 
     // Apache Commons Text
     implementation(libs.commons.text)
+
+    // FloatingX (app-only overlay; not used by :common)
+    // https://github.com/Petterpx/FloatingX
+    implementation(libs.floatingx)
+
+    // jsoup (HTML rendering in app; no longer re-exported by :search)
+    implementation(libs.jsoup)
 
     // Toast (Sonner)
     implementation(libs.sonner)

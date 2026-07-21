@@ -59,15 +59,17 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
 
-    // okhttp
+    // okhttp — Provider surfaces take/return OkHttpClient, Request, Response, EventSource
     api(libs.okhttp)
     api(libs.okhttp.sse)
-    api(libs.okhttp.logging)
 
-    // kotlinx
+    // kotlinx — Message / provider models expose serialization + datetime types
     api(libs.kotlinx.serialization.json)
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.datetime)
+
+    // StringEscapeUtils used only inside GoogleProvider (not part of public surface)
+    implementation(libs.commons.text)
 
     // tests
     testImplementation(libs.junit)

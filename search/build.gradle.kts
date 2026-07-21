@@ -54,7 +54,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
-    api(libs.jsoup)
+    // jsoup is internal to BingSearchService only; not part of search public signatures
+    implementation(libs.jsoup)
     implementation(libs.quickjs)
     testImplementation(libs.junit)
 }

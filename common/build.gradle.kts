@@ -37,29 +37,19 @@ android {
 }
 
 dependencies {
-    // okhttp
+    // okhttp — public types (OkHttpClient, Request, Response, SSE) appear in common APIs
     api(libs.okhttp)
     api(libs.okhttp.sse)
-    api(libs.okhttp.logging)
 
-    // kotlinx
+    // kotlinx — public types appear in common APIs / serialization helpers
     api(libs.kotlinx.serialization.json)
     api(libs.kotlinx.coroutines.core)
-    api(libs.kotlinx.datetime)
-
-    // apache commons
-    api(libs.commons.text)
-
-    // floating
-    // https://github.com/Petterpx/FloatingX
-    api(libs.floatingx)
-    api(libs.floatingx.compose)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
-    // quickjs
+    // quickjs — injectFetch extends QuickJSContext in the public common API
     api(libs.quickjs)
 
     testImplementation(libs.junit)
