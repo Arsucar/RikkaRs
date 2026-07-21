@@ -319,7 +319,7 @@ fun ChatInput(
                         ActionIconButton(
                             onClick = if (inputDraftLoading) onCancelInputDraft else onGenerateInputDraft,
                             enabled = inputDraftLoading || canGenerateInputDraft(
-                                conversationHasMessages = inputDraftEnabled,
+                                hasReplyTarget = inputDraftEnabled,
                                 isEditing = state.isEditing(),
                                 asrStatus = asrState.status,
                             ),

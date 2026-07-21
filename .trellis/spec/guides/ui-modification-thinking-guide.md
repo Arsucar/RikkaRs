@@ -56,6 +56,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
 | UI-only compile as visual validation | Layout, theme, keyboard, and gesture regressions reach users | Record device/screenshot limitations honestly and cover the matrix below |
 | Reply draft and ASR both write the composer | Recording or late model chunks overwrite user text | Make asynchronous composer producers mutually exclusive and keep cancellation generation-guarded |
+| Non-empty conversation treated as a valid reply target | Draft action appears after a user-only turn or during a streaming assistant reply | Require a completed latest assistant turn for actions that semantically reply to the assistant |
 
 ## Verification Matrix
 

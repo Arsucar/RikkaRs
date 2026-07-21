@@ -1,13 +1,19 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import me.rerere.asr.ASRStatus
+import me.rerere.ai.core.MessageRole
+
+internal fun hasInputDraftReplyTarget(
+    latestMessageRole: MessageRole?,
+    mainGenerationActive: Boolean,
+): Boolean = !mainGenerationActive && latestMessageRole == MessageRole.ASSISTANT
 
 internal fun canGenerateInputDraft(
-    conversationHasMessages: Boolean,
+    hasReplyTarget: Boolean,
     isEditing: Boolean,
     asrStatus: ASRStatus,
 ): Boolean =
-    conversationHasMessages &&
+    hasReplyTarget &&
         !isEditing &&
         (asrStatus == ASRStatus.Idle || asrStatus == ASRStatus.Error)
 

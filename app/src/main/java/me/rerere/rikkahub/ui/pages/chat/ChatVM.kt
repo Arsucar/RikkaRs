@@ -61,6 +61,7 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.components.ai.hasInputDraftReplyTarget
 import me.rerere.rikkahub.ui.components.ai.requireInputDraftText
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
@@ -506,7 +507,15 @@ class ChatVM(
     }
 
     fun generateInputDraft(conversation: Conversation) {
-        if (inputDraftJob?.isActive == true || inputState.isEditing()) return
+        if (inputDraftJob?.isActive == true ||
+            inputState.isEditing() ||
+            !hasInputDraftReplyTarget(
+                latestMessageRole = conversation.currentMessages.lastOrNull()?.role,
+                mainGenerationActive = conversationJob.value != null,
+            )
+        ) {
+            return
+        }
         val generation = ++inputDraftGeneration
         val originalText = inputState.textContent.text.toString()
         originalInputDraftText = originalText

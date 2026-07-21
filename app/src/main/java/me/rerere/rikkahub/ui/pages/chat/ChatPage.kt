@@ -91,6 +91,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
+import me.rerere.rikkahub.ui.components.ai.hasInputDraftReplyTarget
 import me.rerere.rikkahub.ui.components.ai.completion.DefaultModelCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.SlashCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.completion.PresetCompletionProvider
@@ -590,7 +591,10 @@ private fun ChatPageContent(
                     },
                     enableSearch = enableWebSearch,
                     inputDraftLoading = inputDraftLoading,
-                    inputDraftEnabled = conversation.currentMessages.isNotEmpty(),
+                    inputDraftEnabled = hasInputDraftReplyTarget(
+                        latestMessageRole = conversation.currentMessages.lastOrNull()?.role,
+                        mainGenerationActive = loadingJob != null,
+                    ),
                     onGenerateInputDraft = {
                         vm.generateInputDraft(conversation)
                     },
