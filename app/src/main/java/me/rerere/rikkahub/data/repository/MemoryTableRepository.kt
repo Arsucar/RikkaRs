@@ -294,6 +294,43 @@ class MemoryTableRepository(
         upsertDocumentInternal(document)
     }
 
+    // #170: optional revision CAS for tool writes. Reads the current document, compares
+    // its revision to the caller's expected revision inside a single transaction, and only
+    // persists when they match. Covers assistant AND global scope (the DAO CAS SQL only
+    // matches assistant/conversation), reusing the same snapshot + revision-bump path as
+    // last-write-wins so behavior is otherwise identical.
+    suspend fun upsertDocumentWithCas(
+        document: MemoryTableDocument,
+        expectedRevision: Int,
+        actorAssistantId: String,
+        actorConversationId: String? = null,
+    ): MemoryTableDocument = inTransaction {
+        val old = document.id
+            .takeIf { it.isNotBlank() }
+            ?.let { dao.getEffectiveDocumentIncludingDeleted(it, actorAssistantId, actorConversationId) }
+            ?: error("memory table document not found or not authorized: ${document.id}")
+        if (old.deletedAt != null) {
+            throw MemoryTableDocumentDeletedException(old.id)
+        }
+        if (old.revision != expectedRevision) {
+            throw MemoryTableRevisionConflictException(
+                documentId = old.id,
+                expectedRevision = expectedRevision,
+                actualRevision = old.revision,
+            )
+        }
+        val template = dao.getEffectiveTemplate(document.templateId, actorAssistantId)
+            ?.takeIf { it.isEffectiveFor(actorAssistantId) }
+            ?: error("memory table template not found or not authorized: ${document.templateId}")
+        ensureDocumentScopeAuthorized(
+            document = document,
+            template = template,
+            actorAssistantId = actorAssistantId,
+            actorConversationId = actorConversationId,
+        )
+        upsertDocumentInternal(document)
+    }
+
     // #96: list stored revision snapshots for a document, newest revision first.
     suspend fun getDocumentSnapshots(
         documentId: String,
@@ -674,6 +711,17 @@ class MemoryTableDocumentDeletedException(
     val documentId: String,
 ) : IllegalStateException(
     "memory table document is in trash and must be restored before writing: $documentId"
+)
+
+// #170: raised when a tool write supplies an expected_revision that no longer matches the
+// stored document revision (optimistic concurrency / CAS). Mirrors the Hook path's
+// MEMORY_TABLE_REVISION_CONFLICT semantics so tool and hook writes report the same conflict.
+class MemoryTableRevisionConflictException(
+    val documentId: String,
+    val expectedRevision: Int,
+    val actualRevision: Int,
+) : IllegalStateException(
+    "memory table revision conflict for $documentId: expected $expectedRevision but current is $actualRevision"
 )
 
 enum class MemoryTableSoftDeleteResult {

@@ -2,16 +2,20 @@ package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.MemoryTableRevisionConflictException
 import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -1600,6 +1604,243 @@ class MemoryTableToolsTest {
         val payload = json.parseToJsonElement(result.text).jsonObject
         assertEquals("false", payload.getValue("success").jsonPrimitive.content)
         assertTrue(payload.getValue("error").jsonPrimitive.content.contains("payload_json"))
+    }
+
+    // #170: payload_json may be supplied as a raw JSON object instead of an encoded string.
+    @Test
+    fun upsertRowsAcceptsPayloadJsonAsObject() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { null },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("template_id", "template")
+                putJsonObject("payload_json") {
+                    put("topic", "structured")
+                }
+            }
+        )
+
+        val payload = json.parseToJsonElement(captured?.payloadJson.orEmpty()).jsonObject
+        assertEquals("structured", payload.getValue("topic").jsonPrimitive.content)
+    }
+
+    // #170: ops may be supplied as a raw JSON array instead of an encoded string.
+    @Test
+    fun applyOpsAcceptsOpsAsArray() = runBlocking {
+        var captured: MemoryTableDocument? = null
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = {
+                document(
+                    "doc",
+                    MemoryTableScopeType.ASSISTANT,
+                    "assistant-a",
+                    payloadJson = """{"facts":[{"key":"name","value":"Ada"}]}""",
+                )
+            },
+            upsertDocument = {
+                captured = it
+                it
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "apply_ops")
+                put("document_id", "doc")
+                put(
+                    "ops",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("type", "insert")
+                                put("table", "facts")
+                                putJsonObject("row") {
+                                    put("key", "pet")
+                                    put("value", "cat")
+                                }
+                            }
+                        )
+                    },
+                )
+            }
+        )
+
+        val facts = json.parseToJsonElement(captured?.payloadJson.orEmpty())
+            .jsonObject.getValue("facts").jsonArray
+        assertEquals(2, facts.size)
+    }
+
+    // #170: read/query responses carry document_id, template_id, revision and resolved_row_keys.
+    @Test
+    fun readPacksIdentityAndResolvedRowKeys() = runBlocking {
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = {
+                listOf(
+                    document(
+                        "doc",
+                        MemoryTableScopeType.ASSISTANT,
+                        "assistant-a",
+                        payloadJson = """{"facts":[]}""",
+                    ).copy(revision = 3),
+                )
+            },
+            getDocument = { error("unexpected get") },
+            upsertDocument = { error("unexpected upsert") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "read")
+            }
+        ).single() as UIMessagePart.Text
+
+        val first = json.parseToJsonElement(result.text).jsonArray.single().jsonObject
+        assertEquals("doc", first.getValue("document_id").jsonPrimitive.content)
+        assertEquals("template", first.getValue("template_id").jsonPrimitive.content)
+        assertEquals("3", first.getValue("revision").jsonPrimitive.content)
+        assertEquals(
+            "key",
+            first.getValue("resolved_row_keys").jsonObject.getValue("facts").jsonPrimitive.content,
+        )
+    }
+
+    // #170: a matching expected_revision applies through the CAS write path.
+    @Test
+    fun patchRowsWithMatchingExpectedRevisionUsesCasWrite() = runBlocking {
+        var casCalls = 0
+        var lastExpectedRevision: Int? = null
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}]}""",
+        ).copy(revision = 5)
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = { error("last-write-wins path must not be used") },
+            upsertDocumentWithCas = { document, expectedRevision ->
+                casCalls++
+                lastExpectedRevision = expectedRevision
+                document.copy(revision = document.revision + 1)
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("expected_revision", 5)
+                put("payload_json", """{"facts":[{"key":"role","value":"eng"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        assertEquals(1, casCalls)
+        assertEquals(5, lastExpectedRevision)
+        val payload = json.parseToJsonElement(result.text).jsonObject
+        assertEquals("doc", payload.getValue("document_id").jsonPrimitive.content)
+    }
+
+    // #170: a stale expected_revision surfaces a tagged REVISION_CONFLICT and does not write.
+    @Test
+    fun upsertRowsWithStaleExpectedRevisionReturnsConflict() = runBlocking {
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[]}""",
+        ).copy(revision = 7)
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = { error("last-write-wins path must not be used") },
+            upsertDocumentWithCas = { _, expectedRevision ->
+                throw MemoryTableRevisionConflictException(
+                    documentId = "doc",
+                    expectedRevision = expectedRevision,
+                    actualRevision = existing.revision,
+                )
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("document_id", "doc")
+                put("expected_revision", 3)
+                put("payload_json", """{"facts":[{"key":"name","value":"Grace"}]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        val payload = json.parseToJsonElement(result.text).jsonObject
+        assertEquals("false", payload.getValue("success").jsonPrimitive.content)
+        assertEquals("REVISION_CONFLICT", payload.getValue("error_code").jsonPrimitive.content)
+        assertEquals("3", payload.getValue("expected_revision").jsonPrimitive.content)
+        assertEquals("7", payload.getValue("actual_revision").jsonPrimitive.content)
+    }
+
+    // #170: omitting expected_revision keeps the last-write-wins path (no CAS).
+    @Test
+    fun patchRowsWithoutExpectedRevisionUsesLastWriteWins() = runBlocking {
+        var lwwCalls = 0
+        val existing = document(
+            id = "doc",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"facts":[{"key":"name","value":"Ada"}]}""",
+        )
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { existing },
+            upsertDocument = {
+                lwwCalls++
+                it
+            },
+            upsertDocumentWithCas = { _, _ -> error("CAS path must not be used without expected_revision") },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        tool.execute(
+            buildJsonObject {
+                put("action", "patch_rows")
+                put("document_id", "doc")
+                put("payload_json", """{"facts":[{"key":"role","value":"eng"}]}""")
+            }
+        )
+
+        assertEquals(1, lwwCalls)
     }
 
     private fun template(

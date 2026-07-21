@@ -1747,6 +1747,14 @@ class ChatService(
                         actorConversationId = conversation.id.toString(),
                     )
                 },
+                upsertDocumentWithCas = { document, expectedRevision ->
+                    memoryTableRepository.upsertDocumentWithCas(
+                        document = document,
+                        expectedRevision = expectedRevision,
+                        actorAssistantId = assistant.id.toString(),
+                        actorConversationId = conversation.id.toString(),
+                    )
+                },
                 deleteDocument = { documentId ->
                     memoryTableRepository.softDeleteDocument(
                         id = documentId,
