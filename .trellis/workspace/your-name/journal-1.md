@@ -1569,3 +1569,40 @@ Fixed final workspace review findings, revalidated compile/tests and device inst
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: 优化 Issue 与 PR 修复
+
+**Date**: 2026-07-22
+**Task**: 优化 Issue 与 PR 修复
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+合并 PR #171/#173，修复回复草稿编辑态、空响应与 ASR 竞态，校正 #170 记忆表 CAS 工具契约并补 Repository 测试，统一 Trellis task/no-task UI 验证规则；聚焦测试、资源/Kotlin 编译及真机安装通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7c8bf052` | (see git log) |
+| `a31222e0` | (see git log) |
+| `626758f2` | (see git log) |
+| `7b6c8697` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
