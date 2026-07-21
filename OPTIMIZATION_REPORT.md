@@ -4,7 +4,7 @@ Date: 2026-07-21
 Branch: `release/rikka-arsucar`
 Starting commit: `a07d71b3b634d3f97d519d693b58f8174ff083b5`
 Resume task: `.trellis/tasks/07-21-resume-plan-apk-opt`
-Final report commit: pending until the archive work commit is created (no push)
+Final work commit: `b70b1ec5` (no push)
 
 ## Outcome (honest)
 
@@ -54,7 +54,7 @@ APK path: `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` (arm64-v8a debug
 | P2 Quality | 5/5 | detekt/ktlint N/A; A4 patreon drawable; coupling/dup/tests documented |
 | P3 Resources/R8 | 4/4 | A4 unused drawable; R8/packaging/baseline profile reviewed-skip |
 | P4 Tests | 3/3 | No new forced tests for entity-ID key/Coil identity/Gradle-only changes; final test run by check; no CI/AndroidTest |
-| Stage 6 Finish | 5/6 | Remeasured; assemble+test+install; NOTES/REPORT revised; work commit pending |
+| Stage 6 Finish | 6/6 | Remeasured; assemble+test+install; NOTES/REPORT revised; work commit `b70b1ec5` |
 
 ## Accepted work (commits + resume uncommitted)
 

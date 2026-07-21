@@ -414,4 +414,4 @@ Cold protocol (same as baseline):
   - SHA-256: `37754831F6E0D064466B99C7CE33131B03F296AC175BB5C242594BC3BAAAF56D`
 - Check gates already green: compile, 960 tests, install on `ebc3de22`
 - `OPTIMIZATION_REPORT.md` rewritten as Plan-resume report with coverage matrix
-- Git commit pending until the archive work commit is created
+- Work commit created: `b70b1ec5`; no push performed

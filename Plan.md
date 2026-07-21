@@ -61,6 +61,6 @@
 - [x] 执行最终 assembleDebug、test 和适用的设备安装验收（assemble via cold; test PASS; installDebug PASS `ebc3de22`）
 - [x] 完成 `OPTIMIZATION_NOTES.md`（存在失败、跳过或验证缺口时）
 - [x] 生成 `OPTIMIZATION_REPORT.md`（已修订为 Plan resume 版：覆盖矩阵 + 诚实 −20% 未达标）
-- [ ] 最终提交：待本轮 work commit 完成后更新（用户已明确要求修复并归档；不 push）
+- [x] 最终提交：`b70b1ec5`（用户已明确要求修复并归档；不 push）
 
 验证：报告明确区分“达到目标”“改善但未达标”“N/A”“未验证”，不隐藏失败或波动。
