@@ -86,13 +86,14 @@ android {
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
             buildConfigField("String", "GITHUB_API_TOKEN", "\"${project.findProperty("github.api.token")?.toString() ?: ""}\"")
         }
-        // CI 试装包：独立 applicationId，可与正式版并存，不会覆盖安装 me.arsucar.rikka
+        // CI 试装包：独立 applicationId，可与正式版并存，不会覆盖安装 me.arsucar.rikka。
+        // 基于 debug，跳过 R8 / shrinkResources / lintVitalRelease，缩短 PR 试装构建时间。
         create("prTest") {
-            initWith(getByName("release"))
+            initWith(getByName("debug"))
             applicationIdSuffix = ".pr"
             versionNameSuffix = "-pr"
-            // 库模块无 prTest variant 时回退到 release
-            matchingFallbacks += listOf("release")
+            // 库模块无 prTest variant 时回退到 debug
+            matchingFallbacks += listOf("debug")
             // 桌面显示名区分正式版（Manifest 用 @string/app_name）
             resValue("string", "app_name", "RikkaRs PR")
             buildConfigField(

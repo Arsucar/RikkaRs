@@ -1,6 +1,7 @@
 # 轻量试装包：对任意分支 / commit 手动出 arm64 prTest APK。
 # 用法：Actions → PR / Branch APK → Run workflow → 可选填 ref（空则用所选 branch）
 # 产物：Artifacts；applicationId = me.arsucar.rikka.pr，不覆盖正式版 me.arsucar.rikka。
+# prTest 基于 debug：无 R8 / shrinkResources / release 签名，优先构建速度。
 # 不覆盖 nightly、不 bump 版本、不发 Release。
 # 关联：Closes #167
 name: PR / Branch APK
@@ -38,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.ref.outputs.value }}
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: recursive
 
       - name: Set up JDK
@@ -69,32 +70,17 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+            ~/.gradle/build-cache-1
+            .gradle/configuration-cache
+          key: ${{ runner.os }}-gradle-v2-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml', 'gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-v2-
 
-      - name: Prepare signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::KEYSTORE_BASE64 secret is missing"
-            exit 1
-          fi
-          echo "$KEYSTORE_BASE64" | base64 -d > rikka-arsucar-release.jks
-          cat >> local.properties << EOF
-          storeFile=rikka-arsucar-release.jks
-          storePassword=${KEYSTORE_PASSWORD}
-          keyAlias=${KEY_ALIAS}
-          keyPassword=${KEY_PASSWORD}
-          EOF
-
-      # prTest：applicationIdSuffix=.pr，与正式版并存，不会覆盖安装
+      # prTest：applicationIdSuffix=.pr，与正式版并存，不会覆盖安装；基于 debug 签名
       - name: Assemble prTest
         run: |
           chmod +x gradlew
-          ./gradlew :app:assemblePrTest --no-daemon
+          ./gradlew :app:assemblePrTest --no-daemon --build-cache
 
       - name: Short SHA
         id: meta
