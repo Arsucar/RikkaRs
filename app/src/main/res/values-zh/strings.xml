@@ -2158,5 +2158,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="input_draft_empty_conversation">暂无会话上下文</string>
   <string name="input_draft_model_unavailable">请先选择建议模型或快速模型</string>
   <string name="error_title_generate_input_draft">回复草稿生成失败</string>
+  <string name="input_draft_empty_response">AI 返回了空白草稿。</string>
 </resources>
 

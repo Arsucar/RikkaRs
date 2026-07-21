@@ -318,7 +318,11 @@ fun ChatInput(
 
                         ActionIconButton(
                             onClick = if (inputDraftLoading) onCancelInputDraft else onGenerateInputDraft,
-                            enabled = inputDraftLoading || inputDraftEnabled,
+                            enabled = inputDraftLoading || canGenerateInputDraft(
+                                conversationHasMessages = inputDraftEnabled,
+                                isEditing = state.isEditing(),
+                                asrStatus = asrState.status,
+                            ),
                         ) {
                             if (inputDraftLoading) {
                                 CircularProgressIndicator(

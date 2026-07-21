@@ -2001,5 +2001,6 @@
   <string name="input_draft_empty_conversation">尚無對話上下文</string>
   <string name="input_draft_model_unavailable">請先選擇建議模型或快速模型</string>
   <string name="error_title_generate_input_draft">回覆草稿生成失敗</string>
+  <string name="input_draft_empty_response">AI 傳回了空白草稿。</string>
 </resources>
 

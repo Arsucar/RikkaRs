@@ -2169,5 +2169,6 @@
   <string name="input_draft_empty_conversation">There is no conversation context yet</string>
   <string name="input_draft_model_unavailable">Select a suggestion or fast model first</string>
   <string name="error_title_generate_input_draft">Reply draft generation failed</string>
+  <string name="input_draft_empty_response">The AI returned an empty draft.</string>
 </resources>
 

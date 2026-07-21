@@ -61,6 +61,7 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.components.ai.requireInputDraftText
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
 import java.util.Locale
@@ -505,7 +506,7 @@ class ChatVM(
     }
 
     fun generateInputDraft(conversation: Conversation) {
-        if (inputDraftJob?.isActive == true) return
+        if (inputDraftJob?.isActive == true || inputState.isEditing()) return
         val generation = ++inputDraftGeneration
         val originalText = inputState.textContent.text.toString()
         originalInputDraftText = originalText
@@ -514,7 +515,7 @@ class ChatVM(
         inputDraftJob = viewModelScope.launch {
             _inputDraftLoading.value = true
             try {
-                val completedDraft = chatService.generateInputDraft(
+                val generatedDraft = chatService.generateInputDraft(
                     conversationId = _conversationId,
                     conversation = conversation,
                 ) streamUpdate@{ partial ->
@@ -533,6 +534,10 @@ class ChatVM(
                     lastInputDraftText = partial
                     inputState.setMessageText(partial)
                 }
+                val completedDraft = requireInputDraftText(
+                    draft = generatedDraft,
+                    emptyMessage = context.getString(R.string.input_draft_empty_response),
+                )
                 if (generation == inputDraftGeneration &&
                     inputState.textContent.text.toString() == lastInputDraftText
                 ) {

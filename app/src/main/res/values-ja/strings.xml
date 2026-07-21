@@ -1987,5 +1987,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="input_draft_empty_conversation">会話のコンテキストがまだありません</string>
   <string name="input_draft_model_unavailable">提案モデルまたは高速モデルを選択してください</string>
   <string name="error_title_generate_input_draft">返信の下書きを生成できませんでした</string>
+  <string name="input_draft_empty_response">AIが空の下書きを返しました。</string>
 </resources>
 
