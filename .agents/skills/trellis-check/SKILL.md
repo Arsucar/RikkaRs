@@ -52,6 +52,18 @@ When multiple sub-agents are running in parallel, only the final `trellis-check`
 
 ## Step 4: Review Against Checklist
 
+### UI Changes
+
+If any changed file affects a user-visible Compose screen, dialog, sheet, list, gesture,
+state indicator, string, or accessibility behavior:
+
+- [ ] Read `.trellis/spec/guides/ui-modification-thinking-guide.md`.
+- [ ] Review its content/state/viewport/theme/accessibility/interaction matrix.
+- [ ] If an active Trellis task exists, confirm its PRD/design records the applicable UI acceptance cases.
+- [ ] Without a task, confirm the same matrix evidence is captured in the check or delivery report; missing PRD/design is not a failure.
+- [ ] If the change exposed a new reusable rule, failure mode, or UI contract, confirm the guide was updated in the same change.
+- [ ] Do not report device visual or gesture verification as passed when no device inspection occurred.
+
 ### Code Quality
 
 - [ ] Linter passes?

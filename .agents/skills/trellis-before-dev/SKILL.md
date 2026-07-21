@@ -35,6 +35,15 @@ Execute these steps:
    cat .trellis/spec/guides/index.md
    ```
 
+   If the task changes any user-visible Compose screen, dialog, sheet, list, gesture,
+   state indicator, string, or accessibility behavior, also read:
+   ```bash
+   cat .trellis/spec/guides/ui-modification-thinking-guide.md
+   ```
+   Treat its checklist as a required pre-edit gate, not as optional background reading.
+   This remains required for direct edits without a Trellis task; record verification
+   evidence in the delivery report instead of creating placeholder task artifacts.
+
 7. Understand the coding standards and patterns you need to follow, then proceed with your development plan.
 
 This step is **mandatory** before writing any code.

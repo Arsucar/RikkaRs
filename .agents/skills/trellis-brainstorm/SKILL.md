@@ -54,6 +54,12 @@ Use a concise title from the user's request. Use a slug without a date prefix. `
 6. After each user answer, update `prd.md` before continuing.
 7. For complex tasks, create or update `design.md` and `implement.md` before implementation starts.
 
+For any task-backed request that changes user-visible Android Compose UI (not web-ui/React), read
+`.trellis/spec/guides/ui-modification-thinking-guide.md` during evidence gathering and
+carry its applicable states, viewport, accessibility, and interaction cases into
+`prd.md` acceptance criteria (and `design.md` when present). If the request introduces
+a new reusable UI rule or failure mode, update that guide before implementation starts.
+
 Do not invent a project-specific product/spec hierarchy. If the repository already has product, domain, or spec docs, use them. If it does not, proceed with the evidence that exists.
 
 ## Question Rules
