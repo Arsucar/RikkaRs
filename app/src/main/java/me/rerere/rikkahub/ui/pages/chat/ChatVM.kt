@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
@@ -110,6 +111,12 @@ class ChatVM(
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
     private var contextPreviewJob: Job? = null
+    private var inputDraftJob: Job? = null
+    private var inputDraftGeneration = 0L
+    private var originalInputDraftText: String? = null
+    private var lastInputDraftText: String? = null
+    private val _inputDraftLoading = MutableStateFlow(false)
+    val inputDraftLoading = _inputDraftLoading.asStateFlow()
     val contextPreviewState = MutableStateFlow<UiState<ContextPreview>>(UiState.Idle)
 
     val hookHistoryState: StateFlow<UiState<List<HookRunHistory>>> = hookRepository
@@ -156,6 +163,7 @@ class ChatVM(
 
     override fun onCleared() {
         contextPreviewJob?.cancel()
+        inputDraftJob?.cancel()
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
@@ -493,6 +501,91 @@ class ChatVM(
     fun generateSuggestion(conversation: Conversation) {
         viewModelScope.launch {
             chatService.generateSuggestion(_conversationId, conversation)
+        }
+    }
+
+    fun generateInputDraft(conversation: Conversation) {
+        if (inputDraftJob?.isActive == true) return
+        val generation = ++inputDraftGeneration
+        val originalText = inputState.textContent.text.toString()
+        originalInputDraftText = originalText
+        lastInputDraftText = ""
+        inputState.setMessageText("")
+        inputDraftJob = viewModelScope.launch {
+            _inputDraftLoading.value = true
+            try {
+                val completedDraft = chatService.generateInputDraft(
+                    conversationId = _conversationId,
+                    conversation = conversation,
+                ) streamUpdate@{ partial ->
+                    if (generation != inputDraftGeneration) return@streamUpdate
+                    val currentText = inputState.textContent.text.toString()
+                    if (currentText != lastInputDraftText) {
+                        // A user/ASR edit wins. Invalidate before cancelling so late chunks are ignored.
+                        inputDraftGeneration++
+                        inputDraftJob?.cancel()
+                        inputDraftJob = null
+                        _inputDraftLoading.value = false
+                        originalInputDraftText = null
+                        lastInputDraftText = null
+                        return@streamUpdate
+                    }
+                    lastInputDraftText = partial
+                    inputState.setMessageText(partial)
+                }
+                if (generation == inputDraftGeneration &&
+                    inputState.textContent.text.toString() == lastInputDraftText
+                ) {
+                    lastInputDraftText = completedDraft
+                    inputState.setMessageText(completedDraft)
+                }
+            } catch (error: CancellationException) {
+                restoreInputDraftIfSafe(generation)
+                throw error
+            } catch (error: Throwable) {
+                restoreInputDraftIfSafe(generation)
+                chatService.addError(
+                    error = error,
+                    conversationId = _conversationId,
+                    title = context.getString(R.string.error_title_generate_input_draft),
+                )
+            } finally {
+                if (generation == inputDraftGeneration) {
+                    _inputDraftLoading.value = false
+                    inputDraftJob = null
+                    originalInputDraftText = null
+                    lastInputDraftText = null
+                }
+            }
+        }
+    }
+
+    fun cancelInputDraft() {
+        val generation = inputDraftGeneration
+        restoreInputDraftIfSafe(generation)
+        inputDraftGeneration++
+        inputDraftJob?.cancel()
+        inputDraftJob = null
+        _inputDraftLoading.value = false
+        originalInputDraftText = null
+        lastInputDraftText = null
+    }
+
+    /** Stops draft streaming while preserving the current text for send/edit actions. */
+    fun finishInputDraft() {
+        inputDraftGeneration++
+        inputDraftJob?.cancel()
+        inputDraftJob = null
+        _inputDraftLoading.value = false
+        originalInputDraftText = null
+        lastInputDraftText = null
+    }
+
+    private fun restoreInputDraftIfSafe(generation: Long) {
+        if (generation != inputDraftGeneration) return
+        val streamedText = lastInputDraftText ?: return
+        if (inputState.textContent.text.toString() == streamedText) {
+            inputState.setMessageText(originalInputDraftText.orEmpty())
         }
     }
 

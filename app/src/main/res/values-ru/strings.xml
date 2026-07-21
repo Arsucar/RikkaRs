@@ -1982,5 +1982,10 @@
   <string name="workspace_cwd_set_assistant_default">Установить по умолчанию для ассистента</string>
   <string name="subagent_step_tool">Вызов инструмента</string>
   <string name="extensions_subagents_open">Открыть профиль субагента</string>
+  <string name="input_draft_generate">Написать черновик ответа</string>
+  <string name="input_draft_cancel">Отменить создание черновика</string>
+  <string name="input_draft_empty_conversation">Контекст беседы пока отсутствует</string>
+  <string name="input_draft_model_unavailable">Сначала выберите модель предложений или быструю модель</string>
+  <string name="error_title_generate_input_draft">Не удалось создать черновик ответа</string>
 </resources>
 

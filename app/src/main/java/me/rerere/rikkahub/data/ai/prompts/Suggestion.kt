@@ -16,3 +16,21 @@ internal val DEFAULT_SUGGESTION_PROMPT = """
     {content}
     </content>
 """.trimIndent()
+
+
+internal val DEFAULT_INPUT_DRAFT_PROMPT = """
+    I will provide recent chat context in the `<content>` block, including messages between the User and the AI assistant.
+    Write one complete reply draft from the **User's** perspective.
+
+    Rules:
+    1. Output only the reply draft, without labels, commentary, alternatives, or surrounding quotes.
+    2. Use {locale} language.
+    3. Respond naturally to the latest assistant message and remain consistent with the context.
+    4. Imitate the user's previous conversational style where possible.
+    5. Do not invent personal facts, commitments, or preferences not supported by the context.
+    6. Act as the User, not the Assistant.
+
+    <content>
+    {content}
+    </content>
+""".trimIndent()

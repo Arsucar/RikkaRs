@@ -2153,5 +2153,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_import_invalid_format">导入格式无效</string>
   <string name="setting_provider_page_clipboard_empty">剪贴板为空</string>
   <string name="workspace_cwd_set_assistant_default">设为助手默认值</string>
+  <string name="input_draft_generate">写回复草稿</string>
+  <string name="input_draft_cancel">取消回复草稿</string>
+  <string name="input_draft_empty_conversation">暂无会话上下文</string>
+  <string name="input_draft_model_unavailable">请先选择建议模型或快速模型</string>
+  <string name="error_title_generate_input_draft">回复草稿生成失败</string>
 </resources>
 

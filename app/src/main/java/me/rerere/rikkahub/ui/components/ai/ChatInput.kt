@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +70,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +94,7 @@ import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.MagicWand01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -126,6 +130,8 @@ fun ChatInput(
     assistant: Assistant,
     hazeState: HazeState,
     enableSearch: Boolean,
+    inputDraftLoading: Boolean,
+    inputDraftEnabled: Boolean,
     onToggleSearch: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     completionProviders: List<ChatCompletionProvider> = emptyList(),
@@ -134,11 +140,14 @@ fun ChatInput(
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onMoreClick: () -> Unit,
+    onGenerateInputDraft: () -> Unit,
+    onCancelInputDraft: () -> Unit,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
 ) {
     val toaster = LocalToaster.current
+    val inputDraftCancelDescription = stringResource(R.string.input_draft_cancel)
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
 
@@ -308,6 +317,27 @@ fun ChatInput(
                         }
 
                         ActionIconButton(
+                            onClick = if (inputDraftLoading) onCancelInputDraft else onGenerateInputDraft,
+                            enabled = inputDraftLoading || inputDraftEnabled,
+                        ) {
+                            if (inputDraftLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .semantics {
+                                            contentDescription = inputDraftCancelDescription
+                                        },
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = HugeIcons.MagicWand01,
+                                    contentDescription = stringResource(R.string.input_draft_generate),
+                                )
+                            }
+                        }
+
+                        ActionIconButton(
                             onClick = onMoreClick
                         ) {
                             Icon(
@@ -323,6 +353,7 @@ fun ChatInput(
                                     when (asrState.status) {
                                         ASRStatus.Listening -> asr.stop()
                                         ASRStatus.Idle, ASRStatus.Error -> {
+                                            if (inputDraftLoading) return@AsrButton
                                             if (!asrPermission.allRequiredPermissionsGranted) {
                                                 asrPermission.requestPermissions()
                                             } else {
@@ -405,10 +436,12 @@ fun ChatInput(
 @Composable
 private fun ActionIconButton(
     onClick: () -> Unit,
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.size(30.dp),
         shape = CircleShape,
         tonalElevation = 0.dp,

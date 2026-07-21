@@ -1982,5 +1982,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_cwd_set_assistant_default">어시스턴트 기본값으로 설정</string>
   <string name="subagent_step_tool">도구 호출</string>
   <string name="extensions_subagents_open">서브 에이전트 프로필 열기</string>
+  <string name="input_draft_generate">답장 초안 작성</string>
+  <string name="input_draft_cancel">답장 초안 작성 취소</string>
+  <string name="input_draft_empty_conversation">아직 대화 문맥이 없습니다</string>
+  <string name="input_draft_model_unavailable">제안 모델 또는 빠른 모델을 먼저 선택하세요</string>
+  <string name="error_title_generate_input_draft">답장 초안 생성 실패</string>
 </resources>
 
