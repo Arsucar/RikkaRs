@@ -1534,3 +1534,38 @@ Established reproducible baseline; accepted Gradle parallelism, Markdown templat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: Complete and archive APK optimization plan resume
+
+**Date**: 2026-07-21
+**Task**: Complete and archive APK optimization plan resume
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Fixed final workspace review findings, revalidated compile/tests and device install, committed the resumed APK optimization work, and archived task 07-21-resume-plan-apk-opt.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b70b1ec5` | (see git log) |
+| `4137a57e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
