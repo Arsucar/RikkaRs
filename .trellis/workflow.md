@@ -398,9 +398,10 @@ Curate `implement.jsonl` and `check.jsonl` so the Phase 2 sub-agents get the rig
 - **Research files** — `{TASK_DIR}/research/*.md` that the sub-agent will need to consult
 
 For any task changing user-visible Android Compose UI (not web-ui/React), include `.trellis/spec/guides/ui-modification-thinking-guide.md`
-in both `implement.jsonl` and `check.jsonl`. The task PRD/design must record the applicable
-UI verification cases, and any new reusable UI rule or failure mode must update the guide
-in the same change.
+in both `implement.jsonl` and `check.jsonl`, and record the applicable UI verification cases in the task PRD/design.
+Lightweight direct UI edits without a Trellis task do not create placeholder manifests or planning artifacts; they still
+run the same verification matrix and record evidence in the check or delivery report. Any new reusable UI rule or failure
+mode must update the guide in the same change.
 
 **What NOT to put in**:
 - Code files (`src/**`, `packages/**/*.ts`, etc.) — those are read by the sub-agent during implementation, not pre-registered here

@@ -2,7 +2,7 @@
 
 > Code-specs for app-layer AI runtime, service wiring, and Compose settings.
 
-For any user-visible Compose change, read the shared [UI Modification Thinking Guide](../guides/ui-modification-thinking-guide.md) before editing. If the change reveals a reusable UI rule or regression pattern, update that guide together with the task's PRD/design and implementation.
+For any user-visible Compose change, read the shared [UI Modification Thinking Guide](../guides/ui-modification-thinking-guide.md) before editing. When an active Trellis task exists, record applicable cases in its PRD/design; a direct edit without a task records the same matrix evidence in its check or delivery report. If the change reveals a reusable UI rule or regression pattern, update the guide in the same change.
 
 ## Specs
 
@@ -38,6 +38,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 
 ## Quality Check
 
+- For every Compose UI change, execute the UI guide's verification matrix. Task-backed work records applicable cases in PRD/design; direct no-task work records evidence in the check or delivery report.
 - Verify subagent field changes with focused unit tests under `app/src/test/.../subagent/`.
 - Verify skill path changes with focused tests for normal reads, traversal rejection, symlink allowlists, and private-skill visibility.
 - For app module runtime changes, run `.\gradlew :app:compileDebugKotlin --no-daemon`.

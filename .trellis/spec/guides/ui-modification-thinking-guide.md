@@ -6,7 +6,7 @@
 
 Read this guide before changing any user-visible Android Compose screen, dialog, sheet, list, card, gesture, state indicator, string, or accessibility behavior. It does not apply to web-ui/React.
 
-When a user requests a UI change, update the relevant task PRD/design acceptance criteria and this guide in the same change whenever the request introduces a new reusable rule, a new failure mode, or changes an existing UI contract. Do not defer a newly discovered UI lesson to a later task.
+When an active Trellis task exists, record the applicable UI cases in that task's PRD/design acceptance criteria. For a lightweight direct edit without a task, do not create placeholder task artifacts; run the same verification matrix and record the evidence in the check or delivery report. In both paths, update this guide in the same change whenever the request introduces a new reusable rule, a new failure mode, or changes an existing UI contract. Do not defer a newly discovered UI lesson to a later task.
 
 ## Pre-Implementation Checklist
 
@@ -55,6 +55,7 @@ When a user requests a UI change, update the relevant task PRD/design acceptance
 | Delete as a permanent inline icon | Accidental deletion competes with card navigation | Use a secondary/overflow action and confirm the exact ID/name and impact |
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
 | UI-only compile as visual validation | Layout, theme, keyboard, and gesture regressions reach users | Record device/screenshot limitations honestly and cover the matrix below |
+| Reply draft and ASR both write the composer | Recording or late model chunks overwrite user text | Make asynchronous composer producers mutually exclusive and keep cancellation generation-guarded |
 
 ## Verification Matrix
 
