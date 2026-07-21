@@ -2,6 +2,8 @@
 
 > Code-specs for app-layer AI runtime, service wiring, and Compose settings.
 
+For any user-visible Compose change, read the shared [UI Modification Thinking Guide](../guides/ui-modification-thinking-guide.md) before editing. If the change reveals a reusable UI rule or regression pattern, update that guide together with the task's PRD/design and implementation.
+
 ## Specs
 
 | Spec | Purpose |

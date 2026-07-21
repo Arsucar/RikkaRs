@@ -397,6 +397,11 @@ Curate `implement.jsonl` and `check.jsonl` so the Phase 2 sub-agents get the rig
 - **Spec files** — `.trellis/spec/<package>/<layer>/index.md` and any specific guideline files (`error-handling.md`, `conventions.md`, etc.) relevant to this task
 - **Research files** — `{TASK_DIR}/research/*.md` that the sub-agent will need to consult
 
+For any task changing user-visible Android Compose UI (not web-ui/React), include `.trellis/spec/guides/ui-modification-thinking-guide.md`
+in both `implement.jsonl` and `check.jsonl`. The task PRD/design must record the applicable
+UI verification cases, and any new reusable UI rule or failure mode must update the guide
+in the same change.
+
 **What NOT to put in**:
 - Code files (`src/**`, `packages/**/*.ts`, etc.) — those are read by the sub-agent during implementation, not pre-registered here
 - Files you're about to modify — same reason

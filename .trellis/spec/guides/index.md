@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Repository Hygiene Guide](./repository-hygiene.md) | Keep temporary device captures and sensitive debug data out of Git | After device UI inspection or before broad staging |
+| [UI Modification Thinking Guide](./ui-modification-thinking-guide.md) | Prevent recurring Android Compose layout, state, feedback, accessibility, and visual-validation regressions | Before changing any user-visible Android Compose UI (not web-ui/React) |
 
 ---
 
@@ -51,6 +52,15 @@ These guides help you **ask the right questions before coding**.
 - [ ] Multiple branches update the same derived state from `kind` / `action`
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When Modifying Android Compose UI
+
+- [ ] The task changes Android Compose UI (a screen, dialog, sheet, list, gesture, state, string, or accessibility behavior); web-ui/React changes use their own frontend guidance
+- [ ] You have checked normal/empty/loading/failure/cancelled states and long or duplicate data
+- [ ] You have checked narrow width, landscape, IME, theme, large text, TalkBack, and scrolling
+- [ ] The requested UI change introduces a new reusable rule or failure mode that must be added to the guide in the same change
+
+→ Read [UI Modification Thinking Guide](./ui-modification-thinking-guide.md)
 
 ### When Handling Device Debug Artifacts
 
