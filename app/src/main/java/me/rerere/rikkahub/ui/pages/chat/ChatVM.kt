@@ -571,6 +571,16 @@ class ChatVM(
         lastInputDraftText = null
     }
 
+    /** Stops draft streaming while preserving the current text for send/edit actions. */
+    fun finishInputDraft() {
+        inputDraftGeneration++
+        inputDraftJob?.cancel()
+        inputDraftJob = null
+        _inputDraftLoading.value = false
+        originalInputDraftText = null
+        lastInputDraftText = null
+    }
+
     private fun restoreInputDraftIfSafe(generation: Long) {
         if (generation != inputDraftGeneration) return
         val streamedText = lastInputDraftText ?: return
