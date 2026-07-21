@@ -883,8 +883,13 @@ class MemoryTableToolsTest {
             }
         ).single() as UIMessagePart.Text
 
-        assertTrue(result.text.contains("tpl-1"))
-        assertTrue(result.text.contains("user_memories"))
+        val template = json.parseToJsonElement(result.text).jsonArray.single().jsonObject
+        assertEquals("tpl-1", template.getValue("id").jsonPrimitive.content)
+        assertEquals("tpl-1", template.getValue("template_id").jsonPrimitive.content)
+        assertEquals("user_memories", template.getValue("name").jsonPrimitive.content)
+        assertTrue("resolved_row_keys" in template)
+        assertTrue("document_id" !in template)
+        assertTrue("revision" !in template)
     }
 
     @Test
@@ -1806,6 +1811,43 @@ class MemoryTableToolsTest {
         assertEquals("REVISION_CONFLICT", payload.getValue("error_code").jsonPrimitive.content)
         assertEquals("3", payload.getValue("expected_revision").jsonPrimitive.content)
         assertEquals("7", payload.getValue("actual_revision").jsonPrimitive.content)
+    }
+
+    @Test
+    fun upsertRowsRejectsExpectedRevisionWhenCreatingDocument() = runBlocking {
+        var upsertCalls = 0
+        var casCalls = 0
+        val tool = buildMemoryTableTools(
+            json = json,
+            assistantId = "assistant-a",
+            readDocuments = { error("unexpected read") },
+            getDocument = { error("unexpected get") },
+            upsertDocument = {
+                upsertCalls++
+                it
+            },
+            upsertDocumentWithCas = { document, _ ->
+                casCalls++
+                document
+            },
+            deleteDocument = { error("unexpected delete") },
+            readTemplates = { listOf(template(schemaJson = factsKeySchemaJson())) },
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("action", "upsert_rows")
+                put("template_id", "template")
+                put("expected_revision", 0)
+                put("payload_json", """{"facts":[]}""")
+            }
+        ).single() as UIMessagePart.Text
+
+        val payload = json.parseToJsonElement(result.text).jsonObject
+        assertEquals("false", payload.getValue("success").jsonPrimitive.content)
+        assertTrue(payload.getValue("error").jsonPrimitive.content.contains("existing document"))
+        assertEquals(0, upsertCalls)
+        assertEquals(0, casCalls)
     }
 
     // #170: omitting expected_revision keeps the last-write-wins path (no CAS).

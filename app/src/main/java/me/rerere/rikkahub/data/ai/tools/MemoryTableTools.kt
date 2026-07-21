@@ -102,11 +102,12 @@ fun buildMemoryTableTools(
             while update preserves the current scope when omitted. Document upsert accepts conversation/assistant/global,
             but conversation writes are currently read-only until the conversation memory-table UI exists.
             `payload_json`, `ops`, and `schema_json` accept either a JSON string or a raw JSON object/array.
-            `read`, `list_templates`, and `query` responses include `document_id`, `template_id`, `revision`, and each
-            table's `resolved_row_key`; pass the returned `revision` back as `expected_revision` on the next write to
-            detect concurrent edits. `expected_revision` is optional on `apply_ops`/`patch_rows`/`upsert_rows`/`delete_row`:
-            when provided the write only succeeds if the stored revision still matches (otherwise a revision conflict is
-            returned); when omitted writes are last-write-wins.
+            `list_templates` responses include both compatible `id` and explicit `template_id`, plus `resolved_row_keys`.
+            `read` and `query` responses include `document_id`, `template_id`, `revision`, and `resolved_row_keys`; pass the
+            returned `revision` back as `expected_revision` on the next write to detect concurrent edits.
+            `expected_revision` is optional on `apply_ops`/`patch_rows`/`upsert_rows`/`delete_row`: when provided, updating
+            an existing document only succeeds if its stored revision still matches (otherwise a revision conflict is
+            returned); when omitted writes are last-write-wins. Creating with `expected_revision` is rejected.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
@@ -167,7 +168,8 @@ fun buildMemoryTableTools(
                             "Optional optimistic-concurrency guard for apply_ops/patch_rows/upsert_rows/delete_row. " +
                                 "When provided, the write only applies if the document's current revision matches " +
                                 "(use the `revision` returned by read/query); on mismatch it returns a revision conflict " +
-                                "and does not write. When omitted, writes are last-write-wins.",
+                                "and does not write. Creating a document with this parameter is rejected. " +
+                                "When omitted, writes are last-write-wins.",
                         )
                     })
                     put("row_key", buildJsonObject {
@@ -231,6 +233,7 @@ fun buildMemoryTableTools(
                                     json.encodeToJsonElement(MemoryTableTemplate.serializer(), template)
                                         .jsonObject
                                         .forEach { (key, value) -> put(key, value) }
+                                    put("template_id", JsonPrimitive(template.id))
                                     put(
                                         "resolved_row_keys",
                                         resolvedRowKeysObject(json, template.id, templates),
@@ -400,6 +403,9 @@ fun buildMemoryTableTools(
                             ?: old?.payloadJson
                             ?: error("payload_json is required")
                         val expectedRevision = params.expectedRevisionParameter()
+                        if (old == null && expectedRevision != null) {
+                            error("expected_revision is only valid when updating an existing document")
+                        }
                         val templates = readTemplates()
                         val readOnlyTables = readOnlyUpdateTables(
                             json = json,
@@ -416,8 +422,6 @@ fun buildMemoryTableTools(
                             newPayloadJson = payloadJson,
                             readOnlyTables = readOnlyTables,
                         )
-                        // #170: CAS is only meaningful when updating an existing document; a create
-                        // has no prior revision to guard against, so expected_revision is ignored there.
                         val writeDocument = (old ?: MemoryTableDocument(
                             templateId = templateId,
                             scopeType = scopeType,
@@ -432,7 +436,7 @@ fun buildMemoryTableTools(
                             json = json,
                             document = persistMemoryTableWrite(
                                 document = writeDocument,
-                                expectedRevision = expectedRevision.takeIf { old != null },
+                                expectedRevision = expectedRevision,
                                 upsertDocument = upsertDocument,
                                 upsertDocumentWithCas = upsertDocumentWithCas,
                             ),

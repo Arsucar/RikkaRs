@@ -262,6 +262,60 @@ class MemoryTableRepositoryTest {
     }
 
     @Test
+    fun upsertDocumentWithCasSnapshotsMatchingRevisionAndRejectsStaleWrite() = runBlocking {
+        val dao = FakeMemoryTableDAO(
+            templates = listOf(templateEntity("template", "ASSISTANT", "assistant-a")),
+            documents = listOf(
+                doc(
+                    id = "doc",
+                    scopeType = "ASSISTANT",
+                    scopeId = "assistant-a",
+                    payloadJson = """{"value":"old"}""",
+                    revision = 4,
+                )
+            ),
+        )
+        val snapshotDao = FakeMemoryTableSnapshotDAO()
+        val repository = MemoryTableRepository(dao, snapshotDao)
+        val draft = MemoryTableDocument(
+            id = "doc",
+            templateId = "template",
+            scopeType = MemoryTableScopeType.ASSISTANT,
+            scopeId = "assistant-a",
+            payloadJson = """{"value":"new"}""",
+            revision = 4,
+        )
+
+        val updated = repository.upsertDocumentWithCas(
+            document = draft,
+            expectedRevision = 4,
+            actorAssistantId = "assistant-a",
+        )
+
+        assertEquals(5, updated.revision)
+        assertEquals(5, dao.documents.single().revision)
+        assertEquals("""{"value":"new"}""", dao.documents.single().payloadJson)
+        assertEquals(listOf(4), snapshotDao.snapshots.map { it.revision })
+        assertEquals("""{"value":"old"}""", snapshotDao.snapshots.single().payloadJson)
+
+        val conflict = assertThrows(MemoryTableRevisionConflictException::class.java) {
+            runBlocking {
+                repository.upsertDocumentWithCas(
+                    document = updated.copy(payloadJson = """{"value":"stale"}"""),
+                    expectedRevision = 4,
+                    actorAssistantId = "assistant-a",
+                )
+            }
+        }
+
+        assertEquals(4, conflict.expectedRevision)
+        assertEquals(5, conflict.actualRevision)
+        assertEquals(1, dao.documentUpserts)
+        assertEquals(1, snapshotDao.snapshots.size)
+        assertEquals("""{"value":"new"}""", dao.documents.single().payloadJson)
+    }
+
+    @Test
     fun rollbackDocumentRestoresPriorRevision() = runBlocking {
         val dao = FakeMemoryTableDAO(
             documents = listOf(
