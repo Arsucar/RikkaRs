@@ -20,6 +20,23 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.35
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.34 之后）
+
+- **AI 回复草稿** — 聊天输入框新增回复草稿按钮，可根据最近对话以用户口吻流式生成可编辑草稿；支持取消和恢复原输入，用户编辑或发送会安全终止生成，且仅在已有完整助手回复时可用。（#169，PR #171）
+  **AI reply drafts** — Add a chat-composer action that streams an editable reply draft from the user's perspective using recent context; cancellation restores the original input, user edits or sending stop generation safely, and the action is available only after a completed assistant reply. (#169, PR #171)
+- **记忆表并发写入保护** — 记忆表工具读写结果补充文档、模板、revision 和行键元数据，写操作支持可选 `expected_revision`；revision 冲突会明确返回并拒绝覆盖，同时兼容原始 JSON 与编码字符串参数。（#170）
+  **Memory-table concurrent-write protection** — Memory-table tool responses now include document, template, revision, and resolved row-key metadata; writes accept an optional `expected_revision`, reject stale updates with an explicit conflict, and accept either raw JSON or encoded JSON parameters. (#170)
+- **子代理传递上下文可视化** — Spawn 工具详情现在展示实际传给子代理的任务、系统提示、Profile 约束、工具、Skills/MCP 和运行元数据，并显示记忆表的实际注入状态、跳过原因及模板名称。（#166）
+  **Subagent transferred-context visibility** — Spawn tool details now show the task, subagent system prompt, profile constraints, actual tools, Skills/MCP, and runtime metadata sent to the child, including actual memory-table injection status, skip reasons, and template names. (#166)
+- **更新信息与工具诊断布局修复** — 侧栏更新卡中的长更新日志现在可以滚动；工具诊断摘要在窄屏下不再被操作按钮挤成逐字竖排。（#172，PR #165 #173）
+  **Update-card and tool-diagnostics layout fixes** — Long changelogs in the sidebar update card are now scrollable, and tool diagnostic summaries no longer collapse into one-character-wide vertical text on narrow screens. (#172, PR #165 #173)
+- **聊天与 AI 运行效率优化** — 缓存 Markdown Web 模板和 API Key 轮询状态，复用图片加载请求，并为聊天抽屉列表使用稳定实体标识，减少重复文件读取、重组工作和无效图片加载。
+  **Chat and AI runtime efficiency** — Cache the Markdown Web template and API-key roulette state, reuse image requests across recompositions, and use stable entity keys in chat-drawer lists to reduce repeated file reads, recomposition work, and redundant image loads.
+
+---
+
 ## v2.3.34
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.33 之后）
