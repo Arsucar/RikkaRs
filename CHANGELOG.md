@@ -20,6 +20,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.36
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.35 之后）
+
+- **助手 Workspace Git 状态抽屉** — 聊天页右侧抽屉现在可查看当前助手绑定 Workspace 的分支、暂存/未暂存/未跟踪文件和受限 diff，并支持手动刷新、截断提示及结构化错误状态；功能保持只读，不会将项目内容注入模型上下文。（#174）
+  **Assistant Workspace Git status drawer** — The chat-side drawer can now show the branch, staged, unstaged, and untracked files, and bounded diffs for the current assistant's bound Workspace, with manual refresh, truncation notices, and structured error states; the feature remains read-only and does not inject project content into model context. (#174)
+- **记忆表横屏沉浸式编辑** — 记忆表文档编辑器新增横竖屏切换；横屏隐藏顶部栏、标签栏和状态栏，以透明的返回/保存操作释放更多编辑空间，同时保留当前编辑模式和草稿，并在输入法显示时隐藏方向按钮。
+  **Immersive landscape memory-table editing** — The memory-table document editor now supports explicit portrait/landscape switching; landscape hides the app bar, tabs, and status bar, uses transparent Back/Save actions to free more editing space, preserves the current mode and draft, and hides the orientation action while the keyboard is visible.
+- **Web 会话流式更新优化** — Web 会话 SSE 在流式回复期间合并过时更新，并仅在发送时转换变化节点，减少更新积压和重复序列化。
+  **Web conversation streaming optimization** — Web conversation SSE now conflates stale updates during streaming and converts only changed nodes when sending, reducing update backlog and repeated serialization.
+
+---
+
 ## v2.3.35
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.34 之后）
