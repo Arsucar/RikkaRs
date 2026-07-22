@@ -149,13 +149,7 @@ class WorkspaceManager(
         extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     ): WorkspaceCommandResult {
         if (globalLock?.isLocked() == true) {
-            return WorkspaceCommandResult(
-                exitCode = 1,
-                stdout = "",
-                stderr = "Workspace storage migration in progress, please retry shortly",
-                timedOut = false,
-                truncated = false,
-            )
+            return workspaceLockedResult()
         }
         require(command.isNotBlank()) { "Command is required" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
@@ -195,6 +189,77 @@ class WorkspaceManager(
         return result.copy(changedFiles = changedFiles)
     }
 
+    fun executeProgram(
+        root: String,
+        arguments: List<String>,
+        cwd: String = "",
+        timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+        stdin: ByteArray? = null,
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    ): WorkspaceCommandResult {
+        if (globalLock?.isLocked() == true) {
+            return workspaceLockedResult()
+        }
+        require(arguments.isNotEmpty()) { "Program arguments are required" }
+        require(arguments.none { it.contains('\u0000') }) { "Program arguments contain invalid character" }
+
+        val workingDir = fileSystem.resolve(filesDir(root), cwd)
+        require(workingDir.exists()) { "Working directory does not exist: $cwd" }
+        require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
+
+        return shellRunner.execute(
+            WorkspaceShellContext(
+                root = root,
+                command = "",
+                cwd = cwd,
+                filesDir = filesDir(root),
+                linuxDir = linuxDir(root),
+                tempDir = tempDir(root),
+                workingDir = workingDir,
+                timeoutMillis = timeoutMillis,
+                stdin = stdin,
+                extraBindMounts = extraBindMounts,
+                programArguments = arguments.toList(),
+            )
+        )
+    }
+
+    fun executeProgramWithValidatedPath(
+        root: String,
+        path: String,
+        buildArguments: (String) -> List<String>,
+        timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+    ): WorkspaceCommandResult {
+        // Keep validation and process startup in one synchronous boundary to minimize path-swap exposure.
+        val validatedPath = validateRelativePath(root, path)
+        return executeProgram(
+            root = root,
+            arguments = buildArguments(validatedPath),
+            timeoutMillis = timeoutMillis,
+        )
+    }
+
+    fun validateRelativePath(root: String, path: String): String {
+        require(path.isNotBlank()) { "Path is required" }
+        require(!path.contains('\u0000')) { "Path contains invalid character" }
+        require(!path.contains('\\')) { "Path must use forward slashes" }
+        require(!path.startsWith('/') && !WINDOWS_ABSOLUTE_PATH.matches(path)) { "Path must be relative" }
+
+        val segments = path.split('/').filter { it.isNotEmpty() && it != "." }
+        require(segments.isNotEmpty() && segments.none { it == ".." }) { "Path escapes workspace root" }
+        val normalized = segments.joinToString("/")
+        fileSystem.resolveRepositoryPath(filesDir(root), normalized)
+        return normalized
+    }
+
+    private fun workspaceLockedResult() = WorkspaceCommandResult(
+        exitCode = 1,
+        stdout = "",
+        stderr = "Workspace storage migration in progress, please retry shortly",
+        timedOut = false,
+        truncated = false,
+    )
+
     private fun requireValidRoot(root: String) {
         require(root.matches(ROOT_NAME_REGEX)) {
             "Invalid workspace root name: $root"
@@ -225,5 +290,6 @@ class WorkspaceManager(
         private const val TEMP_DIR = "tmp"
         const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
+        private val WINDOWS_ABSOLUTE_PATH = Regex("^[A-Za-z]:/.*")
     }
 }

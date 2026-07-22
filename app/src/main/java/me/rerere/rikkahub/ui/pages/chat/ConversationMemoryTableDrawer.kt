@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Database
+import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
@@ -73,6 +75,9 @@ import me.rerere.rikkahub.data.model.HookErrorCode
 import me.rerere.rikkahub.data.model.HookExecutionStatus
 import me.rerere.rikkahub.data.model.HookRunHistory
 import me.rerere.rikkahub.data.model.HookRunStatus
+import me.rerere.rikkahub.data.model.GitChangeSection
+import me.rerere.rikkahub.data.model.GitDiffUiState
+import me.rerere.rikkahub.data.model.GitStatusUiState
 import me.rerere.rikkahub.data.model.actionType
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.ui.components.table.DataTable
@@ -196,6 +201,7 @@ private enum class ConversationDrawerScreen {
     MemoryTable,
     ContextInspector,
     HookHistory,
+    GitStatus,
 }
 
 /**
@@ -215,6 +221,7 @@ fun ConversationDrawerContent(
     templates: List<MemoryTableTemplate>,
     conversationId: String,
     assistantId: String,
+    assistantWorkspaceId: String?,
     isolationEnabled: Boolean,
     onIsolationChange: (Boolean) -> Unit,
     onSyncToConversation: (MemoryTableDocument) -> Unit,
@@ -235,6 +242,13 @@ fun ConversationDrawerContent(
     onApplyPreview: (MemoryTableHookPreview) -> Unit,
     onRunHook: (Uuid) -> Unit,
     onRetryExecution: (Uuid) -> Unit,
+    gitStatusState: GitStatusUiState,
+    gitStatusWorkspaceId: String?,
+    gitDiffState: GitDiffUiState,
+    onLoadGitStatus: () -> Unit,
+    onLoadGitDiff: (String, GitChangeSection) -> Unit,
+    onClearGitDiff: () -> Unit,
+    onNavigateWorkspaceBinding: () -> Unit,
 ) {
     // onDismiss 已由中转菜单移除（不再有关闭按钮），关闭统一走遮罩点击/返回键。
     var screen by remember { mutableStateOf(ConversationDrawerScreen.Menu) }
@@ -244,13 +258,32 @@ fun ConversationDrawerContent(
         if (!drawerOpen) {
             screen = ConversationDrawerScreen.Menu
             onClearContextPreview()
+            onClearGitDiff()
         }
     }
+
+    LaunchedEffect(drawerOpen, assistantWorkspaceId) {
+        if (drawerOpen) onLoadGitStatus()
+    }
+
+    BackHandler(enabled = drawerOpen && screen != ConversationDrawerScreen.Menu) {
+        onClearContextPreview()
+        onClearGitDiff()
+        screen = ConversationDrawerScreen.Menu
+    }
+
+    val displayGitStatusState = gitStatusStateForWorkspace(
+        state = gitStatusState,
+        stateWorkspaceId = gitStatusWorkspaceId,
+        assistantWorkspaceId = assistantWorkspaceId,
+    )
 
     when (screen) {
         ConversationDrawerScreen.Menu -> ConversationDrawerMenu(
             onOpenMemoryTable = { screen = ConversationDrawerScreen.MemoryTable },
             onOpenHookHistory = { screen = ConversationDrawerScreen.HookHistory },
+            onOpenGitStatus = { screen = ConversationDrawerScreen.GitStatus },
+            gitStatusState = displayGitStatusState,
             onOpenContextInspector = {
                 screen = ConversationDrawerScreen.ContextInspector
                 onLoadContextPreview()
@@ -296,7 +329,31 @@ fun ConversationDrawerContent(
             onRetryExecution = onRetryExecution,
             onBack = { screen = ConversationDrawerScreen.Menu },
         )
+
+        ConversationDrawerScreen.GitStatus -> ConversationGitStatusDrawer(
+            statusState = displayGitStatusState,
+            workspaceId = assistantWorkspaceId,
+            diffState = gitDiffState,
+            onRefresh = onLoadGitStatus,
+            onOpenDiff = onLoadGitDiff,
+            onClearDiff = onClearGitDiff,
+            onNavigateWorkspaceBinding = onNavigateWorkspaceBinding,
+            onBack = {
+                onClearGitDiff()
+                screen = ConversationDrawerScreen.Menu
+            },
+        )
     }
+}
+
+internal fun gitStatusStateForWorkspace(
+    state: GitStatusUiState,
+    stateWorkspaceId: String?,
+    assistantWorkspaceId: String?,
+): GitStatusUiState = when {
+    stateWorkspaceId == assistantWorkspaceId -> state
+    assistantWorkspaceId == null -> GitStatusUiState.Unbound
+    else -> GitStatusUiState.Loading
 }
 
 @Composable
@@ -849,6 +906,8 @@ private fun ConversationDrawerMenu(
     onOpenMemoryTable: () -> Unit,
     onOpenContextInspector: () -> Unit,
     onOpenHookHistory: () -> Unit,
+    onOpenGitStatus: () -> Unit,
+    gitStatusState: GitStatusUiState,
 ) {
     Column(
         modifier = Modifier
@@ -873,6 +932,12 @@ private fun ConversationDrawerMenu(
             title = stringResource(R.string.hook_history_menu_title),
             subtitle = stringResource(R.string.hook_history_menu_subtitle),
             onClick = onOpenHookHistory,
+        )
+        ConversationDrawerMenuItem(
+            icon = Lucide.GitBranch,
+            title = stringResource(R.string.git_status_menu_title),
+            subtitle = gitStatusMenuSubtitle(gitStatusState),
+            onClick = onOpenGitStatus,
         )
     }
 }
@@ -908,6 +973,8 @@ private fun ConversationDrawerMenuItem(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Icon(Lucide.ChevronRight, contentDescription = null)

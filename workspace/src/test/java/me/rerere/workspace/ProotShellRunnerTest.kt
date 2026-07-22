@@ -1,6 +1,7 @@
 package me.rerere.workspace
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -48,8 +49,22 @@ class ProotShellRunnerTest {
         }
     }
 
+    @Test
+    fun buildCommandPassesProgramArgumentsWithoutShellEvaluation() {
+        val arguments = listOf("git", "diff", "--", "name; echo unsafe.txt")
+        val command = ProotShellRunner(nativeLibraryDir = File("/native"))
+            .buildCommand(
+                context = shellContext(programArguments = arguments),
+                proot = File("/native/libproot_exec.so"),
+            )
+
+        assertEquals(arguments, command.takeLast(arguments.size))
+        assertFalse(command.contains("eval \"\$2\""))
+    }
+
     private fun shellContext(
         extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+        programArguments: List<String>? = null,
     ): WorkspaceShellContext {
         val baseDir = File(System.getProperty("java.io.tmpdir"), "proot-command-${System.nanoTime()}")
         val filesDir = File(baseDir, "files")
@@ -63,6 +78,7 @@ class ProotShellRunnerTest {
             workingDir = filesDir,
             timeoutMillis = 30_000L,
             extraBindMounts = extraBindMounts,
+            programArguments = programArguments,
         )
     }
 }

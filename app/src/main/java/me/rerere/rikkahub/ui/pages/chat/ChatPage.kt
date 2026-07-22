@@ -77,6 +77,7 @@ import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.resolveAssistant
@@ -155,7 +156,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
     val hookPreviewState by vm.hookPreviewState.collectAsStateWithLifecycle()
     val hookManualRunState by vm.hookManualRunState.collectAsStateWithLifecycle()
+    val gitStatusState by vm.gitStatusState.collectAsStateWithLifecycle()
+    val gitDiffState by vm.gitDiffState.collectAsStateWithLifecycle()
+    val gitStatusWorkspaceId by vm.gitStatusWorkspaceId.collectAsStateWithLifecycle()
     val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
+    val currentAssistant = remember(setting.assistants, conversation.assistantId) {
+        setting.assistants.firstOrNull { it.id == conversation.assistantId }
+    }
     val configuredHooks = remember(setting.assistants, conversation.assistantId) {
         setting.assistants.firstOrNull { it.id == conversation.assistantId }?.hooks.orEmpty()
     }
@@ -312,6 +319,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             templates = memoryTableTemplates,
                             conversationId = conversation.id.toString(),
                             assistantId = conversation.assistantId.toString(),
+                            assistantWorkspaceId = currentAssistant?.workspaceId?.toString(),
                             isolationEnabled = conversation.memoryTableIsolation,
                             onIsolationChange = { enabled ->
                                 vm.setMemoryTableIsolation(enabled)
@@ -383,6 +391,22 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             onApplyPreview = vm::applyMemoryTableHookPreview,
                             onRunHook = vm::runMemoryTableHookNow,
                             onRetryExecution = vm::retryMemoryTableHookExecution,
+                            gitStatusState = gitStatusState,
+                            gitStatusWorkspaceId = gitStatusWorkspaceId,
+                            gitDiffState = gitDiffState,
+                            onLoadGitStatus = {
+                                vm.loadGitStatus(currentAssistant?.workspaceId?.toString())
+                            },
+                            onLoadGitDiff = { path, section ->
+                                currentAssistant?.workspaceId?.toString()?.let { workspaceId ->
+                                    vm.loadGitDiff(workspaceId, path, section)
+                                }
+                            },
+                            onClearGitDiff = vm::clearGitDiff,
+                            onNavigateWorkspaceBinding = {
+                                scope.launch { rightDrawerState.close() }
+                                navController.navigate(Screen.AssistantDetail(conversation.assistantId.toString()))
+                            },
                         )
                     }
                 }

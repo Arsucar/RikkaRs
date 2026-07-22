@@ -39,6 +39,8 @@ val viewModelModule = module {
             memoryTableRepository = get(),
             hookRepository = get(),
             conversationTagRepository = get(),
+            getAssistantGitStatus = get(),
+            getGitFileDiff = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

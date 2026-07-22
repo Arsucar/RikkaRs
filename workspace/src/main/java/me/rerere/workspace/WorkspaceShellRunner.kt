@@ -20,11 +20,15 @@ data class WorkspaceShellContext(
     val timeoutMillis: Long,
     val stdin: ByteArray? = null,
     val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    val programArguments: List<String>? = null,
 )
 
 class HostShellRunner : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
-        val process = ProcessBuilder(defaultShell(), "-c", context.command)
+        val processBuilder = context.programArguments
+            ?.let { ProcessBuilder(it) }
+            ?: ProcessBuilder(defaultShell(), "-c", context.command)
+        val process = processBuilder
             .directory(context.workingDir)
             .redirectErrorStream(false)
             .start()

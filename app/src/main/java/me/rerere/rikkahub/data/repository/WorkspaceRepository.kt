@@ -251,6 +251,45 @@ class WorkspaceRepository(
         }
     }
 
+    suspend fun executeProgram(
+        id: String,
+        arguments: List<String>,
+        cwd: String = "",
+        timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+    ): WorkspaceCommandResult {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return runInterruptible(Dispatchers.IO) {
+            manager.executeProgram(workspace.root, arguments, cwd, timeoutMillis)
+        }
+    }
+
+    suspend fun validateRelativePath(id: String, path: String): String = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.validateRelativePath(workspace.root, path)
+    }
+
+    suspend fun executeProgramWithValidatedPath(
+        id: String,
+        path: String,
+        buildArguments: (String) -> List<String>,
+        timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+    ): WorkspaceCommandResult {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return runInterruptible(Dispatchers.IO) {
+            manager.executeProgramWithValidatedPath(
+                root = workspace.root,
+                path = path,
+                buildArguments = buildArguments,
+                timeoutMillis = timeoutMillis,
+            )
+        }
+    }
+
+    suspend fun workspaceFilesExist(id: String): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        manager.filesDir(workspace.root).isDirectory
+    }
+
     suspend fun delete(id: String): Boolean {
         val workspace = dao.getById(id) ?: return false
         dao.deleteById(id)

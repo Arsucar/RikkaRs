@@ -44,6 +44,9 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.data.model.HookRunHistory
 import me.rerere.rikkahub.data.model.HookExecutionRecord
+import me.rerere.rikkahub.data.model.GitChangeSection
+import me.rerere.rikkahub.data.model.GitDiffUiState
+import me.rerere.rikkahub.data.model.GitStatusUiState
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
@@ -59,6 +62,8 @@ import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
+import me.rerere.rikkahub.domain.git.GetAssistantGitStatusUseCase
+import me.rerere.rikkahub.domain.git.GetGitFileDiffUseCase
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.components.ai.hasInputDraftReplyTarget
@@ -108,12 +113,19 @@ class ChatVM(
     private val memoryTableRepository: MemoryTableRepository,
     hookRepository: HookRepository,
     conversationTagRepository: ConversationTagRepository,
+    private val getAssistantGitStatus: GetAssistantGitStatusUseCase,
+    private val getGitFileDiff: GetGitFileDiffUseCase,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
     private var contextPreviewJob: Job? = null
     private var inputDraftJob: Job? = null
+    private var gitStatusJob: Job? = null
+    private var gitDiffJob: Job? = null
+    private var gitStatusGeneration = 0L
+    private var gitDiffGeneration = 0L
+    private var loadingGitWorkspaceId: String? = null
     private var inputDraftGeneration = 0L
     private var originalInputDraftText: String? = null
     private var lastInputDraftText: String? = null
@@ -129,6 +141,9 @@ class ChatVM(
 
     val hookPreviewState = MutableStateFlow<UiState<MemoryTableHookPreview>>(UiState.Idle)
     val hookManualRunState = MutableStateFlow<UiState<HookExecutionRecord>>(UiState.Idle)
+    val gitStatusState = MutableStateFlow<GitStatusUiState>(GitStatusUiState.Idle)
+    val gitDiffState = MutableStateFlow<GitDiffUiState>(GitDiffUiState.Idle)
+    val gitStatusWorkspaceId = MutableStateFlow<String?>(null)
 
     val conversationTags: StateFlow<List<ConversationTag>> = conversationTagRepository.observeTags()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -166,6 +181,8 @@ class ChatVM(
     override fun onCleared() {
         contextPreviewJob?.cancel()
         inputDraftJob?.cancel()
+        gitStatusJob?.cancel()
+        gitDiffJob?.cancel()
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
@@ -189,6 +206,48 @@ class ChatVM(
         contextPreviewJob?.cancel()
         contextPreviewJob = null
         contextPreviewState.value = UiState.Idle
+    }
+
+    fun loadGitStatus(workspaceId: String?) {
+        if (gitStatusJob?.isActive == true && loadingGitWorkspaceId == workspaceId) return
+        gitStatusJob?.cancel()
+        gitDiffJob?.cancel()
+        loadingGitWorkspaceId = workspaceId
+        gitStatusWorkspaceId.value = workspaceId
+        val generation = ++gitStatusGeneration
+        ++gitDiffGeneration
+        gitStatusState.value = GitStatusUiState.Loading
+        gitDiffState.value = GitDiffUiState.Idle
+        gitStatusJob = viewModelScope.launch {
+            val result = getAssistantGitStatus(workspaceId)
+            if (generation == gitStatusGeneration) {
+                gitStatusState.value = result
+                loadingGitWorkspaceId = null
+            }
+        }
+    }
+
+    fun loadGitDiff(
+        workspaceId: String,
+        path: String,
+        section: GitChangeSection,
+    ) {
+        gitDiffJob?.cancel()
+        val generation = ++gitDiffGeneration
+        gitDiffState.value = GitDiffUiState.Loading
+        gitDiffJob = viewModelScope.launch {
+            val result = getGitFileDiff(workspaceId, path, section)
+            if (generation == gitDiffGeneration) {
+                gitDiffState.value = result
+            }
+        }
+    }
+
+    fun clearGitDiff() {
+        gitDiffJob?.cancel()
+        gitDiffJob = null
+        ++gitDiffGeneration
+        gitDiffState.value = GitDiffUiState.Idle
     }
 
     // 用户设置

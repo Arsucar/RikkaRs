@@ -10,6 +10,7 @@
 |------|---------|
 | [Shell Policy](./shell-policy.md) | Heuristic command validation patterns and conventions |
 | [Storage Policy](./storage-policy.md) | Workspace files storage contracts and Git pack-write support boundaries |
+| [Program Execution](./program-execution.md) | Parameter-array execution and canonical repository-path validation |
 
 ---
 
@@ -17,3 +18,4 @@
 
 - `evaluateShellCommand(command: String): ShellCommandVerdict` — returns `Allowed` or `Rejected(userMessage)`
 - Heuristic-only, not a security boundary; real isolation via `WorkspaceManager` cwd limits + process permissions
+- App-internal commands with untrusted arguments use `executeProgram`; never interpolate arguments into `executeCommand`

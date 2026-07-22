@@ -172,7 +172,6 @@ class WorkspaceFileSystem(
         }
 
     private fun resolvePath(root: File, path: String): File {
-        root.mkdirs()
         val normalized = path
             .replace('\\', '/')
             .trim()
@@ -191,6 +190,26 @@ class WorkspaceFileSystem(
     }
 
     fun resolve(root: File, path: String): File = resolvePath(root, path)
+
+    /**
+     * Resolves a repository path without allowing a symlinked directory component.
+     * The final component may be a symlink when it resolves inside the workspace,
+     * which preserves Git's ability to diff symlink entries as data.
+     */
+    fun resolveRepositoryPath(root: File, path: String): File {
+        val rootPath = root.toPath().toAbsolutePath().normalize()
+        require(!Files.isSymbolicLink(rootPath)) { "Workspace root must not be a symbolic link" }
+
+        val segments = path.split('/').filter { it.isNotEmpty() && it != "." }
+        var current = rootPath
+        segments.dropLast(1).forEach { segment ->
+            current = current.resolve(segment)
+            require(!Files.isSymbolicLink(current)) {
+                "Repository path contains a symbolic link: $path"
+            }
+        }
+        return resolvePath(root, path)
+    }
 
     private fun File.toEntry(root: File): WorkspaceFileEntry = WorkspaceFileEntry(
         path = relativePath(root),

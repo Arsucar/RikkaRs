@@ -15,7 +15,10 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.WorkspaceGitRepository
 import me.rerere.rikkahub.data.repository.WorkspaceStorageMigrator
+import me.rerere.rikkahub.domain.git.GetAssistantGitStatusUseCase
+import me.rerere.rikkahub.domain.git.GetGitFileDiffUseCase
 import me.rerere.rikkahub.workspace.resolveWorkspaceFilesBaseDir
 import me.rerere.workspace.WorkspaceGlobalLock
 import me.rerere.workspace.ProotShellRunner
@@ -104,6 +107,10 @@ val repositoryModule = module {
     single {
         WorkspaceRepository(get(), get(), get(), get())
     }
+
+    single { WorkspaceGitRepository(get()) }
+    single { GetAssistantGitStatusUseCase(get(), get()) }
+    single { GetGitFileDiffUseCase(get(), get()) }
 
     single {
         WorkspaceStorageMigrator(get(), get(), get(), get())
