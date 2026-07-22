@@ -11,7 +11,7 @@
 
 **Date**: 2026-06-05
 **Task**: Enhance image generation workflow
-**Package**: material3/material-color-utilities
+**Package**: app
 **Branch**: `local/agent-trellis-setup`
 
 ### Summary
@@ -1646,7 +1646,7 @@ Implemented and reviewed the assistant-bound read-only Git status drawer, harden
 
 **Date**: 2026-07-22
 **Task**: Fix issues 175 and 176
-**Package**: material3/material-color-utilities
+**Package**: app
 **Branch**: `release/rikka-arsucar`
 
 ### Summary
@@ -1655,22 +1655,70 @@ Optimized the memory table editor for landscape screens and reduced SSE conversa
 
 ### Main Changes
 
-(Add details)
+- Added compact landscape behavior to the memory-table editor and connected the TopAppBar to content scrolling.
+- Applied SSE conflation before DTO conversion and changed single-node diffs to use domain conversations.
+- Added regression coverage for single-node updates/appends and snapshot fallbacks.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `367eed39` | (see git log) |
+| `367eed39` | fix: optimize memory editor and SSE streaming |
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `./gradlew --no-daemon :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug`
+- [OK] `ConversationDiffTest`: 4 passed, 0 skipped, 0 failures, 0 errors.
+- [WARN] ADB device `100.99.129.110:5555` was `offline`; no device landscape or multi-session memory stress test was performed.
+- [OK] Debug APK: https://gofile.io/d/jUOHZS
+- [OK] SHA-256: `6D1E5CCCE50657208CEA7D9811FB88BF68D93CC0EAA11EED323239267410B2FC`
 
 ### Status
 
-[OK] **Completed**
+[OK] **Code complete**; device visual and memory-stress verification pending.
 
 ### Next Steps
 
-- None - task complete
+- Verify 360dp/480dp landscape behavior, IME interaction, and 2-3 concurrent complex sessions when a device is online.
+
+
+## Session 45: Fix landscape memory editor viewport
+
+**Date**: 2026-07-22
+**Task**: Fix landscape memory editor viewport
+**Package**: app
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Moved low-frequency memory editor controls into the landscape content scroller so TopAppBar collapse releases useful editing height. Updated the UI verification guide. Build and APK fallback verification completed; device remained offline.
+
+### Main Changes
+
+- Moved landscape scope controls and conversation scope notes into the table/JSON scroll content while preserving portrait layout.
+- Kept validation errors visible outside the scroller and synchronized landscape spacing with the compact layout.
+- Updated the shared Compose UI guide with the short-landscape collapsing-header rule.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `91d53cd9` | fix: expand memory editor landscape content |
+
+### Testing
+
+- [OK] `./gradlew --no-daemon --no-configuration-cache :app:clean :app:compileDebugKotlin`
+- [OK] `./gradlew --no-daemon :app:assembleDebug`
+- [OK] Independent static review found no actionable issues.
+- [WARN] `adb devices` reported `100.99.129.110:5555` as `offline`; installation and visual/gesture verification were not performed.
+- [OK] Debug APK: https://gofile.io/d/oQ9yfG
+- [OK] SHA-256: `D77EC74791D7F9B4C387CA8A5E15BA06D01EF357D718E7B726D0340586BEE217`
+
+### Status
+
+[OK] **Code complete**; device visual verification pending.
+
+### Next Steps
+
+- When the device is online, verify 360dp/480dp landscape layouts, both tabs, header scrolling, IME, Back, and Save.
