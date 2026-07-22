@@ -28,6 +28,9 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 - Initial positioning may use `rememberLazyListState(initialFirstVisibleItemIndex = ...)`.
 - Do not put expansion, filtering, or unrelated derived maps into an automatic-scroll effect key.
 - Collapsed groups keep a recognizable header and count, and do not render child rows.
+- On short landscape viewports, collapsing only the app bar is insufficient when tabs or low-frequency controls remain
+  fixed outside the content scroller. Keep essential navigation reachable, but move secondary controls into the
+  scrollable header or the same collapsing region and verify the reclaimed editor height with the IME visible.
 - Capacity-uncertain pickers must scroll. A plain `Column` inside an `AlertDialog` is not sufficient for long lists or IME scenarios.
 
 ### Selection and actions
@@ -55,6 +58,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Delete as a permanent inline icon | Accidental deletion competes with card navigation | Use a secondary/overflow action and confirm the exact ID/name and impact |
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
 | UI-only compile as visual validation | Layout, theme, keyboard, and gesture regressions reach users | Record device/screenshot limitations honestly and cover the matrix below |
+| Only the app bar collapses in landscape | Tabs and secondary controls still consume most of a short viewport | Put low-frequency controls in the content scroller or shared collapsing header; measure the editor with IME visible |
 | Reply draft and ASR both write the composer | Recording or late model chunks overwrite user text | Make asynchronous composer producers mutually exclusive and keep cancellation generation-guarded |
 | Non-empty conversation treated as a valid reply target | Draft action appears after a user-only turn or during a streaming assistant reply | Require a completed latest assistant turn for actions that semantically reply to the assistant |
 

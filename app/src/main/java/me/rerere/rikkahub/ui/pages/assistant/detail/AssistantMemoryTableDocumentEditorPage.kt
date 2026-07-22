@@ -341,6 +341,61 @@ private fun MemoryTableDocumentEditorScaffold(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val topAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val contentSpacing = if (isLandscape) 8.dp else 12.dp
+    val scopeControls: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.assistant_page_memory_scope_global),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (!isLandscape) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_memory_scope_global_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Switch(
+                checked = draft.scopeType == MemoryTableScopeType.GLOBAL,
+                onCheckedChange = { enabled ->
+                    if (enabled && templateDraft.scopeType != MemoryTableScopeType.GLOBAL) {
+                        editorError =
+                            "Assistant-scoped memory table templates cannot be saved as global documents"
+                        return@Switch
+                    }
+                    val updated = draft.copy(
+                        scopeType = if (enabled) {
+                            MemoryTableScopeType.GLOBAL
+                        } else {
+                            MemoryTableScopeType.ASSISTANT
+                        },
+                        scopeId = if (enabled) {
+                            MemoryRepository.GLOBAL_MEMORY_ID
+                        } else {
+                            assistantId
+                        },
+                    )
+                    draft = updated
+                    onDraftChange(updated)
+                },
+                enabled = draft.scopeType != MemoryTableScopeType.CONVERSATION &&
+                    templateDraft.scopeType == MemoryTableScopeType.GLOBAL,
+            )
+        }
+
+        if (draft.scopeType == MemoryTableScopeType.CONVERSATION) {
+            Text(
+                text = stringResource(R.string.assistant_page_memory_table_conversation_scope_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 
     Scaffold(
         modifier = if (isLandscape) {
@@ -437,58 +492,8 @@ private fun MemoryTableDocumentEditorScaffold(
                     .padding(horizontal = 16.dp, vertical = contentSpacing),
                 verticalArrangement = Arrangement.spacedBy(contentSpacing),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.assistant_page_memory_scope_global),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        if (!isLandscape) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_memory_scope_global_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = draft.scopeType == MemoryTableScopeType.GLOBAL,
-                        onCheckedChange = { enabled ->
-                            if (enabled && templateDraft.scopeType != MemoryTableScopeType.GLOBAL) {
-                                editorError =
-                                    "Assistant-scoped memory table templates cannot be saved as global documents"
-                                return@Switch
-                            }
-                            val updated = draft.copy(
-                                scopeType = if (enabled) {
-                                    MemoryTableScopeType.GLOBAL
-                                } else {
-                                    MemoryTableScopeType.ASSISTANT
-                                },
-                                scopeId = if (enabled) {
-                                    MemoryRepository.GLOBAL_MEMORY_ID
-                                } else {
-                                    assistantId
-                                },
-                            )
-                            draft = updated
-                            onDraftChange(updated)
-                        },
-                        enabled = draft.scopeType != MemoryTableScopeType.CONVERSATION &&
-                            templateDraft.scopeType == MemoryTableScopeType.GLOBAL,
-                    )
-                }
-
-                if (draft.scopeType == MemoryTableScopeType.CONVERSATION) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_memory_table_conversation_scope_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (!isLandscape) {
+                    scopeControls()
                 }
 
                 editorError?.let { message ->
@@ -505,8 +510,11 @@ private fun MemoryTableDocumentEditorScaffold(
                             .weight(1f)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
                     ) {
+                        if (isLandscape) {
+                            scopeControls()
+                        }
                         if (tableState.isEmpty() && editorError == null) {
                             Text(
                                 text = stringResource(R.string.assistant_page_memory_table_empty_schema),
@@ -551,8 +559,11 @@ private fun MemoryTableDocumentEditorScaffold(
                             .weight(1f)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
                     ) {
+                        if (isLandscape) {
+                            scopeControls()
+                        }
                         Text(
                             text = stringResource(R.string.assistant_page_memory_table_template_settings),
                             style = MaterialTheme.typography.titleSmall,
