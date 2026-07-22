@@ -1,0 +1,5 @@
+{"file":".trellis/spec/app/index.md","reason":"Final app-layer compile and Compose quality checks."}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Verify resource coverage, placeholders, and non-null accessibility descriptions."}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Verify portrait/landscape, IME, theme, TalkBack, scrolling, and interaction evidence."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Audit effect cleanup and remembered state dependencies."}
+{"file":".trellis/tasks/07-23-memory-editor-orientation-immersive/research/orientation-system-ui.md","reason":"Check implementation against researched lifecycle and platform boundaries."}
