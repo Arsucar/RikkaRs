@@ -1722,3 +1722,45 @@ Moved low-frequency memory editor controls into the landscape content scroller s
 ### Next Steps
 
 - When the device is online, verify 360dp/480dp landscape layouts, both tabs, header scrolling, IME, Back, and Save.
+
+
+## Session 46: Collapse memory editor tabs in landscape
+
+**Date**: 2026-07-22
+**Task**: Collapse memory editor tabs in landscape
+**Package**: app
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Moved the Table/JSON tab row into the landscape editor scroller so the app bar, tabs, and scope controls can all release vertical space. Portrait behavior remains fixed.
+
+### Main Changes
+
+- Extracted the Table/JSON tab row without changing its selection and serialization behavior.
+- Kept tabs fixed and full-width in portrait.
+- Placed tabs before scope controls inside each landscape mode scroller so the entire header scrolls away.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a87d0056` | fix: collapse memory editor tabs in landscape |
+
+### Testing
+
+- [OK] `./gradlew --no-daemon :app:compileDebugKotlin`
+- [OK] `./gradlew --no-daemon :app:assembleDebug`
+- [OK] Independent static review found no actionable issues.
+- [WARN] `adb devices` reported `100.99.129.110:5555` as `offline`; installation and visual/gesture verification were not performed.
+- [OK] Debug APK: https://gofile.io/d/wwHA0C
+- [OK] SHA-256: `C3F475666982C8369FA86A82EE91C6EB53176887539895EEAADAA787E79CEA08`
+
+### Status
+
+[OK] **Code complete**; device visual verification pending.
+
+### Next Steps
+
+- Verify the collapsed Tab behavior, tab switching after scrolling, both modes, IME, Back, and Save when a device is online.
