@@ -2230,5 +2230,7 @@
   <string name="git_change_conflicted">Conflicted</string>
   <string name="git_change_untracked">Untracked</string>
   <string name="git_change_unknown">Changed</string>
+  <string name="assistant_page_memory_table_switch_to_landscape">Switch to landscape</string>
+  <string name="assistant_page_memory_table_switch_to_portrait">Switch to portrait</string>
 </resources>
 

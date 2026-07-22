@@ -20,6 +20,8 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 - [ ] Define feedback for every command: success, rejection, failure, cancellation, and confirmation for destructive or relaxing actions.
 - [ ] Define the primary click target separately from dangerous actions. Put delete/remove in an overflow or secondary action with scoped confirmation.
 - [ ] Provide localized descriptions for icons and localize enum names, preset slugs, status reasons, and other machine-facing values.
+- [ ] If a page mutates Activity orientation or system-bar visibility, snapshot the entering values, derive UI from the
+  actual configuration/insets, and restore every window-level side effect on mode change and page disposal.
 
 ## Interaction and Layout Contracts
 
@@ -59,6 +61,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
 | UI-only compile as visual validation | Layout, theme, keyboard, and gesture regressions reach users | Record device/screenshot limitations honestly and cover the matrix below |
 | Only the app bar collapses in landscape | Tabs and secondary controls still consume most of a short viewport | Put low-frequency controls in the content scroller or shared collapsing header; measure the editor with IME visible |
+| Page-local orientation or immersive mode is not restored | Later routes stay rotated or lose system bars | Snapshot Activity/window state, use actual configuration as truth, and restore on portrait transition plus disposal |
 | Reply draft and ASR both write the composer | Recording or late model chunks overwrite user text | Make asynchronous composer producers mutually exclusive and keep cancellation generation-guarded |
 | Non-empty conversation treated as a valid reply target | Draft action appears after a user-only turn or during a streaming assistant reply | Require a completed latest assistant turn for actions that semantically reply to the assistant |
 

@@ -2048,5 +2048,7 @@
   <string name="git_change_conflicted">Конфликт</string>
   <string name="git_change_untracked">Неотслеживаемый</string>
   <string name="git_change_unknown">Изменено</string>
+  <string name="assistant_page_memory_table_switch_to_landscape">Переключить на ландшафтный режим</string>
+  <string name="assistant_page_memory_table_switch_to_portrait">Переключиться на портрет</string>
 </resources>
 

@@ -2048,5 +2048,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="git_change_conflicted">충돌</string>
   <string name="git_change_untracked">추적되지 않음</string>
   <string name="git_change_unknown">변경됨</string>
+  <string name="assistant_page_memory_table_switch_to_landscape">가로 모드로 전환</string>
+  <string name="assistant_page_memory_table_switch_to_portrait">세로로 전환</string>
 </resources>
 

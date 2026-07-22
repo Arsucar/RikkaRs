@@ -2062,5 +2062,7 @@
   <string name="git_change_conflicted">衝突</string>
   <string name="git_change_untracked">未追蹤</string>
   <string name="git_change_unknown">已變更</string>
+  <string name="assistant_page_memory_table_switch_to_landscape">切換到橫向</string>
+  <string name="assistant_page_memory_table_switch_to_portrait">切換至直向</string>
 </resources>
 

@@ -2219,5 +2219,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="git_change_conflicted">冲突</string>
   <string name="git_change_untracked">未跟踪</string>
   <string name="git_change_unknown">已更改</string>
+  <string name="assistant_page_memory_table_switch_to_landscape">切换到横屏</string>
+  <string name="assistant_page_memory_table_switch_to_portrait">切换到竖屏</string>
 </resources>
 

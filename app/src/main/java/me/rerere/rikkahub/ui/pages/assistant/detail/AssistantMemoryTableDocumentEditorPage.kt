@@ -1,29 +1,41 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -31,23 +43,27 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -61,6 +77,9 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.FloppyDisk
+import me.rerere.hugeicons.stroke.OrientationLandscapeToPotrait
+import me.rerere.hugeicons.stroke.OrientationPotraitToLandscape
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
@@ -169,6 +188,7 @@ private fun MemoryTableDocumentEditorScaffold(
     onSave: (MemoryTableDocument) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
+    val activity = LocalActivity.current
     var draft by remember(document.id, document.templateId) { mutableStateOf(document) }
     var selectedTab by remember(document.id) { mutableIntStateOf(0) }
     var templateDraft by remember(template.id, template.updatedAt) { mutableStateOf(template) }
@@ -193,9 +213,75 @@ private fun MemoryTableDocumentEditorScaffold(
     var addColumnTableIndex by remember { mutableIntStateOf(-1) }
     var columnActionTarget by remember { mutableStateOf<Pair<Int, MemoryTableSchemaColumn>?>(null) }
     var columnToDelete by remember { mutableStateOf<Pair<Int, MemoryTableSchemaColumn>?>(null) }
+    val enteringRequestedOrientation = remember(activity) { activity?.requestedOrientation }
+    val systemUiSnapshotState = remember(activity) {
+        mutableStateOf<MemoryTableEditorSystemUiSnapshot?>(null)
+    }
+    val configurationOrientation = LocalConfiguration.current.orientation
+    val isLandscape = configurationOrientation == Configuration.ORIENTATION_LANDSCAPE
 
     fun currentFingerprint(): String = editorFingerprint(draft, payloadJson, templateDraft)
     val hasUnsavedChanges = currentFingerprint() != baselineFingerprint
+
+    fun restoreSystemUi() {
+        val hostActivity = activity ?: return
+        val snapshot = systemUiSnapshotState.value ?: return
+        val controller = WindowCompat.getInsetsController(hostActivity.window, hostActivity.window.decorView)
+        if (snapshot.statusBarVisible) {
+            controller.show(WindowInsetsCompat.Type.statusBars())
+        } else {
+            controller.hide(WindowInsetsCompat.Type.statusBars())
+        }
+        controller.systemBarsBehavior = snapshot.systemBarsBehavior
+    }
+
+    fun restoreEditorWindowState() {
+        val hostActivity = activity ?: return
+        restoreSystemUi()
+        enteringRequestedOrientation?.let { orientation ->
+            if (hostActivity.requestedOrientation != orientation) {
+                hostActivity.requestedOrientation = orientation
+            }
+        }
+    }
+
+    LaunchedEffect(activity) {
+        val hostActivity = activity ?: return@LaunchedEffect
+        val decorView = hostActivity.window.decorView
+        while (systemUiSnapshotState.value == null) {
+            val rootInsets = ViewCompat.getRootWindowInsets(decorView)
+            if (rootInsets != null) {
+                val controller = WindowCompat.getInsetsController(hostActivity.window, decorView)
+                systemUiSnapshotState.value = MemoryTableEditorSystemUiSnapshot(
+                    statusBarVisible = rootInsets.isVisible(WindowInsetsCompat.Type.statusBars()),
+                    systemBarsBehavior = controller.systemBarsBehavior,
+                )
+                break
+            }
+            withFrameNanos { }
+        }
+    }
+
+    LaunchedEffect(activity, isLandscape, systemUiSnapshotState.value) {
+        val hostActivity = activity ?: return@LaunchedEffect
+        val snapshot = systemUiSnapshotState.value ?: return@LaunchedEffect
+        val controller = WindowCompat.getInsetsController(hostActivity.window, hostActivity.window.decorView)
+        if (isLandscape) {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            if (snapshot.statusBarVisible) {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            } else {
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            }
+            controller.systemBarsBehavior = snapshot.systemBarsBehavior
+        }
+    }
+
+    DisposableEffect(activity) {
+        onDispose { restoreEditorWindowState() }
+    }
 
     fun updateTables(tables: List<MemoryTableEditorTable>) {
         tableState = tables
@@ -313,6 +399,7 @@ private fun MemoryTableDocumentEditorScaffold(
                 onDraftChange(saved)
                 onUpdateTemplate(templateDraft)
                 baselineFingerprint = editorFingerprint(saved, payload, templateDraft)
+                restoreEditorWindowState()
                 onSave(saved)
             }
             .onFailure { editorError = it.message }
@@ -323,6 +410,7 @@ private fun MemoryTableDocumentEditorScaffold(
         if (hasUnsavedChanges) {
             showUnsavedDialog = true
         } else {
+            restoreEditorWindowState()
             onNavigateBack()
         }
     }
@@ -338,9 +426,22 @@ private fun MemoryTableDocumentEditorScaffold(
             draft.revision,
         )
     }
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val topAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val contentSpacing = if (isLandscape) 8.dp else 12.dp
+    val landscapeActionSize = 48.dp
+    val landscapeActionTopPadding = 4.dp
+    val landscapeCutoutInsets = WindowInsets.displayCutout.only(
+        WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+    )
+    val landscapeHorizontalCutoutInsets = WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)
+    val imeVisible = WindowInsets.isImeVisible
+    val orientationTarget = memoryTableEditorTargetOrientation(configurationOrientation)
+    val orientationContentDescription = stringResource(
+        if (isLandscape) {
+            R.string.assistant_page_memory_table_switch_to_portrait
+        } else {
+            R.string.assistant_page_memory_table_switch_to_landscape
+        },
+    )
     val modeTabs: @Composable () -> Unit = {
         SecondaryTabRow(
             selectedTabIndex = selectedTab,
@@ -425,21 +526,16 @@ private fun MemoryTableDocumentEditorScaffold(
     }
 
     Scaffold(
-        modifier = if (isLandscape) {
-            Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
-        } else {
-            Modifier
-        },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = titleText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (!isLandscape) {
+            if (!isLandscape) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = titleText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(
                                 text = stringResource(
                                     R.string.assistant_page_memory_table_template_ref,
@@ -451,170 +547,232 @@ private fun MemoryTableDocumentEditorScaffold(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = { requestBack() },
-                        shapes = IconButtonDefaults.shapes(),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = CustomColors.listItemColors.containerColor,
+                    },
+                    navigationIcon = {
+                        FilledTonalIconButton(
+                            onClick = { requestBack() },
+                            shapes = IconButtonDefaults.shapes(),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = CustomColors.listItemColors.containerColor,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.ArrowLeft01,
+                                contentDescription = stringResource(R.string.back),
+                            )
+                        }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = { persistDraft() },
+                            enabled = editorError == null,
+                        ) {
+                            Text(stringResource(R.string.common_save))
+                        }
+                    },
+                    colors = CustomColors.topBarColors,
+                )
+            }
+        },
+        floatingActionButton = {
+            if (activity != null && !imeVisible) {
+                FloatingActionButton(
+                    onClick = { activity.requestedOrientation = orientationTarget },
+                    modifier = Modifier.size(56.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isLandscape) {
+                            HugeIcons.OrientationLandscapeToPotrait
+                        } else {
+                            HugeIcons.OrientationPotraitToLandscape
+                        },
+                        contentDescription = orientationContentDescription,
+                    )
+                }
+            }
+        },
+        contentWindowInsets = if (isLandscape) WindowInsets.navigationBars else ScaffoldDefaults.contentWindowInsets,
+        containerColor = CustomColors.topBarColors.containerColor,
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding(),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                if (!isLandscape) {
+                    modeTabs()
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (isLandscape) {
+                                Modifier.windowInsetsPadding(landscapeHorizontalCutoutInsets)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(
+                            start = 16.dp,
+                            top = contentSpacing,
+                            end = 16.dp,
+                            bottom = contentSpacing,
                         ),
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                ) {
+                    if (!isLandscape) {
+                        scopeControls()
+                    }
+
+                    editorError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
+                    if (selectedTab == 0) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        ) {
+                            if (isLandscape) {
+                                scopeControls()
+                            }
+                            if (tableState.isEmpty() && editorError == null) {
+                                Text(
+                                    text = stringResource(R.string.assistant_page_memory_table_empty_schema),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            val injectionToggles = remember(templateDraft.schemaJson) {
+                                readMemoryTableInjectionToggles(templateDraft.schemaJson)
+                            }
+                            tableState.forEachIndexed { tableIndex, table ->
+                                val injectEnabled = injectionToggles
+                                    .firstOrNull { it.name == table.name }
+                                    ?.injectEnabled
+                                    ?: true
+                                MemoryTableEditableTable(
+                                    table = table,
+                                    injectEnabled = injectEnabled,
+                                    onInjectEnabledChange = { enabled ->
+                                        setTableInjectionEnabled(table.name, enabled)
+                                    },
+                                    onChange = { updated ->
+                                        updateTables(
+                                            tableState.mapIndexed { index, current ->
+                                                if (index == tableIndex) updated else current
+                                            },
+                                        )
+                                    },
+                                    onAddColumn = {
+                                        addColumnTableIndex = tableIndex
+                                        showAddColumnDialog = true
+                                    },
+                                    onColumnAction = { column ->
+                                        columnActionTarget = tableIndex to column
+                                    },
+                                )
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        ) {
+                            if (isLandscape) {
+                                scopeControls()
+                            }
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_table_template_settings),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            TextField(
+                                value = templateDraft.name,
+                                onValueChange = { value ->
+                                    templateDraft = templateDraft.copy(name = value)
+                                },
+                                label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            TextField(
+                                value = templateDraft.description,
+                                onValueChange = { value ->
+                                    templateDraft = templateDraft.copy(description = value)
+                                },
+                                label = {
+                                    Text(stringResource(R.string.assistant_page_memory_table_template_description))
+                                },
+                                minLines = 2,
+                                maxLines = 5,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            TextField(
+                                value = templateDraft.schemaJson,
+                                onValueChange = { value ->
+                                    templateDraft = templateDraft.copy(schemaJson = value)
+                                    editorError = validateMemoryTableSchemaJson(value).exceptionOrNull()?.message
+                                },
+                                label = { Text(stringResource(R.string.assistant_page_memory_table_schema_json)) },
+                                minLines = 6,
+                                maxLines = 14,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            TextField(
+                                value = payloadJson,
+                                onValueChange = { value ->
+                                    payloadJson = value
+                                    editorError = validateMemoryTablePayloadJson(value).exceptionOrNull()?.message
+                                },
+                                label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
+                                minLines = 6,
+                                maxLines = 14,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .windowInsetsPadding(landscapeCutoutInsets)
+                        .padding(start = 8.dp, top = landscapeActionTopPadding),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    IconButton(
+                        onClick = { requestBack() },
+                        modifier = Modifier.size(landscapeActionSize),
                     ) {
                         Icon(
                             imageVector = HugeIcons.ArrowLeft01,
                             contentDescription = stringResource(R.string.back),
                         )
                     }
-                },
-                actions = {
-                    TextButton(
+                    IconButton(
                         onClick = { persistDraft() },
+                        modifier = Modifier.size(landscapeActionSize),
                         enabled = editorError == null,
                     ) {
-                        Text(stringResource(R.string.common_save))
-                    }
-                },
-                scrollBehavior = topAppBarScrollBehavior.takeIf { isLandscape },
-                colors = CustomColors.topBarColors,
-            )
-        },
-        containerColor = CustomColors.topBarColors.containerColor,
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding(),
-        ) {
-            if (!isLandscape) {
-                modeTabs()
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = contentSpacing),
-                verticalArrangement = Arrangement.spacedBy(contentSpacing),
-            ) {
-                if (!isLandscape) {
-                    scopeControls()
-                }
-
-                editorError?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                if (selectedTab == 0) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                    ) {
-                        if (isLandscape) {
-                            modeTabs()
-                            scopeControls()
-                        }
-                        if (tableState.isEmpty() && editorError == null) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_memory_table_empty_schema),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        val injectionToggles = remember(templateDraft.schemaJson) {
-                            readMemoryTableInjectionToggles(templateDraft.schemaJson)
-                        }
-                        tableState.forEachIndexed { tableIndex, table ->
-                            val injectEnabled = injectionToggles
-                                .firstOrNull { it.name == table.name }
-                                ?.injectEnabled
-                                ?: true
-                            MemoryTableEditableTable(
-                                table = table,
-                                injectEnabled = injectEnabled,
-                                onInjectEnabledChange = { enabled ->
-                                    setTableInjectionEnabled(table.name, enabled)
-                                },
-                                onChange = { updated ->
-                                    updateTables(
-                                        tableState.mapIndexed { index, current ->
-                                            if (index == tableIndex) updated else current
-                                        },
-                                    )
-                                },
-                                onAddColumn = {
-                                    addColumnTableIndex = tableIndex
-                                    showAddColumnDialog = true
-                                },
-                                onColumnAction = { column ->
-                                    columnActionTarget = tableIndex to column
-                                },
-                            )
-                        }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                    ) {
-                        if (isLandscape) {
-                            modeTabs()
-                            scopeControls()
-                        }
-                        Text(
-                            text = stringResource(R.string.assistant_page_memory_table_template_settings),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        TextField(
-                            value = templateDraft.name,
-                            onValueChange = { value ->
-                                templateDraft = templateDraft.copy(name = value)
-                            },
-                            label = { Text(stringResource(R.string.assistant_page_memory_table_template_name)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        TextField(
-                            value = templateDraft.description,
-                            onValueChange = { value ->
-                                templateDraft = templateDraft.copy(description = value)
-                            },
-                            label = { Text(stringResource(R.string.assistant_page_memory_table_template_description)) },
-                            minLines = 2,
-                            maxLines = 5,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        TextField(
-                            value = templateDraft.schemaJson,
-                            onValueChange = { value ->
-                                templateDraft = templateDraft.copy(schemaJson = value)
-                                editorError = validateMemoryTableSchemaJson(value).exceptionOrNull()?.message
-                            },
-                            label = { Text(stringResource(R.string.assistant_page_memory_table_schema_json)) },
-                            minLines = 6,
-                            maxLines = 14,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        TextField(
-                            value = payloadJson,
-                            onValueChange = { value ->
-                                payloadJson = value
-                                editorError = validateMemoryTablePayloadJson(value).exceptionOrNull()?.message
-                            },
-                            label = { Text(stringResource(R.string.assistant_page_memory_table_payload_json)) },
-                            minLines = 6,
-                            maxLines = 14,
-                            modifier = Modifier.fillMaxWidth(),
+                        Icon(
+                            imageVector = HugeIcons.FloppyDisk,
+                            contentDescription = stringResource(R.string.common_save),
                         )
                     }
                 }
@@ -642,6 +800,7 @@ private fun MemoryTableDocumentEditorScaffold(
                 TextButton(
                     onClick = {
                         showUnsavedDialog = false
+                        restoreEditorWindowState()
                         onNavigateBack()
                     },
                 ) {
@@ -945,6 +1104,14 @@ internal fun shouldCloseMemoryTableEditor(
     template: MemoryTableTemplate?,
 ): Boolean = templateLookupComplete && template == null
 
+internal fun memoryTableEditorTargetOrientation(configurationOrientation: Int): Int {
+    return if (configurationOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    }
+}
+
 internal fun memoryTableEditorScopeId(
     scopeType: MemoryTableScopeType,
     assistantId: String,
@@ -1120,6 +1287,11 @@ private fun MemoryTableTemplate.withColumnRenamed(
 private data class MemoryTableSchemaTable(
     val name: String,
     val columns: List<MemoryTableSchemaColumn>,
+)
+
+private data class MemoryTableEditorSystemUiSnapshot(
+    val statusBarVisible: Boolean,
+    val systemBarsBehavior: Int,
 )
 
 private data class MemoryTableSchemaColumn(
