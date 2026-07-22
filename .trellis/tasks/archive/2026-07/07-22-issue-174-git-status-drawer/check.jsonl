@@ -1,0 +1,8 @@
+{"file":".trellis/spec/app/index.md","reason":"App compilation, tests and device-install quality gate"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Locale key and placeholder parity audit"}
+{"file":".trellis/spec/app/workspace-tool-capabilities.md","reason":"No fallback Workspace and readiness verification"}
+{"file":".trellis/spec/workspace/index.md","reason":"Workspace isolation contract review"}
+{"file":".trellis/spec/workspace/program-execution.md","reason":"Verify argv separation and repository path containment"}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Final UI verification matrix"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"End-to-end typed state and error-flow check"}
+{"file":".trellis/spec/guides/repository-hygiene.md","reason":"Device captures and final staging hygiene"}

@@ -1,0 +1,9 @@
+{"file":".trellis/spec/app/index.md","reason":"App-layer pre-development and verification contracts"}
+{"file":".trellis/spec/app/ui-localization.md","reason":"Required resource-backed English and Simplified Chinese UI text"}
+{"file":".trellis/spec/app/workspace-tool-capabilities.md","reason":"Assistant workspace binding and fail-closed readiness semantics"}
+{"file":".trellis/spec/workspace/index.md","reason":"Workspace execution and isolation boundary"}
+{"file":".trellis/spec/workspace/program-execution.md","reason":"Parameterized argv execution and canonical path validation contract"}
+{"file":".trellis/spec/workspace/shell-policy.md","reason":"Preserve the existing Shell policy while adding argv execution"}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Drawer state, layout, accessibility and visual verification matrix"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Typed Git output contract across process, data, state and Compose layers"}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Cancellation and stale Compose state rules"}
