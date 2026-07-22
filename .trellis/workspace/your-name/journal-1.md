@@ -1764,3 +1764,37 @@ Moved the Table/JSON tab row into the landscape editor scroller so the app bar, 
 ### Next Steps
 
 - Verify the collapsed Tab behavior, tab switching after scrolling, both modes, IME, Back, and Save when a device is online.
+
+
+## Session 47: Memory editor orientation and immersive landscape
+
+**Date**: 2026-07-23
+**Task**: Memory editor orientation and immersive landscape
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Implemented page-local portrait/landscape switching with a bottom-right FAB, immersive landscape status-bar behavior, transparent adjacent top-left Back/Save overlay actions, selected-mode preservation, localized accessibility labels, and orientation helper tests. Device remained offline; user supplied a first-build screenshot exposing opaque top actions, right-corner clipping, and reserved action-band overlap. Follow-up changed the actions to a transparent overlay with normal content padding. Resource/compile/test/assemble checks passed; lint remains blocked by unrelated existing baseline findings. Debug APK was uploaded for manual verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dcd3bac1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
