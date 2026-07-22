@@ -341,6 +341,33 @@ private fun MemoryTableDocumentEditorScaffold(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val topAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val contentSpacing = if (isLandscape) 8.dp else 12.dp
+    val modeTabs: @Composable () -> Unit = {
+        SecondaryTabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color.Transparent,
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { switchToTableMode() },
+                text = { Text(stringResource(R.string.assistant_page_memory_table_mode_table)) },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = {
+                    serializeMemoryTablePayload(payloadJson, tableState)
+                        .onSuccess {
+                            payloadJson = it
+                            editorError = null
+                        }
+                        .onFailure {
+                            editorError = it.message
+                        }
+                    selectedTab = 1
+                },
+                text = { Text(stringResource(R.string.assistant_page_memory_table_mode_json)) },
+            )
+        }
+    }
     val scopeControls: @Composable () -> Unit = {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -460,30 +487,8 @@ private fun MemoryTableDocumentEditorScaffold(
                 .padding(innerPadding)
                 .imePadding(),
         ) {
-            SecondaryTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = Color.Transparent,
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { switchToTableMode() },
-                    text = { Text(stringResource(R.string.assistant_page_memory_table_mode_table)) },
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = {
-                        serializeMemoryTablePayload(payloadJson, tableState)
-                            .onSuccess {
-                                payloadJson = it
-                                editorError = null
-                            }
-                            .onFailure {
-                                editorError = it.message
-                            }
-                        selectedTab = 1
-                    },
-                    text = { Text(stringResource(R.string.assistant_page_memory_table_mode_json)) },
-                )
+            if (!isLandscape) {
+                modeTabs()
             }
 
             Column(
@@ -513,6 +518,7 @@ private fun MemoryTableDocumentEditorScaffold(
                         verticalArrangement = Arrangement.spacedBy(contentSpacing),
                     ) {
                         if (isLandscape) {
+                            modeTabs()
                             scopeControls()
                         }
                         if (tableState.isEmpty() && editorError == null) {
@@ -562,6 +568,7 @@ private fun MemoryTableDocumentEditorScaffold(
                         verticalArrangement = Arrangement.spacedBy(contentSpacing),
                     ) {
                         if (isLandscape) {
+                            modeTabs()
                             scopeControls()
                         }
                         Text(
