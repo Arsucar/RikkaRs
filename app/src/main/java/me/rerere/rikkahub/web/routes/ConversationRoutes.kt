@@ -11,17 +11,18 @@ import io.ktor.server.routing.route
 import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
-import me.rerere.rikkahub.web.dto.ConversationDto
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
 import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
 import me.rerere.rikkahub.web.dto.EditMessageRequest
@@ -376,7 +377,7 @@ fun Route.conversationRoutes(
 
             try {
                 var sequence = 0L
-                var previousDto: ConversationDto? = null
+                var previousConversation: Conversation? = null
 
                 val knownErrorIds = chatService.errors.value.map { it.id }.toMutableSet()
 
@@ -387,8 +388,8 @@ fun Route.conversationRoutes(
                         .map { it != null }
                         .distinctUntilChanged()
                 ) { conversation, isGenerating ->
-                    ConversationStreamPayload.Conversation(conversation.toDto(isGenerating))
-                }
+                    ConversationStreamPayload.ConversationUpdate(conversation, isGenerating)
+                }.conflate()
 
                 val errorEvents = chatService.errors.map { errors ->
                     errors
@@ -405,20 +406,21 @@ fun Route.conversationRoutes(
 
                 merge(conversationEvents, errorEvents).collect { payload ->
                     when (payload) {
-                        is ConversationStreamPayload.Conversation -> {
+                        is ConversationStreamPayload.ConversationUpdate -> {
                             sequence += 1
-                            val currentDto = payload.value
-                            val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
+                            val currentConversation = payload.conversation
+                            val nodeDiff = previousConversation?.singleNodeDiffOrNull(currentConversation)
                             if (nodeDiff != null) {
+                                val nodeDto = nodeDiff.node.toDto()
                                 val json = JsonInstant.encodeToString(
                                     ConversationNodeUpdateEvent(
                                         seq = sequence,
-                                        conversationId = currentDto.id,
-                                        nodeId = nodeDiff.node.id,
+                                        conversationId = currentConversation.id.toString(),
+                                        nodeId = nodeDto.id,
                                         nodeIndex = nodeDiff.nodeIndex,
-                                        node = nodeDiff.node,
-                                        updateAt = currentDto.updateAt,
-                                        isGenerating = currentDto.isGenerating
+                                        node = nodeDto,
+                                        updateAt = currentConversation.updateAt.toEpochMilli(),
+                                        isGenerating = payload.isGenerating
                                     )
                                 )
                                 send(data = json, event = "node_update")
@@ -426,12 +428,12 @@ fun Route.conversationRoutes(
                                 val json = JsonInstant.encodeToString(
                                     ConversationSnapshotEvent(
                                         seq = sequence,
-                                        conversation = currentDto
+                                        conversation = currentConversation.toDto(payload.isGenerating)
                                     )
                                 )
                                 send(data = json, event = "snapshot")
                             }
-                            previousDto = currentDto
+                            previousConversation = currentConversation
                         }
 
                         is ConversationStreamPayload.BatchErrors -> {
@@ -452,7 +454,11 @@ fun Route.conversationRoutes(
 }
 
 private sealed interface ConversationStreamPayload {
-    data class Conversation(val value: ConversationDto) : ConversationStreamPayload
+    data class ConversationUpdate(
+        val conversation: Conversation,
+        val isGenerating: Boolean,
+    ) : ConversationStreamPayload
+
     data class BatchErrors(val messages: List<String>) : ConversationStreamPayload
 }
 

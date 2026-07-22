@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -334,8 +338,16 @@ private fun MemoryTableDocumentEditorScaffold(
             draft.revision,
         )
     }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val topAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val contentSpacing = if (isLandscape) 8.dp else 12.dp
 
     Scaffold(
+        modifier = if (isLandscape) {
+            Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
+        } else {
+            Modifier
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -345,16 +357,18 @@ private fun MemoryTableDocumentEditorScaffold(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_memory_table_template_ref,
-                                templateDraft.name.ifBlank { templateDraft.id },
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        if (!isLandscape) {
+                            Text(
+                                text = stringResource(
+                                    R.string.assistant_page_memory_table_template_ref,
+                                    templateDraft.name.ifBlank { templateDraft.id },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -379,6 +393,7 @@ private fun MemoryTableDocumentEditorScaffold(
                         Text(stringResource(R.string.common_save))
                     }
                 },
+                scrollBehavior = topAppBarScrollBehavior.takeIf { isLandscape },
                 colors = CustomColors.topBarColors,
             )
         },
@@ -419,8 +434,8 @@ private fun MemoryTableDocumentEditorScaffold(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 16.dp, vertical = contentSpacing),
+                verticalArrangement = Arrangement.spacedBy(contentSpacing),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -432,11 +447,13 @@ private fun MemoryTableDocumentEditorScaffold(
                             text = stringResource(R.string.assistant_page_memory_scope_global),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        Text(
-                            text = stringResource(R.string.assistant_page_memory_scope_global_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (!isLandscape) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_memory_scope_global_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     Switch(
                         checked = draft.scopeType == MemoryTableScopeType.GLOBAL,

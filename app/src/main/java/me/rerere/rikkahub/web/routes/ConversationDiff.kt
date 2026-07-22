@@ -1,14 +1,14 @@
 package me.rerere.rikkahub.web.routes
 
-import me.rerere.rikkahub.web.dto.ConversationDto
-import me.rerere.rikkahub.web.dto.MessageNodeDto
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 
 internal data class NodeDiff(
     val nodeIndex: Int,
-    val node: MessageNodeDto
+    val node: MessageNode
 )
 
-internal fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): NodeDiff? {
+internal fun Conversation.singleNodeDiffOrNull(current: Conversation): NodeDiff? {
     if (id != current.id || assistantId != current.assistantId || createAt != current.createAt) {
         return null
     }
@@ -26,15 +26,15 @@ internal fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): Nod
         return null
     }
 
-    if (messages.size > current.messages.size) {
+    if (messageNodes.size > current.messageNodes.size) {
         return null
     }
 
     var changedIndex = -1
-    val maxSize = maxOf(messages.size, current.messages.size)
+    val maxSize = maxOf(messageNodes.size, current.messageNodes.size)
     for (index in 0 until maxSize) {
-        val previousNode = messages.getOrNull(index)
-        val currentNode = current.messages.getOrNull(index)
+        val previousNode = messageNodes.getOrNull(index)
+        val currentNode = current.messageNodes.getOrNull(index)
         if (previousNode == currentNode) continue
 
         if (changedIndex != -1) {
@@ -47,6 +47,6 @@ internal fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): Nod
         return null
     }
 
-    val changedNode = current.messages.getOrNull(changedIndex) ?: return null
+    val changedNode = current.messageNodes.getOrNull(changedIndex) ?: return null
     return NodeDiff(nodeIndex = changedIndex, node = changedNode)
 }
