@@ -1640,3 +1640,37 @@ Implemented and reviewed the assistant-bound read-only Git status drawer, harden
 ### Next Steps
 
 - None - task complete
+
+
+## Session 44: Fix issues 175 and 176
+
+**Date**: 2026-07-22
+**Task**: Fix issues 175 and 176
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Optimized the memory table editor for landscape screens and reduced SSE conversation streaming allocations with conflation, domain-level diffs, and regression tests. Full app unit tests, AndroidTest compilation, and debug assembly passed; device was offline, so the APK was uploaded for manual verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `367eed39` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
