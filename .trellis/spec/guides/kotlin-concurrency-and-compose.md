@@ -109,3 +109,38 @@ fun commitConversationState(transform: (ConversationState) -> ConversationState)
 - [ ] acquire/release 在同一手势块内通过 `try/finally` 成对清理
 - [ ] 手势所有权状态按起始 pointer ID 隔离
 - [ ] 多指、取消和重复 release 均有回归测试
+
+---
+
+## 5. 共享 Kotlin 文件 facade 避免 eager 静态初始化
+
+### 问题
+
+Kotlin 文件中的非 `const` 顶层字段会进入生成的 `*Kt.<clinit>`。如果共享工具文件在初始化
+`Regex`、formatter 或其他运行时对象时抛错，首次访问会得到 `ExceptionInInitializerError`；
+同一进程后续调用该文件中的任意无关函数都会变成 `NoClassDefFoundError`。
+
+```kotlin
+// Wrong: 所有 StringUtilsKt 函数都依赖这个初始化成功
+private val placeholderPattern = Regex("\\{([^{}]+)}")
+```
+
+### 正确做法
+
+共享工具 facade 保持无运行时静态初始化。对象只在需要它的函数内、完成早退判断后构造；
+若确实需要缓存，放入职责单一且不会连带其他工具函数的 holder/facade。
+
+```kotlin
+// Correct: StringUtilsKt 不再生成有行为的 <clinit>
+fun String.applyPlaceholders(vararg values: Pair<String, String>): String {
+    if (values.isEmpty()) return this
+    return Regex("\\{([^{}]+)}").replace(this) { match -> /* ... */ }
+}
+```
+
+### 检查清单
+
+- [ ] 共享 `*Utils.kt` 文件不含构造运行时对象的顶层非 `const val`
+- [ ] 出现 `ExceptionInInitializerError` 后又出现同一类的 `NoClassDefFoundError` 时，检查最初 cause 和生成类的 `<clinit>`
+- [ ] 根修后用 `javap -c -p <Class>` 或等价字节码工具确认目标 facade 不再包含有行为的静态初始化块
+- [ ] 行为测试覆盖迁移前的函数契约；不要只在单个 Compose 调用点吞掉 linkage error

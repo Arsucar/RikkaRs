@@ -59,6 +59,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Main list filtered but favorites/derived list unfiltered | Two parts of the screen disagree about the same filter | Apply the same predicate to every projection; preserve full persistence order |
 | Delete as a permanent inline icon | Accidental deletion competes with card navigation | Use a secondary/overflow action and confirm the exact ID/name and impact |
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
+| Optional diagnostics computed inline in Compose | One malformed timestamp or formatter initialization failure crashes the whole message list | Build diagnostic labels in a pure helper, catch only expected data/linkage failures, and omit the optional diagnostic row on failure |
 | UI-only compile as visual validation | Layout, theme, keyboard, and gesture regressions reach users | Record device/screenshot limitations honestly and cover the matrix below |
 | Only the app bar collapses in landscape | Tabs and secondary controls still consume most of a short viewport | Put low-frequency controls in the content scroller or shared collapsing header; measure the editor with IME visible |
 | Page-local orientation or immersive mode is not restored | Later routes stay rotated or lose system bars | Snapshot Activity/window state, use actual configuration as truth, and restore on portrait transition plus disposal |

@@ -6,8 +6,6 @@ import java.net.URLEncoder
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-private val PLACEHOLDER_PATTERN = Regex("\\{([^{}]+)}")
-
 fun String.urlEncode(): String {
     return URLEncoder.encode(this, "UTF-8")
 }
@@ -34,8 +32,6 @@ fun String.unescapeHtml(): String {
     return StringEscapeUtils.unescapeHtml4(this)
 }
 
-fun Number.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
-
 fun String.applyPlaceholders(
     vararg placeholders: Pair<String, String>,
 ): String {
@@ -45,7 +41,7 @@ fun String.applyPlaceholders(
             if (placeholder !in this) put(placeholder, replacement)
         }
     }
-    return PLACEHOLDER_PATTERN.replace(this) { match ->
+    return Regex("\\{([^{}]+)}").replace(this) { match ->
         replacements[match.groupValues[1]] ?: match.value
     }
 }
@@ -66,44 +62,6 @@ fun Long.fileSizeToString(): String {
     }
     return "%.${precision}f %s".format(value, units[unitIndex])
 }
-
-fun Int.formatNumber(): String {
-    val absValue = kotlin.math.abs(this)
-    val sign = if (this < 0) "-" else ""
-
-    return when {
-        absValue < 1000 -> this.toString()
-        absValue < 1000000 -> {
-            val value = absValue / 1000.0
-            if (value == value.toInt().toDouble()) {
-                "$sign${value.toInt()}K"
-            } else {
-                "$sign${value.toFixed(1)}K"
-            }
-        }
-
-        absValue < 1000000000 -> {
-            val value = absValue / 1000000.0
-            if (value == value.toInt().toDouble()) {
-                "$sign${value.toInt()}M"
-            } else {
-                "$sign${value.toFixed(1)}M"
-            }
-        }
-
-        else -> {
-            val value = absValue / 1000000000.0
-            if (value == value.toInt().toDouble()) {
-                "$sign${value.toInt()}B"
-            } else {
-                "$sign${value.toFixed(1)}B"
-            }
-        }
-    }
-}
-
-fun Float.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
-fun Double.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
 
 /**
  * 提取字符串中所有引号内的内容

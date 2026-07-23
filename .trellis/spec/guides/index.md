@@ -25,6 +25,7 @@ These guides help you **ask the right questions before coding**.
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Repository Hygiene Guide](./repository-hygiene.md) | Keep temporary device captures and sensitive debug data out of Git | After device UI inspection or before broad staging |
 | [UI Modification Thinking Guide](./ui-modification-thinking-guide.md) | Prevent recurring Android Compose layout, state, feedback, accessibility, and visual-validation regressions | Before changing any user-visible Android Compose UI (not web-ui/React) |
+| [Kotlin Concurrency and Compose Guide](./kotlin-concurrency-and-compose.md) | Prevent coroutine, Compose state, gesture, and Kotlin file-initialization regressions | When changing shared Kotlin utilities or Compose/concurrency behavior |
 
 ---
 

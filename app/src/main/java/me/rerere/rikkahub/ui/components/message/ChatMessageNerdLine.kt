@@ -27,6 +27,64 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.toFixed
 import java.time.Duration
+import java.time.DateTimeException
+
+internal data class TokenStatsDisplay(
+    val promptLabel: String,
+    val cachedLabel: String?,
+    val completionLabel: String,
+    val tpsLabel: String?,
+    val durationLabel: String?,
+)
+
+/**
+ * Build token-stats labels for a message. Returns null if usage is absent or formatting fails.
+ * Isolated from Compose so ExceptionInInitializerError / bad timestamps cannot crash the list.
+ */
+internal fun buildTokenStatsDisplay(message: UIMessage): TokenStatsDisplay? {
+    return try {
+        val usage = message.usage ?: return null
+        val promptLabel = "${usage.promptTokens.formatNumber()} tokens"
+        val cachedLabel = if (usage.cachedTokens > 0) {
+            "(${usage.cachedTokens.formatNumber()} cached)"
+        } else {
+            null
+        }
+        val completionLabel = "${usage.completionTokens.formatNumber()} tokens"
+
+        var tpsLabel: String? = null
+        var durationLabel: String? = null
+        val finishedAt = message.finishedAt
+        if (finishedAt != null) {
+            val duration = Duration.between(
+                message.createdAt.toJavaLocalDateTime(),
+                finishedAt.toJavaLocalDateTime()
+            )
+            val durationMs = duration.toMillis()
+            if (durationMs > 0) {
+                val tps = usage.completionTokens.toFloat() / durationMs * 1000
+                tpsLabel = "${tps.toFixed(1)} tok/s"
+                durationLabel = "${(durationMs / 1000f).toFixed(1)}s"
+            }
+        }
+
+        TokenStatsDisplay(
+            promptLabel = promptLabel,
+            cachedLabel = cachedLabel,
+            completionLabel = completionLabel,
+            tpsLabel = tpsLabel,
+            durationLabel = durationLabel,
+        )
+    } catch (_: DateTimeException) {
+        null
+    } catch (_: ArithmeticException) {
+        null
+    } catch (_: ExceptionInInitializerError) {
+        null
+    } catch (_: NoClassDefFoundError) {
+        null
+    }
+}
 
 /**
  * 显示消息的技术统计信息（如 token 使用量）
@@ -38,6 +96,9 @@ fun ChatMessageNerdLine(
     color: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
 ) {
     val settings = LocalSettings.current.displaySetting
+    if (!settings.showTokenUsage) return
+
+    val stats = buildTokenStatsDisplay(message) ?: return
 
     ProvideTextStyle(MaterialTheme.typography.labelSmall.copy(color = color)) {
         CompositionLocalProvider(LocalContentColor provides color) {
@@ -46,75 +107,65 @@ fun ChatMessageNerdLine(
                 itemVerticalAlignment = Alignment.CenterVertically,
                 modifier = modifier.padding(horizontal = 4.dp),
             ) {
-                val usage = message.usage
-                if (settings.showTokenUsage && usage != null) {
-                    // Input tokens
-                    StatsItem(
-                        icon = {
-                            Icon(
-                                imageVector = HugeIcons.Upload02,
-                                contentDescription = "Input",
-                                tint = color,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        },
-                        content = {
-                            Text(text = "${usage.promptTokens.formatNumber()} tokens")
-                            // Cached tokens
-                            if (usage.cachedTokens > 0) {
-                                Text(
-                                    text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
-                                )
-                            }
+                // Input tokens
+                StatsItem(
+                    icon = {
+                        Icon(
+                            imageVector = HugeIcons.Upload02,
+                            contentDescription = "Input",
+                            tint = color,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    },
+                    content = {
+                        Text(text = stats.promptLabel)
+                        stats.cachedLabel?.let { cached ->
+                            Text(text = cached)
                         }
-                    )
-                    // Output tokens
-                    StatsItem(
-                        icon = {
-                            Icon(
-                                imageVector = HugeIcons.Download04,
-                                contentDescription = "Output",
-                                modifier = Modifier.size(12.dp)
-                            )
-                        },
-                        content = {
-                            Text(text = "${usage.completionTokens.formatNumber()} tokens")
-                        }
-                    )
-                    // TPS
-                    if (message.finishedAt != null) {
-                        val duration = Duration.between(
-                            message.createdAt.toJavaLocalDateTime(),
-                            message.finishedAt!!.toJavaLocalDateTime()
-                        )
-                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
-                        val seconds = (duration.toMillis() / 1000f).toFixed(1)
-                        StatsItem(
-                            icon = {
-                                Icon(
-                                    imageVector = HugeIcons.Zap,
-                                    contentDescription = "Speed",
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            },
-                            content = {
-                                Text(text = "${tps.toFixed(1)} tok/s")
-                            }
-                        )
-
-                        StatsItem(
-                            icon = {
-                                Icon(
-                                    imageVector = HugeIcons.Clock02,
-                                    contentDescription = "Duration",
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            },
-                            content = {
-                                Text(text = "${seconds}s")
-                            }
-                        )
                     }
+                )
+                // Output tokens
+                StatsItem(
+                    icon = {
+                        Icon(
+                            imageVector = HugeIcons.Download04,
+                            contentDescription = "Output",
+                            modifier = Modifier.size(12.dp)
+                        )
+                    },
+                    content = {
+                        Text(text = stats.completionLabel)
+                    }
+                )
+                // TPS
+                stats.tpsLabel?.let { tps ->
+                    StatsItem(
+                        icon = {
+                            Icon(
+                                imageVector = HugeIcons.Zap,
+                                contentDescription = "Speed",
+                                modifier = Modifier.size(12.dp)
+                            )
+                        },
+                        content = {
+                            Text(text = tps)
+                        }
+                    )
+                }
+                // Duration
+                stats.durationLabel?.let { duration ->
+                    StatsItem(
+                        icon = {
+                            Icon(
+                                imageVector = HugeIcons.Clock02,
+                                contentDescription = "Duration",
+                                modifier = Modifier.size(12.dp)
+                            )
+                        },
+                        content = {
+                            Text(text = duration)
+                        }
+                    )
                 }
             }
         }
