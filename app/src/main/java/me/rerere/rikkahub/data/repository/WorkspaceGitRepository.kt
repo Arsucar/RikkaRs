@@ -4,16 +4,24 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.GitChangeSection
 import me.rerere.rikkahub.data.model.GitFileChange
 import me.rerere.rikkahub.data.model.GitRepositoryStatus
+import me.rerere.rikkahub.data.model.workspaceCwdToRelativePath
 import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceWorkingDirectoryException
 import java.nio.charset.StandardCharsets
 
 class WorkspaceGitRepository(
     private val workspaceRepository: WorkspaceRepository,
 ) {
-    suspend fun readStatus(workspace: WorkspaceEntity): GitRepositoryStatus {
+    suspend fun readStatus(
+        workspace: WorkspaceEntity,
+        workspaceCwd: String? = null,
+    ): GitRepositoryStatus {
+        val selectedCwd = workspaceCwdToRelativePath(workspaceCwd)
+        val repositoryCwd = loadGitRepositoryCwd(workspace.id, selectedCwd)
         val result = workspaceRepository.executeProgram(
             id = workspace.id,
             arguments = STATUS_ARGUMENTS,
+            cwd = repositoryCwd,
             timeoutMillis = GIT_TIMEOUT_MILLIS,
         )
         result.requireGitSuccess()
@@ -32,14 +40,20 @@ class WorkspaceGitRepository(
         workspace: WorkspaceEntity,
         path: String,
         section: GitChangeSection,
+        workspaceCwd: String? = null,
     ): GitDiffContent {
+        val selectedCwd = workspaceCwdToRelativePath(workspaceCwd)
+        val repositoryCwd = loadGitRepositoryCwd(workspace.id, selectedCwd)
         val diff = try {
             workspaceRepository.executeProgramWithValidatedPath(
                 id = workspace.id,
                 path = path,
                 buildArguments = { validatedPath -> buildGitDiffArguments(section, validatedPath) },
+                cwd = repositoryCwd,
                 timeoutMillis = GIT_TIMEOUT_MILLIS,
             )
+        } catch (_: WorkspaceWorkingDirectoryException) {
+            throw GitReadException.DirectoryUnavailable
         } catch (_: IllegalArgumentException) {
             throw GitReadException.InvalidPath
         }
@@ -60,6 +74,13 @@ class WorkspaceGitRepository(
         const val GIT_TIMEOUT_MILLIS = 8_000L
         const val MAX_STATUS_FILES = 300
         const val MAX_DIFF_BYTES = 64 * 1024
+        private val GIT_PREFIX_ARGUMENTS = listOf(
+            "git",
+            "--no-pager",
+            "--no-optional-locks",
+            "rev-parse",
+            "--show-prefix",
+        )
         private val STATUS_ARGUMENTS = listOf(
             "git",
             "--no-pager",
@@ -71,6 +92,42 @@ class WorkspaceGitRepository(
             "--untracked-files=all",
         )
     }
+
+    private suspend fun loadGitRepositoryCwd(workspaceId: String, selectedCwd: String): String {
+        val result = try {
+            workspaceRepository.executeProgram(
+                id = workspaceId,
+                arguments = GIT_PREFIX_ARGUMENTS,
+                cwd = selectedCwd,
+                timeoutMillis = GIT_TIMEOUT_MILLIS,
+            )
+        } catch (_: WorkspaceWorkingDirectoryException) {
+            throw GitReadException.DirectoryUnavailable
+        }
+        result.requireGitSuccess()
+        return resolveGitRepositoryRootCwd(selectedCwd, result.stdout)
+    }
+}
+
+internal fun resolveGitRepositoryRootCwd(workspaceCwd: String, showPrefixOutput: String): String {
+    val cwdSegments = workspaceCwd.split('/').filter { it.isNotEmpty() }
+    val prefixSegments = showPrefixOutput
+        .trimEnd('\r', '\n')
+        .replace('\\', '/')
+        .split('/')
+        .filter { it.isNotEmpty() && it != "." }
+    require(prefixSegments.size <= cwdSegments.size) {
+        "Git repository prefix is outside the workspace CWD"
+    }
+    require(
+        prefixSegments.isEmpty() ||
+            cwdSegments.takeLast(prefixSegments.size) == prefixSegments,
+    ) {
+        "Git repository prefix does not match the workspace CWD"
+    }
+    return cwdSegments
+        .dropLast(prefixSegments.size)
+        .joinToString("/")
 }
 
 internal fun buildGitDiffArguments(
@@ -131,6 +188,7 @@ sealed interface GitDiffContent {
 
 sealed class GitReadException : Exception() {
     data object InvalidPath : GitReadException()
+    data object DirectoryUnavailable : GitReadException()
     data object PermissionDenied : GitReadException()
     data object NotRepository : GitReadException()
     data object TimedOut : GitReadException()

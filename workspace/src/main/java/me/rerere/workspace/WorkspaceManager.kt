@@ -6,6 +6,11 @@ import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
+class WorkspaceWorkingDirectoryException(
+    cwd: String,
+    cause: IllegalArgumentException? = null,
+) : IllegalArgumentException("Invalid workspace working directory: $cwd", cause)
+
 class WorkspaceManager(
     private val baseDir: File,
     private val config: WorkspaceConfig = WorkspaceConfig(),
@@ -203,9 +208,17 @@ class WorkspaceManager(
         require(arguments.isNotEmpty()) { "Program arguments are required" }
         require(arguments.none { it.contains('\u0000') }) { "Program arguments contain invalid character" }
 
-        val workingDir = fileSystem.resolve(filesDir(root), cwd)
-        require(workingDir.exists()) { "Working directory does not exist: $cwd" }
-        require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
+        val workingDir = try {
+            fileSystem.resolve(filesDir(root), cwd)
+        } catch (error: IllegalArgumentException) {
+            throw WorkspaceWorkingDirectoryException(cwd, error)
+        }
+        if (!workingDir.exists()) {
+            throw WorkspaceWorkingDirectoryException(cwd)
+        }
+        if (!workingDir.isDirectory) {
+            throw WorkspaceWorkingDirectoryException(cwd)
+        }
 
         return shellRunner.execute(
             WorkspaceShellContext(
@@ -229,27 +242,42 @@ class WorkspaceManager(
         path: String,
         buildArguments: (String) -> List<String>,
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+        cwd: String = "",
     ): WorkspaceCommandResult {
         // Keep validation and process startup in one synchronous boundary to minimize path-swap exposure.
-        val validatedPath = validateRelativePath(root, path)
+        val validatedPath = validateRelativePath(root, path, cwd)
         return executeProgram(
             root = root,
             arguments = buildArguments(validatedPath),
+            cwd = cwd,
             timeoutMillis = timeoutMillis,
         )
     }
 
-    fun validateRelativePath(root: String, path: String): String {
-        require(path.isNotBlank()) { "Path is required" }
-        require(!path.contains('\u0000')) { "Path contains invalid character" }
-        require(!path.contains('\\')) { "Path must use forward slashes" }
-        require(!path.startsWith('/') && !WINDOWS_ABSOLUTE_PATH.matches(path)) { "Path must be relative" }
+    fun validateRelativePath(root: String, path: String, cwd: String = ""): String {
+        val normalizedPath = normalizeRelativeRepositoryPath(path, allowBlank = false, label = "Path")
+        val normalizedCwd = normalizeRelativeRepositoryPath(cwd, allowBlank = true, label = "Working directory")
+        val workspaceRelativePath = listOf(normalizedCwd, normalizedPath)
+            .filter { it.isNotEmpty() }
+            .joinToString("/")
+        fileSystem.resolveRepositoryPath(filesDir(root), workspaceRelativePath)
+        return normalizedPath
+    }
+
+    private fun normalizeRelativeRepositoryPath(
+        path: String,
+        allowBlank: Boolean,
+        label: String,
+    ): String {
+        if (allowBlank && path.isBlank()) return ""
+        require(path.isNotBlank()) { "$label is required" }
+        require(!path.contains('\u0000')) { "$label contains invalid character" }
+        require(!path.contains('\\')) { "$label must use forward slashes" }
+        require(!path.startsWith('/') && !WINDOWS_ABSOLUTE_PATH.matches(path)) { "$label must be relative" }
 
         val segments = path.split('/').filter { it.isNotEmpty() && it != "." }
-        require(segments.isNotEmpty() && segments.none { it == ".." }) { "Path escapes workspace root" }
-        val normalized = segments.joinToString("/")
-        fileSystem.resolveRepositoryPath(filesDir(root), normalized)
-        return normalized
+        require(segments.isNotEmpty() && segments.none { it == ".." }) { "$label escapes workspace root" }
+        return segments.joinToString("/")
     }
 
     private fun workspaceLockedResult() = WorkspaceCommandResult(

@@ -49,7 +49,7 @@ import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_INPUT_DRAFT_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.buildInputDraftPrompt
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.ai.GenerationPreparationMode
@@ -2102,6 +2102,7 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         onStreamUpdate: (String) -> Unit,
+        userInstruction: String = "",
     ): String {
         require(conversation.id == conversationId) { "Conversation ID mismatch" }
         require(conversation.currentMessages.isNotEmpty()) {
@@ -2115,11 +2116,12 @@ class ChatService(
         val provider = model.findProvider(settings.providers)
             ?: error(context.getString(R.string.input_draft_model_unavailable))
         val providerHandler = providerManager.getProviderByType(provider)
-        val prompt = DEFAULT_INPUT_DRAFT_PROMPT.applyPlaceholders(
-            "locale" to Locale.getDefault().displayName,
-            "content" to conversation.currentMessages
+        val prompt = buildInputDraftPrompt(
+            locale = Locale.getDefault().displayName,
+            content = conversation.currentMessages
                 .takeLast(8)
                 .joinToString("\n\n") { it.summaryAsText(maxLength = 500) },
+            userInstruction = userInstruction,
         )
         var messages = listOf(UIMessage.user(prompt))
         var draft = ""

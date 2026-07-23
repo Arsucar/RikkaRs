@@ -52,3 +52,9 @@ fun resolveEffectiveWorkspaceCwd(
     val stored = conversation.workspaceCwd ?: assistant.defaultWorkspaceCwd
     return normalizeWorkspaceCwd(stored)
 }
+
+/** Converts an absolute workspace CWD into the relative path expected by [WorkspaceManager]. */
+fun workspaceCwdToRelativePath(path: String?): String {
+    val normalized = normalizeWorkspaceCwd(path)
+    return normalized.removePrefix("$WORKSPACE_ROOT/").removePrefix(WORKSPACE_ROOT)
+}

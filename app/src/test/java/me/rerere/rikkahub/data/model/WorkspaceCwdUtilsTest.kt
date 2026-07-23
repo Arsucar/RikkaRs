@@ -86,4 +86,13 @@ class WorkspaceCwdUtilsTest {
             resolveEffectiveWorkspaceCwd(conv("/workspace//x/"), Assistant()),
         )
     }
+
+    @Test
+    fun relativePathConvertsAbsoluteWorkspaceCwdForProgramExecution() {
+        assertEquals("", workspaceCwdToRelativePath(null))
+        assertEquals("", workspaceCwdToRelativePath("/workspace"))
+        assertEquals("project", workspaceCwdToRelativePath("/workspace/project"))
+        assertEquals("project/nested", workspaceCwdToRelativePath("/workspace//project/nested/"))
+        assertEquals("", workspaceCwdToRelativePath("/workspace/../etc"))
+    }
 }

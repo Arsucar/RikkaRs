@@ -8,6 +8,21 @@ import org.junit.Test
 class StringUtilsTest {
 
     @Test
+    fun `placeholder replacements are not expanded recursively`() {
+        assertEquals(
+            "value={second}",
+            "value={first}".applyPlaceholders(
+                "first" to "{second}",
+                "second" to "expanded",
+            ),
+        )
+        assertEquals(
+            "value=first",
+            "value={key}".applyPlaceholders("key" to "first", "key" to "second"),
+        )
+    }
+
+    @Test
     fun `extract chinese double quotes`() {
         assertEquals(listOf("你好"), "他说“你好”".extractQuotedContent())
     }

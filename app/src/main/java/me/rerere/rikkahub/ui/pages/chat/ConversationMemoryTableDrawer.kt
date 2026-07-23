@@ -222,6 +222,7 @@ fun ConversationDrawerContent(
     conversationId: String,
     assistantId: String,
     assistantWorkspaceId: String?,
+    assistantWorkspaceCwd: String?,
     isolationEnabled: Boolean,
     onIsolationChange: (Boolean) -> Unit,
     onSyncToConversation: (MemoryTableDocument) -> Unit,
@@ -262,7 +263,7 @@ fun ConversationDrawerContent(
         }
     }
 
-    LaunchedEffect(drawerOpen, assistantWorkspaceId) {
+    LaunchedEffect(drawerOpen, assistantWorkspaceId, assistantWorkspaceCwd) {
         if (drawerOpen) onLoadGitStatus()
     }
 

@@ -273,6 +273,7 @@ class WorkspaceRepository(
         path: String,
         buildArguments: (String) -> List<String>,
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+        cwd: String = "",
     ): WorkspaceCommandResult {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         return runInterruptible(Dispatchers.IO) {
@@ -280,6 +281,7 @@ class WorkspaceRepository(
                 root = workspace.root,
                 path = path,
                 buildArguments = buildArguments,
+                cwd = cwd,
                 timeoutMillis = timeoutMillis,
             )
         }

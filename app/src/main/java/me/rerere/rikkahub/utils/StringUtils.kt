@@ -6,6 +6,8 @@ import java.net.URLEncoder
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
+private val PLACEHOLDER_PATTERN = Regex("\\{([^{}]+)}")
+
 fun String.urlEncode(): String {
     return URLEncoder.encode(this, "UTF-8")
 }
@@ -37,11 +39,15 @@ fun Number.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
 fun String.applyPlaceholders(
     vararg placeholders: Pair<String, String>,
 ): String {
-    var result = this
-    for ((placeholder, replacement) in placeholders) {
-        result = result.replace("{$placeholder}", replacement)
+    if (placeholders.isEmpty()) return this
+    val replacements = buildMap {
+        placeholders.forEach { (placeholder, replacement) ->
+            if (placeholder !in this) put(placeholder, replacement)
+        }
     }
-    return result
+    return PLACEHOLDER_PATTERN.replace(this) { match ->
+        replacements[match.groupValues[1]] ?: match.value
+    }
 }
 
 fun Long.fileSizeToString(): String {

@@ -15,7 +15,10 @@ class GetAssistantGitStatusUseCase(
     private val workspaceRepository: WorkspaceRepository,
     private val gitRepository: WorkspaceGitRepository,
 ) {
-    suspend operator fun invoke(workspaceId: String?): GitStatusUiState {
+    suspend operator fun invoke(
+        workspaceId: String?,
+        workspaceCwd: String? = null,
+    ): GitStatusUiState {
         return try {
             if (workspaceId == null) return GitStatusUiState.Unbound
             val workspace = workspaceRepository.getById(workspaceId)
@@ -24,7 +27,7 @@ class GetAssistantGitStatusUseCase(
             if (!workspaceRepository.workspaceFilesExist(resolvedWorkspace.id)) {
                 return GitStatusUiState.DirectoryUnavailable
             }
-            GitStatusUiState.Success(gitRepository.readStatus(resolvedWorkspace))
+            GitStatusUiState.Success(gitRepository.readStatus(resolvedWorkspace, workspaceCwd))
         } catch (error: CancellationException) {
             throw error
         } catch (_: SecurityException) {
@@ -47,6 +50,7 @@ class GetGitFileDiffUseCase(
         workspaceId: String,
         path: String,
         section: GitChangeSection,
+        workspaceCwd: String? = null,
     ): GitDiffUiState {
         return try {
             val workspace = workspaceRepository.getById(workspaceId) ?: return GitDiffUiState.Failed
@@ -56,7 +60,7 @@ class GetGitFileDiffUseCase(
             if (!workspaceRepository.workspaceFilesExist(workspace.id)) {
                 return GitDiffUiState.DirectoryUnavailable
             }
-            when (val result = gitRepository.readDiff(workspace, path, section)) {
+            when (val result = gitRepository.readDiff(workspace, path, section, workspaceCwd)) {
                 GitDiffContent.Binary -> GitDiffUiState.Binary
                 is GitDiffContent.Text -> GitDiffUiState.Text(result.content, result.truncated)
             }
@@ -85,6 +89,7 @@ internal fun classifyGitWorkspaceBinding(
 }
 
 private fun GitReadException.toStatusUiState(): GitStatusUiState = when (this) {
+    GitReadException.DirectoryUnavailable -> GitStatusUiState.DirectoryUnavailable
     GitReadException.PermissionDenied -> GitStatusUiState.PermissionDenied
     GitReadException.NotRepository -> GitStatusUiState.NotRepository
     GitReadException.TimedOut -> GitStatusUiState.TimedOut
@@ -94,8 +99,9 @@ private fun GitReadException.toStatusUiState(): GitStatusUiState = when (this) {
     -> GitStatusUiState.Failed
 }
 
-private fun GitReadException.toDiffUiState(): GitDiffUiState = when (this) {
+internal fun GitReadException.toDiffUiState(): GitDiffUiState = when (this) {
     GitReadException.InvalidPath -> GitDiffUiState.InvalidPath
+    GitReadException.DirectoryUnavailable -> GitDiffUiState.DirectoryUnavailable
     GitReadException.PermissionDenied -> GitDiffUiState.PermissionDenied
     GitReadException.TimedOut -> GitDiffUiState.TimedOut
     GitReadException.NotRepository,

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.prompts
 
+import me.rerere.rikkahub.utils.applyPlaceholders
+
 internal val DEFAULT_SUGGESTION_PROMPT = """
     I will provide you with some chat content in the `<content>` block, including conversations between the User and the AI assistant.
     You need to act as the **User** to reply to the assistant, generating 3~5 appropriate and contextually relevant responses to help the assistant improve its answers.
@@ -30,7 +32,30 @@ internal val DEFAULT_INPUT_DRAFT_PROMPT = """
     5. Do not invent personal facts, commitments, or preferences not supported by the context.
     6. Act as the User, not the Assistant.
 
+    {user_instruction}
+
     <content>
     {content}
     </content>
 """.trimIndent()
+
+internal fun buildInputDraftPrompt(
+    locale: String,
+    content: String,
+    userInstruction: String = "",
+): String {
+    val instructionBlock = userInstruction.trim().takeIf { it.isNotEmpty() }?.let {
+        """
+        <user_instruction>
+        用户对本次回复的附加要求/意图：
+        $it
+        </user_instruction>
+        请在生成回复草稿时严格遵循上述要求。
+        """.trimIndent()
+    }.orEmpty()
+    return DEFAULT_INPUT_DRAFT_PROMPT.applyPlaceholders(
+        "locale" to locale,
+        "content" to content,
+        "user_instruction" to instructionBlock,
+    )
+}

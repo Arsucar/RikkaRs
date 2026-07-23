@@ -111,6 +111,17 @@ class WorkspaceGitRepositoryTest {
     }
 
     @Test
+    fun repositoryRootCwdIsDerivedFromGitShowPrefix() {
+        assertEquals("", resolveGitRepositoryRootCwd("app/src", "app/src/\n"))
+        assertEquals("nested/repo", resolveGitRepositoryRootCwd("nested/repo", "\n"))
+        assertEquals("nested/repo", resolveGitRepositoryRootCwd("nested/repo/src/main", "src/main/\n"))
+        assertEquals("nested", resolveGitRepositoryRootCwd("nested/ repo/src", " repo/src/\n"))
+        assertThrows(IllegalArgumentException::class.java) {
+            resolveGitRepositoryRootCwd("nested/repo", "other/\n")
+        }
+    }
+
+    @Test
     fun diffPathWithShellMetacharactersRemainsOneArgument() {
         val path = "folder/name; echo leaked.txt"
 

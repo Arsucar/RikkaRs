@@ -126,6 +126,7 @@ class ChatVM(
     private var gitStatusGeneration = 0L
     private var gitDiffGeneration = 0L
     private var loadingGitWorkspaceId: String? = null
+    private var loadingGitWorkspaceCwd: String? = null
     private var inputDraftGeneration = 0L
     private var originalInputDraftText: String? = null
     private var lastInputDraftText: String? = null
@@ -208,21 +209,28 @@ class ChatVM(
         contextPreviewState.value = UiState.Idle
     }
 
-    fun loadGitStatus(workspaceId: String?) {
-        if (gitStatusJob?.isActive == true && loadingGitWorkspaceId == workspaceId) return
+    fun loadGitStatus(workspaceId: String?, workspaceCwd: String? = null) {
+        if (gitStatusJob?.isActive == true &&
+            loadingGitWorkspaceId == workspaceId &&
+            loadingGitWorkspaceCwd == workspaceCwd
+        ) {
+            return
+        }
         gitStatusJob?.cancel()
         gitDiffJob?.cancel()
         loadingGitWorkspaceId = workspaceId
+        loadingGitWorkspaceCwd = workspaceCwd
         gitStatusWorkspaceId.value = workspaceId
         val generation = ++gitStatusGeneration
         ++gitDiffGeneration
         gitStatusState.value = GitStatusUiState.Loading
         gitDiffState.value = GitDiffUiState.Idle
         gitStatusJob = viewModelScope.launch {
-            val result = getAssistantGitStatus(workspaceId)
+            val result = getAssistantGitStatus(workspaceId, workspaceCwd)
             if (generation == gitStatusGeneration) {
                 gitStatusState.value = result
                 loadingGitWorkspaceId = null
+                loadingGitWorkspaceCwd = null
             }
         }
     }
@@ -231,12 +239,13 @@ class ChatVM(
         workspaceId: String,
         path: String,
         section: GitChangeSection,
+        workspaceCwd: String? = null,
     ) {
         gitDiffJob?.cancel()
         val generation = ++gitDiffGeneration
         gitDiffState.value = GitDiffUiState.Loading
         gitDiffJob = viewModelScope.launch {
-            val result = getGitFileDiff(workspaceId, path, section)
+            val result = getGitFileDiff(workspaceId, path, section, workspaceCwd)
             if (generation == gitDiffGeneration) {
                 gitDiffState.value = result
             }
@@ -565,7 +574,10 @@ class ChatVM(
         }
     }
 
-    fun generateInputDraft(conversation: Conversation) {
+    fun generateInputDraft(
+        conversation: Conversation,
+        userInstruction: String = inputState.textContent.text.toString().trim(),
+    ) {
         if (inputDraftJob?.isActive == true ||
             inputState.isEditing() ||
             !hasInputDraftReplyTarget(
@@ -586,22 +598,24 @@ class ChatVM(
                 val generatedDraft = chatService.generateInputDraft(
                     conversationId = _conversationId,
                     conversation = conversation,
-                ) streamUpdate@{ partial ->
-                    if (generation != inputDraftGeneration) return@streamUpdate
-                    val currentText = inputState.textContent.text.toString()
-                    if (currentText != lastInputDraftText) {
-                        // A user/ASR edit wins. Invalidate before cancelling so late chunks are ignored.
-                        inputDraftGeneration++
-                        inputDraftJob?.cancel()
-                        inputDraftJob = null
-                        _inputDraftLoading.value = false
-                        originalInputDraftText = null
-                        lastInputDraftText = null
-                        return@streamUpdate
-                    }
-                    lastInputDraftText = partial
-                    inputState.setMessageText(partial)
-                }
+                    onStreamUpdate = streamUpdate@{ partial ->
+                        if (generation != inputDraftGeneration) return@streamUpdate
+                        val currentText = inputState.textContent.text.toString()
+                        if (currentText != lastInputDraftText) {
+                            // A user/ASR edit wins. Invalidate before cancelling so late chunks are ignored.
+                            inputDraftGeneration++
+                            inputDraftJob?.cancel()
+                            inputDraftJob = null
+                            _inputDraftLoading.value = false
+                            originalInputDraftText = null
+                            lastInputDraftText = null
+                            return@streamUpdate
+                        }
+                        lastInputDraftText = partial
+                        inputState.setMessageText(partial)
+                    },
+                    userInstruction = userInstruction,
+                )
                 val completedDraft = requireInputDraftText(
                     draft = generatedDraft,
                     emptyMessage = context.getString(R.string.input_draft_empty_response),

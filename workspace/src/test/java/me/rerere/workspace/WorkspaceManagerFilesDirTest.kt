@@ -73,6 +73,72 @@ class WorkspaceManagerFilesDirTest {
     }
 
     @Test
+    fun validatedProgramUsesNestedCwdWhileKeepingArgumentRelativeToRepository() {
+        val baseDir = File(System.getProperty("java.io.tmpdir"), "ws-nested-program-${System.nanoTime()}")
+        val runner = RecordingShellRunner()
+        val manager = WorkspaceManager(baseDir = baseDir, shellRunner = runner)
+        manager.ensureWorkspace("ws1")
+        File(manager.filesDir("ws1"), "nested/repo/folder").mkdirs()
+
+        manager.executeProgramWithValidatedPath(
+            root = "ws1",
+            path = "./folder/file name.txt",
+            buildArguments = { path -> listOf("git", "diff", "--", path) },
+            cwd = "nested/repo",
+        )
+
+        assertEquals("nested/repo", runner.context?.cwd)
+        assertEquals(
+            listOf("git", "diff", "--", "folder/file name.txt"),
+            runner.context?.programArguments,
+        )
+    }
+
+    @Test
+    fun validatedProgramRejectsUnsafeNestedCwdBeforeRunnerInvocation() {
+        val baseDir = File(System.getProperty("java.io.tmpdir"), "ws-invalid-cwd-${System.nanoTime()}")
+        val runner = RecordingShellRunner()
+        val manager = WorkspaceManager(baseDir = baseDir, shellRunner = runner)
+        manager.ensureWorkspace("ws1")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            manager.executeProgramWithValidatedPath(
+                root = "ws1",
+                path = "file.txt",
+                buildArguments = { path -> listOf("git", "diff", "--", path) },
+                cwd = "../outside",
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            manager.executeProgramWithValidatedPath(
+                root = "ws1",
+                path = "file.txt",
+                buildArguments = { path -> listOf("git", "diff", "--", path) },
+                cwd = "/workspace/nested",
+            )
+        }
+        assertNull(runner.context)
+    }
+
+    @Test
+    fun validatedProgramReportsMissingCwdSeparatelyFromInvalidPath() {
+        val baseDir = File(System.getProperty("java.io.tmpdir"), "ws-missing-cwd-${System.nanoTime()}")
+        val runner = RecordingShellRunner()
+        val manager = WorkspaceManager(baseDir = baseDir, shellRunner = runner)
+        manager.ensureWorkspace("ws1")
+
+        assertThrows(WorkspaceWorkingDirectoryException::class.java) {
+            manager.executeProgramWithValidatedPath(
+                root = "ws1",
+                path = "file.txt",
+                buildArguments = { path -> listOf("git", "diff", "--", path) },
+                cwd = "missing",
+            )
+        }
+        assertNull(runner.context)
+    }
+
+    @Test
     fun readOnlyProgramValidationDoesNotCreateMissingWorkspaceRoot() {
         val baseDir = File(System.getProperty("java.io.tmpdir"), "ws-missing-${System.nanoTime()}")
         val runner = RecordingShellRunner()
@@ -101,7 +167,7 @@ class WorkspaceManagerFilesDirTest {
         assertThrows(IllegalArgumentException::class.java) {
             manager.executeProgram("ws1", listOf("git", "bad\u0000argument"))
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertThrows(WorkspaceWorkingDirectoryException::class.java) {
             manager.executeProgram("ws1", listOf("git", "status"), cwd = "missing")
         }
         assertNull(runner.context)

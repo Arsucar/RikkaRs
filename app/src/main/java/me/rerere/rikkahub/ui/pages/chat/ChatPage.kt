@@ -163,6 +163,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val currentAssistant = remember(setting.assistants, conversation.assistantId) {
         setting.assistants.firstOrNull { it.id == conversation.assistantId }
     }
+    val currentAssistantWorkspaceCwd = currentAssistant?.let { assistant ->
+        resolveEffectiveWorkspaceCwd(conversation, assistant)
+    }
     val configuredHooks = remember(setting.assistants, conversation.assistantId) {
         setting.assistants.firstOrNull { it.id == conversation.assistantId }?.hooks.orEmpty()
     }
@@ -320,6 +323,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             conversationId = conversation.id.toString(),
                             assistantId = conversation.assistantId.toString(),
                             assistantWorkspaceId = currentAssistant?.workspaceId?.toString(),
+                            assistantWorkspaceCwd = currentAssistantWorkspaceCwd,
                             isolationEnabled = conversation.memoryTableIsolation,
                             onIsolationChange = { enabled ->
                                 vm.setMemoryTableIsolation(enabled)
@@ -395,11 +399,19 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             gitStatusWorkspaceId = gitStatusWorkspaceId,
                             gitDiffState = gitDiffState,
                             onLoadGitStatus = {
-                                vm.loadGitStatus(currentAssistant?.workspaceId?.toString())
+                                vm.loadGitStatus(
+                                    workspaceId = currentAssistant?.workspaceId?.toString(),
+                                    workspaceCwd = currentAssistantWorkspaceCwd,
+                                )
                             },
                             onLoadGitDiff = { path, section ->
                                 currentAssistant?.workspaceId?.toString()?.let { workspaceId ->
-                                    vm.loadGitDiff(workspaceId, path, section)
+                                    vm.loadGitDiff(
+                                        workspaceId = workspaceId,
+                                        path = path,
+                                        section = section,
+                                        workspaceCwd = currentAssistantWorkspaceCwd,
+                                    )
                                 }
                             },
                             onClearGitDiff = vm::clearGitDiff,
@@ -620,7 +632,10 @@ private fun ChatPageContent(
                         mainGenerationActive = loadingJob != null,
                     ),
                     onGenerateInputDraft = {
-                        vm.generateInputDraft(conversation)
+                        vm.generateInputDraft(
+                            conversation = conversation,
+                            userInstruction = inputState.textContent.text.toString().trim(),
+                        )
                     },
                     onCancelInputDraft = vm::cancelInputDraft,
                     onToggleSearch = {

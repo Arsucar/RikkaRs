@@ -26,6 +26,7 @@ fun WorkspaceManager.executeProgramWithValidatedPath(
     path: String,
     buildArguments: (String) -> List<String>,
     timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+    cwd: String = "",
 ): WorkspaceCommandResult
 ```
 
@@ -37,7 +38,7 @@ fun WorkspaceManager.executeProgramWithValidatedPath(
 - Program execution does not use `bash -c`, `eval`, command-string quoting, or `evaluateShellCommand`.
 - Existing `executeCommand` remains the Shell API and retains heuristic policy plus changed-file scanning.
 - Read-only path resolution never creates a missing Workspace files root. Directory creation belongs to `ensureWorkspace` and explicit write operations.
-- `validateRelativePath` rejects NUL, backslash, Unix/Windows absolute paths, empty paths and any `..` segment, then applies canonical containment under the Workspace files root. The Workspace root and every existing intermediate path component must not be a symbolic link. Call it immediately before passing repository paths to argv.
+- `validateRelativePath` rejects NUL, backslash, Unix/Windows absolute paths, empty paths and any `..` segment, then applies canonical containment under the Workspace files root. When `cwd` is supplied, validation checks the combined `cwd/path` while returning the path relative to `cwd`. The Workspace root and every existing intermediate path component must not be a symbolic link. Call it immediately before passing repository paths to argv.
 - App-internal repository commands use `executeProgramWithValidatedPath` so canonical/symlink validation, argv construction and process startup stay in one synchronous execution boundary.
 - A validated path remains one argv element. Use a program-native `--` terminator where the program supports it.
 
@@ -45,7 +46,7 @@ fun WorkspaceManager.executeProgramWithValidatedPath(
 
 - Empty argv -> `IllegalArgumentException`.
 - Any argv value containing NUL -> `IllegalArgumentException`.
-- Missing/non-directory cwd -> `IllegalArgumentException` before process start, without creating the missing Workspace root.
+- Missing/non-directory cwd -> `WorkspaceWorkingDirectoryException` (an `IllegalArgumentException` subtype) before process start, without creating the missing Workspace root.
 - Global migration lock -> structured exit code 1 result, same as Shell execution.
 - Relative path with `..`, absolute prefix or backslash -> `IllegalArgumentException`.
 - Symlink resolving outside the files root, or a symlinked intermediate repository directory -> `IllegalArgumentException`.
