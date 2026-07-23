@@ -23,6 +23,25 @@ class StringUtilsTest {
     }
 
     @Test
+    fun `title prompt placeholders compile and replace`() {
+        assertEquals(
+            "content=hello",
+            "content={content}".applyPlaceholders("content" to "hello"),
+        )
+        assertEquals(
+            "a=1 b=2",
+            "a={content} b={char_count}".applyPlaceholders(
+                "content" to "1",
+                "char_count" to "2",
+            ),
+        )
+        assertEquals(
+            "unchanged",
+            "unchanged".applyPlaceholders("content" to "x"),
+        )
+    }
+
+    @Test
     fun `extract chinese double quotes`() {
         assertEquals(listOf("你好"), "他说“你好”".extractQuotedContent())
     }

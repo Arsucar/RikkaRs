@@ -41,7 +41,7 @@ fun String.applyPlaceholders(
             if (placeholder !in this) put(placeholder, replacement)
         }
     }
-    return Regex("\\{([^{}]+)}").replace(this) { match ->
+    return Regex("\\{([^{}]+)\\}").replace(this) { match ->
         replacements[match.groupValues[1]] ?: match.value
     }
 }
