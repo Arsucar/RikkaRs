@@ -47,8 +47,10 @@ import me.rerere.rikkahub.data.db.migrations.Migration_37_38
 import me.rerere.rikkahub.data.db.migrations.Migration_38_39
 import me.rerere.rikkahub.data.db.migrations.Migration_42_43
 import me.rerere.rikkahub.data.db.migrations.Migration_43_44
+import me.rerere.rikkahub.data.db.migrations.Migration_44_45
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
+import me.rerere.rikkahub.data.sync.BackupArchive
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
@@ -92,6 +94,7 @@ val dataSourceModule = module {
                 Migration_38_39,
                 Migration_42_43,
                 Migration_43_44,
+                Migration_44_45,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -393,11 +396,21 @@ val dataSourceModule = module {
     }
 
     single {
+        BackupArchive(
+            settingsStore = get(),
+            json = get(),
+            context = get(),
+            database = get(),
+        )
+    }
+
+    single {
         WebDavSync(
             settingsStore = get(),
             json = get(),
             context = get(),
-            httpClient = get()
+            httpClient = get(),
+            backupArchive = get(),
         )
     }
 
@@ -421,7 +434,8 @@ val dataSourceModule = module {
             settingsStore = get(),
             json = get(),
             context = get(),
-            httpClient = get()
+            httpClient = get(),
+            backupArchive = get(),
         )
     }
 

@@ -5,18 +5,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupTaskCoordinatorTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    private val coordinator = BackupTaskCoordinator(scope)
+    private val coordinator = BackupTaskCoordinator(scope, Dispatchers.Unconfined)
 
     @After
     fun tearDown() {
@@ -28,7 +29,10 @@ class BackupTaskCoordinatorTest {
         val release = CompletableDeferred<Unit>()
         coordinator.start(BackupOperation.LOCAL_EXPORT) { release.await() }
 
-        assertEquals(BackupTaskState.Running, coordinator.states.value[BackupOperation.LOCAL_EXPORT])
+        assertEquals(
+            BackupTaskState.Running(BackupTaskStage.PREPARING),
+            coordinator.states.value[BackupOperation.LOCAL_EXPORT]
+        )
         release.complete(Unit)
         yield()
 
@@ -60,7 +64,8 @@ class BackupTaskCoordinatorTest {
 
         val state = coordinator.states.value[BackupOperation.LOCAL_IMPORT]
         assertTrue(state is BackupTaskState.Failed)
-        assertSame(failure, (state as BackupTaskState.Failed).error)
+        assertTrue((state as BackupTaskState.Failed).error is IllegalStateException)
+        assertEquals(failure.message, state.error.message)
     }
 
     @Test
@@ -71,5 +76,72 @@ class BackupTaskCoordinatorTest {
         assertTrue(coordinator.consumeSuccess(BackupOperation.LOCAL_EXPORT))
         assertFalse(coordinator.consumeSuccess(BackupOperation.LOCAL_EXPORT))
         assertEquals(BackupTaskState.Idle, coordinator.states.value[BackupOperation.LOCAL_EXPORT])
+    }
+
+    @Test
+    fun stageUpdatesRemainObservable() = runBlocking {
+        val release = CompletableDeferred<Unit>()
+        coordinator.start(BackupOperation.LOCAL_EXPORT) {
+            updateStage(BackupTaskStage.WRITING)
+            release.await()
+        }
+
+        assertEquals(
+            BackupTaskState.Running(BackupTaskStage.WRITING),
+            coordinator.states.value[BackupOperation.LOCAL_EXPORT]
+        )
+        release.complete(Unit)
+        Unit
+    }
+
+    @Test
+    fun cancelledScopeDoesNotLeaveOperationRunning() {
+        val cancelledScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined).apply { cancel() }
+        val cancelledCoordinator = BackupTaskCoordinator(cancelledScope, Dispatchers.Unconfined)
+
+        assertFalse(cancelledCoordinator.start(BackupOperation.LOCAL_EXPORT) { })
+        assertEquals(
+            BackupTaskState.Cancelled,
+            cancelledCoordinator.states.value[BackupOperation.LOCAL_EXPORT]
+        )
+    }
+
+    @Test
+    fun timeoutHasDedicatedFailure() = runBlocking {
+        val timedCoordinator = BackupTaskCoordinator(
+            scope = scope,
+            dispatcher = Dispatchers.Unconfined,
+            timeoutMillis = 10,
+        )
+        timedCoordinator.start(BackupOperation.WEB_DAV_BACKUP) {
+            CompletableDeferred<Unit>().await()
+        }
+
+        val state = withTimeout(1_000) {
+            timedCoordinator.states.first {
+                it[BackupOperation.WEB_DAV_BACKUP] is BackupTaskState.Failed
+            }[BackupOperation.WEB_DAV_BACKUP]
+        }
+
+        assertTrue((state as BackupTaskState.Failed).error is BackupTaskTimeoutException)
+    }
+
+    @Test
+    fun cancellationDoesNotBecomeSuccess() = runBlocking {
+        val release = CompletableDeferred<Unit>()
+        assertTrue(
+            coordinator.start(BackupOperation.LOCAL_EXPORT) {
+                release.await()
+            }
+        )
+        assertTrue(coordinator.cancel(BackupOperation.LOCAL_EXPORT))
+        release.complete(Unit)
+        yield()
+
+        assertEquals(
+            BackupTaskState.Cancelled,
+            coordinator.states.value[BackupOperation.LOCAL_EXPORT]
+        )
+        assertFalse(coordinator.consumeSuccess(BackupOperation.LOCAL_EXPORT))
     }
 }

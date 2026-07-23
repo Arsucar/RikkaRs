@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +20,8 @@ import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.BackupOperation
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
+import me.rerere.rikkahub.data.sync.BackupTaskStage
+import me.rerere.rikkahub.data.sync.copyToCancellable
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
@@ -39,8 +43,17 @@ class BackupVM(
 ) : ViewModel() {
     val taskStates = taskCoordinator.states
 
+    private val _activeWebDavRestoreHref = MutableStateFlow<String?>(null)
+    val activeWebDavRestoreHref: StateFlow<String?> = _activeWebDavRestoreHref.asStateFlow()
+
+    private val _activeS3RestoreKey = MutableStateFlow<String?>(null)
+    val activeS3RestoreKey: StateFlow<String?> = _activeS3RestoreKey.asStateFlow()
+
     fun consumeTaskSuccess(operation: BackupOperation): Boolean =
         taskCoordinator.consumeSuccess(operation)
+
+    fun cancelTask(operation: BackupOperation): Boolean = taskCoordinator.cancel(operation)
+
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -88,15 +101,34 @@ class BackupVM(
     }
 
     fun startWebDavBackup(): Boolean = taskCoordinator.start(BackupOperation.WEB_DAV_BACKUP) {
-        webDavSync.backup(settings.value.webDavConfig)
+        webDavSync.backup(settings.value.webDavConfig) { updateStage(it) }
         recordBackupTime()
         loadBackupFileItems()
     }
 
-    fun startWebDavRestore(item: WebDavBackupItem): Boolean =
-        taskCoordinator.start(BackupOperation.WEB_DAV_RESTORE) {
-            webDavSync.restore(config = settings.value.webDavConfig, item = item)
+    fun startWebDavRestore(item: WebDavBackupItem): Boolean {
+        _activeWebDavRestoreHref.value = item.href
+        val started = taskCoordinator.start(
+            operation = BackupOperation.WEB_DAV_RESTORE,
+            initialStage = BackupTaskStage.TRANSFERRING,
+        ) {
+            try {
+                webDavSync.restore(
+                    config = settings.value.webDavConfig,
+                    item = item,
+                    onStage = { updateStage(it) },
+                )
+            } finally {
+                if (_activeWebDavRestoreHref.value == item.href) {
+                    _activeWebDavRestoreHref.value = null
+                }
+            }
         }
+        if (!started && _activeWebDavRestoreHref.value == item.href) {
+            _activeWebDavRestoreHref.value = null
+        }
+        return started
+    }
 
     suspend fun restore(item: WebDavBackupItem) {
         webDavSync.restore(config = settings.value.webDavConfig, item = item)
@@ -114,11 +146,14 @@ class BackupVM(
     fun startLocalExport(targetUri: Uri): Boolean = taskCoordinator.start(BackupOperation.LOCAL_EXPORT) {
         val exportFile = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
         try {
+            updateStage(BackupTaskStage.WRITING)
             withContext(Dispatchers.IO) {
                 val output = context.contentResolver.openOutputStream(targetUri)
                     ?: error("Unable to open the selected export destination")
                 output.use { outputStream ->
-                    FileInputStream(exportFile).use { inputStream -> inputStream.copyTo(outputStream) }
+                    FileInputStream(exportFile).use { inputStream ->
+                        inputStream.copyToCancellable(outputStream)
+                    }
                 }
             }
             recordBackupTime()
@@ -128,17 +163,23 @@ class BackupVM(
     }
 
     fun startLocalImport(sourceUri: Uri, importType: String): Boolean =
-        taskCoordinator.start(BackupOperation.LOCAL_IMPORT) {
+        taskCoordinator.start(
+            operation = BackupOperation.LOCAL_IMPORT,
+            initialStage = BackupTaskStage.TRANSFERRING,
+        ) {
             val extension = if (importType == "chatbox") "json" else "zip"
-            val tempFile = File(context.cacheDir, "temp_${importType}_${System.currentTimeMillis()}.$extension")
+            val tempFile = File.createTempFile("temp_${importType}_", ".$extension", context.cacheDir)
             try {
                 withContext(Dispatchers.IO) {
                     val input = context.contentResolver.openInputStream(sourceUri)
                         ?: error("Unable to open the selected import file")
                     input.use { inputStream ->
-                        FileOutputStream(tempFile).use { outputStream -> inputStream.copyTo(outputStream) }
+                        FileOutputStream(tempFile).use { outputStream ->
+                            inputStream.copyToCancellable(outputStream)
+                        }
                     }
                 }
+                updateStage(BackupTaskStage.RESTORING)
                 when (importType) {
                     "local" -> restoreFromLocalFile(tempFile)
                     "chatbox" -> restoreFromChatBox(tempFile)
@@ -244,13 +285,33 @@ class BackupVM(
     }
 
     fun startS3Backup(): Boolean = taskCoordinator.start(BackupOperation.S3_BACKUP) {
-        s3Sync.backupToS3(settings.value.s3Config)
+        s3Sync.backupToS3(settings.value.s3Config) { updateStage(it) }
         recordBackupTime()
         loadS3BackupFileItems()
     }
 
-    fun startS3Restore(item: S3BackupItem): Boolean = taskCoordinator.start(BackupOperation.S3_RESTORE) {
-        s3Sync.restoreFromS3(config = settings.value.s3Config, item = item)
+    fun startS3Restore(item: S3BackupItem): Boolean {
+        _activeS3RestoreKey.value = item.key
+        val started = taskCoordinator.start(
+            operation = BackupOperation.S3_RESTORE,
+            initialStage = BackupTaskStage.TRANSFERRING,
+        ) {
+            try {
+                s3Sync.restoreFromS3(
+                    config = settings.value.s3Config,
+                    item = item,
+                    onStage = { updateStage(it) },
+                )
+            } finally {
+                if (_activeS3RestoreKey.value == item.key) {
+                    _activeS3RestoreKey.value = null
+                }
+            }
+        }
+        if (!started && _activeS3RestoreKey.value == item.key) {
+            _activeS3RestoreKey.value = null
+        }
+        return started
     }
 
     suspend fun restoreFromS3(item: S3BackupItem) {

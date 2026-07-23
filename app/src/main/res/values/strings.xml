@@ -448,6 +448,10 @@
   <string name="backup_page_s3_path_style_desc">Use endpoint/bucket/object. Turn off to use bucket.endpoint/object.</string>
   <string name="backup_page_s3_region">Region</string>
   <string name="backup_page_s3_secret_access_key">Secret Access Key</string>
+  <string name="backup_page_stage_preparing">Preparing backup...</string>
+  <string name="backup_page_stage_restoring">Restoring data...</string>
+  <string name="backup_page_stage_transferring">Transferring data...</string>
+  <string name="backup_page_stage_writing">Writing backup file...</string>
   <string name="backup_page_test_connection">Test Connection</string>
   <string name="backup_page_title">Backup and Restore</string>
   <string name="backup_page_unknown_error">Unknown error</string>

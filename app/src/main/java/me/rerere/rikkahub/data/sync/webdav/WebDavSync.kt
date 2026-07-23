@@ -15,16 +15,17 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.datastore.migration.SettingsJsonMigrator
 import me.rerere.rikkahub.data.db.validateRestoredDatabaseForeignKeys
+import me.rerere.rikkahub.data.sync.BackupArchive
+import me.rerere.rikkahub.data.sync.BackupArchiveOptions
+import me.rerere.rikkahub.data.sync.BackupTaskStage
+import me.rerere.rikkahub.data.sync.copyToCancellable
 import me.rerere.rikkahub.utils.fileSizeToString
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 private const val TAG = "WebDavSync"
 
@@ -33,6 +34,7 @@ class WebDavSync(
     private val json: Json,
     private val context: Context,
     private val httpClient: HttpClient,
+    private val backupArchive: BackupArchive,
 ) {
     private fun getClient(config: WebDavConfig): WebDavClient {
         return WebDavClient(config, httpClient)
@@ -45,9 +47,14 @@ class WebDavSync(
         Log.i(TAG, "testConnection: Connection successful")
     }
 
-    suspend fun backup(config: WebDavConfig) = withContext(Dispatchers.IO) {
+    suspend fun backup(
+        config: WebDavConfig,
+        onStage: (BackupTaskStage) -> Unit = {},
+    ) = withContext(Dispatchers.IO) {
+        onStage(BackupTaskStage.PREPARING)
         val file = prepareBackupFile(config)
         try {
+            onStage(BackupTaskStage.TRANSFERRING)
             val client = getClient(config)
             client.ensureCollectionExists().getOrThrow()
             client.put(path = file.name, file = file, contentType = "application/zip").getOrThrow()
@@ -78,18 +85,24 @@ class WebDavSync(
             .sortedByDescending { it.lastModified }
     }
 
-    suspend fun restore(config: WebDavConfig, item: WebDavBackupItem) = withContext(Dispatchers.IO) {
+    suspend fun restore(
+        config: WebDavConfig,
+        item: WebDavBackupItem,
+        onStage: (BackupTaskStage) -> Unit = {},
+    ) = withContext(Dispatchers.IO) {
         val client = getClient(config)
         val backupFile = File(context.cacheDir, item.displayName)
 
         try {
             // Download backup file directly to file to avoid OOM
+            onStage(BackupTaskStage.TRANSFERRING)
             Log.i(TAG, "restore: Downloading ${item.displayName}")
             client.downloadToFile(item.displayName, backupFile).getOrThrow()
 
             Log.i(TAG, "restore: Downloaded ${backupFile.length().fileSizeToString()}")
 
             // Restore from backup file
+            onStage(BackupTaskStage.RESTORING)
             restoreFromBackupFile(backupFile, config)
         } finally {
             // Clean up temp file
@@ -128,96 +141,18 @@ class WebDavSync(
         }
     }
 
-    suspend fun prepareBackupFile(config: WebDavConfig): File = withContext(Dispatchers.IO) {
-        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
-        val backupFile = File(context.cacheDir, "backup_$timestamp.zip")
-
-        if (backupFile.exists()) {
-            backupFile.delete()
-        }
-
-        try {
-            // Create zip file and backup data
-            ZipOutputStream(FileOutputStream(backupFile)).use { zipOut ->
-            addVirtualFileToZip(
-                zipOut = zipOut,
-                name = "settings.json",
-                content = json.encodeToString(settingsStore.settingsFlow.value)
-            )
-
-            // Backup database files
-            if (config.items.contains(WebDavConfig.BackupItem.DATABASE)) {
-                val dbFile = context.getDatabasePath("rikka_hub")
-                if (dbFile.exists()) {
-                    addFileToZip(zipOut, dbFile, "rikka_hub.db")
-                }
-
-                val walFile = File(dbFile.parentFile, "rikka_hub-wal")
-                if (walFile.exists()) {
-                    addFileToZip(zipOut, walFile, "rikka_hub-wal")
-                }
-
-                val shmFile = File(dbFile.parentFile, "rikka_hub-shm")
-                if (shmFile.exists()) {
-                    addFileToZip(zipOut, shmFile, "rikka_hub-shm")
-                }
-            }
-
-            // Backup app files
-            if (config.items.contains(WebDavConfig.BackupItem.FILES)) {
-                val uploadFolder = File(context.filesDir, FileFolders.UPLOAD)
-                if (uploadFolder.exists() && uploadFolder.isDirectory) {
-                    Log.i(TAG, "prepareBackupFile: Backing up files from ${uploadFolder.absolutePath}")
-                    uploadFolder.listFiles()?.forEach { file ->
-                        if (file.isFile) {
-                            addFileToZip(zipOut, file, "${FileFolders.UPLOAD}/${file.name}")
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "prepareBackupFile: Upload folder does not exist or is not a directory")
-                }
-
-                val skillsFolder = File(context.filesDir, FileFolders.SKILLS)
-                if (skillsFolder.exists() && skillsFolder.isDirectory) {
-                    Log.i(TAG, "prepareBackupFile: Backing up skills from ${skillsFolder.absolutePath}")
-                    addDirectoryToZip(
-                        zipOut = zipOut,
-                        rootDir = skillsFolder,
-                        currentDir = skillsFolder,
-                        entryPrefix = "${FileFolders.SKILLS}/"
-                    )
-                } else {
-                    Log.w(TAG, "prepareBackupFile: Skills folder does not exist or is not a directory")
-                }
-
-                val fontsFolder = File(context.filesDir, FileFolders.FONTS)
-                if (fontsFolder.exists() && fontsFolder.isDirectory) {
-                    Log.i(TAG, "prepareBackupFile: Backing up fonts from ${fontsFolder.absolutePath}")
-                    fontsFolder.listFiles()?.forEach { file ->
-                        if (file.isFile) {
-                            addFileToZip(zipOut, file, "${FileFolders.FONTS}/${file.name}")
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "prepareBackupFile: Fonts folder does not exist or is not a directory")
-                }
-            }
-        }
-
-            Log.i(
-                TAG,
-                "prepareBackupFile: Created backup file ${backupFile.name} (${backupFile.length().fileSizeToString()})"
-            )
-            backupFile
-        } catch (error: Throwable) {
-            backupFile.delete()
-            throw error
-        }
-    }
+    suspend fun prepareBackupFile(config: WebDavConfig): File = backupArchive.create(
+        BackupArchiveOptions(
+            includeDatabase = config.items.contains(WebDavConfig.BackupItem.DATABASE),
+            includeFiles = config.items.contains(WebDavConfig.BackupItem.FILES),
+        )
+    )
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = withContext(Dispatchers.IO) {
         Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
         var databaseRestored = false
+        var walRestored = false
+        var shmRestored = false
 
         ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
             var entry: ZipEntry?
@@ -266,14 +201,16 @@ class WebDavSync(
                                     )
                                     targetFile.parentFile?.mkdirs()
                                     FileOutputStream(targetFile).use { outputStream ->
-                                        zipIn.copyTo(outputStream)
+                                        zipIn.copyToCancellable(outputStream)
                                     }
                                     Log.i(
                                         TAG,
                                         "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
                                     )
-                                    if (zipEntry.name == "rikka_hub.db") {
-                                        databaseRestored = true
+                                    when (zipEntry.name) {
+                                        "rikka_hub.db" -> databaseRestored = true
+                                        "rikka_hub-wal" -> walRestored = true
+                                        "rikka_hub-shm" -> shmRestored = true
                                     }
                                 }
                             }
@@ -300,7 +237,7 @@ class WebDavSync(
 
                                     try {
                                         FileOutputStream(targetFile).use { outputStream ->
-                                            zipIn.copyTo(outputStream)
+                                            zipIn.copyToCancellable(outputStream)
                                         }
                                         Log.i(
                                             TAG,
@@ -325,7 +262,7 @@ class WebDavSync(
                                     val fontsFolder = File(context.filesDir, FileFolders.FONTS).apply { mkdirs() }
                                     val targetFile = File(fontsFolder, fileName)
                                     FileOutputStream(targetFile).use { outputStream ->
-                                        zipIn.copyTo(outputStream)
+                                        zipIn.copyToCancellable(outputStream)
                                     }
                                     Log.i(
                                         TAG,
@@ -344,45 +281,17 @@ class WebDavSync(
         }
 
         if (databaseRestored) {
-            validateRestoredDatabaseForeignKeys(context.getDatabasePath("rikka_hub"))
+            val databaseFile = context.getDatabasePath("rikka_hub")
+            if (!walRestored) File(databaseFile.parentFile, "rikka_hub-wal").delete()
+            if (!shmRestored) File(databaseFile.parentFile, "rikka_hub-shm").delete()
+            validateRestoredDatabaseForeignKeys(context.getDatabasePath("rikka_hub"), context)
             Log.i(TAG, "restoreFromBackupFile: Foreign-key integrity check passed")
         }
 
         Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
     }
 
-    private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryName: String) {
-        FileInputStream(file).use { fis ->
-            val zipEntry = ZipEntry(entryName)
-            zipOut.putNextEntry(zipEntry)
-            fis.copyTo(zipOut)
-            zipOut.closeEntry()
-            Log.d(TAG, "addFileToZip: Added $entryName (${file.length()} bytes) to zip")
-        }
-    }
-
-    private fun addDirectoryToZip(
-        zipOut: ZipOutputStream,
-        rootDir: File,
-        currentDir: File,
-        entryPrefix: String,
-    ) {
-        currentDir.listFiles()?.forEach { file ->
-            if (file.isDirectory) {
-                addDirectoryToZip(
-                    zipOut = zipOut,
-                    rootDir = rootDir,
-                    currentDir = file,
-                    entryPrefix = entryPrefix,
-                )
-            } else if (file.isFile) {
-                val relativePath = file.relativeTo(rootDir).invariantSeparatorsPath
-                addFileToZip(zipOut, file, "$entryPrefix$relativePath")
-            }
-        }
-    }
-
-    private fun restoreSkillEntry(zipIn: ZipInputStream, entryName: String) {
+    private suspend fun restoreSkillEntry(zipIn: ZipInputStream, entryName: String) {
         val relativePath = entryName.substringAfter("${FileFolders.SKILLS}/")
         val skillName = relativePath.substringBefore('/', missingDelimiterValue = "")
         val skillRelativePath = relativePath.substringAfter('/', missingDelimiterValue = "")
@@ -403,7 +312,7 @@ class WebDavSync(
 
         try {
             FileOutputStream(targetFile).use { outputStream ->
-                zipIn.copyTo(outputStream)
+                zipIn.copyToCancellable(outputStream)
             }
             Log.i(TAG, "restoreFromBackupFile: Restored skill file $entryName (${targetFile.length()} bytes)")
         } catch (e: CancellationException) {
@@ -414,13 +323,6 @@ class WebDavSync(
         }
     }
 
-    private fun addVirtualFileToZip(zipOut: ZipOutputStream, name: String, content: String) {
-        val zipEntry = ZipEntry(name)
-        zipOut.putNextEntry(zipEntry)
-        zipOut.write(content.toByteArray())
-        zipOut.closeEntry()
-        Log.i(TAG, "addVirtualFileToZip: $name (${content.length} bytes)")
-    }
 }
 
 data class WebDavBackupItem(

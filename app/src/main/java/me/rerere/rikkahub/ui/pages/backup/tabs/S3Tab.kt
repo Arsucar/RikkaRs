@@ -4,6 +4,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,11 +84,13 @@ fun S3Tab(
     val taskStates by vm.taskStates.collectAsStateWithLifecycle()
     val backupState = taskStates.getValue(BackupOperation.S3_BACKUP)
     val restoreState = taskStates.getValue(BackupOperation.S3_RESTORE)
+    val activeS3RestoreKey by vm.activeS3RestoreKey.collectAsStateWithLifecycle()
+    val isRestoreBusy = restoreState is BackupTaskState.Running
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
-    val isBackingUp = backupState == BackupTaskState.Running
+    val isBackingUp = backupState is BackupTaskState.Running
 
     LaunchedEffect(restoreState) {
         if (restoreState == BackupTaskState.Success &&
@@ -298,13 +301,18 @@ fun S3Tab(
 
             Button(
                 onClick = {
-                    vm.startS3Backup()
+                    if (isBackingUp) {
+                        vm.cancelTask(BackupOperation.S3_BACKUP)
+                    } else {
+                        vm.startS3Backup()
+                    }
                 },
-                enabled = !isBackingUp
             ) {
                 if (isBackingUp) {
-                    CircularWavyProgressIndicator(
-                        modifier = Modifier.size(18.dp)
+                    Icon(
+                        HugeIcons.Cancel01,
+                        contentDescription = stringResource(R.string.cancel),
+                        modifier = Modifier.size(18.dp),
                     )
                 } else {
                     Icon(HugeIcons.Upload02, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -312,7 +320,7 @@ fun S3Tab(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (isBackingUp) {
-                        stringResource(R.string.backup_page_backing_up)
+                        stringResource(R.string.cancel)
                     } else {
                         stringResource(R.string.backup_page_backup_now)
                     }
@@ -347,7 +355,8 @@ fun S3Tab(
                         text = state.error.message ?: stringResource(R.string.backup_page_unknown_error),
                         color = MaterialTheme.colorScheme.error,
                     )
-                    BackupTaskState.Idle, BackupTaskState.Running -> Unit
+                    BackupTaskState.Idle -> Unit
+                    is BackupTaskState.Running -> Text(backupStageText(state.stage))
                 }
                 backupItemsState.onSuccess {
                     LazyColumn(
@@ -358,7 +367,8 @@ fun S3Tab(
                         items(it) { item ->
                             S3BackupItemCard(
                                 item = item,
-                                isRestoring = restoreState == BackupTaskState.Running,
+                                isRestoring = isRestoreBusy && activeS3RestoreKey == item.key,
+                                restoreBusy = isRestoreBusy,
                                 onDelete = {
                                     scope.launch {
                                         runCatching {
@@ -382,6 +392,9 @@ fun S3Tab(
                                 },
                                 onRestore = { restoreItem ->
                                     vm.startS3Restore(restoreItem)
+                                },
+                                onCancel = {
+                                    vm.cancelTask(BackupOperation.S3_RESTORE)
                                 },
                             )
                         }
@@ -441,7 +454,7 @@ private fun BackupStatusCard(
                     if (taskState != BackupTaskState.Idle) {
                         Text(
                             text = when (taskState) {
-                                BackupTaskState.Running -> stringResource(R.string.backup_page_backing_up)
+                                is BackupTaskState.Running -> backupStageText(taskState.stage)
                                 BackupTaskState.Success -> stringResource(R.string.backup_page_backup_success)
                                 BackupTaskState.Cancelled -> stringResource(R.string.hook_status_cancelled)
                                 is BackupTaskState.Failed -> taskState.error.message
@@ -466,8 +479,10 @@ private fun BackupStatusCard(
 private fun S3BackupItemCard(
     item: S3BackupItem,
     isRestoring: Boolean = false,
+    restoreBusy: Boolean = false,
     onDelete: (S3BackupItem) -> Unit = {},
     onRestore: (S3BackupItem) -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     CardGroup {
         item(
@@ -505,25 +520,27 @@ private fun S3BackupItemCard(
                             onClick = {
                                 onDelete(item)
                             },
-                            enabled = !isRestoring
+                            enabled = !restoreBusy
                         ) {
                             Text(stringResource(R.string.backup_page_delete))
                         }
                         Button(
                             onClick = {
-                                onRestore(item)
+                                if (isRestoring) onCancel() else onRestore(item)
                             },
-                            enabled = !isRestoring
+                            enabled = isRestoring || !restoreBusy,
                         ) {
                             if (isRestoring) {
-                                CircularWavyProgressIndicator(
-                                    modifier = Modifier.size(16.dp)
+                                Icon(
+                                    HugeIcons.Cancel01,
+                                    contentDescription = stringResource(R.string.cancel),
+                                    modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
                             Text(
                                 if (isRestoring) {
-                                    stringResource(R.string.backup_page_restoring)
+                                    stringResource(R.string.cancel)
                                 } else {
                                     stringResource(R.string.backup_page_restore_now)
                                 }
