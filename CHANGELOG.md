@@ -20,6 +20,17 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.38
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.37 之后）
+
+- **备份卡住与数据库一致性修复** — WebDAV / S3 / 本地导入导出统一任务生命周期：运行阶段可见、可取消、超时与异常不再永久转圈；备份改用 `VACUUM INTO` 单文件数据库快照并清理旧 WAL/SHM，校验走 Requery + simple 以兼容 FTS；新增 44→45 防御迁移幂等补齐 `compress_hidden_count`。
+  **Backup stall and database consistency fixes** — WebDAV / S3 / local import-export share a unified task lifecycle with visible stages, cancellation, and terminal states for timeouts and failures; backups now use a `VACUUM INTO` single-file DB snapshot with old WAL/SHM cleanup and Requery+simple integrity checks for FTS compatibility; Migration 44→45 idempotently adds missing `compress_hidden_count`.
+- **共享工具初始化崩溃防护** — 避免共享 Kotlin 工具 facade 在静态初始化失败后导致整类不可用的连锁崩溃。
+  **Shared utility initialization crash hardening** — Prevent shared Kotlin utility facades from cascading into process-wide linkage failures after a static initializer error.
+
+---
+
 ## v2.3.37
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.36 之后）
