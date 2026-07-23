@@ -1798,3 +1798,39 @@ Implemented page-local portrait/landscape switching with a bottom-right FAB, imm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 48: 发布 v2.3.37 并关闭 issues #177/#178
+
+**Date**: 2026-07-23
+**Task**: 发布 v2.3.37 并关闭 issues #177/#178
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+完成 #177 草稿附加用户意图与 #178 嵌套 Git CWD 修复；通过 workspace/app 测试、compile、assembleDebug 和 git diff --check；发布 v2.3.37 arm64 Release，正式 CI run 29990320459 成功；设备 100.99.129.110:5555 offline；已发布中英文 issue 交付评论并关闭 #177/#178。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `04eaf668c2cea8b1755d8ede910aaf151a2fef70` | (see git log) |
+| `889ea96cdaab04794841740227f6a751432e441c` | (see git log) |
+| `896c1f83fbf65980bac618111a56169e4786a979` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
