@@ -20,6 +20,17 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.37
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.36 之后）
+
+- **草稿回复支持附加用户意图** — 点击“写回复草稿”时会捕获输入框现有文本，去除首尾空白后作为可选指令引导生成；空白输入保持原行为，取消或失败仍可恢复原文，用户/ASR 编辑继续优先于晚到的流式片段，同时避免历史消息中的占位符文本被二次展开。（#177）
+  **Draft replies support additional user intent** — The Draft Reply action now captures existing composer text and uses its trimmed value as an optional generation instruction; blank input keeps the previous behavior, cancellation or failure still restores the original text, user/ASR edits continue to win over late stream chunks, and placeholder-like text in chat history is no longer expanded recursively. (#177)
+- **嵌套 Workspace Git 仓库识别与差异修复** — Git 状态和 diff 现在遵循会话 CWD、助手默认 CWD、`/workspace` 的优先级，并从有效目录解析实际仓库根；Workspace 根不是仓库时也能正确读取嵌套仓库，同时保留路径/符号链接校验和工作目录、权限、超时等结构化错误分类。（#178）
+  **Nested Workspace Git repository status and diff fixes** — Git status and diffs now follow the conversation CWD, assistant default CWD, then `/workspace`, resolving the actual repository root from the effective directory; nested repositories work even when the Workspace root is not a repository, while path/symlink validation and structured working-directory, permission, and timeout errors remain intact. (#178)
+
+---
+
 ## v2.3.36
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.35 之后）
