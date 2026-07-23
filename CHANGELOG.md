@@ -20,6 +20,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.39
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.38 之后）
+
+- **标题总结与 Hook 占位符正则修复** — 修复 `applyPlaceholders` 中未正确转义的 `}`，消除 Android/ICU 在编译 `\{([^{}]+)}` 时的 `Syntax error in regexp pattern`；恢复标题生成、Hook 提示词替换及其他共用该工具函数的能力。
+  **Title summary and Hook placeholder regex fix** — Escape the closing `}` in `applyPlaceholders` so Android/ICU no longer rejects `\{([^{}]+)}` with a pattern syntax error; restores title generation, Hook prompt substitution, and other shared callers.
+
+---
+
 ## v2.3.38
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.37 之后）
