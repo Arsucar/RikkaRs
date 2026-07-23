@@ -1834,3 +1834,37 @@ Implemented page-local portrait/landscape switching with a bottom-right FAB, imm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 49: Fix StringUtils facade initialization crashes
+
+**Date**: 2026-07-23
+**Task**: Fix StringUtils facade initialization crashes
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Removed eager StringUtilsKt initialization, isolated number formatting, hardened optional chat token statistics, added regression tests, verified bytecode/tests/device installation, and documented the shared facade rule.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `943942c5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
