@@ -36,6 +36,13 @@ class StringUtilsTest {
             ),
         )
         assertEquals(
+            "content=hello\nallowed=work, personal",
+            "content={content}\nallowed={allowed_tags}".applyPlaceholders(
+                "content" to "hello",
+                "allowed_tags" to "work, personal",
+            ),
+        )
+        assertEquals(
             "unchanged",
             "unchanged".applyPlaceholders("content" to "x"),
         )
