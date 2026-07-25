@@ -21,33 +21,34 @@ class InputDraftPolicyTest {
     }
 
     @Test
-    fun generationRequiresReplyTargetOutsideEditModeWithIdleAsr() {
+    fun generationRequiresReplyTargetWithIdleAsr() {
         assertFalse(
             canGenerateInputDraft(
                 hasReplyTarget = false,
-                isEditing = false,
-                asrStatus = ASRStatus.Idle,
-            )
-        )
-        assertFalse(
-            canGenerateInputDraft(
-                hasReplyTarget = true,
-                isEditing = true,
                 asrStatus = ASRStatus.Idle,
             )
         )
         assertTrue(
             canGenerateInputDraft(
                 hasReplyTarget = true,
-                isEditing = false,
                 asrStatus = ASRStatus.Idle,
             )
         )
         assertTrue(
             canGenerateInputDraft(
                 hasReplyTarget = true,
-                isEditing = false,
                 asrStatus = ASRStatus.Error,
+            )
+        )
+    }
+
+    // #181: 编辑态不再禁用「写回复草稿」，只要有回复目标且 ASR 空闲即可生成。
+    @Test
+    fun generationIsAllowedRegardlessOfEditMode() {
+        assertTrue(
+            canGenerateInputDraft(
+                hasReplyTarget = true,
+                asrStatus = ASRStatus.Idle,
             )
         )
     }
@@ -58,7 +59,6 @@ class InputDraftPolicyTest {
             assertFalse(
                 canGenerateInputDraft(
                     hasReplyTarget = true,
-                    isEditing = false,
                     asrStatus = status,
                 )
             )

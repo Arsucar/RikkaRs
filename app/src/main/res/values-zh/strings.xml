@@ -2159,6 +2159,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="input_draft_model_unavailable">请先选择建议模型或快速模型</string>
   <string name="error_title_generate_input_draft">回复草稿生成失败</string>
   <string name="input_draft_empty_response">AI 返回了空白草稿。</string>
+  <string name="input_draft_edit_success">草稿已生成，可基于原内容继续修改</string>
   <string name="git_status_menu_title">Git 状态</string>
   <string name="git_status_loading">正在读取 Git 状态...</string>
   <string name="git_status_unbound_short">未绑定项目</string>

@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -127,11 +128,20 @@ class ChatVM(
     private var gitDiffGeneration = 0L
     private var loadingGitWorkspaceId: String? = null
     private var loadingGitWorkspaceCwd: String? = null
+    // #180: 记录上次已完成加载的 workspace key，避免抽屉重开时对同一目标强制全量重载
+    private var loadedGitWorkspaceId: String? = null
+    private var loadedGitWorkspaceCwd: String? = null
+    private var hasLoadedGitStatus = false
     private var inputDraftGeneration = 0L
     private var originalInputDraftText: String? = null
     private var lastInputDraftText: String? = null
     private val _inputDraftLoading = MutableStateFlow(false)
     val inputDraftLoading = _inputDraftLoading.asStateFlow()
+
+    // #181: 草稿生成成功完成时发出事件，由 UI 复用现有 Toaster 提示。
+    // 带 1 格缓冲 + tryEmit，避免 emit 时无活跃订阅者（页面切换/销毁）导致挂起。
+    private val _inputDraftSuccessFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val inputDraftSuccessFlow: SharedFlow<Unit> = _inputDraftSuccessFlow
     val contextPreviewState = MutableStateFlow<UiState<ContextPreview>>(UiState.Idle)
 
     val hookHistoryState: StateFlow<UiState<List<HookRunHistory>>> = hookRepository
@@ -209,11 +219,34 @@ class ChatVM(
         contextPreviewState.value = UiState.Idle
     }
 
-    fun loadGitStatus(workspaceId: String?, workspaceCwd: String? = null) {
+    /**
+     * 加载助手绑定 workspace 的 Git 状态。
+     *
+     * #180: 抽屉每次打开都会调用本方法。为避免对同一 workspaceId + cwd 反复置 Loading
+     * 并走 proot 双次 git 造成卡顿，非强制刷新时若已对同一目标加载过（无论成功与否）
+     * 就复用现有 [gitStatusState]，不再重置。仅在 workspace/cwd 变化或
+     * [forceRefresh]（手动刷新）时才重新全量拉取。
+     */
+    fun loadGitStatus(
+        workspaceId: String?,
+        workspaceCwd: String? = null,
+        forceRefresh: Boolean = false,
+    ) {
+        // 已有同一目标的在途请求，直接复用，避免重复触发。
         if (gitStatusJob?.isActive == true &&
             loadingGitWorkspaceId == workspaceId &&
             loadingGitWorkspaceCwd == workspaceCwd
         ) {
+            return
+        }
+        // 非强制刷新且已对同一目标加载过：复用缓存结果，不再置 Loading 重载。
+        if (!forceRefresh &&
+            hasLoadedGitStatus &&
+            loadedGitWorkspaceId == workspaceId &&
+            loadedGitWorkspaceCwd == workspaceCwd
+        ) {
+            // 仍需同步当前展示归属，保证 UI 过滤逻辑指向正确 workspace。
+            gitStatusWorkspaceId.value = workspaceId
             return
         }
         gitStatusJob?.cancel()
@@ -231,6 +264,20 @@ class ChatVM(
                 gitStatusState.value = result
                 loadingGitWorkspaceId = null
                 loadingGitWorkspaceCwd = null
+                // #180: 仅缓存稳定结果；瞬态错误（proot 未就绪/超时/git 不可用/执行失败）
+                // 不缓存，使重开抽屉能自动重试，无需用户手动刷新。
+                val isTransientError = result is GitStatusUiState.WorkspaceNotReady ||
+                    result is GitStatusUiState.TimedOut ||
+                    result is GitStatusUiState.GitUnavailable ||
+                    result is GitStatusUiState.DirectoryUnavailable ||
+                    result is GitStatusUiState.Failed
+                if (isTransientError) {
+                    hasLoadedGitStatus = false
+                } else {
+                    loadedGitWorkspaceId = workspaceId
+                    loadedGitWorkspaceCwd = workspaceCwd
+                    hasLoadedGitStatus = true
+                }
             }
         }
     }
@@ -578,8 +625,8 @@ class ChatVM(
         conversation: Conversation,
         userInstruction: String = inputState.textContent.text.toString().trim(),
     ) {
+        // #181: 编辑自己的消息时也允许「写回复草稿」，不再用 isEditing() 硬禁用。
         if (inputDraftJob?.isActive == true ||
-            inputState.isEditing() ||
             !hasInputDraftReplyTarget(
                 latestMessageRole = conversation.currentMessages.lastOrNull()?.role,
                 mainGenerationActive = conversationJob.value != null,
@@ -587,6 +634,7 @@ class ChatVM(
         ) {
             return
         }
+        val isEditingDraft = inputState.isEditing()
         val generation = ++inputDraftGeneration
         val originalText = inputState.textContent.text.toString()
         originalInputDraftText = originalText
@@ -625,6 +673,11 @@ class ChatVM(
                 ) {
                     lastInputDraftText = completedDraft
                     inputState.setMessageText(completedDraft)
+                    // #181: 编辑态草稿生成成功后，通知 UI 用现有 Toaster 提示可继续修改。
+                    // 用 tryEmit 配合带缓冲的 SharedFlow，避免无订阅者时 emit 挂起。
+                    if (isEditingDraft) {
+                        _inputDraftSuccessFlow.tryEmit(Unit)
+                    }
                 }
             } catch (error: CancellationException) {
                 restoreInputDraftIfSafe(generation)

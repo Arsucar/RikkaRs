@@ -320,7 +320,6 @@ fun ChatInput(
                             onClick = if (inputDraftLoading) onCancelInputDraft else onGenerateInputDraft,
                             enabled = inputDraftLoading || canGenerateInputDraft(
                                 hasReplyTarget = inputDraftEnabled,
-                                isEditing = state.isEditing(),
                                 asrStatus = asrState.status,
                             ),
                         ) {

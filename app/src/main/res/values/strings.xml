@@ -2174,6 +2174,7 @@
   <string name="input_draft_model_unavailable">Select a suggestion or fast model first</string>
   <string name="error_title_generate_input_draft">Reply draft generation failed</string>
   <string name="input_draft_empty_response">The AI returned an empty draft.</string>
+  <string name="input_draft_edit_success">Draft generated. You can keep editing based on the original content.</string>
   <string name="git_status_menu_title">Git status</string>
   <string name="git_status_loading">Reading Git status...</string>
   <string name="git_status_unbound_short">No project bound</string>

@@ -404,6 +404,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                     workspaceCwd = currentAssistantWorkspaceCwd,
                                 )
                             },
+                            // #180: Git 详情页手动刷新强制全量重载，忽略缓存
+                            onRefreshGitStatus = {
+                                vm.loadGitStatus(
+                                    workspaceId = currentAssistant?.workspaceId?.toString(),
+                                    workspaceCwd = currentAssistantWorkspaceCwd,
+                                    forceRefresh = true,
+                                )
+                            },
                             onLoadGitDiff = { path, section ->
                                 currentAssistant?.workspaceId?.toString()?.let { workspaceId ->
                                     vm.loadGitDiff(
@@ -588,6 +596,14 @@ private fun ChatPageContent(
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+
+    // #181: 编辑态草稿生成成功后，用现有 Toaster 提示可基于原内容继续修改
+    val inputDraftEditSuccessMsg = stringResource(R.string.input_draft_edit_success)
+    LaunchedEffect(Unit) {
+        vm.inputDraftSuccessFlow.collect {
+            toaster.show(message = inputDraftEditSuccessMsg, type = ToastType.Success)
+        }
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
