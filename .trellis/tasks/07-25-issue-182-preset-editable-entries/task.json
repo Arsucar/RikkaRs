@@ -1,0 +1,34 @@
+{
+  "id": "issue-182-preset-editable-entries",
+  "name": "issue-182-preset-editable-entries",
+  "title": "预设增强：内置提示词可编辑/开关，System 注入可拖拽排序",
+  "description": "对标 SillyTavern 预设：预设内条目可见/可编辑/可开关/可拖拽排序；系统内置提示词纳入预设；System 类注入按 order 拼接。",
+  "status": "backlog",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P1",
+  "creator": "Arsucar",
+  "assignee": "Arsucar",
+  "createdAt": "2026-07-25",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/PromptInjectionTransformer.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/export/ExportSerializer.kt"
+  ],
+  "notes": "GitHub issue #182。子代理网关(sub.100xlabs.space)在 2026-07-25 多次 524 超时，编排实现暂缓；本任务先产出 design spec。",
+  "meta": {
+    "issue": 182
+  }
+}
