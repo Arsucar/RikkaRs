@@ -45,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +55,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.BackupOperation
 import me.rerere.rikkahub.data.sync.BackupTaskState
@@ -86,9 +84,12 @@ fun S3Tab(
     val restoreState = taskStates.getValue(BackupOperation.S3_RESTORE)
     val activeS3RestoreKey by vm.activeS3RestoreKey.collectAsStateWithLifecycle()
     val isRestoreBusy = restoreState is BackupTaskState.Running
+    val testState = taskStates.getValue(BackupOperation.S3_TEST)
+    val deleteState = taskStates.getValue(BackupOperation.S3_DELETE)
+    val isTesting = testState is BackupTaskState.Running
+    val isDeleting = deleteState is BackupTaskState.Running
     val toaster = LocalToaster.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
     val isBackingUp = backupState is BackupTaskState.Running
 
@@ -98,6 +99,41 @@ fun S3Tab(
         ) {
             showBackupFiles = false
             onShowRestartDialog()
+        }
+    }
+
+    // #186: test connection and remote delete now run on the coordinator scope; surface their terminal
+    // result as a one-shot toast even if the coroutine finished while the user was off the page.
+    LaunchedEffect(testState) {
+        when (vm.consumeTaskTerminal(BackupOperation.S3_TEST)) {
+            BackupTaskState.Success -> toaster.show(
+                context.getString(R.string.backup_page_connection_success),
+                type = ToastType.Success,
+            )
+            is BackupTaskState.Failed -> toaster.show(
+                context.getString(
+                    R.string.backup_page_connection_failed,
+                    (testState as BackupTaskState.Failed).error.message ?: "",
+                ),
+                type = ToastType.Error,
+            )
+            else -> Unit
+        }
+    }
+    LaunchedEffect(deleteState) {
+        when (vm.consumeTaskTerminal(BackupOperation.S3_DELETE)) {
+            BackupTaskState.Success -> toaster.show(
+                context.getString(R.string.backup_page_delete_success),
+                type = ToastType.Success,
+            )
+            is BackupTaskState.Failed -> toaster.show(
+                context.getString(
+                    R.string.backup_page_delete_failed,
+                    (deleteState as BackupTaskState.Failed).error.message ?: "",
+                ),
+                type = ToastType.Error,
+            )
+            else -> Unit
         }
     }
 
@@ -267,26 +303,8 @@ fun S3Tab(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
         ) {
             OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        try {
-                            vm.testS3()
-                            toaster.show(
-                                context.getString(R.string.backup_page_connection_success),
-                                type = ToastType.Success
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            toaster.show(
-                                context.getString(
-                                    R.string.backup_page_connection_failed,
-                                    e.message ?: ""
-                                ),
-                                type = ToastType.Error
-                            )
-                        }
-                    }
-                }
+                onClick = { vm.testS3() },
+                enabled = !isTesting,
             ) {
                 Text(stringResource(R.string.backup_page_test_connection))
             }
@@ -368,27 +386,11 @@ fun S3Tab(
                             S3BackupItemCard(
                                 item = item,
                                 isRestoring = isRestoreBusy && activeS3RestoreKey == item.key,
-                                restoreBusy = isRestoreBusy,
+                                restoreBusy = isRestoreBusy || isDeleting,
                                 onDelete = {
-                                    scope.launch {
-                                        runCatching {
-                                            vm.deleteS3BackupFile(item)
-                                            toaster.show(
-                                                context.getString(R.string.backup_page_delete_success),
-                                                type = ToastType.Success
-                                            )
-                                            vm.loadS3BackupFileItems()
-                                        }.onFailure { err ->
-                                            err.printStackTrace()
-                                            toaster.show(
-                                                context.getString(
-                                                    R.string.backup_page_delete_failed,
-                                                    err.message ?: ""
-                                                ),
-                                                type = ToastType.Error
-                                            )
-                                        }
-                                    }
+                                    // #186: delete runs on the coordinator scope; the terminal result is
+                                    // surfaced via the S3_DELETE LaunchedEffect and survives navigation.
+                                    vm.deleteS3BackupFile(item)
                                 },
                                 onRestore = { restoreItem ->
                                     vm.startS3Restore(restoreItem)

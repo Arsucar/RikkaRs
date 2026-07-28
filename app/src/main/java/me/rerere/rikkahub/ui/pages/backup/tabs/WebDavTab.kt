@@ -44,7 +44,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +54,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.BackupOperation
@@ -85,9 +83,12 @@ fun WebDavTab(
     val restoreState = taskStates.getValue(BackupOperation.WEB_DAV_RESTORE)
     val activeWebDavRestoreHref by vm.activeWebDavRestoreHref.collectAsStateWithLifecycle()
     val isRestoreBusy = restoreState is BackupTaskState.Running
+    val testState = taskStates.getValue(BackupOperation.WEB_DAV_TEST)
+    val deleteState = taskStates.getValue(BackupOperation.WEB_DAV_DELETE)
+    val isTesting = testState is BackupTaskState.Running
+    val isDeleting = deleteState is BackupTaskState.Running
     val toaster = LocalToaster.current
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var showBackupFiles by remember { mutableStateOf(false) }
     val isBackingUp = backupState is BackupTaskState.Running
 
@@ -97,6 +98,41 @@ fun WebDavTab(
         ) {
             showBackupFiles = false
             onShowRestartDialog()
+        }
+    }
+
+    // #186: test connection and remote delete now run on the coordinator scope; surface their terminal
+    // result as a one-shot toast even if the coroutine finished while the user was off the page.
+    LaunchedEffect(testState) {
+        when (vm.consumeTaskTerminal(BackupOperation.WEB_DAV_TEST)) {
+            BackupTaskState.Success -> toaster.show(
+                context.getString(R.string.backup_page_connection_success),
+                type = ToastType.Success,
+            )
+            is BackupTaskState.Failed -> toaster.show(
+                context.getString(
+                    R.string.backup_page_connection_failed,
+                    (testState as BackupTaskState.Failed).error.message ?: "",
+                ),
+                type = ToastType.Error,
+            )
+            else -> Unit
+        }
+    }
+    LaunchedEffect(deleteState) {
+        when (vm.consumeTaskTerminal(BackupOperation.WEB_DAV_DELETE)) {
+            BackupTaskState.Success -> toaster.show(
+                context.getString(R.string.backup_page_delete_success),
+                type = ToastType.Success,
+            )
+            is BackupTaskState.Failed -> toaster.show(
+                context.getString(
+                    R.string.backup_page_delete_failed,
+                    (deleteState as BackupTaskState.Failed).error.message ?: "",
+                ),
+                type = ToastType.Error,
+            )
+            else -> Unit
         }
     }
 
@@ -249,26 +285,8 @@ fun WebDavTab(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
         ) {
             OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        try {
-                            vm.testWebDav()
-                            toaster.show(
-                                context.getString(R.string.backup_page_connection_success),
-                                type = ToastType.Success
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            toaster.show(
-                                context.getString(
-                                    R.string.backup_page_connection_failed,
-                                    e.message ?: ""
-                                ),
-                                type = ToastType.Error
-                            )
-                        }
-                    }
-                }
+                onClick = { vm.testWebDav() },
+                enabled = !isTesting,
             ) {
                 Text(stringResource(R.string.backup_page_test_connection))
             }
@@ -349,27 +367,12 @@ fun WebDavTab(
                             WebDavBackupItemCard(
                                 item = item,
                                 isRestoring = isRestoreBusy && activeWebDavRestoreHref == item.href,
-                                restoreBusy = isRestoreBusy,
+                                restoreBusy = isRestoreBusy || isDeleting,
                                 onDelete = {
-                                    scope.launch {
-                                        runCatching {
-                                            vm.deleteWebDavBackupFile(item)
-                                            toaster.show(
-                                                context.getString(R.string.backup_page_delete_success),
-                                                type = ToastType.Success
-                                            )
-                                            vm.loadBackupFileItems()
-                                        }.onFailure { err ->
-                                            err.printStackTrace()
-                                            toaster.show(
-                                                context.getString(
-                                                    R.string.backup_page_delete_failed,
-                                                    err.message ?: ""
-                                                ),
-                                                type = ToastType.Error
-                                            )
-                                        }
-                                    }
+                                    // #186: delete runs on the coordinator scope; the terminal result is
+                                    // surfaced by the WEB_DAV_DELETE LaunchedEffect above, so leaving the
+                                    // page no longer cancels the request or drops the toast.
+                                    vm.deleteWebDavBackupFile(item)
                                 },
                                 onRestore = { restoreItem ->
                                     vm.startWebDavRestore(restoreItem)

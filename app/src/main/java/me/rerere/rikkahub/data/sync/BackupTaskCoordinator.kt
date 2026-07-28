@@ -17,6 +17,9 @@ import kotlinx.coroutines.withTimeout
 
 enum class BackupOperation {
     WEB_DAV_BACKUP, WEB_DAV_RESTORE, S3_BACKUP, S3_RESTORE, LOCAL_EXPORT, LOCAL_IMPORT,
+    // #186: lightweight remote operations (test connection / delete remote file) also run on the
+    // coordinator scope so they survive page navigation and report their result via states.
+    WEB_DAV_TEST, WEB_DAV_DELETE, S3_TEST, S3_DELETE,
 }
 
 enum class BackupTaskStage {
@@ -114,6 +117,25 @@ class BackupTaskCoordinator(
         if (_states.value[operation] !is BackupTaskState.Success) return false
         _states.update { it + (operation to BackupTaskState.Idle) }
         return true
+    }
+
+    /**
+     * #186: consume a terminal state (Success/Failed/Cancelled) exactly once and reset to Idle.
+     * Returns the consumed state so the UI can render a one-shot toast, or null if the operation is
+     * still Idle/Running. This lets lightweight operations report their result even though the coroutine
+     * outlives the composition that started it.
+     */
+    @Synchronized
+    fun consumeTerminal(operation: BackupOperation): BackupTaskState? {
+        val state = _states.value[operation]
+        if (state !is BackupTaskState.Success &&
+            state !is BackupTaskState.Failed &&
+            state !is BackupTaskState.Cancelled
+        ) {
+            return null
+        }
+        _states.update { it + (operation to BackupTaskState.Idle) }
+        return state
     }
 
     private fun updateState(operation: BackupOperation, state: BackupTaskState) {

@@ -3005,25 +3005,29 @@ class ChatService(
         depth: Int,
         maxDepth: Int,
     ): List<Tool> {
-        val workspaceToolsFactory: (me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess) -> List<Tool> = { access ->
-            kotlinx.coroutines.runBlocking {
-                val privateSkillMounts = assistantPrivateSkillMounts(assistant.id)
-                createSubagentWorkspaceTools(
-                    access = access,
-                    profile = profile,
-                    workspaceRepository = workspaceRepository,
-                    workspaceId = workspaceId,
-                    workspaceCwd = workspaceCwd,
-                    knownMounts = listOf(
-                        WorkspaceKnownMount(
-                            target = "/skills",
-                            source = skillManager.getSkillsDir(),
-                            allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
-                        )
-                    ) + privateSkillMounts.knownMounts,
-                    extraBindMounts = privateSkillMounts.bindMounts,
+        // #185: precompute workspace tools with a suspend call instead of runBlocking inside the factory.
+        // buildSubagentTools always invokes the factory with exactly profile.workspaceAccess
+        // (SubagentPermissionBuilder.kt: workspaceToolsFactory(profile.workspaceAccess)), which is a
+        // known value in this scope. Computing it here keeps the whole path suspend/cancellable and
+        // avoids blocking a Dispatchers.IO thread under high subagent concurrency.
+        val privateSkillMounts = assistantPrivateSkillMounts(assistant.id)
+        val precomputedWorkspaceTools = createSubagentWorkspaceTools(
+            access = profile.workspaceAccess,
+            profile = profile,
+            workspaceRepository = workspaceRepository,
+            workspaceId = workspaceId,
+            workspaceCwd = workspaceCwd,
+            knownMounts = listOf(
+                WorkspaceKnownMount(
+                    target = "/skills",
+                    source = skillManager.getSkillsDir(),
+                    allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
                 )
-            }
+            ) + privateSkillMounts.knownMounts,
+            extraBindMounts = privateSkillMounts.bindMounts,
+        )
+        val workspaceToolsFactory: (me.rerere.rikkahub.data.ai.subagent.WorkspaceAccess) -> List<Tool> = { _ ->
+            precomputedWorkspaceTools
         }
         val spawnToolBuilder: (() -> Tool)? =
             if (profile.canSpawn && depth + 1 <= maxDepth) {

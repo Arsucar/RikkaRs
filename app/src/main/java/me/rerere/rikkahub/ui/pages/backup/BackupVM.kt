@@ -21,6 +21,7 @@ import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.BackupOperation
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.data.sync.BackupTaskStage
+import me.rerere.rikkahub.data.sync.BackupTaskState
 import me.rerere.rikkahub.data.sync.copyToCancellable
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -51,6 +52,10 @@ class BackupVM(
 
     fun consumeTaskSuccess(operation: BackupOperation): Boolean =
         taskCoordinator.consumeSuccess(operation)
+
+    // #186: consume a terminal state (Success/Failed/Cancelled) once for one-shot UI feedback.
+    fun consumeTaskTerminal(operation: BackupOperation): BackupTaskState? =
+        taskCoordinator.consumeTerminal(operation)
 
     fun cancelTask(operation: BackupOperation): Boolean = taskCoordinator.cancel(operation)
 
@@ -91,7 +96,12 @@ class BackupVM(
         }
     }
 
-    suspend fun testWebDav() {
+    // #186: run test connection on the coordinator scope so it survives page navigation and reports
+    // its result through taskStates (WEB_DAV_TEST) instead of the composition-scoped coroutine.
+    fun testWebDav(): Boolean = taskCoordinator.start(
+        operation = BackupOperation.WEB_DAV_TEST,
+        initialStage = BackupTaskStage.TRANSFERRING,
+    ) {
         webDavSync.testConnection(settings.value.webDavConfig)
     }
 
@@ -134,8 +144,14 @@ class BackupVM(
         webDavSync.restore(config = settings.value.webDavConfig, item = item)
     }
 
-    suspend fun deleteWebDavBackupFile(item: WebDavBackupItem) {
+    // #186: delete remote backup on the coordinator scope so an in-flight delete is not cancelled by
+    // leaving the page; on success reload the list. Result is surfaced through taskStates (WEB_DAV_DELETE).
+    fun deleteWebDavBackupFile(item: WebDavBackupItem): Boolean = taskCoordinator.start(
+        operation = BackupOperation.WEB_DAV_DELETE,
+        initialStage = BackupTaskStage.TRANSFERRING,
+    ) {
         webDavSync.deleteBackupFile(settings.value.webDavConfig, item)
+        loadBackupFileItems()
     }
 
     suspend fun exportToFile(): File {
@@ -275,7 +291,12 @@ class BackupVM(
         }
     }
 
-    suspend fun testS3() {
+    // #186: run test connection on the coordinator scope so it survives page navigation and reports
+    // its result through taskStates (S3_TEST) instead of the composition-scoped coroutine.
+    fun testS3(): Boolean = taskCoordinator.start(
+        operation = BackupOperation.S3_TEST,
+        initialStage = BackupTaskStage.TRANSFERRING,
+    ) {
         s3Sync.testS3(settings.value.s3Config)
     }
 
@@ -318,8 +339,14 @@ class BackupVM(
         s3Sync.restoreFromS3(config = settings.value.s3Config, item = item)
     }
 
-    suspend fun deleteS3BackupFile(item: S3BackupItem) {
+    // #186: delete remote S3 backup on the coordinator scope so an in-flight delete is not cancelled by
+    // leaving the page; on success reload the list. Result is surfaced through taskStates (S3_DELETE).
+    fun deleteS3BackupFile(item: S3BackupItem): Boolean = taskCoordinator.start(
+        operation = BackupOperation.S3_DELETE,
+        initialStage = BackupTaskStage.TRANSFERRING,
+    ) {
         s3Sync.deleteS3BackupFile(settings.value.s3Config, item)
+        loadS3BackupFileItems()
     }
 
     private suspend fun recordBackupTime() {
