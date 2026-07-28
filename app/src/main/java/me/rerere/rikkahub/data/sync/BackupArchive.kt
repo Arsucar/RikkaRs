@@ -43,6 +43,12 @@ class BackupArchive(
     private val database: AppDatabase,
 ) {
     suspend fun create(options: BackupArchiveOptions): File = withContext(Dispatchers.IO) {
+        // #184 defect 4: never back up the placeholder `Settings.dummy()` (init=true) that the
+        // settings flow holds before the real preferences finish loading. Persisting it would ship a
+        // blank configuration inside the archive.
+        val settings = settingsStore.settingsFlow.value
+        check(!settings.init) { "Cannot back up before settings are loaded" }
+
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         val backupFile = File.createTempFile("backup_${timestamp}_", ".zip", context.cacheDir)
         var databaseSnapshot: File? = null
@@ -55,7 +61,7 @@ class BackupArchive(
                 addVirtualFileToZip(
                     zipOut = zipOut,
                     name = "settings.json",
-                    content = json.encodeToString(settingsStore.settingsFlow.value),
+                    content = json.encodeToString(settings),
                 )
 
                 if (options.includeDatabase) {
