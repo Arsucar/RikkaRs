@@ -106,6 +106,7 @@ import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionSubagentProfilePage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionSubagentsPage
+import me.rerere.rikkahub.ui.pages.extensions.PresetDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
@@ -578,6 +579,10 @@ class RouteActivity : ComponentActivity() {
                                 PromptPage()
                             }
 
+                            entry<Screen.PresetDetail> { key ->
+                                PresetDetailPage(presetId = key.id)
+                            }
+
                             entry<Screen.Skills> {
                                 SkillsPage()
                             }
@@ -838,6 +843,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Prompts : Screen
+
+    @Serializable
+    data class PresetDetail(val id: String) : Screen
 
     @Serializable
     data object Skills : Screen

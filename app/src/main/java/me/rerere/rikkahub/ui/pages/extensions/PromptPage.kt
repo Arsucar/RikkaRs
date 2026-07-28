@@ -97,16 +97,21 @@ import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.PresetSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
+import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.PresetEntry
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -165,7 +170,11 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                     presets = settings.presets,
                     modeInjections = settings.modeInjections,
                     onUpdatePresets = { vm.updateSettings(settings.copy(presets = it)) },
-                    onUpdateModeInjections = { vm.updateSettings(settings.copy(modeInjections = it)) }
+                    onUpdateModeInjections = { updatedModeInjections ->
+                        vm.updateSettings(
+                            settings.withModeInjectionsPreservingPresetSnapshots(updatedModeInjections)
+                        )
+                    }
                 )
 
                 1 -> LorebookTab(
@@ -187,6 +196,7 @@ private fun PresetTab(
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
     val toaster = LocalToaster.current
+    val navController = LocalNavController.current
     val currentPresets by rememberUpdatedState(presets)
     val editState = useEditState<Preset> { edited ->
         val index = presets.indexOfFirst { it.id == edited.id }
@@ -246,7 +256,7 @@ private fun PresetTab(
                     PresetCard(
                         preset = preset,
                         modeInjections = modeInjections,
-                        onEdit = { editState.open(preset) },
+                        onEdit = { navController.navigate(Screen.PresetDetail(preset.id.toString())) },
                         onDelete = { onUpdatePresets(presets - preset) }
                     )
                 }
@@ -264,7 +274,9 @@ private fun PresetTab(
                 }
             },
         ) {
-            Button(onClick = { editState.open(Preset()) }) {
+            Button(onClick = {
+                editState.open(Preset(entriesVersion = PRESET_ENTRIES_VERSION))
+            }) {
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
@@ -307,11 +319,9 @@ private fun PresetCard(
     var showExportDialog by remember { mutableStateOf(false) }
     val exporter = rememberExporter(preset, PresetSerializer)
     val includedNames = remember(preset, modeInjections) {
-        modeInjections
-            .filter { it.id in preset.effectiveInjectionIds() }
-            .map { it.name.ifBlank { "" } }
-            .filter { it.isNotBlank() }
+        preset.displayEntryNames(modeInjections)
     }
+    val entryCount = remember(preset) { preset.displayEntryCount() }
 
     SwipeToDismissBox(
         state = swipeState,
@@ -386,7 +396,7 @@ private fun PresetCard(
                     Text(
                         text = stringResource(
                             R.string.prompt_page_entries_count_format,
-                            preset.effectiveInjectionIds().size
+                            entryCount
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
@@ -422,8 +432,15 @@ internal fun PresetEditSheet(
     onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
 ) {
     var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
-    val presetModeInjections = remember(modeInjections, preset.modeInjectionIds) {
-        modeInjections.filter { it.id in preset.modeInjectionIds }
+    val presetModeInjections = remember(modeInjections, preset) {
+        val ids = if (preset.hasEntries()) {
+            preset.entries.filterIsInstance<PresetEntry.Reference>().mapTo(mutableSetOf()) {
+                it.modeInjectionId
+            }
+        } else {
+            preset.modeInjectionIds
+        }
+        modeInjections.filter { it.id in ids }
     }
 
     ModalBottomSheet(
@@ -508,7 +525,14 @@ internal fun PresetEditSheet(
                     )
                 } else {
                     presetModeInjections.forEach { injection ->
-                        val enabledInPreset = injection.id in preset.effectiveInjectionIds()
+                        val referenceEntry = preset.entries
+                            .filterIsInstance<PresetEntry.Reference>()
+                            .firstOrNull { it.modeInjectionId == injection.id }
+                        val enabledInPreset = if (preset.hasEntries()) {
+                            referenceEntry?.enabled == true
+                        } else {
+                            injection.id in preset.effectiveInjectionIds()
+                        }
                         ListItem(
                             headlineContent = {
                                 Text(injection.name.ifBlank { stringResource(R.string.prompt_page_unnamed) })
@@ -533,7 +557,26 @@ internal fun PresetEditSheet(
                                         checked = enabledInPreset,
                                         onCheckedChange = { checked ->
                                             onEditPreset(
-                                                if (checked) {
+                                                if (preset.hasEntries()) {
+                                                    val updatedEntries = if (referenceEntry != null) {
+                                                        preset.entries.map { entry ->
+                                                            if (entry.id == referenceEntry.id) {
+                                                                referenceEntry.copy(enabled = checked)
+                                                            } else {
+                                                                entry
+                                                            }
+                                                        }
+                                                    } else {
+                                                        preset.entries + PresetEntry.Reference(
+                                                            enabled = checked,
+                                                            order = preset.entries
+                                                                .filterIsInstance<PresetEntry.Reference>()
+                                                                .size,
+                                                            modeInjectionId = injection.id,
+                                                        )
+                                                    }
+                                                    preset.copy(entries = updatedEntries)
+                                                } else if (checked) {
                                                     preset.copy(
                                                         modeInjectionIds = preset.modeInjectionIds + injection.id,
                                                         disabledEntryIds = preset.disabledEntryIds - injection.id,
@@ -569,12 +612,19 @@ internal fun PresetEditSheet(
                         onUpdateModeInjections(modeInjections.toMutableList().apply { set(index, edited) })
                     } else {
                         onUpdateModeInjections(modeInjections + edited)
-                        onEditPreset(
+                        onEditPreset(if (preset.hasEntries()) {
+                            preset.copy(
+                                entries = preset.entries + PresetEntry.Reference(
+                                    order = preset.entries.filterIsInstance<PresetEntry.Reference>().size,
+                                    modeInjectionId = edited.id,
+                                )
+                            )
+                        } else {
                             preset.copy(
                                 modeInjectionIds = preset.modeInjectionIds + edited.id,
                                 disabledEntryIds = preset.disabledEntryIds - edited.id,
                             )
-                        )
+                        })
                     }
                 }
                 editingInjection = null

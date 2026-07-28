@@ -50,6 +50,9 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.prompts.buildInputDraftPrompt
+import me.rerere.rikkahub.data.ai.prompts.resolveBuiltinOverride
+import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_INPUT_DRAFT_PROMPT
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.ai.GenerationPreparationMode
@@ -2062,9 +2065,14 @@ class ChatService(
             }
 
             val providerHandler = providerManager.getProviderByType(provider)
+            // #182: 预设内启用的 suggestion 覆盖 > 全局 settings.suggestionPrompt（仅当有非空覆盖）。
+            val assistant = settings.assistants.firstOrNull { it.id == conversation.assistantId }
+            val suggestionTemplate = assistant
+                ?.let { resolveBuiltinOverride(it, settings.presets, BuiltinPromptRegistry.KEY_SUGGESTION) }
+                ?: settings.suggestionPrompt
             val messages = listOf(
                 UIMessage.user(
-                    settings.suggestionPrompt.applyPlaceholders(
+                    suggestionTemplate.applyPlaceholders(
                         "locale" to Locale.getDefault().displayName,
                         "content" to conversation.currentMessages
                             .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
@@ -2116,12 +2124,18 @@ class ChatService(
         val provider = model.findProvider(settings.providers)
             ?: error(context.getString(R.string.input_draft_model_unavailable))
         val providerHandler = providerManager.getProviderByType(provider)
+        // #182: 预设内启用的 reply_draft 覆盖 > 默认模板（仅当有非空覆盖）。
+        val assistant = settings.assistants.firstOrNull { it.id == conversation.assistantId }
+        val draftTemplate = assistant
+            ?.let { resolveBuiltinOverride(it, settings.presets, BuiltinPromptRegistry.KEY_REPLY_DRAFT) }
+            ?: DEFAULT_INPUT_DRAFT_PROMPT
         val prompt = buildInputDraftPrompt(
             locale = Locale.getDefault().displayName,
             content = conversation.currentMessages
                 .takeLast(8)
                 .joinToString("\n\n") { it.summaryAsText(maxLength = 500) },
             userInstruction = userInstruction,
+            template = draftTemplate,
         )
         var messages = listOf(UIMessage.user(prompt))
         var draft = ""

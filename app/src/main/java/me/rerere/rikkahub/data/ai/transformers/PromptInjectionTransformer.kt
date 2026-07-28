@@ -3,13 +3,17 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.PresetEntry
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.effectivePosition
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
+import me.rerere.rikkahub.data.model.inPresetDisplayOrder
 import kotlin.uuid.Uuid
 
 /**
@@ -63,8 +67,12 @@ internal fun transformMessages(
     }
 
     // 按位置和优先级分组
+    val modeInjectionOrder = modeInjections.withIndex().associate { (index, injection) -> injection.id to index }
     val byPosition = injections
-        .sortedByDescending { it.priority }
+        .sortedWith(
+            compareByDescending<PromptInjection> { it.priority }
+                .thenBy { modeInjectionOrder[it.id] ?: Int.MAX_VALUE }
+        )
         .groupBy { it.position }
 
     // 应用注入
@@ -94,18 +102,49 @@ internal fun collectInjections(
     } else {
         assistant.lorebookIds
     }
-    // 展开助手关联预设内生效的注入 ID (预设内被单独禁用的条目会被排除, 见 issue #65)
+    // 助手关联的预设 (见 issue #65 / #182)
     val effectivePresetIds = assistant.presetIds
-    val presetInjectionIds = presets
-        .filter { it.id in effectivePresetIds }
+    val activePresets = presets.filter { it.id in effectivePresetIds }
+
+    // 展开旧模型预设内生效的注入 ID (未迁移到 entries 的预设走此路径, 见 issue #65)
+    // 预设内被单独禁用的条目会被排除
+    val presetInjectionIds = activePresets
+        .filter { !it.hasEntries() }
         .flatMap { it.effectiveInjectionIds() }
         .toSet()
     val allModeInjectionIds = effectiveModeInjectionIds + presetInjectionIds
 
-    // 1. 获取关联的 ModeInjection (含直接绑定与预设展开的条目)
+    // 1. 获取关联的 ModeInjection (含直接绑定与旧模型预设展开的条目)
+    // 记录已注入 id，供 step1b 去重（同一 id 只注入一次，避免直连+entries 双注入）。
+    val injectedIds = mutableSetOf<Uuid>()
     modeInjections
         .filter { it.enabled && allModeInjectionIds.contains(it.id) }
-        .forEach { injections.add(it) }
+        .forEach {
+            injections.add(it)
+            injectedIds.add(it.id)
+        }
+
+    // 1b. 展开新模型预设 (entries)：每个启用条目就地解析为 ModeInjection (见 issue #182)
+    // priority = -order（或迁移条目的 legacyPriority），使下游 sortedByDescending{priority} 生效。
+    // 若解析出的 injection.id 已在 step1 注入过则跳过（按 id 去重，lorebook 不参与）。
+    activePresets
+        .filter { it.hasEntries() }
+        .forEach { preset ->
+            preset.entries
+                .inPresetDisplayOrder()
+                .forEachIndexed { displayIndex, entry ->
+                    if (!entry.enabled) return@forEachIndexed
+                    resolvePresetEntry(
+                        entry = entry,
+                        modeInjections = modeInjections,
+                        fallbackPriority = -displayIndex,
+                    )?.let { resolved ->
+                        if (injectedIds.add(resolved.deduplicationId)) {
+                            injections.add(resolved.injection)
+                        }
+                    }
+                }
+        }
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
     val enabledLorebooks = lorebooks.filter {
@@ -126,6 +165,74 @@ internal fun collectInjections(
     }
 
     return injections
+}
+
+/**
+ * 将一个启用的 [PresetEntry] 解析为可注入的 [PromptInjection.ModeInjection]。
+ *
+ * - [PresetEntry.Custom]：直接用内嵌内容。
+ * - [PresetEntry.Builtin]：查 [BuiltinPromptRegistry]，用 override 或默认模板，DYNAMIC 时替换宏；
+ *   未知 key 或解析后内容为空则跳过（返回 null，AC6：不注入、不报错）。
+ * - [PresetEntry.Reference]：查全局 [modeInjections] 命中 [PresetEntry.Reference.modeInjectionId]；
+ *   被删或全局禁用则跳过。
+ *
+ * order → priority 采用 `-order` 映射：下游 `sortedByDescending { priority }` 即为组内 order 升序拼接。
+ * position 对 Builtin 取 [effectivePosition]（overridePosition 优先）。
+ */
+private data class ResolvedPresetEntry(
+    val injection: PromptInjection.ModeInjection,
+    val deduplicationId: Uuid,
+)
+
+private fun resolvePresetEntry(
+    entry: PresetEntry,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    fallbackPriority: Int,
+): ResolvedPresetEntry? {
+    val content: String
+    val role: MessageRole
+    var deduplicationId = entry.id
+    val position: InjectionPosition = entry.effectivePosition()
+    // 迁移快照条目保留原 priority 参与全局混排（防排序回归）；用户新建条目 legacyPriority=null 时回退 -order。
+    var priority = fallbackPriority
+    when (entry) {
+        is PresetEntry.Custom -> {
+            content = entry.content
+            role = entry.role
+            entry.legacyPriority?.let { priority = it }
+        }
+
+        is PresetEntry.Builtin -> {
+            val def = BuiltinPromptRegistry[entry.builtinKey] ?: return null
+            // config-only：内置模板的真实注入由各自专用 transformer / 特性流程完成。
+            // 预设路径对 injectable=false 的条目一律跳过，避免双注入或泄漏未解析字面宏（见 #182）。
+            if (!def.injectable) return null
+            val override = entry.overrideContent?.takeIf { def.overridable }
+            content = override ?: def.defaultContent
+            role = entry.role
+        }
+
+        is PresetEntry.Reference -> {
+            val target = modeInjections.firstOrNull { it.id == entry.modeInjectionId }
+                ?.takeIf { it.enabled } ?: return null
+            content = target.content
+            role = entry.role
+            deduplicationId = target.id
+        }
+    }
+    if (content.isBlank()) return null
+    return ResolvedPresetEntry(
+        injection = PromptInjection.ModeInjection(
+            id = entry.id,
+            enabled = true,
+            priority = priority,
+            position = position,
+            content = content,
+            injectDepth = entry.injectDepth,
+            role = role,
+        ),
+        deduplicationId = deduplicationId,
+    )
 }
 
 /**

@@ -50,9 +50,9 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
@@ -67,7 +67,6 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
 import me.rerere.rikkahub.ui.pages.extensions.ModeInjectionEditSheet
-import me.rerere.rikkahub.ui.pages.extensions.PresetEditSheet
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.skills.AddSkillDialog
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -92,21 +91,13 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
     var deletePrivateSkillTarget by remember { mutableStateOf<SkillMetadata?>(null) }
 
     // 点击单个扩展条目 -> 直接打开对应编辑弹窗（复用扩展管理页的编辑组件）
-    val presetEditState = useEditState<Preset> { edited ->
-        val newPresets = if (settings.presets.any { it.id == edited.id }) {
-            settings.presets.map { if (it.id == edited.id) edited else it }
-        } else {
-            settings.presets + edited
-        }
-        vm.updateSettings(settings.copy(presets = newPresets))
-    }
     val modeInjectionEditState = useEditState<PromptInjection.ModeInjection> { edited ->
         val newInjections = if (settings.modeInjections.any { it.id == edited.id }) {
             settings.modeInjections.map { if (it.id == edited.id) edited else it }
         } else {
             settings.modeInjections + edited
         }
-        vm.updateSettings(settings.copy(modeInjections = newInjections))
+        vm.updateSettings(settings.withModeInjectionsPreservingPresetSnapshots(newInjections))
     }
     val lorebookEditState = useEditState<Lorebook> { edited ->
         val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
@@ -230,7 +221,9 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                             else assistant.presetIds - presetId
                                             vm.update(assistant.copy(presetIds = newIds))
                                         },
-                                        onEdit = { presetEditState.open(it) },
+                                        onEdit = {
+                                            navController.navigate(Screen.PresetDetail(it.id.toString()))
+                                        },
                                     )
                                 }
                                 if (settings.modeInjections.isNotEmpty()) {
@@ -357,19 +350,6 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
         onDismiss = { deletePrivateSkillTarget = null },
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deletePrivateSkillTarget?.name ?: ""))
-    }
-
-    if (presetEditState.isEditing) {
-        presetEditState.currentState?.let { state ->
-            PresetEditSheet(
-                preset = state,
-                modeInjections = settings.modeInjections,
-                onDismiss = { presetEditState.dismiss() },
-                onConfirm = { presetEditState.confirm() },
-                onEditPreset = { presetEditState.currentState = it },
-                onUpdateModeInjections = { vm.updateSettings(settings.copy(modeInjections = it)) },
-            )
-        }
     }
 
     if (modeInjectionEditState.isEditing) {

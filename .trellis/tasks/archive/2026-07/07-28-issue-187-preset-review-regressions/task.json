@@ -1,0 +1,35 @@
+{
+  "id": "issue-187-preset-review-regressions",
+  "name": "issue-187-preset-review-regressions",
+  "title": "修复 #187 预设审查回归",
+  "description": "修复 #182 实现审查确认的 Reference 重复注入、Workspace 默认模板不一致和拖拽排序无障碍缺陷。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P1",
+  "creator": "your-name",
+  "assignee": "Arsucar",
+  "createdAt": "2026-07-28",
+  "completedAt": "2026-07-28",
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/PromptInjectionTransformer.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/ai/prompts/BuiltinPromptRegistry.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/WorkspaceReminderTransformer.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PresetDetailPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PresetEntryUi.kt"
+  ],
+  "notes": "Review follow-up for #182. GitHub issue #187 records three independently reproduced regressions.",
+  "meta": {
+    "issue": 187,
+    "relatedIssue": 182
+  }
+}

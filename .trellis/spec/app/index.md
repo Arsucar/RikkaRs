@@ -22,6 +22,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 | [Assistant Tool Capability Catalog](./tool-capability-catalog.md) | Stable tool IDs, availability reasons, approvals, and pure snapshots |
 | [Assistant Tool Permissions](./tool-permissions.md) | Four-state per-tool policy and runtime enforcement |
 | [Tool Diagnostics and Connection Status](./tool-diagnostics-and-connection-status.md) | Read-only diagnostics, redaction, probes, and revision-safe status |
+| [Preset Entries](./preset-entries.md) | Versioned entries, migration, Builtin consumers, and UI invariants |
 
 ## Pre-Development Checklist
 
@@ -35,6 +36,8 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 - For Conversation persistence, keep summary/diff queries lightweight, preserve complete full reads, and bound temporary encoded batches without truncating history.
 - For every new or changed user-visible UI string, provide a string resource and a real Simplified Chinese translation before delivery.
 - For assistant tool summaries, keep configured/available/effective distinct and construct snapshots without I/O.
+- For preset-entry changes, preserve the entries-version sentinel, snapshot legacy injections before deletion, and keep
+  Builtin uniqueness symmetric across create/edit paths.
 
 ## Quality Check
 
@@ -48,3 +51,5 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 - For Conversation persistence changes, test summary sentinel isolation, exact batch/page boundaries, 65+ node full reads, and metadata-only diagnostic formatting.
 - For backup XML-only changes, run `.\gradlew :app:processDebugResources --no-daemon --no-configuration-cache --console=plain`.
 - For tool catalog changes, cover dynamic sources and status reasons, then compare effective names at the generation boundary.
+- For preset-entry changes, run serialization, migration persistence, injection ordering, Builtin override, and UI
+  projection tests.

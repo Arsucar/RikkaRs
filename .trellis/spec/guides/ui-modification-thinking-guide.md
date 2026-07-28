@@ -15,11 +15,17 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 - [ ] Enumerate data sizes: zero, one, typical, many, duplicate names, and long localized text.
 - [ ] Check small width, landscape, IME visible, dark/light theme, scrolling, TalkBack, and large font behavior.
 - [ ] Separate display projection from persistence semantics. UI filtering or deduplication must not silently delete or merge stored entities.
+- [ ] For asynchronously persisted editors, submit relative mutations against the latest stored entity. Do not let a
+  delayed action write a captured whole-object snapshot over newer sibling fields.
+- [ ] Define collection invariants such as unique keys once, then apply them symmetrically to create, edit, import, and
+  restore paths. An edit picker must keep the current value selectable while excluding values owned by sibling items.
 - [ ] Check every repeated item has a stable business key and every derived list has the narrowest correct memoization keys.
 - [ ] Check whether state changes should alter scroll position. Only explicit navigation should trigger automatic scrolling.
 - [ ] Define feedback for every command: success, rejection, failure, cancellation, and confirmation for destructive or relaxing actions.
 - [ ] Define the primary click target separately from dangerous actions. Put delete/remove in an overflow or secondary action with scoped confirmation.
 - [ ] Provide localized descriptions for icons and localize enum names, preset slugs, status reasons, and other machine-facing values.
+- [ ] Gesture-only actions such as drag reordering have a TalkBack/keyboard equivalent. Do not expose an empty click
+  action on a drag handle; provide explicit move commands with correct boundary states and an accurate description.
 - [ ] If a page mutates Activity orientation or system-bar visibility, snapshot the entering values, derive UI from the
   actual configuration/insets, and restore every window-level side effect on mode change and page disposal.
 
@@ -57,6 +63,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Default checkbox on every row | Empty boxes dominate the page and compete with switches | Reveal selection controls only in explicit multi-select mode |
 | Plain `Column` for an unbounded picker | Templates or keyboard make the dialog overflow | Use a scrollable list and test small width plus IME |
 | Main list filtered but favorites/derived list unfiltered | Two parts of the screen disagree about the same filter | Apply the same predicate to every projection; preserve full persistence order |
+| Create picker enforces uniqueness but edit picker lists every value | Editing one row can duplicate a sibling key and make later saves appear ineffective | Share one availability projection; exclude sibling-owned values while retaining the row's current value |
 | Delete as a permanent inline icon | Accidental deletion competes with card navigation | Use a secondary/overflow action and confirm the exact ID/name and impact |
 | Domain count exposed directly | Numbers such as `4/12` are technically valid but confusing | Define and test a user-facing count helper |
 | Optional diagnostics computed inline in Compose | One malformed timestamp or formatter initialization failure crashes the whole message list | Build diagnostic labels in a pure helper, catch only expected data/linkage failures, and omit the optional diagnostic row on failure |
@@ -65,6 +72,7 @@ When an active Trellis task exists, record the applicable UI cases in that task'
 | Page-local orientation or immersive mode is not restored | Later routes stay rotated or lose system bars | Snapshot Activity/window state, use actual configuration as truth, and restore on portrait transition plus disposal |
 | Reply draft and ASR both write the composer | Recording or late model chunks overwrite user text | Make asynchronous composer producers mutually exclusive and keep cancellation generation-guarded |
 | Non-empty conversation treated as a valid reply target | Draft action appears after a user-only turn or during a streaming assistant reply | Require a completed latest assistant turn for actions that semantically reply to the assistant |
+| Drag handle is an empty button | TalkBack announces a move action, but activation does nothing and keyboard users cannot reorder | Keep touch drag, remove the fake click action, and provide accessible move up/down commands with boundary disabling |
 
 ## Verification Matrix
 

@@ -33,6 +33,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.ui.pages.extensions.displayEntryCount
 import kotlin.uuid.Uuid
 
 @Composable
@@ -69,7 +70,7 @@ fun PresetsContent(
                         Text(
                             text = stringResource(
                                 R.string.extension_content_preset_entries_count,
-                                preset.effectiveInjectionIds().size,
+                                preset.displayEntryCount(),
                             ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

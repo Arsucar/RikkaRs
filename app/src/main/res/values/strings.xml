@@ -775,6 +775,25 @@
   <string name="prompt_page_mode_injection_tab">Mode Injection</string>
   <string name="prompt_page_name">Name</string>
   <string name="prompt_page_new_keyword">New Keyword</string>
+  <string name="preset_detail_builtin_key">Builtin template</string>
+  <string name="preset_detail_config_only_desc">Edits here do take effect, but through the matching feature (reply draft, suggestions, workspace, memory table) at runtime instead of being injected directly into the current conversation.</string>
+  <string name="preset_detail_config_only_tag">Used by feature</string>
+  <string name="preset_detail_delete_message">Delete "%1$s" from this preset? This action cannot be undone.</string>
+  <string name="preset_detail_delete_title">Delete preset entry</string>
+  <string name="preset_detail_empty_section">No entries in this section</string>
+  <string name="preset_detail_more_actions">More actions</string>
+  <string name="preset_detail_invalid_reference">Invalid reference</string>
+  <string name="preset_detail_reference_reselect">This reference no longer points to a valid injection. Please reselect one.</string>
+  <string name="preset_detail_drag_handle">Drag to reorder</string>
+  <string name="preset_detail_move_down">Move down</string>
+  <string name="preset_detail_move_up">Move up</string>
+  <string name="preset_detail_not_found">Preset not found</string>
+  <string name="preset_detail_override_content">Override content</string>
+  <string name="preset_detail_reference_target">Referenced injection</string>
+  <string name="preset_detail_section_builtin">Builtin prompts</string>
+  <string name="preset_detail_section_custom">Custom entries</string>
+  <string name="preset_detail_section_reference">Global references</string>
+  <string name="preset_detail_variables">Variables</string>
   <string name="prompt_page_preset_empty">No presets</string>
   <string name="prompt_page_preset_entries">Preset entries</string>
   <string name="prompt_page_preset_no_entries">No enabled entries</string>
@@ -2238,4 +2257,3 @@
   <string name="assistant_page_memory_table_switch_to_landscape">Switch to landscape</string>
   <string name="assistant_page_memory_table_switch_to_portrait">Switch to portrait</string>
 </resources>
-

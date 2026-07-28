@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/index.md","reason":"App package pre-development and quality gates."}
+{"file":".trellis/spec/app/preset-entries.md","reason":"Preset runtime, migration, Builtin consumer, reorder, and test contracts."}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Compose accessibility and UI verification matrix."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Compose state and shared Kotlin safety checks."}

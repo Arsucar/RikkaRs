@@ -30,7 +30,6 @@ import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
@@ -41,7 +40,6 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
-import me.rerere.rikkahub.ui.pages.extensions.PresetEditSheet
 import org.koin.compose.koinInject
 
 
@@ -64,14 +62,6 @@ fun ExtensionSelector(
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
     // 点击单个条目 -> 直接打开该条目的编辑弹窗（全局条目改动落到 SettingsStore）
-    val presetEditState = useEditState<Preset> { edited ->
-        val newPresets = if (settings.presets.any { it.id == edited.id }) {
-            settings.presets.map { if (it.id == edited.id) edited else it }
-        } else {
-            settings.presets + edited
-        }
-        scope.launch { settingsStore.update(settings.copy(presets = newPresets)) }
-    }
     val lorebookEditState = useEditState<Lorebook> { edited ->
         val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
             settings.lorebooks.map { if (it.id == edited.id) edited else it }
@@ -159,7 +149,9 @@ fun ExtensionSelector(
                                 onUpdate(assistant.copy(presetIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
-                            onEdit = { presetEditState.open(it) },
+                            onEdit = {
+                                navController.navigate(Screen.PresetDetail(it.id.toString()))
+                            },
                         )
                     } else {
                         ExtensionEmptyState(
@@ -255,21 +247,6 @@ fun ExtensionSelector(
                     }
                 }
             }
-        }
-    }
-
-    if (presetEditState.isEditing) {
-        presetEditState.currentState?.let { state ->
-            PresetEditSheet(
-                preset = state,
-                modeInjections = settings.modeInjections,
-                onDismiss = { presetEditState.dismiss() },
-                onConfirm = { presetEditState.confirm() },
-                onEditPreset = { presetEditState.currentState = it },
-                onUpdateModeInjections = { updated ->
-                    scope.launch { settingsStore.update(settings.copy(modeInjections = updated)) }
-                },
-            )
         }
     }
 

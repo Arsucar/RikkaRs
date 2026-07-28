@@ -8,6 +8,9 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.PresetEntry
+import me.rerere.rikkahub.data.model.migratedWithEntries
+import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -1365,6 +1368,715 @@ class PromptInjectionTransformerTest {
         val injectedIndex = result.indexOfFirst { getMessageText(it).contains("Bottom injection") }
         val lastUserIndex = result.indexOfLast { it.role == MessageRole.USER && getMessageText(it) == "Thanks!" }
         assertEquals(lastUserIndex - 1, injectedIndex)
+    }
+    // endregion
+
+    // region Preset entries tests (#182)
+    @Test
+    fun `preset custom entries should inject in ascending order regardless of list order`() {
+        val presetId = Uuid.random()
+        // entries 列表故意乱序，order 决定最终拼接顺序
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(
+                    order = 2,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = "Third",
+                ),
+                PresetEntry.Custom(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = "First",
+                ),
+                PresetEntry.Custom(
+                    order = 1,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = "Second",
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        // AC2: system 拼接顺序严格等于 entry.order
+        assertTrue(systemText.indexOf("First") < systemText.indexOf("Second"))
+        assertTrue(systemText.indexOf("Second") < systemText.indexOf("Third"))
+    }
+
+    @Test
+    fun `preset disabled custom entry should not be injected`() {
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(order = 0, content = "Kept entry", enabled = true),
+                PresetEntry.Custom(order = 1, content = "Skipped entry", enabled = false),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        // AC1: 禁用条目不注入，其余照常
+        assertTrue(systemText.contains("Kept entry"))
+        assertFalse(systemText.contains("Skipped entry"))
+    }
+
+    @Test
+    fun `preset custom entries should not mix across positions`() {
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = "System block",
+                ),
+                PresetEntry.Custom(
+                    order = 0,
+                    position = InjectionPosition.TOP_OF_CHAT,
+                    content = "Top block",
+                    role = MessageRole.USER,
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // AC3: 按 position 分组，system 条目并入 system 消息，TOP_OF_CHAT 独立成消息
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.contains("System block"))
+        assertFalse(systemText.contains("Top block"))
+        assertEquals("Top block", getMessageText(result[1]))
+    }
+
+    @Test
+    fun `preset builtin entry is config-only and must not be injected`() {
+        // #182 config-only 语义：内置模板 injectable=false，真实注入由各自专用 transformer /
+        // 特性流程完成（建议流程等），预设注入路径对 Builtin 一律跳过，避免双注入。
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Builtin(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    builtinKey = BuiltinPromptRegistry.KEY_SUGGESTION,
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // Builtin (injectable=false) 不产生任何注入：消息原样返回。
+        assertEquals(messages, result)
+    }
+
+    @Test
+    fun `preset builtin entry with override is still config-only and not injected`() {
+        // #182 config-only 语义：即便用户在预设里覆盖了内置模板文案，预设注入路径依然跳过；
+        // 覆盖内容只影响该模板专用流程的展示/编辑，不会经预设直接进对话。
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Builtin(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    builtinKey = BuiltinPromptRegistry.KEY_WORKSPACE_GUIDE,
+                    overrideContent = "Custom workspace override text",
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // override 内容不会被预设路径注入。
+        val systemText = getMessageText(result.first())
+        assertFalse(systemText.contains("Custom workspace override text"))
+        assertEquals(messages, result)
+    }
+
+    @Test
+    fun `preset builtin entry with unknown key should be skipped without error`() {
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Builtin(
+                    order = 0,
+                    builtinKey = "totally_unknown_key",
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // AC6: 未知 key 跳过、不报错、不注入
+        assertEquals(messages, result)
+    }
+
+    @Test
+    fun `preset builtin dynamic template is config-only and macro is never leaked`() {
+        // #182 config-only 语义：动态内置模板（workspace_guide 等）的真实注入由
+        // WorkspaceReminderTransformer 完成。预设路径跳过 Builtin，因此既不会注入解析后的宏，
+        // 也不会把未解析的字面宏（如 {{workspace_name}}）泄漏进 system 文本。
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Builtin(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    builtinKey = BuiltinPromptRegistry.KEY_WORKSPACE_GUIDE,
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // 未注入任何内容：既无解析后的值，也无未解析的字面宏泄漏。
+        val systemText = getMessageText(result.first())
+        assertFalse(systemText.contains("/workspace/proj"))
+        assertFalse(systemText.contains("{{workspace_name}}"))
+        assertFalse(systemText.contains("{{cwd}}"))
+        assertEquals(messages, result)
+    }
+
+    @Test
+    fun `preset reference entry should resolve global mode injection`() {
+        val presetId = Uuid.random()
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            content = "Referenced global content",
+        )
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Reference(
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    modeInjectionId = injectionId,
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        assertTrue(systemText.contains("Referenced global content"))
+    }
+
+    @Test
+    fun `direct binding and reference to the same global injection should inject once`() {
+        val target = createModeInjection(content = "Reference dedup marker")
+        val preset = Preset(
+            entries = listOf(PresetEntry.Reference(modeInjectionId = target.id)),
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("Hello")),
+            assistant = createAssistant(
+                modeInjectionIds = setOf(target.id),
+                presetIds = setOf(preset.id),
+            ),
+            modeInjections = listOf(target),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val occurrences = getMessageText(result.first()).split(target.content).size - 1
+        assertEquals(1, occurrences)
+    }
+
+    @Test
+    fun `different custom entries with equal content should remain independent`() {
+        val marker = "Equal custom marker"
+        val preset = Preset(
+            entries = listOf(
+                PresetEntry.Custom(order = 0, content = marker),
+                PresetEntry.Custom(order = 1, content = marker),
+            ),
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("Hello")),
+            assistant = createAssistant(presetIds = setOf(preset.id)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val occurrences = getMessageText(result.first()).split(marker).size - 1
+        assertEquals(2, occurrences)
+    }
+
+    @Test
+    fun `preset reference entry to deleted injection should be skipped`() {
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Reference(
+                    order = 0,
+                    modeInjectionId = Uuid.random(), // 全局不存在
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = emptyList(),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        // 引用失效则跳过，不报错
+        assertEquals(messages, result)
+    }
+    // endregion
+
+    // region Preset migration tests (#182)
+    @Test
+    fun `migratedWithEntries should snapshot old modeInjectionIds as custom entries`() {
+        val idHigh = Uuid.random()
+        val idLow = Uuid.random()
+        val injections = listOf(
+            createModeInjection(id = idHigh, priority = 10, content = "High priority", name = "High"),
+            createModeInjection(id = idLow, priority = 1, content = "Low priority", name = "Low"),
+        )
+        val preset = Preset(
+            id = Uuid.random(),
+            modeInjectionIds = setOf(idHigh, idLow),
+        )
+
+        val migrated = preset.migratedWithEntries(injections)
+
+        assertTrue(migrated.hasEntries())
+        assertEquals(2, migrated.entries.size)
+        // priority DESC → order 0..n；High(priority=10) 排前
+        val first = migrated.entries.first { it.order == 0 } as PresetEntry.Custom
+        val second = migrated.entries.first { it.order == 1 } as PresetEntry.Custom
+        assertEquals("High priority", first.content)
+        assertEquals("Low priority", second.content)
+    }
+
+    @Test
+    fun `migratedWithEntries should mark disabled entries as not enabled`() {
+        val enabledId = Uuid.random()
+        val disabledId = Uuid.random()
+        val injections = listOf(
+            createModeInjection(id = enabledId, content = "Enabled content"),
+            createModeInjection(id = disabledId, content = "Disabled content"),
+        )
+        val preset = Preset(
+            id = Uuid.random(),
+            modeInjectionIds = setOf(enabledId, disabledId),
+            disabledEntryIds = setOf(disabledId),
+        )
+
+        val migrated = preset.migratedWithEntries(injections)
+
+        val enabledEntry = migrated.entries.first { (it as PresetEntry.Custom).content == "Enabled content" }
+        val disabledEntry = migrated.entries.first { (it as PresetEntry.Custom).content == "Disabled content" }
+        assertTrue(enabledEntry.enabled)
+        assertFalse(disabledEntry.enabled)
+    }
+
+    @Test
+    fun `migratedWithEntries should be idempotent`() {
+        val id = Uuid.random()
+        val injections = listOf(createModeInjection(id = id, content = "Content"))
+        val preset = Preset(id = Uuid.random(), modeInjectionIds = setOf(id))
+
+        val once = preset.migratedWithEntries(injections)
+        val twice = once.migratedWithEntries(injections)
+
+        assertEquals(once.entries, twice.entries)
+    }
+
+    @Test
+    fun `migratedWithEntries should mark empty preset as entries model`() {
+        val preset = Preset(id = Uuid.random())
+
+        val migrated = preset.migratedWithEntries(emptyList())
+
+        assertTrue(migrated.hasEntries())
+        assertTrue(migrated.entries.isEmpty())
+    }
+
+    @Test
+    fun `migrated preset should inject equivalently to legacy id path`() {
+        val idA = Uuid.random()
+        val idB = Uuid.random()
+        val injections = listOf(
+            createModeInjection(
+                id = idA,
+                priority = 10,
+                position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                content = "Alpha",
+            ),
+            createModeInjection(
+                id = idB,
+                priority = 5,
+                position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                content = "Beta",
+            ),
+        )
+        val presetId = Uuid.random()
+        val legacyPreset = Preset(id = presetId, modeInjectionIds = setOf(idA, idB))
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+        val assistant = createAssistant(presetIds = setOf(presetId))
+
+        val legacyResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = injections,
+            lorebooks = emptyList(),
+            presets = listOf(legacyPreset),
+        )
+        val migratedResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = injections,
+            lorebooks = emptyList(),
+            presets = listOf(legacyPreset.migratedWithEntries(injections)),
+        )
+
+        // AC5: 迁移后 system 拼接文本与旧路径一致（priority→order 锁定顺序）
+        assertEquals(getMessageText(legacyResult.first()), getMessageText(migratedResult.first()))
+    }
+
+    @Test
+    fun `direct binding and preset entry sharing one id should inject only once`() {
+        // #182 去重：同一 injection 既被 assistant 直连绑定，又出现在预设 entries（模拟迁移后快照），
+        // collectInjections 按 id 去重（step1 记录 injectedIds，step1b add 失败即跳过），
+        // 保证内容只注入一次，避免直连 + entries 双注入。
+        val sharedId = Uuid.random()
+        val presetId = Uuid.random()
+        val marker = "Shared duplicated marker"
+        val globalInjection = createModeInjection(
+            id = sharedId,
+            position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+            content = marker,
+        )
+        // 预设条目复用同一 id（迁移快照会把全局 id 原样带入 Custom.id）
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(
+                    id = sharedId,
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = marker,
+                ),
+            ),
+        )
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(
+                modeInjectionIds = setOf(sharedId),
+                presetIds = setOf(presetId),
+            ),
+            modeInjections = listOf(globalInjection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        // 内容只出现一次（未去重会出现两次）
+        val occurrences = systemText.split(marker).size - 1
+        assertEquals(1, occurrences)
+    }
+
+    @Test
+    fun `migratedWithEntries should inherit globally disabled injection as disabled entry`() {
+        // #182 enabled 继承：锁定旧路径 filter{it.enabled} 语义——全局 enabled=false 的注入
+        // 迁移后对应 Custom 条目 enabled 也必须为 false（即便它不在 disabledEntryIds 中）。
+        val disabledGlobalId = Uuid.random()
+        val injections = listOf(
+            createModeInjection(id = disabledGlobalId, enabled = false, content = "Globally disabled content"),
+        )
+        val preset = Preset(
+            id = Uuid.random(),
+            modeInjectionIds = setOf(disabledGlobalId),
+            // 注意：不放进 disabledEntryIds，enabled=false 应仅来自全局 injection.enabled
+        )
+
+        val migrated = preset.migratedWithEntries(injections)
+
+        assertEquals(1, migrated.entries.size)
+        val entry = migrated.entries.first() as PresetEntry.Custom
+        assertEquals("Globally disabled content", entry.content)
+        assertFalse(entry.enabled)
+    }
+
+    @Test
+    fun `migratedWithEntries should record original priority as legacyPriority`() {
+        // #182 legacyPriority 存在性：迁移后 Custom.legacyPriority 必须等于原 injection.priority，
+        // 供 resolvePresetEntry 混排时参与全局排序（防排序回归）。
+        val idHigh = Uuid.random()
+        val idLow = Uuid.random()
+        val injections = listOf(
+            createModeInjection(id = idHigh, priority = 10, content = "High"),
+            createModeInjection(id = idLow, priority = 1, content = "Low"),
+        )
+        val preset = Preset(id = Uuid.random(), modeInjectionIds = setOf(idHigh, idLow))
+
+        val migrated = preset.migratedWithEntries(injections)
+
+        val high = migrated.entries.first { (it as PresetEntry.Custom).content == "High" } as PresetEntry.Custom
+        val low = migrated.entries.first { (it as PresetEntry.Custom).content == "Low" } as PresetEntry.Custom
+        assertEquals(10, high.legacyPriority)
+        assertEquals(1, low.legacyPriority)
+    }
+
+    @Test
+    fun `migrated preset entry and direct binding should keep legacy priority ordering when mixed`() {
+        // #182 legacyPriority 排序锁定（混合来源）：
+        // - Alpha(priority=10) 经预设迁移条目注入（legacyPriority=10 参与混排）
+        // - Beta(priority=5) 经 assistant 直连绑定注入
+        // 二者都 AFTER_SYSTEM_PROMPT。迁移前（legacy 展开）Alpha 在 Beta 前；迁移后必须保持一致，
+        // 不因预设条目改走 -order 而排序翻转。
+        val idAlpha = Uuid.random()
+        val idBeta = Uuid.random()
+        val injections = listOf(
+            createModeInjection(
+                id = idAlpha,
+                priority = 10,
+                position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                content = "Alpha",
+            ),
+            createModeInjection(
+                id = idBeta,
+                priority = 5,
+                position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                content = "Beta",
+            ),
+        )
+        val presetId = Uuid.random()
+        // 预设仅承载 Alpha；Beta 由 assistant 直连绑定
+        val legacyPreset = Preset(id = presetId, modeInjectionIds = setOf(idAlpha))
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+        )
+        val assistant = createAssistant(
+            modeInjectionIds = setOf(idBeta),
+            presetIds = setOf(presetId),
+        )
+
+        val legacyResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = injections,
+            lorebooks = emptyList(),
+            presets = listOf(legacyPreset),
+        )
+        val migratedResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = injections,
+            lorebooks = emptyList(),
+            presets = listOf(legacyPreset.migratedWithEntries(injections)),
+        )
+
+        val legacyText = getMessageText(legacyResult.first())
+        val migratedText = getMessageText(migratedResult.first())
+        // 迁移前后 system 拼接文本一致
+        assertEquals(legacyText, migratedText)
+        // 混排顺序锁定：Alpha(priority=10) 在 Beta(priority=5) 之前
+        assertTrue(migratedText.indexOf("Alpha") < migratedText.indexOf("Beta"))
+    }
+
+    @Test
+    fun `migration keeps global list order when priorities are equal`() {
+        val idFirst = Uuid.random()
+        val idSecond = Uuid.random()
+        val injections = listOf(
+            createModeInjection(id = idFirst, priority = 5, content = "First"),
+            createModeInjection(id = idSecond, priority = 5, content = "Second"),
+        )
+        val preset = Preset(modeInjectionIds = linkedSetOf(idSecond, idFirst))
+
+        val migrated = preset.migratedWithEntries(injections)
+
+        assertEquals(listOf("First", "Second"), migrated.entries.map {
+            (it as PresetEntry.Custom).content
+        })
+    }
+
+    @Test
+    fun `equal priority mixed sources keep legacy mode and lorebook order`() {
+        val presetInjection = createModeInjection(priority = 5, content = "Preset mode")
+        val directInjection = createModeInjection(priority = 5, content = "Direct mode")
+        val lorebookEntry = createRegexInjection(
+            priority = 5,
+            content = "Lorebook entry",
+            constantActive = true,
+        )
+        val presetId = Uuid.random()
+        val lorebook = Lorebook(id = Uuid.random(), entries = listOf(lorebookEntry))
+        val legacyPreset = Preset(
+            id = presetId,
+            modeInjectionIds = setOf(presetInjection.id),
+        )
+        val assistant = createAssistant(
+            modeInjectionIds = setOf(directInjection.id),
+            presetIds = setOf(presetId),
+            lorebookIds = setOf(lorebook.id),
+        )
+        val modeInjections = listOf(presetInjection, directInjection)
+        val messages = listOf(UIMessage.system("System"), UIMessage.user("Hello"))
+
+        val legacyResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = modeInjections,
+            lorebooks = listOf(lorebook),
+            presets = listOf(legacyPreset),
+        )
+        val migratedResult = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = modeInjections,
+            lorebooks = listOf(lorebook),
+            presets = listOf(legacyPreset.migratedWithEntries(modeInjections)),
+        )
+
+        val legacyText = getMessageText(legacyResult.first())
+        val migratedText = getMessageText(migratedResult.first())
+        assertEquals(legacyText, migratedText)
+        assertTrue(migratedText.indexOf("Preset mode") < migratedText.indexOf("Direct mode"))
+        assertTrue(migratedText.indexOf("Direct mode") < migratedText.indexOf("Lorebook entry"))
+    }
+
+    @Test
+    fun `new preset injection follows the same type sections shown by detail page`() {
+        val referenceTarget = createModeInjection(content = "Reference")
+        val presetId = Uuid.random()
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Reference(
+                    order = 0,
+                    modeInjectionId = referenceTarget.id,
+                ),
+                PresetEntry.Custom(
+                    order = 0,
+                    content = "Custom",
+                ),
+            ),
+        )
+        val messages = listOf(UIMessage.system("System"), UIMessage.user("Hello"))
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(presetIds = setOf(presetId)),
+            modeInjections = listOf(referenceTarget),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        assertTrue(systemText.indexOf("Custom") < systemText.indexOf("Reference"))
     }
     // endregion
 }

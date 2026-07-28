@@ -741,6 +741,25 @@
   <string name="prompt_page_mode_injection_tab">模式注入</string>
   <string name="prompt_page_name">名称</string>
   <string name="prompt_page_new_keyword">新关键词</string>
+  <string name="preset_detail_builtin_key">内置模板</string>
+  <string name="preset_detail_config_only_desc">在此编辑的内容会生效，但由对应功能（回复草稿/建议/工作区/记忆表）在运行时使用，而非直接注入到当前对话。</string>
+  <string name="preset_detail_config_only_tag">由专用功能使用</string>
+  <string name="preset_detail_delete_message">确定要从此预设中删除“%1$s”吗？此操作无法撤销。</string>
+  <string name="preset_detail_delete_title">删除预设条目</string>
+  <string name="preset_detail_empty_section">该分区暂无条目</string>
+  <string name="preset_detail_more_actions">更多操作</string>
+  <string name="preset_detail_invalid_reference">无效引用</string>
+  <string name="preset_detail_reference_reselect">该引用已失效（目标注入不存在），请重新选择。</string>
+  <string name="preset_detail_drag_handle">拖动排序</string>
+  <string name="preset_detail_move_down">下移</string>
+  <string name="preset_detail_move_up">上移</string>
+  <string name="preset_detail_not_found">未找到预设</string>
+  <string name="preset_detail_override_content">覆盖内容</string>
+  <string name="preset_detail_reference_target">引用的注入</string>
+  <string name="preset_detail_section_builtin">内置提示词</string>
+  <string name="preset_detail_section_custom">自定义条目</string>
+  <string name="preset_detail_section_reference">全局引用</string>
+  <string name="preset_detail_variables">变量</string>
   <string name="prompt_page_preset_empty">暂无预设</string>
   <string name="prompt_page_preset_entries">预设条目</string>
   <string name="prompt_page_preset_no_entries">没有启用的条目</string>
@@ -2223,4 +2242,3 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_table_switch_to_landscape">切换到横屏</string>
   <string name="assistant_page_memory_table_switch_to_portrait">切换到竖屏</string>
 </resources>
-

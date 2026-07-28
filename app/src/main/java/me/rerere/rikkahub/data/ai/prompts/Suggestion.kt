@@ -39,10 +39,19 @@ internal val DEFAULT_INPUT_DRAFT_PROMPT = """
     </content>
 """.trimIndent()
 
+/**
+ * 构建回复草稿 prompt。
+ *
+ * @param template 模板文本。默认用 [DEFAULT_INPUT_DRAFT_PROMPT]；调用方可传入预设里
+ *   reply_draft 内置条目的启用覆盖内容（见 #182 [me.rerere.rikkahub.data.ai.prompts.resolveBuiltinOverride]），
+ *   使「预设里编辑的草稿模板」真正生效。占位符（{locale}/{content}/{user_instruction}）
+ *   由本函数统一解析，故覆盖模板应保留这些占位符才能拿到运行时值。
+ */
 internal fun buildInputDraftPrompt(
     locale: String,
     content: String,
     userInstruction: String = "",
+    template: String = DEFAULT_INPUT_DRAFT_PROMPT,
 ): String {
     val instructionBlock = userInstruction.trim().takeIf { it.isNotEmpty() }?.let {
         """
@@ -53,7 +62,7 @@ internal fun buildInputDraftPrompt(
         请在生成回复草稿时严格遵循上述要求。
         """.trimIndent()
     }.orEmpty()
-    return DEFAULT_INPUT_DRAFT_PROMPT.applyPlaceholders(
+    return template.applyPlaceholders(
         "locale" to locale,
         "content" to content,
         "user_instruction" to instructionBlock,

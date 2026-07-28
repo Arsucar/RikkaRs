@@ -1,0 +1,37 @@
+{
+  "id": "issue-182-preset-fixes",
+  "name": "issue-182-preset-fixes",
+  "title": "修复 #182 预设可编辑条目实现的注入/迁移/UI 缺陷",
+  "description": "对 #182 已落地实现做代码审查后修复 10 个缺陷：4 个内置配置条目被错误注入、迁移导致重复注入与排序回归、迁移丢弃全局 enabled、迁移不持久化且快照丢内容、UI 计数错误、Reference 失效引用默认选中、Builtin 切 key 残留 override、跨组重排翻转顺序。核心是保留内置配置可编辑性，同时禁止其进入通用对话注入路径。",
+  "status": "in_progress",
+  "dev_type": "bugfix",
+  "scope": null,
+  "package": "app",
+  "priority": "P1",
+  "creator": "Arsucar",
+  "assignee": "Arsucar",
+  "createdAt": "2026-07-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "app/src/main/java/me/rerere/rikkahub/data/ai/prompts/BuiltinPromptRegistry.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/PromptInjectionTransformer.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/model/PresetEntry.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PresetDetailPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/components/ai/ExtensionContent.kt"
+  ],
+  "notes": "承接 07-25-issue-182-preset-editable-entries 的实现审查。用户定调：预设是让用户显式化、可维护自己配置的地方，reply_draft/suggestion 应保留为可编辑配置，不因『注入无意义』删除；真正的 bug 是注入路径无差别注入所有 enabled 条目。迁移排序回归按保守方案（锁定不回归）。",
+  "meta": {
+    "issue": 182
+  }
+}

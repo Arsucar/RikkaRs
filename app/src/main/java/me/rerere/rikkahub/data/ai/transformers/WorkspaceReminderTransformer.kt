@@ -3,6 +3,9 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
+import me.rerere.rikkahub.data.ai.prompts.buildWorkspaceGuidePrompt
+import me.rerere.rikkahub.data.ai.prompts.resolveBuiltinOverride
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
 
@@ -24,7 +27,25 @@ class WorkspaceReminderTransformer(
         // 与 ChatService.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时注入
         if (!resolveWorkspaceToolCapability(workspace.id, listOf(workspace)).available) return messages
 
-        val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)
+        // #182: 预设内启用的 workspace_guide 覆盖优先；宏由本处用运行时 workspace 数据替换。
+        // 无有效覆盖时回退默认拼装。
+        val override = resolveBuiltinOverride(
+            ctx.assistant,
+            ctx.settings.presets,
+            BuiltinPromptRegistry.KEY_WORKSPACE_GUIDE,
+        )
+        val prompt = if (override != null) {
+            BuiltinPromptRegistry.resolveContent(
+                def = requireNotNull(BuiltinPromptRegistry[BuiltinPromptRegistry.KEY_WORKSPACE_GUIDE]),
+                override = override,
+                vars = mapOf(
+                    "workspace_name" to workspace.name,
+                    "cwd" to ctx.workspaceCwd.orEmpty(),
+                ),
+            )
+        } else {
+            buildWorkspaceGuidePrompt(workspace.name, ctx.workspaceCwd)
+        }
 
         // 追加到第一条 system 消息; 若不存在则插入一条
         val systemIndex = messages.indexOfFirst { it.role == MessageRole.SYSTEM }
@@ -36,25 +57,6 @@ class WorkspaceReminderTransformer(
             listOf(UIMessage.system(prompt)) + messages
         }
     }
-}
-
-private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null): String = buildString {
-    appendLine("<workspace>")
-    appendLine("You have access to a persistent Linux workspace named \"${workspace.name}\", running in a sandboxed proot rootfs environment.")
-    appendLine("- The workspace files area is mounted at `/workspace`. Use it as your working directory; files written there persist across turns of this conversation.")
-    appendLine("- All paths passed to workspace tools must be absolute and inside the Rootfs (for example `/workspace/notes.md`).")
-    appendLine("- Available tools:")
-    appendLine("  - `workspace_read_file`: read file contents.")
-    appendLine("  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files.")
-    appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
-    appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
-    appendLine("- Global skills are mounted for inspection at `/skills/<skill-name>/`; assistant-private skills for this assistant are mounted at `/skills_private/<skill-name>/`.")
-    appendLine("- You may run scripts from `/skills_private` and iterate on private skill files there. Writes outside `/workspace` and `/tmp`, including skill files, may require user approval.")
-    appendLine("- Files the user uploaded are mounted at `/upload`. Treat `/upload` as READ-ONLY: read uploaded files from `/upload/<file-name>`, but never modify, overwrite, or delete anything there. If you need to change an uploaded file, copy it into `/workspace` first and edit the copy.")
-    if (!cwd.isNullOrBlank()) {
-        appendLine("- Current working directory: `$cwd`. Use this as the default context for file operations and shell commands.")
-    }
-    append("</workspace>")
 }
 
 private fun UIMessage.appendText(extra: String): UIMessage {

@@ -256,11 +256,67 @@ data class Preset(
     val id: Uuid = Uuid.random(),
     val name: String = "",
     val description: String = "",
-    val modeInjectionIds: Set<Uuid> = emptySet(),   // 引用全局 Settings.modeInjections
-    val disabledEntryIds: Set<Uuid> = emptySet(),   // 预设内被单独禁用的条目
+    val modeInjectionIds: Set<Uuid> = emptySet(),   // 引用全局 Settings.modeInjections（旧字段，迁移后弃用）
+    val disabledEntryIds: Set<Uuid> = emptySet(),   // 预设内被单独禁用的条目（旧字段，迁移后弃用）
+    val entries: List<PresetEntry> = emptyList(),   // 可编辑/开关/排序的预设条目 (见 issue #182)
+    val entriesVersion: Int = 0,                    // 0=旧 ID 模型；1=entries 模型（空列表也有效）
 ) {
-    /** 该预设启用时实际生效的注入 ID 集合 */
+    /** 该预设启用时实际生效的注入 ID 集合（旧路径，仅当 [entries] 为空时使用） */
     fun effectiveInjectionIds(): Set<Uuid> = modeInjectionIds - disabledEntryIds
+
+    /** 是否已迁移到新 [entries] 模型 */
+    fun hasEntries(): Boolean = entriesVersion >= PRESET_ENTRIES_VERSION || entries.isNotEmpty()
+}
+
+const val PRESET_ENTRIES_VERSION = 1
+
+/**
+ * 懒迁移：把旧 [Preset.modeInjectionIds] / [Preset.disabledEntryIds] 展开为 [PresetEntry.Custom] 快照。
+ *
+ * - 幂等：已含 [Preset.entries] 的预设原样返回。
+ * - 快照语义：内容从全局 [modeInjections] 复制，脱钩全局后续修改。
+ * - `enabled = (id !in disabledEntryIds) && injection.enabled`（继承全局 enabled，锁定旧 filter{it.enabled} 语义）。
+ * - priority DESC 映射为稳定 order（0..n）；同时把原 priority 存入 legacyPriority 供混排防排序回归。
+ * - 命中不到全局条目的 ID 跳过（无内容可快照）。
+ */
+fun Preset.migratedWithEntries(
+    modeInjections: List<PromptInjection.ModeInjection>,
+): Preset {
+    if (entriesVersion >= PRESET_ENTRIES_VERSION) return this
+    if (entries.isNotEmpty()) {
+        return copy(
+            modeInjectionIds = emptySet(),
+            disabledEntryIds = emptySet(),
+            entriesVersion = PRESET_ENTRIES_VERSION,
+        )
+    }
+    val migrated = modeInjections
+        .filter { it.id in modeInjectionIds }
+        // priority 降序（与旧 transformMessages 的 sortedByDescending{priority} 一致），
+        // 相同 priority 保持全局 modeInjections 列表顺序
+        .sortedByDescending { it.priority }
+        .mapIndexed { index, injection ->
+            PresetEntry.Custom(
+                id = injection.id,
+                // 继承全局 enabled：锁定旧路径 filter{it.enabled} 语义——全局禁用的注入迁移后仍不注入。
+                enabled = (injection.id !in disabledEntryIds) && injection.enabled,
+                order = index,
+                position = injection.position,
+                injectDepth = injection.injectDepth,
+                role = injection.role,
+                name = injection.name,
+                content = injection.content,
+                // 保留原 priority 供 resolvePresetEntry 混排时使用（防排序回归），
+                // 用户新建条目 legacyPriority=null 时才回退 -order。
+                legacyPriority = injection.priority,
+            )
+        }
+    return copy(
+        modeInjectionIds = emptySet(),
+        disabledEntryIds = emptySet(),
+        entries = migrated,
+        entriesVersion = PRESET_ENTRIES_VERSION,
+    )
 }
 
 /**

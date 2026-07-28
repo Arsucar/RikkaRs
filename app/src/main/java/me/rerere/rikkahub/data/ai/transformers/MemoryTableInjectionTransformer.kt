@@ -12,6 +12,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS
+import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
+import me.rerere.rikkahub.data.ai.prompts.resolveBuiltinOverride
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS
 import me.rerere.rikkahub.data.model.MemoryTableDocument
@@ -39,7 +41,7 @@ class MemoryTableInjectionTransformer(
         messages: List<UIMessage>,
     ): List<UIMessage> {
         if (documents.isEmpty()) return messages
-        val content = buildMemoryTablePrompt(
+        val dataBlock = buildMemoryTablePrompt(
             templates = templates,
             documents = documents,
             maxDocuments = maxDocuments,
@@ -47,7 +49,21 @@ class MemoryTableInjectionTransformer(
             maxChars = maxChars,
             recentConversationText = messages.recentConversationText(),
         )
-        if (content.isBlank()) return messages
+        if (dataBlock.isBlank()) return messages
+
+        // #182: 预设内启用的 memory_table_guide 覆盖只影响「引导文案」；实时数据块（dataBlock）
+        // 仍由运行时文档渲染。覆盖文案里的 {{memory_tables}} 宏在此处替换为数据块，
+        // 无宏时把数据块追加到文案之后（避免数据丢失）。无覆盖则维持原行为（仅注入数据块）。
+        val guideOverride = resolveBuiltinOverride(
+            ctx.assistant,
+            ctx.settings.presets,
+            BuiltinPromptRegistry.KEY_MEMORY_TABLE_GUIDE,
+        )
+        val content = if (guideOverride != null) {
+            applyMemoryTableGuideOverride(guideOverride, dataBlock)
+        } else {
+            dataBlock
+        }
 
         val result = messages.toMutableList()
         val systemIndex = result.indexOfFirst { it.role == me.rerere.ai.core.MessageRole.SYSTEM }
@@ -63,6 +79,21 @@ class MemoryTableInjectionTransformer(
             result.add(0, UIMessage.system(content))
         }
         return result
+    }
+}
+
+// #182: 把预设覆盖的引导文案与运行时数据块合并。覆盖文案含 {{memory_tables}} 宏时，
+// 数据块替换到该位置（用户控制摆放）；不含宏时把数据块追加到文案之后，保证实时数据不丢失。
+// 既替换 `{{memory_tables}}` 也替换 `{{ memory_tables }}`，与 BuiltinPromptRegistry 宏名一致。
+internal fun applyMemoryTableGuideOverride(guideOverride: String, dataBlock: String): String {
+    val hasMacro = guideOverride.contains(MEMORY_TABLE_MACRO) ||
+        guideOverride.contains("{{ memory_tables }}")
+    return if (hasMacro) {
+        guideOverride
+            .replace(MEMORY_TABLE_MACRO, dataBlock)
+            .replace("{{ memory_tables }}", dataBlock)
+    } else {
+        "$guideOverride\n\n$dataBlock"
     }
 }
 

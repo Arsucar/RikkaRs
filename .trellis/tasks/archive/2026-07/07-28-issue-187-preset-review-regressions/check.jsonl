@@ -1,0 +1,4 @@
+{"file":".trellis/spec/app/index.md","reason":"App package final quality gates."}
+{"file":".trellis/spec/app/preset-entries.md","reason":"Verify preset deduplication, Workspace consumer, and reorder invariants."}
+{"file":".trellis/spec/guides/ui-modification-thinking-guide.md","reason":"Verify TalkBack, keyboard, gesture, localization, and form-factor cases."}
+{"file":".trellis/spec/guides/kotlin-concurrency-and-compose.md","reason":"Check Compose state and mutation correctness."}
