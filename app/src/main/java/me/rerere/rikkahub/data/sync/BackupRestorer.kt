@@ -115,18 +115,40 @@ class BackupRestorer(
 
             // Validate the restored database on the temporary copy BEFORE touching the live one.
             val stagedDb = tempDb
+            val newSettings = pendingSettings
             if (includeDatabase && stagedDb != null) {
                 validateDatabaseIntegrity(stagedDb, context)
                 validateRestoredDatabaseForeignKeys(stagedDb, context)
                 Log.i(TAG, "restore: staged database passed integrity + foreign-key checks")
-                swapDatabaseAtomically(databaseDir, stagedDb, tempWal, tempShm)
-                Log.i(TAG, "restore: database swapped in atomically")
-            }
 
-            // Apply settings last so the persisted state is consistent with the restored database.
-            pendingSettings?.let {
-                settingsStore.update(it)
-                Log.i(TAG, "restore: settings applied")
+                // #190: make the database swap the FINAL commit point so a failure never leaves the
+                // persisted state as "new settings + old database". Apply settings first (DataStore
+                // edit is transactional, so update() throwing leaves the DB untouched → still fully
+                // old). Snapshot the previous settings so a swap failure can roll them back too,
+                // mirroring the .restore-bak rollback the swap already performs on the database.
+                val previousSettings = settingsStore.settingsFlow.value.takeIf { !it.init }
+                newSettings?.let {
+                    settingsStore.update(it)
+                    Log.i(TAG, "restore: settings applied (pre-swap)")
+                }
+                try {
+                    swapDatabaseAtomically(databaseDir, stagedDb, tempWal, tempShm)
+                    Log.i(TAG, "restore: database swapped in atomically")
+                } catch (error: Throwable) {
+                    // The swap already restored the live database from its .restore-bak snapshot;
+                    // roll settings back too so the persisted state stays old-settings + old-database.
+                    if (newSettings != null && previousSettings != null) {
+                        runCatching { settingsStore.update(previousSettings) }
+                            .onFailure { Log.e(TAG, "restore: failed to roll back settings after swap failure", it) }
+                    }
+                    throw error
+                }
+            } else {
+                // No database payload: settings stand on their own, there is no swap to coordinate with.
+                newSettings?.let {
+                    settingsStore.update(it)
+                    Log.i(TAG, "restore: settings applied (no database payload)")
+                }
             }
 
             Log.i(TAG, "restore: completed successfully")

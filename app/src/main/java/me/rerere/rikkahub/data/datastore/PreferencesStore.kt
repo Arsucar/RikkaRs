@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.datastore
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
@@ -551,7 +553,22 @@ class SettingsStore(
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
-        .toMutableStateFlow(scope, Settings.dummy())
+        .toMutableStateFlow(scope, Settings.dummy()) { cause, current ->
+            // #189: 区分冷启动首帧失败与运行期失败。
+            // - current 仍是 dummy（init=true）：从未拿到有效配置，UI 只会显示空白且 update() 被
+            //   init 护栏静默丢弃。此时把失败逃逸出 AppScope（其 CoroutineExceptionHandler 只 log），
+            //   post 到主线程 looper 交给已安装的 UncaughtExceptionHandler（CrashHandler）标记崩溃并
+            //   重启进入 SafeModeActivity，兑现 #183「崩溃兜底交 SafeMode」的验收契约。
+            // - current 已是有效值：仅上游后续失败，保留当前值优雅降级（不终止进程）。
+            if (current.init) {
+                Handler(Looper.getMainLooper()).post {
+                    throw IllegalStateException(
+                        "Failed to load settings on cold start; entering safe mode",
+                        cause,
+                    )
+                }
+            }
+        }
 
     suspend fun update(settings: Settings) {
         if(settings.init) {
