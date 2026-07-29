@@ -20,6 +20,25 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.40
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.39 之后）
+
+- **导入 SillyTavern 提示词预设** — 预设页导入 JSON 时自动识别 SillyTavern「Chat Completion Preset」格式，将 `prompts[]` + `prompt_order[]` 映射为可编辑的 `PresetEntry`：支持条目顺序、启用状态（`prompts[].enabled` 与 `prompt_order[].enabled` 取 AND）、角色归一（SYSTEM 仅用于位置判定，条目只落 USER/ASSISTANT）、注入位置/深度映射、marker 占位条目跳过，以及未映射的 ST 顶层设置写入 description 提示；自有格式导入同步修复条目 ID 重复问题。（#188）
+  **Import SillyTavern prompt presets** — The preset page now auto-detects SillyTavern "Chat Completion Preset" JSON on import, mapping `prompts[]` + `prompt_order[]` to editable `PresetEntry` items: entry order, enabled state (AND of `prompts[].enabled` and `prompt_order[].enabled`), role normalization (SYSTEM used only for positioning; entries only carry USER/ASSISTANT), injection position/depth mapping, marker placeholder skipping, unmapped ST top-level settings written into the description; native-format import also fixed to re-randomize entry IDs. (#188)
+- **可编辑预设条目** — 预设从 ID 容器升级为可编辑、可开关、可拖拽排序的条目模型：内置提示词支持覆盖模板内容与位置；迁移保留全局 enabled 与旧排序；注入按 id 去重并防止宏泄漏；UI 新增条目分区计数、无效引用不再自动选中、跨组排序保持、创建/编辑唯一性校验、拖拽无障碍命令。（#182, #187）
+  **Editable preset entries** — Presets upgraded from ID containers to an editable, toggleable, drag-reorderable entry model: builtin prompts support content/position overrides; migration preserves global enabled and legacy ordering; injection dedups by id with macro leakage guards; UI adds entry-aware counts, invalid Reference deselection, cross-group reorder preservation, create/edit uniqueness checks, and accessible drag move commands. (#182, #187)
+- **原子化备份恢复与 SafeMode 升级** — WebDAV/S3/本地恢复统一走 BackupRestorer：先解压到临时目录校验完整性和外键，再原子替换并保留 `.restore-bak` 回退；settings 在 DB 替换成功后应用，dummy 设置不产出备份；冷启动首帧 settings 失败时升级到 SafeMode 而非静默吞掉。（#184, #189, #190）
+  **Atomic backup restore and SafeMode escalation** — WebDAV/S3/local restore unified through BackupRestorer: unpack to a temp dir, validate integrity and foreign keys, then atomically swap with a `.restore-bak` fallback; settings applied only after DB swap succeeds; dummy settings no longer produce backups; cold-start first-frame settings failure now escalates to SafeMode instead of being silently swallowed. (#184, #189, #190)
+- **Settings 流、ChatService 与备份标签页修复** — `toMutableStateFlow` 移除 `Runtime.halt(1)`，改有限重试后保留现值；ChatService 工厂移除 `runBlocking`，改 suspend 路径；WebDAV/S3 测试连接与远端删除迁入 BackupTaskCoordinator，离页不中断。（#183, #185, #186）
+  **Settings flow, ChatService, and backup tab fixes** — `toMutableStateFlow` drops `Runtime.halt(1)` in favor of bounded retry with value retention; ChatService factory removes `runBlocking` for suspend paths; WebDAV/S3 test-connection and remote delete moved into BackupTaskCoordinator so leaving the page no longer interrupts them. (#183, #185, #186)
+- **消息操作菜单可滚动** — 当操作项超出屏幕高度时，底部操作表现在可垂直滚动，确保所有操作可达。（#179）
+  **Scrollable message actions sheet** — The bottom action sheet now scrolls vertically when actions exceed screen height, keeping all options reachable. (#179)
+- **编辑模式草稿回复与 Git 状态缓存** — 编辑自己的消息时仍可触发"写回复草稿"并显示成功提示；Git 状态抽屉对同一 Workspace/CWD 重开时复用上次结果，手动刷新走 forceRefresh。（#180, #181）
+  **Draft reply in edit mode and Git status cache** — "Write reply draft" is now allowed while editing your own message with a success toast; the Git status drawer reuses the last result for the same workspace/CWD on reopen, with forceRefresh for manual refresh. (#180, #181)
+
+---
+
 ## v2.3.39
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.38 之后）
