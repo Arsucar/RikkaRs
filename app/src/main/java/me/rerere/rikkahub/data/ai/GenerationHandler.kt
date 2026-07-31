@@ -569,7 +569,7 @@ class GenerationHandler(
         val preparedTools = tools.snapshotToolDefinitions()
         val usedConversationSystemPrompt =
             assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()
-        val retainedMessages = messages.limitContext(assistant.contextMessageSize)
+        val retainedMessages = messages.limitContext(assistant.contextMessageLimit)
         val internalMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt =

@@ -216,18 +216,25 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
-                put(
-                    "size",
-                    if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
-                        params.size ?: "auto"
-                    } else {
-                        when (params.aspectRatio) {
-                            ImageAspectRatio.SQUARE -> "1024x1024"
-                            ImageAspectRatio.LANDSCAPE -> "1536x1024"
-                            ImageAspectRatio.PORTRAIT -> "1024x1536"
+
+                // Grok (xAI) rejects the size field; skip it for those models.
+                val isGrok = providerSetting.baseUrl.contains("x.ai", ignoreCase = true) ||
+                    params.model.modelId.contains("grok", ignoreCase = true)
+
+                if (!isGrok) {
+                    put(
+                        "size",
+                        if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
+                            params.size ?: "auto"
+                        } else {
+                            when (params.aspectRatio) {
+                                ImageAspectRatio.SQUARE -> "1024x1024"
+                                ImageAspectRatio.LANDSCAPE -> "1536x1024"
+                                ImageAspectRatio.PORTRAIT -> "1024x1536"
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 if (params.model.modelId.equals(GPT_IMAGE_2, ignoreCase = true)) {
                     params.quality?.let { put("quality", it.apiValue) }
                     params.outputFormat?.let { format ->

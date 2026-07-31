@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
@@ -155,7 +156,9 @@ class BackupVM(
     }
 
     suspend fun exportToFile(): File {
+        // Prefer user-configured backup items (fork lifecycle); full-entry override is for dedicated paths.
         val file = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        recordBackupTime()
         return file
     }
 
@@ -208,7 +211,10 @@ class BackupVM(
         }
 
     suspend fun restoreFromLocalFile(file: File) {
-        webDavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
+        webDavSync.restoreFromLocalFile(
+            file,
+            settings.value.webDavConfig.copy(items = WebDavConfig.BackupItem.entries),
+        )
     }
 
     suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {

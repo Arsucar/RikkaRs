@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.di
 
 import kotlinx.serialization.json.Json
-import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -70,10 +69,6 @@ val appModule = module {
         )
     }
     single<Json> { JsonInstant }
-
-    single {
-        Highlighter(get())
-    }
 
     single {
         AppEventBus()

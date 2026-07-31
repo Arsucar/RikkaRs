@@ -779,7 +779,7 @@ class SubagentHost(
             topP = profile.topP ?: parent.topP,
             maxTokens = profile.maxTokens ?: parent.maxTokens,
             reasoningLevel = profile.reasoningLevel,
-            contextMessageSize = 0,
+            contextMessageLimit = 0,
             streamOutput = profile.streamOutput || parent.streamOutput,
             enableMemory = profile.enableMemory,
             useGlobalMemory = false,

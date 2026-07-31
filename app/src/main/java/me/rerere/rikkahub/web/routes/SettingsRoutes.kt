@@ -130,7 +130,8 @@ fun Route.settingsRoutes(
         post("/search/enabled") {
             val request = call.receive<UpdateSearchEnabledRequest>()
             val assistantId = request.assistantId.toUuid("assistantId")
-            if (settingsStore.settingsFlow.value.assistants.none { it.id == assistantId }) {
+            val settings = settingsStore.settingsFlow.value
+            if (settings.assistants.none { it.id == assistantId }) {
                 throw NotFoundException("Assistant not found")
             }
             settingsStore.updateAssistantWebSearch(assistantId, request.enabled)

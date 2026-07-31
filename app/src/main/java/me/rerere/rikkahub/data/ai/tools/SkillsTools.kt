@@ -8,8 +8,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
-import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.files.SkillPaths
 
 fun createSkillTools(
     enabledSkills: Set<String>,
@@ -63,9 +63,9 @@ fun createSkillTools(
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
                     ?: error("name is required")
                 val skill = availableByName[name]
-                if (skill == null) {
-                    error("Skill '$name' is not available. Available skills: ${enabledSkills.joinToString()}")
-                }
+                    ?: error(
+                        "Skill '$name' is not available. Available skills: ${available.joinToString { it.name }}"
+                    )
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
                 val content = if (path.isNullOrBlank()) {
                     require(skill.skillFile.exists()) { "Skill '$name' not found" }

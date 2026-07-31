@@ -25,12 +25,14 @@ data class Assistant(
     val systemPrompt: String = "",
     val temperature: Float? = null,
     val topP: Float? = null,
-    val contextMessageSize: Int = 0,
+    // 上下文消息条数上限, 超出后阶梯式截断; 0 表示不限制
+    val contextMessageLimit: Int = 0,
+    // #59 fork: 自动压缩上下文（与 contextMessageLimit 阶梯截断并存）
     val autoCompressEnabled: Boolean = false,
     val autoCompressThresholdTokens: Int = 8000,
     val autoCompressKeepRecentMessages: Int = 32,
     val streamOutput: Boolean = true,
-    val enableWebSearch: Boolean = false,
+    val enableWebSearch: Boolean = false, // 网络搜索开关(每个助手独立)
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableMemoryTable: Boolean = false,

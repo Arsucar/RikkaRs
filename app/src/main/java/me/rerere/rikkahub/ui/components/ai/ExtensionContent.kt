@@ -192,7 +192,7 @@ fun SkillsContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(skills, key = { it.name }) { skill ->
+        items(skills, key = { it.skillDir.absolutePath }) { skill ->
             ListItem(
                 modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
                     if (onEdit != null) onEdit(skill) else onManage?.invoke()

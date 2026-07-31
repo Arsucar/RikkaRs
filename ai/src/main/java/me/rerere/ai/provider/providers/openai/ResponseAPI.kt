@@ -248,24 +248,27 @@ class ResponseAPI(
             }
 
             // tools
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
+            // Response API 的 tools 是扁平数组, 函数工具和内置工具可以共存, 必须写在同一个 key 下,
+            // 否则后写入的会覆盖前者
+            val useFunctionTools =
+                params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+            if (useFunctionTools || params.model.tools.isNotEmpty()) {
                 putJsonArray("tools") {
-                    params.tools.forEach { tool ->
-                        add(buildJsonObject {
-                            put("type", "function")
-                            put("name", tool.name)
-                            put("description", tool.description)
-                            put(
-                                "parameters",
-                                tool.openAIParametersSchemaElement(json)
-                            )
-                        })
+                    if (useFunctionTools) {
+                        params.tools.forEach { tool ->
+                            add(buildJsonObject {
+                                put("type", "function")
+                                put("name", tool.name)
+                                put("description", tool.description)
+                                put(
+                                    "parameters",
+                                    // null parameters -> empty object schema (fork helper)
+                                    tool.openAIParametersSchemaElement(json)
+                                )
+                            })
+                        }
                     }
-                }
-            }
-            // built-in tools
-            if (params.model.tools.isNotEmpty()) {
-                putJsonArray("tools") {
+                    // built-in tools
                     params.model.tools.forEach { builtInTool ->
                         when (builtInTool) {
                             BuiltInTools.Search -> {
@@ -770,7 +773,13 @@ class ResponseAPI(
 }
 
 private fun isModelAllowTemperature(model: Model): Boolean {
-    return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
+    val isMoonshotRestricted = ModelRegistry.KIMI_K2_5.match(model.modelId) ||
+        ModelRegistry.KIMI_K2_6.match(model.modelId) ||
+        ModelRegistry.KIMI_K3.match(model.modelId) ||
+        ModelRegistry.KIMI_K3_ALIAS.match(model.modelId)
+    return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) &&
+        !ModelRegistry.GPT_5.match(model.modelId) &&
+        !isMoonshotRestricted
 }
 
 private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {

@@ -8,14 +8,21 @@ import kotlin.uuid.Uuid
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.SkillMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeNoException
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class SkillsToolsTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     @Test
     fun useSkill_readsDefaultBodyAndSubfile() = runBlocking {
         val skillDir = createSkillDir("demo")
@@ -101,6 +108,38 @@ class SkillsToolsTest {
         } finally {
             skillDir.parentFile?.deleteRecursively()
         }
+    }
+
+    @Test
+    fun use_skill_reads_metadata_directory_when_display_name_differs() = runBlocking {
+        val skillDir = tempFolder.newFolder("directory-name")
+        skillDir.resolve("SKILL.md").writeText(
+            """
+                ---
+                name: Display Name
+                description: Test skill
+                ---
+                Skill instructions
+            """.trimIndent()
+        )
+        val tool = createSkillTools(
+            enabledSkills = setOf("Display Name"),
+            allSkills = listOf(
+                SkillMetadata(
+                    name = "Display Name",
+                    description = "Test skill",
+                    skillDir = skillDir,
+                )
+            ),
+        ).single()
+
+        val result = tool.execute(
+            buildJsonObject {
+                put("name", "Display Name")
+            }
+        )
+
+        assertEquals("Skill instructions", (result.single() as UIMessagePart.Text).text)
     }
 
     private fun createSkillDir(name: String): File {

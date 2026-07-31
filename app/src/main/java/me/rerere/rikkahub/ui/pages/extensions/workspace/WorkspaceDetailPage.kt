@@ -339,7 +339,7 @@ fun WorkspaceDetailPage(id: String) {
                     onViewText = { entry -> openTextFile(entry, state.area, readOnly = true) },
                     onEditText = { entry -> openTextFile(entry, state.area, readOnly = false) },
                     onShare = { entry ->
-                        vm.shareFile(entry, context.cacheDir) { file ->
+                        vm.exportToCacheFile(entry, context.cacheDir) { file ->
                             val uri = FileProvider.getUriForFile(
                                 context,
                                 "${context.packageName}.fileprovider",
@@ -839,7 +839,7 @@ private fun WorkspaceFileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(Modifier.clickable(onClick = if (entry.isDirectory) onOpen else onOpenFile)),
+            .then(modifier.clickable(onClick = if (entry.isDirectory) onOpen else onOpenFile)),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Row(

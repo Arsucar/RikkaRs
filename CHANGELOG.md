@@ -16,7 +16,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ### 新功能与修复 / Features & Fixes
 
-（暂无）
+- **合并上游 rikkahub 2.4.2–2.4.5+** — 将 `upstream/master` tip `8349ef25` 合入 `release/rikka-arsucar`：助手级网络搜索、Kimi K3、上下文阶梯截断、MCP 拆分、Workspace 预览/SAF/多图格式、备份与 WebDAV 解耦、主题网格、mermaid 内置、原生 highlight、TTS 默认倍速、AI 方言修复与 AGP/Kotlin 升级等；保留 fork 身份（`me.arsucar.rikka`、无 Firebase、`release-apk.yml`、版本 ≥2.3.41/203）、#59 自动压缩与分段双许可。（#197）
+  **Merge upstream rikkahub 2.4.2–2.4.5+** — Merged `upstream/master` tip `8349ef25` into `release/rikka-arsucar`: per-assistant web search, Kimi K3, stepped context truncation, MCP split, Workspace preview/SAF/more image formats, backup/WebDAV decoupling, theme grid, bundled mermaid, native highlight, TTS default speed, AI dialect fixes, and AGP/Kotlin upgrades; kept fork identity (`me.arsucar.rikka`, no Firebase, `release-apk.yml`, version ≥2.3.41/203), #59 auto-compress, and segmented dual license. (#197)
 
 ---
 

@@ -19,7 +19,6 @@ import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
-import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.workspace.normalizeWorkspaceChangedFiles
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
@@ -67,7 +66,9 @@ suspend fun createWorkspaceTools(
     )
 }
 
-private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "gif", "webp")
+private val IMAGE_EXTENSIONS = setOf(
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "ico",
+)
 
 internal fun String.isImagePath(): Boolean =
     substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
@@ -82,7 +83,7 @@ private fun createReadFileTool(
     description = """
         Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
         Use /workspace for the workspace files area. Use /skills for global skill files and /skills_private for this assistant's private skill files.
-        Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp).
+        Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp, svg, heic, heif, avif, ico).
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -316,29 +317,28 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
         }
         return file.readText()
     }
-    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
-    val size = fileSize(workspaceId, area, relativePath)
+    return readRootfsBuffer(workspaceId, path).toString(Charsets.UTF_8.name())
+}
+
+/**
+ * 按 Rootfs 内绝对路径读入内存。路径映射交给 WorkspaceManager, 由它统一处理
+ * /workspace、bind mount 与 Rootfs 内部路径。
+ */
+private suspend fun WorkspaceRepository.readRootfsBuffer(
+    workspaceId: String,
+    path: String,
+): ByteArrayOutputStream {
+    val size = rootfsFileSize(workspaceId, path)
     require(size <= MAX_READ_FILE_BYTES) {
         fileTooLargeMessage(path, size)
     }
-    val buffer = ByteArrayOutputStream(size.toInt())
-    exportFile(workspaceId, area, relativePath, buffer)
-    return buffer.toString(Charsets.UTF_8.name())
+    return ByteArrayOutputStream(size.toInt()).also { exportRootfsFile(workspaceId, path, it) }
 }
 
 private fun fileTooLargeMessage(path: String, sizeBytes: Long): String =
     "File is too large to read: $path (${sizeBytes / 1024 / 1024}MB, " +
         "max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). " +
         "Use shell commands like head, tail, or grep to read parts of it."
-
-private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea, String> {
-    val trimmed = path.trimEnd('/')
-    return if (trimmed == "/workspace" || trimmed.startsWith("/workspace/")) {
-        WorkspaceStorageArea.FILES to trimmed.removePrefix("/workspace").trimStart('/')
-    } else {
-        WorkspaceStorageArea.LINUX to trimmed.trimStart('/')
-    }
-}
 
 internal fun resolveKnownMountFile(path: String, knownMounts: List<WorkspaceKnownMount>): File? {
     val normalized = normalizeRootfsAbsolutePath(path) ?: return null
@@ -389,12 +389,7 @@ private suspend fun WorkspaceRepository.readImageInRootfs(
     val bytes = resolveKnownMountFile(path, knownMounts)?.let { file ->
         require(file.isFile) { "Path is not a file: $path" }
         file.readBytes()
-    } ?: run {
-        val (area, relativePath) = rootfsPathToAreaAndRelative(path)
-        val buffer = ByteArrayOutputStream()
-        exportFile(workspaceId, area, relativePath, buffer)
-        buffer.toByteArray()
-    }
+    } ?: readRootfsBuffer(workspaceId, path).toByteArray()
 
     val filesManager = getKoin().get<FilesManager>()
     val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))

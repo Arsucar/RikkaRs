@@ -1,0 +1,13 @@
+{"file": "docs/RIKKA_ARSUCAR_FORK_AND_CI.md", "reason": "Fork identity, no-Firebase, release-apk-only, version line — merge post-gate authority"}
+{"file": ".trellis/spec/app/index.md", "reason": "App layer checklist for assistant/search/workspace/chat paths touched by upstream"}
+{"file": ".trellis/spec/app/assistant-web-search.md", "reason": "Upstream moves web search to per-assistant storage; must not break fork migration contracts"}
+{"file": ".trellis/spec/app/android-backup-rules.md", "reason": "Upstream decouples local backup from WebDAV; backup allow-list and restore contracts"}
+{"file": ".trellis/spec/app/workspace-media-preview.md", "reason": "Upstream workspace preview/SAF/HEIC; preserve FileProvider and LINUX read-only rules"}
+{"file": ".trellis/spec/app/workspace-tool-capabilities.md", "reason": "Workspace bind mount and tool path changes from upstream"}
+{"file": ".trellis/spec/workspace/index.md", "reason": "Workspace package boundary for shell/storage when merging upstream workspace commits"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Merge spans ai/app/workspace/highlight; force cross-layer conflict synthesis"}
+{"file": ".trellis/spec/guides/repository-hygiene.md", "reason": "Avoid staging merge debris, device dumps, or secrets after large merge"}
+{"file": ".trellis/spec/guides/ui-modification-thinking-guide.md", "reason": "Theme grid, assistant context UI, TTS/skills UI changes need Compose regression matrix"}
+{"file": ".trellis/tasks/07-31-issue-197-upstream-merge/prd.md", "reason": "Requirements, D1–D3, refreshed behind=56 baseline"}
+{"file": ".trellis/tasks/07-31-issue-197-upstream-merge/design.md", "reason": "Conflict hot zones and fork/ours synthesis rules"}
+{"file": ".trellis/tasks/07-31-issue-197-upstream-merge/implement.md", "reason": "Ordered merge, gate, validate, rollback checklist"}

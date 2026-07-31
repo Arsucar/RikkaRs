@@ -64,6 +64,7 @@ export interface AssistantProfile {
   id: string;
   chatModelId?: string | null;
   reasoningLevel?: string | null;
+  enableWebSearch?: boolean;
   mcpServers?: string[];
   modeInjectionIds?: string[];
   lorebookIds?: string[];

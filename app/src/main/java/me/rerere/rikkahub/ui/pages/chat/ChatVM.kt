@@ -317,7 +317,7 @@ class ChatVM(
         onError = { chatService.addError(it, _conversationId) },
     )
 
-    // 网络搜索
+    // 网络搜索：绑定当前会话助手，而非全局 selected assistant（fork + assistant-web-search 契约）
     val enableWebSearch = combine(settings, conversation) { settings, conversation ->
         settings.assistants.firstOrNull { it.id == conversation.assistantId }?.enableWebSearch ?: false
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -368,8 +368,8 @@ class ChatVM(
     val mcpManager = chatService.mcpManager
 
     // 更新设置
-    fun updateSettings(newSettings: Settings) {
-        viewModelScope.launch {
+    fun updateSettings(newSettings: Settings): Job {
+        return viewModelScope.launch {
             val oldSettings = settings.value
             // 检查用户头像是否有变化，如果有则删除旧头像
             checkUserAvatarDelete(oldSettings, newSettings)
@@ -582,11 +582,10 @@ class ChatVM(
         }
     }
 
-    fun deleteConversation(conversation: Conversation) {
+    fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
             conversationRepo.deleteConversation(conversation)
         }
-    }
 
     fun updatePinnedStatus(conversation: Conversation) {
         viewModelScope.launch {

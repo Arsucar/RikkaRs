@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
 
 class ShareSheetTest {
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,
@@ -41,7 +41,7 @@ class ShareSheetTest {
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
         // encodeForShare strips models for a smaller QR payload
-        assertEquals(0, decodedOpenAI.models.size)
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test
