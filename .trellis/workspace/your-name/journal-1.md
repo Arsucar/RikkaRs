@@ -1868,3 +1868,37 @@ Removed eager StringUtilsKt initialization, isolated number formatting, hardened
 ### Next Steps
 
 - None - task complete
+
+
+## Session 50: Review+ship #191-#196 and archive tasks
+
+**Date**: 2026-07-31
+**Task**: Review+ship #191-#196 and archive tasks
+**Package**: material3/material-color-utilities
+**Branch**: `release/rikka-arsucar`
+
+### Summary
+
+Reviewed uncommitted #191-#196 work; fixed API error redaction, REPLACE final status, StatsVM load mutex, missing-stats completeness, semantic privacy log. Compiled unit tests and installDebug OK. Committed feat as 8644f537 (v2.3.41) and archived #188/#191-#196 + parent resolve-open-issues.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8644f537` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
