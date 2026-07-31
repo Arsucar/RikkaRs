@@ -34,6 +34,8 @@ data class Assistant(
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableMemoryTable: Boolean = false,
+    /** [SemanticMemory Plugin] per-assistant semantic memory gate (independent of enableMemory). */
+    val enableSemanticMemory: Boolean = false,
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
@@ -260,6 +262,11 @@ data class Preset(
     val disabledEntryIds: Set<Uuid> = emptySet(),   // 预设内被单独禁用的条目（旧字段，迁移后弃用）
     val entries: List<PresetEntry> = emptyList(),   // 可编辑/开关/排序的预设条目 (见 issue #182)
     val entriesVersion: Int = 0,                    // 0=旧 ID 模型；1=entries 模型（空列表也有效）
+    /**
+     * Reply-draft context assembly options (issue #196).
+     * `null` = use [DEFAULT_DRAFT_CONTEXT] at runtime; missing field deserializes as null (compat).
+     */
+    val draftContext: DraftContextConfig? = null,
 ) {
     /** 该预设启用时实际生效的注入 ID 集合（旧路径，仅当 [entries] 为空时使用） */
     fun effectiveInjectionIds(): Set<Uuid> = modeInjectionIds - disabledEntryIds

@@ -69,6 +69,8 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
+import me.rerere.rikkahub.data.model.DEFAULT_DRAFT_CONTEXT
+import me.rerere.rikkahub.data.model.DraftContextConfig
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
@@ -207,6 +209,12 @@ private fun PresetDetailContent(
 
     val availableKeys = remember(preset.entries) { availableBuiltinKeys(preset.entries) }
     var builtinMenuExpanded by remember { mutableStateOf(false) }
+    // #196: computed outside LazyListScope (not a @Composable receiver).
+    val hasReplyDraft = remember(preset.entries) {
+        preset.entries.any {
+            it is PresetEntry.Builtin && it.builtinKey == BuiltinPromptRegistry.KEY_REPLY_DRAFT
+        }
+    }
 
     LazyColumn(
         modifier = modifier.padding(16.dp),
@@ -285,6 +293,18 @@ private fun PresetDetailContent(
                         onMoveDown = { moveEntry(entry, 1) },
                     )
                 }
+            }
+        }
+
+        // #196: reply-draft context assembly — only when this preset has a reply_draft Builtin.
+        if (hasReplyDraft) {
+            item(key = "draft_context") {
+                DraftContextSection(
+                    draftContext = preset.draftContext,
+                    onChange = { next ->
+                        onMutatePreset { current -> current.copy(draftContext = next) }
+                    },
+                )
             }
         }
 
@@ -379,6 +399,144 @@ private fun EmptySectionHint() {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * Reply-draft context knobs (#196). Displayed only when the preset contains a reply_draft Builtin.
+ * [draftContext] null → show [DEFAULT_DRAFT_CONTEXT] values + "默认" tag; any edit materializes non-null.
+ */
+@Composable
+private fun DraftContextSection(
+    draftContext: DraftContextConfig?,
+    onChange: (DraftContextConfig) -> Unit,
+) {
+    val effective = draftContext ?: DEFAULT_DRAFT_CONTEXT
+    val isDefault = draftContext == null
+    // Local text buffers so partial typing (e.g. empty field) does not thrash persisted state.
+    var messageCountText by remember(effective.messageCount, isDefault) {
+        mutableStateOf(effective.messageCount.toString())
+    }
+    var maxCharsText by remember(effective.maxCharsPerMessage, isDefault) {
+        mutableStateOf(effective.maxCharsPerMessage.toString())
+    }
+
+    fun mutate(transform: (DraftContextConfig) -> DraftContextConfig) {
+        onChange(transform(draftContext ?: DEFAULT_DRAFT_CONTEXT))
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.preset_detail_draft_context_section),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (isDefault) {
+                    Tag(type = TagType.INFO) {
+                        Text(stringResource(R.string.preset_detail_draft_context_default_tag))
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = messageCountText,
+                onValueChange = { raw ->
+                    messageCountText = raw
+                    val parsed = raw.toIntOrNull()
+                    val next = when {
+                        parsed == null || parsed < 0 -> DEFAULT_DRAFT_CONTEXT.messageCount
+                        else -> parsed
+                    }
+                    mutate { it.copy(messageCount = next) }
+                },
+                label = { Text(stringResource(R.string.preset_detail_draft_context_message_count)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+
+            OutlinedTextField(
+                value = maxCharsText,
+                onValueChange = { raw ->
+                    maxCharsText = raw
+                    val parsed = raw.toIntOrNull()
+                    val next = when {
+                        parsed == null || parsed < 0 -> DEFAULT_DRAFT_CONTEXT.maxCharsPerMessage
+                        else -> parsed
+                    }
+                    mutate { it.copy(maxCharsPerMessage = next) }
+                },
+                label = { Text(stringResource(R.string.preset_detail_draft_context_max_chars)) },
+                supportingText = {
+                    Text(stringResource(R.string.preset_detail_draft_context_max_chars_hint))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+
+            Text(
+                text = stringResource(R.string.preset_detail_draft_context_include_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+
+            FormItem(
+                label = { Text(stringResource(R.string.preset_detail_draft_context_include_media)) },
+                tail = {
+                    Switch(
+                        checked = effective.includeMedia,
+                        onCheckedChange = { checked -> mutate { it.copy(includeMedia = checked) } },
+                    )
+                },
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.preset_detail_draft_context_include_tools)) },
+                tail = {
+                    Switch(
+                        checked = effective.includeTools,
+                        onCheckedChange = { checked -> mutate { it.copy(includeTools = checked) } },
+                    )
+                },
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.preset_detail_draft_context_include_reasoning)) },
+                tail = {
+                    Switch(
+                        checked = effective.includeReasoning,
+                        onCheckedChange = { checked ->
+                            mutate { it.copy(includeReasoning = checked) }
+                        },
+                    )
+                },
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.preset_detail_draft_context_keep_latest)) },
+                tail = {
+                    Switch(
+                        checked = effective.keepLatestMessageIntact,
+                        onCheckedChange = { checked ->
+                            mutate { it.copy(keepLatestMessageIntact = checked) }
+                        },
+                    )
+                },
+            )
+        }
+    }
 }
 
 @Composable

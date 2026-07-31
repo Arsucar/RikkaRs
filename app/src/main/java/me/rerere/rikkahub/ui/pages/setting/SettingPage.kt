@@ -232,6 +232,13 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_tts_service_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_tts_service)) },
                     )
+                    // [SemanticMemory Plugin]
+                    item(
+                        onClick = { navController.navigate(Screen.SemanticMemory) },
+                        leadingContent = { Icon(HugeIcons.Book03, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_semantic_memory_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_semantic_memory)) },
+                    )
                     item(
                         onClick = { navController.navigate(Screen.SettingMcp) },
                         leadingContent = { Icon(HugeIcons.McpServer, null) },

@@ -19,6 +19,8 @@ data class Model(
     val abilities: List<ModelAbility> = emptyList(),
     val tools: Set<BuiltInTools> = emptySet(),
     val providerOverwrite: ProviderSetting? = null,
+    /** Optional output dim for embedding APIs that support truncation (e.g. OpenAI `dimensions`). */
+    val embeddingDimensions: Int? = null,
 )
 
 @Serializable

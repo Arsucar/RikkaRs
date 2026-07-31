@@ -29,10 +29,13 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
                 entities.map { it.toAssistantMemory() }
             }
 
-    suspend fun getGlobalMemories(): List<AssistantMemory> {
+suspend fun getGlobalMemories(): List<AssistantMemory> {
         return memoryDAO.getGlobalMemories()
             .map { it.toAssistantMemory() }
     }
+
+    /** Raw entities for semantic-memory migration (preserves assistant_id). */
+    suspend fun getAllMemoriesRaw(): List<MemoryEntity> = memoryDAO.getAllMemories()
 
     fun getEffectiveMemoriesFlow(assistantId: String): Flow<List<AssistantMemory>> =
         memoryDAO.getEffectiveMemoriesFlow(assistantId)

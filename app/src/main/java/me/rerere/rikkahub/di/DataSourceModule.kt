@@ -48,6 +48,16 @@ import me.rerere.rikkahub.data.db.migrations.Migration_38_39
 import me.rerere.rikkahub.data.db.migrations.Migration_42_43
 import me.rerere.rikkahub.data.db.migrations.Migration_43_44
 import me.rerere.rikkahub.data.db.migrations.Migration_44_45
+import me.rerere.rikkahub.data.db.migrations.Migration_45_46
+import me.rerere.rikkahub.data.db.migrations.Migration_46_47
+import me.rerere.rikkahub.data.db.migrations.Migration_47_48
+import me.rerere.rikkahub.data.ai.ApiCallRecorder
+import me.rerere.rikkahub.data.ai.transformers.SemanticMemoryTransformer
+import me.rerere.rikkahub.data.memory.semantic.EmbeddingService
+import me.rerere.rikkahub.data.memory.semantic.MemorySummarizer
+import me.rerere.rikkahub.data.memory.semantic.RecallService
+import me.rerere.rikkahub.data.memory.semantic.SemanticMemoryManager
+import me.rerere.rikkahub.data.memory.semantic.SemanticMemoryRepository
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.BackupArchive
@@ -96,6 +106,9 @@ val dataSourceModule = module {
                 Migration_42_43,
                 Migration_43_44,
                 Migration_44_45,
+                Migration_45_46,
+                Migration_46_47,
+                Migration_47_48,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -255,6 +268,55 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().messageStatsDao()
+    }
+
+    single {
+        get<AppDatabase>().apiCallRecordDao()
+    }
+
+    single {
+        ApiCallRecorder(dao = get())
+    }
+
+    // [SemanticMemory Plugin] DI
+    single {
+        get<AppDatabase>().episodicMemoryDao()
+    }
+    single {
+        SemanticMemoryRepository(dao = get())
+    }
+    single {
+        EmbeddingService(providerManager = get())
+    }
+    single {
+        RecallService(repository = get(), embeddingService = get())
+    }
+    single {
+        SemanticMemoryTransformer(recallService = get())
+    }
+    single {
+        MemorySummarizer(
+            providerManager = get(),
+            embeddingService = get(),
+            repository = get(),
+            recallService = get(),
+            json = get(),
+        )
+    }
+    single {
+        SemanticMemoryManager(
+            summarizer = get(),
+            repository = get(),
+            embeddingService = get(),
+            recallService = get(),
+            oldMemoryRepository = get(),
+            settingsStore = get(),
+            json = get(),
+        )
+    }
+
+    single {
         get<AppDatabase>().managedFileDao()
     }
 
@@ -281,6 +343,7 @@ val dataSourceModule = module {
             context = get(),
             providerManager = get(),
             json = get(),
+            apiCallRecorder = get(),
             memoryRepo = get()
         )
     }

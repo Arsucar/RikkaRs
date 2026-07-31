@@ -159,7 +159,7 @@ internal fun buildMemoryTablePrompt(
             }
             appendLine("scope=${document.scopeType.name.lowercase()} revision=${document.revision}")
             appendLine("schema:")
-            appendLine((template?.schemaJson ?: "{}").trim())
+            appendLine(slimSchemaForInjection(template?.schemaJson))
             appendLine("payload:")
             appendLine(payload.trim())
         }
@@ -170,6 +170,47 @@ internal fun buildMemoryTablePrompt(
         appendLine("</memory_tables>")
     }
     return effectiveCharLimit?.let { limit -> rendered.limitMemoryTableChars(limit) } ?: rendered
+}
+
+/**
+ * #194: Strip engine/policy fields from schema JSON before system-prompt injection.
+ * Keeps only tables[].name and columns[].{name, type, primaryKey} so the model can
+ * address rows without carrying injectPolicy/updatePolicy/maxInjectTokens/descriptions.
+ * Storage and list_templates still use the full schema; this is injection-only.
+ *
+ * - null/blank → `"{}"`
+ * - invalid JSON → original string (no crash)
+ */
+internal fun slimSchemaForInjection(schemaJson: String?): String {
+    val raw = schemaJson?.trim().orEmpty()
+    if (raw.isBlank()) return "{}"
+    return runCatching {
+        val root = memoryTableSchemaJson.parseToJsonElement(raw) as? JsonObject
+            ?: return@runCatching raw
+        val tables = (root["tables"] as? JsonArray).orEmpty()
+        val slimTables = tables.mapNotNull { element ->
+            val table = element as? JsonObject ?: return@mapNotNull null
+            val name = (table["name"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            val columns = (table["columns"] as? JsonArray).orEmpty().mapNotNull { columnElement ->
+                val column = columnElement as? JsonObject ?: return@mapNotNull null
+                val columnName = (column["name"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                buildMap {
+                    put("name", JsonPrimitive(columnName))
+                    (column["type"] as? JsonPrimitive)?.let { put("type", it) }
+                    (column["primaryKey"] as? JsonPrimitive)?.let { put("primaryKey", it) }
+                }.let(::JsonObject)
+            }
+            JsonObject(
+                mapOf(
+                    "name" to JsonPrimitive(name),
+                    "columns" to JsonArray(columns),
+                ),
+            )
+        }
+        JsonObject(mapOf("tables" to JsonArray(slimTables))).toString()
+    }.getOrDefault(raw)
 }
 
 internal fun minNullableLimit(first: Int?, second: Int?): Int? = when {

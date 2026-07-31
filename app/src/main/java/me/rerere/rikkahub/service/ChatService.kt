@@ -53,6 +53,8 @@ import me.rerere.rikkahub.data.ai.prompts.buildInputDraftPrompt
 import me.rerere.rikkahub.data.ai.prompts.resolveBuiltinOverride
 import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_INPUT_DRAFT_PROMPT
+import me.rerere.rikkahub.data.model.resolveDraftContextConfig
+import me.rerere.rikkahub.data.model.toDraftContextContent
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.ai.GenerationPreparationMode
@@ -113,10 +115,12 @@ import me.rerere.rikkahub.data.ai.transformers.SlashSkillInputTransformer
 import me.rerere.rikkahub.data.ai.transformers.MemoryTableInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.SemanticMemoryTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
+import me.rerere.rikkahub.data.memory.semantic.SemanticMemoryManager
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.event.NoticeKind
@@ -403,6 +407,10 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val hookRepository: HookRepository,
     private val hookDispatcher: HookDispatcher,
+    private val apiCallRecorder: me.rerere.rikkahub.data.ai.ApiCallRecorder? = null,
+    // [SemanticMemory Plugin]
+    private val semanticMemoryTransformer: SemanticMemoryTransformer,
+    private val semanticMemoryManager: SemanticMemoryManager,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -912,6 +920,34 @@ class ChatService(
             }
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
+            }
+            // [SemanticMemory Plugin] background auto-summarize
+            launchWithConversationReference(conversationId) {
+                runCatching {
+                    val result = semanticMemoryManager.checkAndSummarize(
+                        messages = finalConversation.currentMessages,
+                        assistantId = finalConversation.assistantId.toString(),
+                        conversationId = conversationId.toString(),
+                        assistantSemanticEnabled = assistant.enableSemanticMemory,
+                    )
+                    if (result != null && result.errors.isEmpty() &&
+                        (result.newMemories > 0 || result.updatedMemories > 0)
+                    ) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(
+                                    R.string.semantic_memory_auto_summarize_toast,
+                                    result.newMemories,
+                                    result.updatedMemories,
+                                ),
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                }.onFailure {
+                    Log.e(TAG, "auto-summarize failed", it)
+                }
             }
             cleanupStreamingSubagentMetadata(conversationId)
         }
@@ -1646,6 +1682,10 @@ class ChatService(
                     )
                 )
             }
+            // [SemanticMemory Plugin] inject recalled memories into system prompt
+            if (settings.semanticMemoryConfig.enabled && assistant.enableSemanticMemory) {
+                add(semanticMemoryTransformer)
+            }
             add(templateTransformer)
             add(WorkspaceReminderTransformer(workspace))
         }
@@ -1994,6 +2034,15 @@ class ChatService(
         return part.copy(output = cancelledOutput)
     }
 
+    private suspend fun <T> recordProviderCall(
+        provider: me.rerere.ai.provider.ProviderSetting,
+        model: me.rerere.ai.provider.Model,
+        block: suspend () -> T,
+    ): T {
+        val recorder = apiCallRecorder ?: return block()
+        return recorder.record(provider = provider, model = model, block = block)
+    }
+
     // ---- 生成标题 ----
 
     suspend fun generateTitle(
@@ -2024,11 +2073,13 @@ class ChatService(
             )
             val params = backgroundTextGenerationParams(model)
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = messages,
-                params = params,
-            )
+            val result = recordProviderCall(provider, model) {
+                providerHandler.generateText(
+                    providerSetting = provider,
+                    messages = messages,
+                    params = params,
+                )
+            }
 
             // 生成完，conversation可能不是最新了，因此需要重新获取
             conversationRepo.getConversationById(conversation.id)?.let {
@@ -2080,11 +2131,13 @@ class ChatService(
             )
             val params = backgroundTextGenerationParams(model)
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = messages,
-                params = params,
-            )
+            val result = recordProviderCall(provider, model) {
+                providerHandler.generateText(
+                    providerSetting = provider,
+                    messages = messages,
+                    params = params,
+                )
+            }
             val suggestions =
                 result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
                     ?.filter { it.isNotBlank() } ?: emptyList()
@@ -2129,11 +2182,11 @@ class ChatService(
         val draftTemplate = assistant
             ?.let { resolveBuiltinOverride(it, settings.presets, BuiltinPromptRegistry.KEY_REPLY_DRAFT) }
             ?: DEFAULT_INPUT_DRAFT_PROMPT
+        // #196: draft-only assembly (tail truncate / placeholders); null draftContext → code defaults.
+        val draftContextConfig = resolveDraftContextConfig(assistant, settings.presets)
         val prompt = buildInputDraftPrompt(
             locale = Locale.getDefault().displayName,
-            content = conversation.currentMessages
-                .takeLast(8)
-                .joinToString("\n\n") { it.summaryAsText(maxLength = 500) },
+            content = conversation.currentMessages.toDraftContextContent(draftContextConfig),
             userInstruction = userInstruction,
             template = draftTemplate,
         )
@@ -2141,14 +2194,16 @@ class ChatService(
         var draft = ""
         val params = backgroundTextGenerationParams(model)
         ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-        providerHandler.streamText(
-            providerSetting = provider,
-            messages = messages,
-            params = params,
-        ).collect { chunk ->
-            messages = messages.handleMessageChunk(chunk, model)
-            draft = messages.lastOrNull()?.toText()?.trimStart().orEmpty()
-            onStreamUpdate(draft)
+        recordProviderCall(provider, model) {
+            providerHandler.streamText(
+                providerSetting = provider,
+                messages = messages,
+                params = params,
+            ).collect { chunk ->
+                messages = messages.handleMessageChunk(chunk, model)
+                draft = messages.lastOrNull()?.toText()?.trimStart().orEmpty()
+                onStreamUpdate(draft)
+            }
         }
         return draft.trim()
     }
@@ -2235,11 +2290,13 @@ class ChatService(
             val requestMessages = listOf(UIMessage.user(prompt))
             val params = backgroundTextGenerationParams(model)
             ProviderRateLimiter.await(provider = provider, messages = requestMessages, params = params)
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = requestMessages,
-                params = params,
-            )
+            val result = recordProviderCall(provider, model) {
+                providerHandler.generateText(
+                    providerSetting = provider,
+                    messages = requestMessages,
+                    params = params,
+                )
+            }
             return result.choices[0].message?.toText()?.trim()
                 ?: throw IllegalStateException("Failed to generate compressed summary")
         }

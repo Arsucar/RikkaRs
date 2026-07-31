@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_SCHEMA_JSON
 import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
@@ -9,6 +10,121 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MemoryTableInjectionTransformerTest {
+    @Test
+    fun slimSchemaForInjectionReturnsEmptyObjectForNullOrBlank() {
+        assertEquals("{}", slimSchemaForInjection(null))
+        assertEquals("{}", slimSchemaForInjection(""))
+        assertEquals("{}", slimSchemaForInjection("   "))
+    }
+
+    @Test
+    fun slimSchemaForInjectionReturnsOriginalOnInvalidJson() {
+        val invalid = """{"tables": ["""
+        assertEquals(invalid, slimSchemaForInjection(invalid))
+        assertEquals("not-json", slimSchemaForInjection("not-json"))
+    }
+
+    @Test
+    fun slimSchemaForInjectionKeepsOnlyAddressingFields() {
+        val full = """
+            {
+              "tables": [
+                {
+                  "name": "memories",
+                  "columns": [
+                    { "name": "key", "type": "string", "description": "Stable key", "primaryKey": true },
+                    { "name": "summary", "type": "string", "description": "Content" }
+                  ],
+                  "injectPolicy": { "enabled": true, "triggerSend": false },
+                  "updatePolicy": { "enabled": true }
+                },
+                {
+                  "name": "secrets",
+                  "columns": [
+                    { "name": "token", "type": "string" }
+                  ],
+                  "injectPolicy": { "enabled": false }
+                }
+              ],
+              "maxInjectTokens": 800
+            }
+        """.trimIndent()
+
+        val slim = slimSchemaForInjection(full)
+
+        assertFalse(slim.contains("injectPolicy"))
+        assertFalse(slim.contains("updatePolicy"))
+        assertFalse(slim.contains("maxInjectTokens"))
+        assertFalse(slim.contains("description"))
+        assertTrue(slim.contains("\"memories\""))
+        assertTrue(slim.contains("\"secrets\""))
+        assertTrue(slim.contains("\"key\""))
+        assertTrue(slim.contains("\"type\""))
+        assertTrue(slim.contains("\"primaryKey\""))
+        assertTrue(slim.contains("\"summary\""))
+        assertTrue(slim.contains("\"token\""))
+    }
+
+    @Test
+    fun slimSchemaForInjectionOmitsMissingPrimaryKeyAndType() {
+        val schema = """{"tables":[{"name":"facts","columns":[{"name":"key"}]}]}"""
+        val slim = slimSchemaForInjection(schema)
+
+        assertTrue(slim.contains("\"facts\""))
+        assertTrue(slim.contains("\"key\""))
+        assertFalse(slim.contains("primaryKey"))
+        assertFalse(slim.contains("\"type\""))
+    }
+
+    @Test
+    fun slimSchemaForInjectionReducesDefaultSchemaByAtLeast40Percent() {
+        val full = DEFAULT_MEMORY_TABLE_SCHEMA_JSON.trim()
+        val slim = slimSchemaForInjection(full)
+        val reduction = 1.0 - (slim.length.toDouble() / full.length.toDouble())
+
+        assertFalse(slim.contains("injectPolicy"))
+        assertFalse(slim.contains("updatePolicy"))
+        assertFalse(slim.contains("maxInjectTokens"))
+        assertFalse(slim.contains("description"))
+        assertTrue(
+            "expected ≥40% reduction, got ${(reduction * 100).toInt()}% " +
+                "(full=${full.length}, slim=${slim.length})",
+            reduction >= 0.40,
+        )
+    }
+
+    @Test
+    fun buildPromptInjectsSlimmedSchemaNotEngineFields() {
+        val schemaJson = """
+            {
+              "tables": [
+                {
+                  "name": "memories",
+                  "columns": [
+                    { "name": "key", "type": "string", "description": "row key", "primaryKey": true }
+                  ],
+                  "injectPolicy": { "enabled": true },
+                  "updatePolicy": { "enabled": true }
+                }
+              ],
+              "maxInjectTokens": 800
+            }
+        """.trimIndent()
+        val prompt = buildMemoryTablePrompt(
+            templates = listOf(template("template", schemaJson = schemaJson)),
+            documents = listOf(document("doc", MemoryTableScopeType.ASSISTANT)),
+        )
+
+        val schemaSection = prompt.substringAfter("schema:").substringBefore("payload:")
+        assertFalse(schemaSection.contains("injectPolicy"))
+        assertFalse(schemaSection.contains("updatePolicy"))
+        assertFalse(schemaSection.contains("maxInjectTokens"))
+        assertFalse(schemaSection.contains("description"))
+        assertTrue(schemaSection.contains("memories"))
+        assertTrue(schemaSection.contains("key"))
+        assertTrue(schemaSection.contains("primaryKey"))
+    }
+
     @Test
     fun buildPromptIncludesAllSupportedScopes() {
         val prompt = buildMemoryTablePrompt(

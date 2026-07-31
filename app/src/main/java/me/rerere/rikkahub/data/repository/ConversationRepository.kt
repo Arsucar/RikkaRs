@@ -14,11 +14,13 @@ import kotlinx.coroutines.flow.map
 import me.rerere.common.android.Logging
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.computeMessageStats
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.MessageStatsDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
@@ -35,6 +37,7 @@ class ConversationRepository(
     private val database: AppDatabase,
     private val filesManager: FilesManager,
     private val messageFtsManager: MessageFtsManager,
+    private val messageStatsDAO: MessageStatsDAO = database.messageStatsDao(),
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -617,6 +620,7 @@ class ConversationRepository(
                     persistedNodeCount += entities.size
                 },
             )
+            upsertMessageStats(conversationId, nodes)
         } catch (error: Exception) {
             logConversationNodeDiagnostics(
                 operation = operation,
@@ -696,6 +700,7 @@ class ConversationRepository(
                 messageNodeDAO.insert(entity)
                 writeCallCount++
             }
+            upsertMessageStats(conversationId, nodes)
         } catch (error: Exception) {
             logConversationNodeDiagnostics(
                 operation = operation,
@@ -724,6 +729,11 @@ class ConversationRepository(
                 startedAtNanos = startedAtNanos,
             )
         }
+    }
+
+    private suspend fun upsertMessageStats(conversationId: String, nodes: List<MessageNode>) {
+        val computed = computeMessageStats(conversationId, nodes)
+        messageStatsDAO.replaceConversationStats(computed.stats, computed.daily)
     }
 
     private fun logConversationNodeDiagnostics(

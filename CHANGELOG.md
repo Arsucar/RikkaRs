@@ -20,6 +20,23 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.41
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.40 之后）
+
+- **统计面板 API 上游健康监控** — 记录主生成与标题/建议/草稿/压缩等路径的 API 调用结果，统计页展示成功率、平均延迟与错误分类；错误信息脱敏，避免密钥泄漏。（#191）
+  **API upstream health on Stats** — Records API outcomes for main generation and title/suggestion/draft/compress paths; Stats shows success rate, average latency, and error classes with redacted error messages. (#191)
+- **Stats 加载性能与消息统计缓存** — 消息 token/日活统计写入增量缓存表，会话节点保存时同步更新，避免统计页反复 `json_each` 全表扫描；首次打开按需回填。（#192, #193）
+  **Stats load performance and message stats cache** — Token/daily counts use incremental cache tables updated on message-node writes, avoiding repeated full-table `json_each` scans; first open backfills on demand. (#192, #193)
+- **精简 memory_tables 注入 schema** — 注入提示词只保留表/列结构字段，去掉引擎策略字段，降低 token；存储与 `list_templates` 仍保留完整 schema。（#194）
+  **Slim memory_tables injection schema** — Injection prompts keep only table/column structure and drop engine policy fields to save tokens; storage and `list_templates` retain the full schema. (#194)
+- **语义记忆系统** — 可选的情节记忆召回与自动摘要（默认关闭）；设置页可浏览/导入导出；注入有 caps 与超时 fail-open。（#195）
+  **Semantic memory** — Optional episodic recall and auto-summarization (off by default); settings UI for browse/import/export; injection uses caps and fail-open timeout. (#195)
+- **草稿上下文可配置** — 回复草稿可配置尾部消息窗口、工具/推理/媒体是否纳入上下文；仅 reply_draft 内置预设展示配置 UI，向后兼容缺省字段。（#196）
+  **Configurable draft context** — Reply drafts can configure the tail message window and whether tools/reasoning/media enter context; UI only for reply_draft builtins; missing fields remain backward-compatible. (#196)
+
+---
+
 ## v2.3.40
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.39 之后）

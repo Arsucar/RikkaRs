@@ -721,6 +721,29 @@ private fun ModelSettingsForm(
                                 }
                             )
                         }
+
+                        if (model.type == ModelType.EMBEDDING) {
+                            OutlinedTextField(
+                                value = model.embeddingDimensions?.toString().orEmpty(),
+                                onValueChange = { raw ->
+                                    val trimmed = raw.trim()
+                                    val dims = trimmed.toIntOrNull()?.takeIf { it > 0 }
+                                    onModelChange(
+                                        model.copy(
+                                            embeddingDimensions = if (trimmed.isEmpty()) null else dims,
+                                        ),
+                                    )
+                                },
+                                label = {
+                                    Text(stringResource(R.string.setting_provider_page_embedding_dimensions))
+                                },
+                                supportingText = {
+                                    Text(stringResource(R.string.setting_provider_page_embedding_dimensions_desc))
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 }
 

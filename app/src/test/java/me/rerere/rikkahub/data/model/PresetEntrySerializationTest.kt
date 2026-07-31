@@ -68,4 +68,30 @@ class PresetEntrySerializationTest {
         assertTrue(normalized.modeInjectionIds.isEmpty())
         assertEquals("existing snapshot", (normalized.entries.single() as PresetEntry.Custom).content)
     }
+
+    @Test
+    fun `draftContext missing from json stays null for backward compatibility`() {
+        val base = Preset(name = "legacy")
+        val encoded = JsonInstant.encodeToString(base)
+            .replace(Regex(",?\"draftContext\":null"), "")
+
+        val decoded = JsonInstant.decodeFromString<Preset>(encoded)
+
+        assertNull(decoded.draftContext)
+        assertEquals("legacy", decoded.name)
+    }
+
+    @Test
+    fun `draftContext exports with preset`() {
+        val preset = Preset(
+            name = "export",
+            draftContext = DraftContextConfig(messageCount = 4, includeMedia = true),
+        )
+        val json = JsonInstant.encodeToString(preset)
+        assertTrue(json.contains("\"draftContext\""))
+        assertTrue(json.contains("\"messageCount\":4"))
+        val decoded = JsonInstant.decodeFromString<Preset>(json)
+        assertEquals(4, decoded.draftContext?.messageCount)
+        assertTrue(decoded.draftContext?.includeMedia == true)
+    }
 }

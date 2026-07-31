@@ -19,6 +19,7 @@ import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.SettingConversationTagsVM
+import me.rerere.rikkahub.ui.pages.setting.SemanticMemoryVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import org.koin.core.module.dsl.viewModel
@@ -85,4 +86,6 @@ val viewModelModule = module {
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
+    // [SemanticMemory Plugin]
+    viewModelOf(::SemanticMemoryVM)
 }

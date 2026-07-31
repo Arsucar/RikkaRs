@@ -1039,8 +1039,10 @@
   <string name="stats_page_heatmap_more">更多</string>
   <string name="stats_page_heatmap_title">聊天熱力圖</string>
   <string name="stats_page_input_tokens">輸入詞元</string>
+  <string name="stats_page_last_updated">更新於 %1$s</string>
   <string name="stats_page_launch_count">應用程式啟動次數</string>
   <string name="stats_page_output_tokens">輸出詞元</string>
+  <string name="stats_page_refresh">重新整理統計</string>
   <string name="stats_page_title">統計資料</string>
   <string name="stats_page_total_conversations">總對話數</string>
   <string name="stats_page_total_messages">總訊息</string>

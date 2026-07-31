@@ -363,6 +363,22 @@ private fun AssistantMemoryContent(
                     )
                 }
             )
+            // [SemanticMemory Plugin] third memory mode, independent of enableMemory / memory table
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_semantic_memory)) },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_semantic_memory_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.enableSemanticMemory,
+                        onCheckedChange = {
+                            onUpdateAssistant(assistant.copy(enableSemanticMemory = it))
+                        },
+                        enabled = settings.semanticMemoryConfig.enabled,
+                    )
+                },
+            )
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_global)) },
                 supportingContent = {

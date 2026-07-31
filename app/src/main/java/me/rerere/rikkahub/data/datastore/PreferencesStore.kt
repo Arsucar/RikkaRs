@@ -216,6 +216,9 @@ class SettingsStore(
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
         val WORKSPACE_FILES_STORAGE = stringPreferencesKey("workspace_files_storage")
+
+        // [SemanticMemory Plugin]
+        val SEMANTIC_MEMORY_CONFIG = stringPreferencesKey("semantic_memory_config")
     }
 
     private val dataStore = context.settingsStore
@@ -359,6 +362,12 @@ class SettingsStore(
                 workspaceFilesStorage = preferences[WORKSPACE_FILES_STORAGE]
                     ?.let { runCatching { WorkspaceFilesStorage.valueOf(it) }.getOrNull() }
                     ?: WorkspaceFilesStorage.PRIVATE,
+                // [SemanticMemory Plugin]
+                semanticMemoryConfig = preferences[SEMANTIC_MEMORY_CONFIG]?.let {
+                    runCatching {
+                        JsonInstant.decodeFromString<me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig>(it)
+                    }.getOrNull()
+                } ?: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
             )
         }
         .map {
@@ -666,6 +675,8 @@ class SettingsStore(
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[WORKSPACE_FILES_STORAGE] = settings.workspaceFilesStorage.name
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            // [SemanticMemory Plugin]
+            preferences[SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
         }
     }
 
@@ -1087,6 +1098,9 @@ data class Settings(
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
     val workspaceFilesStorage: WorkspaceFilesStorage = WorkspaceFilesStorage.PRIVATE,
+    // [SemanticMemory Plugin]
+    val semanticMemoryConfig: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig =
+        me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

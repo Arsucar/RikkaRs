@@ -17,9 +17,15 @@ import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MemoryTableDAO
 import me.rerere.rikkahub.data.db.dao.MemoryTableSnapshotDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.ApiCallRecordDAO
+import me.rerere.rikkahub.data.db.dao.EpisodicMemoryDAO
+import me.rerere.rikkahub.data.db.dao.MessageStatsDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.dao.SubagentContextDAO
+import me.rerere.rikkahub.data.db.entity.ApiCallRecordEntity
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
+import me.rerere.rikkahub.data.db.entity.EpisodicMemoryEntity
+import me.rerere.rikkahub.data.db.entity.SemanticMemoryStateEntity
 import me.rerere.rikkahub.data.db.entity.ConversationTagCrossRef
 import me.rerere.rikkahub.data.db.entity.ConversationTagEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -36,6 +42,8 @@ import me.rerere.rikkahub.data.db.entity.MemoryTableDocumentEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableSnapshotEntity
 import me.rerere.rikkahub.data.db.entity.MemoryTableTemplateEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.db.entity.MessageStatsDailyEntity
+import me.rerere.rikkahub.data.db.entity.MessageStatsEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.entity.SubagentContextEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
@@ -59,6 +67,11 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryEntity::class,
         GenMediaEntity::class,
         MessageNodeEntity::class,
+        MessageStatsEntity::class,
+        MessageStatsDailyEntity::class,
+        ApiCallRecordEntity::class,
+        EpisodicMemoryEntity::class,
+        SemanticMemoryStateEntity::class,
         ManagedFileEntity::class,
         FavoriteEntity::class,
         WorkspaceEntity::class,
@@ -68,7 +81,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryTableSnapshotEntity::class,
         SubagentContextEntity::class,
     ],
-    version = 45,
+    version = 48,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -108,6 +121,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun genMediaDao(): GenMediaDAO
 
     abstract fun messageNodeDao(): MessageNodeDAO
+
+    abstract fun messageStatsDao(): MessageStatsDAO
+
+    abstract fun apiCallRecordDao(): ApiCallRecordDAO
+
+    abstract fun episodicMemoryDao(): EpisodicMemoryDAO
 
     abstract fun managedFileDao(): ManagedFileDAO
 

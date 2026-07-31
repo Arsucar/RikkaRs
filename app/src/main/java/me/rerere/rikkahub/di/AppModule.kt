@@ -138,6 +138,10 @@ val appModule = module {
             folderRepository = get(),
             hookRepository = get(),
             hookDispatcher = get(),
+            apiCallRecorder = get(),
+            // [SemanticMemory Plugin]
+            semanticMemoryTransformer = get(),
+            semanticMemoryManager = get(),
         )
     }
 

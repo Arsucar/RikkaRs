@@ -1037,8 +1037,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="stats_page_heatmap_more">더보기</string>
   <string name="stats_page_heatmap_title">채팅 히트맵</string>
   <string name="stats_page_input_tokens">입력 토큰</string>
+  <string name="stats_page_last_updated">업데이트 %1$s</string>
   <string name="stats_page_launch_count">앱 실행 횟수</string>
   <string name="stats_page_output_tokens">출력 토큰</string>
+  <string name="stats_page_refresh">통계 새로고침</string>
   <string name="stats_page_title">통계</string>
   <string name="stats_page_total_conversations">총 대화 수</string>
   <string name="stats_page_total_messages">총 메시지</string>

@@ -102,6 +102,7 @@ class GenerationHandler(
     private val providerManager: ProviderManager,
     private val json: Json,
     private val memoryRepo: MemoryRepository,
+    private val apiCallRecorder: ApiCallRecorder? = null,
 ) {
     suspend fun prepareFirstProviderInput(
         settings: Settings,
@@ -452,41 +453,53 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
-        if (stream) {
-            executePreparedProviderRequest(
-                providerSetting = provider,
-                prepared = prepared,
-                params = params,
-            ) { exactMessages, exactParams ->
-                providerImpl.streamText(
-                    providerSetting = provider,
-                    messages = exactMessages,
-                    params = exactParams,
-                )
-            }.collect {
-                messages = messages.handleMessageChunk(chunk = it, model = model)
-                it.usage?.let { usage ->
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
-                        } else {
-                            message
-                        }
+        suspend fun handleStreamChunk(chunk: me.rerere.ai.ui.MessageChunk) {
+            messages = messages.handleMessageChunk(chunk = chunk, model = model)
+            chunk.usage?.let { usage ->
+                messages = messages.mapIndexed { index, message ->
+                    if (index == messages.lastIndex) {
+                        message.copy(usage = message.usage.merge(usage))
+                    } else {
+                        message
                     }
                 }
-                onUpdateMessages(messages)
+            }
+            onUpdateMessages(messages)
+        }
+
+        // Rate-limit wait is outside ApiCallRecorder so latency_ms is pure provider RTT
+        // (matches ChatService: await then record only generateText/streamText).
+        val exactParams = params.copy(tools = prepared.tools)
+        ProviderRateLimiter.await(
+            provider = provider,
+            messages = prepared.messages,
+            params = exactParams,
+        )
+        val recorder = apiCallRecorder
+        if (stream) {
+            suspend fun runStream() {
+                providerImpl.streamText(
+                    providerSetting = provider,
+                    messages = prepared.messages,
+                    params = exactParams,
+                ).collect { handleStreamChunk(it) }
+            }
+            if (recorder != null) {
+                recorder.record(provider = provider, model = model) { runStream() }
+            } else {
+                runStream()
             }
         } else {
-            val chunk = executePreparedProviderRequest(
-                providerSetting = provider,
-                prepared = prepared,
-                params = params,
-            ) { exactMessages, exactParams ->
+            suspend fun runGenerate(): me.rerere.ai.ui.MessageChunk =
                 providerImpl.generateText(
                     providerSetting = provider,
-                    messages = exactMessages,
+                    messages = prepared.messages,
                     params = exactParams,
                 )
+            val chunk = if (recorder != null) {
+                recorder.record(provider = provider, model = model) { runGenerate() }
+            } else {
+                runGenerate()
             }
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
             chunk.usage?.let { usage ->

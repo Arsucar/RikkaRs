@@ -1037,8 +1037,10 @@
   <string name="stats_page_heatmap_more">Ещё</string>
   <string name="stats_page_heatmap_title">Тепловая карта чата</string>
   <string name="stats_page_input_tokens">Входные токены</string>
+  <string name="stats_page_last_updated">Обновлено %1$s</string>
   <string name="stats_page_launch_count">Количество запусков приложения</string>
   <string name="stats_page_output_tokens">Выходные токены</string>
+  <string name="stats_page_refresh">Обновить статистику</string>
   <string name="stats_page_title">Статистика</string>
   <string name="stats_page_total_conversations">Всего бесед</string>
   <string name="stats_page_total_messages">Всего сообщений</string>
