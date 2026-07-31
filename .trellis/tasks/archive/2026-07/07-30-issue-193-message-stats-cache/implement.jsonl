@@ -1,0 +1,6 @@
+{"path":".trellis/spec/app/conversation-persistence.md","type":"spec"}
+{"path":".trellis/spec/app/ui-localization.md","type":"spec"}
+{"path":".trellis/spec/guides/ui-modification-thinking-guide.md","type":"guide"}
+{"path":".trellis/tasks/07-30-issue-193-message-stats-cache/research/statsvm-loadstats.md","type":"research"}
+{"path":".trellis/tasks/07-30-issue-193-message-stats-cache/research/messagenode-dao-sql.md","type":"research"}
+{"path":".trellis/tasks/07-30-issue-193-message-stats-cache/research/conversationrepo-write-delete.md","type":"research"}
