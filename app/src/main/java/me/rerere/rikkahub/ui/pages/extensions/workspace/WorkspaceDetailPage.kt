@@ -839,7 +839,7 @@ private fun WorkspaceFileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(modifier.clickable(onClick = if (entry.isDirectory) onOpen else onOpenFile)),
+            .clickable(onClick = if (entry.isDirectory) onOpen else onOpenFile),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Row(

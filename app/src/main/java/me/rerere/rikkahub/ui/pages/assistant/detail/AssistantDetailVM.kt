@@ -34,6 +34,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
@@ -80,7 +81,8 @@ class AssistantDetailVM(
 
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
-    val mcpStatuses = mcpManager.syncingStatus.asStateFlow()
+    // syncingStatus is already a StateFlow; do not call asStateFlow() on it.
+    val mcpStatuses: StateFlow<Map<Uuid, McpStatus>> = mcpManager.syncingStatus
     private val connectionStatusStore = ToolConnectionStatusStore()
     private val connectionJobs = mutableMapOf<Uuid, Job>()
     private val connectionFingerprints = mutableMapOf<Uuid, Long>()

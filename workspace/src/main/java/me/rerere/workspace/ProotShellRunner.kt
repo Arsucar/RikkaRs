@@ -13,6 +13,7 @@ data class WorkspaceBindMount(
 
 class ProotShellRunner(
     private val nativeLibraryDir: File,
+    private val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     private val patcher: RootfsPatcher = RootfsPatcher(),
     private val emulateHardLinksWithSymlinks: Boolean = false,
 ) : WorkspaceShellRunner {

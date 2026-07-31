@@ -125,6 +125,8 @@ class SettingsStore(
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val REQUEST_LOGGING_ENABLED = booleanPreferencesKey("request_logging_enabled")
+        // Legacy global web-search key (migration input only; removed by PreferenceStoreV4Migration)
+        val ENABLE_WEB_SEARCH = booleanPreferencesKey("enable_web_search")
         // 模型选择
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
         val RECENT_CHAT_MODELS = stringPreferencesKey("recent_chat_models")
@@ -770,8 +772,17 @@ class SettingsStore(
     }
 
     suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
-        val assistant = settingsFlow.value.assistants.firstOrNull { it.id == assistantId } ?: return
-        updateAssistantConfig(assistant.copy(enableWebSearch = enabled))
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(enableWebSearch = enabled)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
     }
 
     suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
@@ -794,20 +805,6 @@ class SettingsStore(
                 assistants = settings.assistants.map { assistant ->
                     if (assistant.id == assistantId) {
                         assistant.copy(reasoningLevel = reasoningLevel)
-                    } else {
-                        assistant
-                    }
-                }
-            )
-        }
-    }
-
-    suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
-        update { settings ->
-            settings.copy(
-                assistants = settings.assistants.map { assistant ->
-                    if (assistant.id == assistantId) {
-                        assistant.copy(enableWebSearch = enabled)
                     } else {
                         assistant
                     }
