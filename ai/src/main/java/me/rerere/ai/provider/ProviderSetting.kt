@@ -32,6 +32,7 @@ enum class ClaudePromptCacheTtl(val apiValue: String?) {
 sealed class ProviderSetting {
     abstract val id: Uuid
     abstract val enabled: Boolean
+    abstract var enable429IpRotation: Boolean
     abstract val name: String
     abstract val models: List<Model>
     abstract val balanceOption: BalanceOption
@@ -56,6 +57,7 @@ sealed class ProviderSetting {
         rateLimit: ProviderRateLimit = this.rateLimit,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
+        enable429IpRotation: Boolean = this.enable429IpRotation,
         shortDescription: @Composable (() -> Unit) = this.shortDescription,
     ): ProviderSetting
 
@@ -74,6 +76,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.openai.com/v1",
+        var enable429IpRotation: Boolean = false,
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
         var includeHistoryReasoning: Boolean = true,
@@ -110,6 +113,7 @@ sealed class ProviderSetting {
             rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
+            enable429IpRotation: Boolean,
             shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
@@ -119,6 +123,7 @@ sealed class ProviderSetting {
                 models = models,
                 builtIn = builtIn,
                 description = description,
+                enable429IpRotation = enable429IpRotation,
                 balanceOption = balanceOption,
                 shortDescription = shortDescription,
                 tags = tags,
@@ -142,6 +147,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
+        var enable429IpRotation: Boolean = false,
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
         var privateKey: String = "", // only for vertex AI service account
@@ -181,6 +187,7 @@ sealed class ProviderSetting {
             rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
+            enable429IpRotation: Boolean,
             shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
@@ -190,6 +197,7 @@ sealed class ProviderSetting {
                 models = models,
                 builtIn = builtIn,
                 description = description,
+                enable429IpRotation = enable429IpRotation,
                 shortDescription = shortDescription,
                 balanceOption = balanceOption,
                 tags = tags,
@@ -213,6 +221,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
+        var enable429IpRotation: Boolean = false,
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
     ) : ProviderSetting() {
@@ -248,6 +257,7 @@ sealed class ProviderSetting {
             rateLimit: ProviderRateLimit,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
+            enable429IpRotation: Boolean,
             shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
@@ -258,6 +268,7 @@ sealed class ProviderSetting {
                 balanceOption = balanceOption,
                 builtIn = builtIn,
                 description = description,
+                enable429IpRotation = enable429IpRotation,
                 shortDescription = shortDescription,
                 tags = tags,
                 rateLimit = rateLimit,
