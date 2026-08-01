@@ -1,9 +1,13 @@
 // [SemanticMemory Plugin]
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -12,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.EpisodicMemoryEntity
@@ -28,6 +33,12 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "SemanticMemoryVM"
 
+/** Result of an export operation, surfaced via [SemanticMemoryVM.exportResult]. */
+data class ExportResult(
+    val success: Boolean,
+    val message: String,
+)
+
 class SemanticMemoryVM(
     private val settingsStore: SettingsStore,
     private val embeddingService: EmbeddingService,
@@ -35,6 +46,7 @@ class SemanticMemoryVM(
     private val repository: SemanticMemoryRepository,
     private val recallService: RecallService,
     private val conversationRepository: ConversationRepository,
+    private val context: Context,
 ) : ViewModel() {
 
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
@@ -51,6 +63,9 @@ class SemanticMemoryVM(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
+
+    private val _exportResult = MutableStateFlow<ExportResult?>(null)
+    val exportResult: StateFlow<ExportResult?> = _exportResult
 
     private val _lastSummarizeDetail = MutableStateFlow<SummarizeResult?>(null)
     val lastSummarizeDetail: StateFlow<SummarizeResult?> = _lastSummarizeDetail
@@ -74,11 +89,11 @@ class SemanticMemoryVM(
         _selectedAssistantId.value = assistantId
     }
 
-    fun updateConfig(config: SemanticMemoryConfig) {
+    fun updateConfig(transform: (SemanticMemoryConfig) -> SemanticMemoryConfig) {
         viewModelScope.launch {
             val current = settings.value
             if (current.init) return@launch
-            settingsStore.update(current.copy(semanticMemoryConfig = config))
+            settingsStore.updateSemanticMemoryConfig(transform)
         }
     }
 
@@ -96,15 +111,26 @@ class SemanticMemoryVM(
         }
     }
 
-    fun exportData(filePath: String) {
+    fun exportData(targetUri: Uri) {
         viewModelScope.launch {
             _isProcessing.value = true
             _message.value = null
+            _exportResult.value = null
             runCatching {
-                semanticMemoryManager.exportToFile(filePath)
-                _message.value = "Export OK"
+                val cacheFile = java.io.File(context.cacheDir, "semantic_memory_export.gz")
+                semanticMemoryManager.exportToFile(cacheFile.absolutePath)
+                // Copy the cache file to the user-selected destination URI (blocking I/O → IO dispatcher).
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(targetUri)?.use { output ->
+                        cacheFile.inputStream().use { input -> input.copyTo(output) }
+                    } ?: error("无法打开目标文件")
+                }
+                cacheFile.delete()
             }.onFailure {
-                _message.value = "Export failed: ${it.message}"
+                if (it is CancellationException) throw it
+                _exportResult.value = ExportResult(false, "Export failed: ${it.message}")
+            }.onSuccess {
+                _exportResult.value = ExportResult(true, "导出成功")
             }
             _isProcessing.value = false
         }
@@ -118,6 +144,7 @@ class SemanticMemoryVM(
                 val count = semanticMemoryManager.importFromFile(filePath)
                 _message.value = "Imported $count memories"
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Import failed: ${it.message}"
             }
             _isProcessing.value = false
@@ -132,6 +159,7 @@ class SemanticMemoryVM(
                 val count = semanticMemoryManager.migrateAllOldMemories()
                 _message.value = if (count > 0) "Migrated $count memories" else "No old memories"
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Migrate failed: ${it.message}"
             }
             _isProcessing.value = false
@@ -176,6 +204,7 @@ class SemanticMemoryVM(
                     }
                 }
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Summarize failed: ${it.message}"
                 Log.e(TAG, "triggerSummarize failed", it)
             }
@@ -213,6 +242,7 @@ class SemanticMemoryVM(
                     }
                 }
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Recall test failed: ${it.message}"
             }
             _isProcessing.value = false
@@ -252,6 +282,7 @@ class SemanticMemoryVM(
                     "Memory added"
                 }
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Add failed: ${it.message}"
             }
             _isProcessing.value = false
@@ -288,6 +319,7 @@ class SemanticMemoryVM(
                 repository.updateMemory(updated)
                 recallService.invalidateCache(memory.assistantId)
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Update failed: ${it.message}"
             }
             _isProcessing.value = false
@@ -301,6 +333,7 @@ class SemanticMemoryVM(
                 recallService.invalidateCache(assistantId)
                 _message.value = "Memory deleted"
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Delete failed: ${it.message}"
             }
         }
@@ -320,6 +353,7 @@ class SemanticMemoryVM(
                 _evictionCandidates.value = emptyList()
                 _message.value = "Evicted ${ids.size} memories"
             }.onFailure {
+                if (it is CancellationException) throw it
                 _message.value = "Eviction failed: ${it.message}"
             }
         }
