@@ -23,6 +23,7 @@ lifecycleViewmodelNav3 = "2.11.0"
 nav3Material = "1.0.0-SNAPSHOT"
 markdown = "d79a97cc8e"
 okhttp = "5.4.0"
+mockwebserver = "5.4.0"
 retrofit = "3.0.0"
 coil = "3.5.0"
 quickjs = "3.2.3"
@@ -111,6 +112,7 @@ metadata-extractor = { module = "com.drewnoakes:metadata-extractor", version.ref
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-sse = { group = "com.squareup.okhttp3", name = "okhttp-sse", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "mockwebserver" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-serialization-json = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version.ref = "retrofit" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
