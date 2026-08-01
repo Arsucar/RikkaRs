@@ -311,6 +311,7 @@ fun ChatInput(
                                         onUpdateAssistant(assistant.copy(reasoningLevel = it))
                                     },
                                     onlyIcon = true,
+                                    dialect = model.reasoningDialect,
                                 )
                             }
 

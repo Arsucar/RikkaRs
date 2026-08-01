@@ -23,6 +23,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.mapReasoningEffort
+import me.rerere.ai.core.resolveDialect
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
@@ -232,13 +234,16 @@ class ResponseAPI(
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
+                val dialect = resolveDialect(
+                    explicit = params.model.reasoningDialect,
+                    host = host,
+                    modelId = params.model.modelId,
+                )
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
-                    }
+                    mapReasoningEffort(dialect, level)?.let { put("effort", it) }
                 })
                 if (capabilities.supportEncryptedContent) {
                     put("include", buildJsonArray {

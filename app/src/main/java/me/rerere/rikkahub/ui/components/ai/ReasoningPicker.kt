@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import me.rerere.ai.core.ReasoningDialect
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea
@@ -46,8 +47,15 @@ import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
 import kotlin.math.roundToInt
 
-private val levels = ReasoningLevel.entries
-private val levelCount = levels.size
+private val allLevels = ReasoningLevel.entries
+
+private fun levelsForDialect(dialect: ReasoningDialect): List<ReasoningLevel> {
+    return if (dialect == ReasoningDialect.OnOffOnly) {
+        listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO)
+    } else {
+        allLevels
+    }
+}
 
 @Composable
 fun ReasoningButton(
@@ -55,6 +63,7 @@ fun ReasoningButton(
     onlyIcon: Boolean = false,
     reasoningLevel: ReasoningLevel,
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
+    dialect: ReasoningDialect = ReasoningDialect.Auto,
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -62,7 +71,8 @@ fun ReasoningButton(
         ReasoningPicker(
             reasoningLevel = reasoningLevel,
             onDismissRequest = { showPicker = false },
-            onUpdateReasoningLevel = onUpdateReasoningLevel
+            onUpdateReasoningLevel = onUpdateReasoningLevel,
+            dialect = dialect,
         )
     }
 
@@ -92,11 +102,21 @@ fun ReasoningPicker(
     reasoningLevel: ReasoningLevel,
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
+    dialect: ReasoningDialect = ReasoningDialect.Auto,
 ) {
-    val currentIndex = levels.indexOf(reasoningLevel).coerceAtLeast(0)
-    var sliderValue by remember { mutableFloatStateOf(currentIndex.toFloat()) }
+    val levels = remember(dialect) { levelsForDialect(dialect) }
+    val levelCount = levels.size
+    val effectiveLevel = if (reasoningLevel in levels) {
+        reasoningLevel
+    } else if (reasoningLevel.isEnabled) {
+        ReasoningLevel.AUTO
+    } else {
+        ReasoningLevel.OFF
+    }
+    val currentIndex = levels.indexOf(effectiveLevel).coerceAtLeast(0)
+    var sliderValue by remember(dialect) { mutableFloatStateOf(currentIndex.toFloat()) }
 
-    LaunchedEffect(currentIndex) {
+    LaunchedEffect(currentIndex, dialect) {
         sliderValue = currentIndex.toFloat()
     }
 
@@ -135,11 +155,11 @@ fun ReasoningPicker(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val iconColor by animateColorAsState(
-                    if (reasoningLevel.isEnabled) MaterialTheme.colorScheme.primary
+                    if (effectiveLevel.isEnabled) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurface
                 )
                 Icon(
-                    imageVector = when (reasoningLevel) {
+                    imageVector = when (effectiveLevel) {
                         ReasoningLevel.OFF -> HugeIcons.Idea
                         ReasoningLevel.AUTO -> HugeIcons.Idea01
                         ReasoningLevel.LOW -> ReasoningLow
@@ -152,7 +172,7 @@ fun ReasoningPicker(
                     tint = iconColor,
                 )
                 Text(
-                    text = reasoningLevel.label(),
+                    text = effectiveLevel.label(),
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
@@ -198,7 +218,8 @@ fun ReasoningPicker(
                 )
 
                 ReasoningScale(
-                    selectedLevel = reasoningLevel,
+                    levels = levels,
+                    selectedLevel = effectiveLevel,
                     onSelect = { level ->
                         sliderValue = levels.indexOf(level).toFloat()
                         onUpdateReasoningLevel(level)
@@ -211,6 +232,7 @@ fun ReasoningPicker(
 
 @Composable
 private fun ReasoningScale(
+    levels: List<ReasoningLevel>,
     selectedLevel: ReasoningLevel,
     onSelect: (ReasoningLevel) -> Unit,
 ) {

@@ -804,7 +804,7 @@
   <string name="reasoning_medium_desc">模型将使用更多推理来回答问题。</string>
   <string name="reasoning_off">关闭</string>
   <string name="reasoning_off_desc">关闭推理功能，模型将直接回答问题。</string>
-  <string name="reasoning_picker_hint">并非所有模型都支持深度调整。请参考模型和提供商文档。</string>
+  <string name="reasoning_picker_hint">并非所有模型都支持深度调整。「超高」表示该模型允许的最高思考强度（DeepSeek 会映射为 max）。中转站请在模型设置中配置思考强度方言。请参考提供商文档。</string>
   <string name="reasoning_picker_title">调整模型思考深度</string>
   <string name="reasoning_xhigh">超高</string>
   <string name="regenerate">重新生成</string>
@@ -1197,6 +1197,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_embedding_dimensions">向量维度</string>
   <string name="setting_provider_page_embedding_dimensions_desc">可选。在 API 支持时请求截断/降维输出（如 OpenAI dimensions）。留空则使用完整维度。</string>
   <string name="setting_provider_page_embedding_model">嵌入</string>
+  <string name="setting_provider_page_reasoning_dialect">思考强度方言</string>
+  <string name="setting_provider_page_reasoning_dialect_desc">将抽象思考档位（低…超高）映射为服务商实际参数。中转站 DeepSeek 若报 xhigh 非法，请选「DeepSeek（最高 max）」。自动：按域名/模型 ID 识别。</string>
+  <string name="setting_provider_page_reasoning_dialect_auto">自动</string>
+  <string name="setting_provider_page_reasoning_dialect_openai_extended">OpenAI 扩展（含 xhigh）</string>
+  <string name="setting_provider_page_reasoning_dialect_openai_classic">OpenAI 经典（最高 high）</string>
+  <string name="setting_provider_page_reasoning_dialect_deepseek_max">DeepSeek（最高 max）</string>
+  <string name="setting_provider_page_reasoning_dialect_on_off">仅开关</string>
   <string name="setting_provider_page_enable">是否启用</string>
   <string name="setting_provider_page_enabled">启用</string>
   <string name="setting_provider_page_filter_example">例如：GPT-3.5</string>
