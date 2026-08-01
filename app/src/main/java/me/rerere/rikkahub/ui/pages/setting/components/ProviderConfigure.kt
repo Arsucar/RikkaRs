@@ -111,6 +111,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
+            enable429IpRotation = this.enable429IpRotation,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
@@ -118,6 +119,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
+            enable429IpRotation = this.enable429IpRotation,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
@@ -125,6 +127,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, tags = this.tags, rateLimit = this.rateLimit,
             builtIn = this.builtIn,
+            enable429IpRotation = this.enable429IpRotation,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
