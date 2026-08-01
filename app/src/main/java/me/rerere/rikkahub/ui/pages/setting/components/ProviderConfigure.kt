@@ -396,6 +396,14 @@ private fun ProviderConfigureOpenAI(
             }
         )
     }
+    if (provider.enable429IpRotation) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+    }
     if (show429Confirm) {
         Enable429RotationConfirmDialog(
             onConfirm = {
@@ -508,6 +516,14 @@ private fun ProviderConfigureClaude(
             onCheckedChange = {
                 if (it) show429Confirm = true else onEdit(provider.copy(enable429IpRotation = false))
             }
+        )
+    }
+    if (provider.enable429IpRotation) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
     }
     if (show429Confirm) {
@@ -692,6 +708,14 @@ private fun ProviderConfigureGoogle(
             onCheckedChange = {
                 if (it) show429Confirm = true else onEdit(provider.copy(enable429IpRotation = false))
             }
+        )
+    }
+    if (provider.enable429IpRotation) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
     }
     if (show429Confirm) {
