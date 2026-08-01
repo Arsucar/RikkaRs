@@ -16,6 +16,7 @@ import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
+import me.rerere.rikkahub.data.ai.clash.ClashApiClient
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -444,7 +445,12 @@ val dataSourceModule = module {
                 }
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
-            .addInterceptor(AIRequestInterceptor())
+            .addInterceptor(
+                AIRequestInterceptor(
+                    settingsStore = get(),
+                    clashApiClient = get(),
+                )
+            )
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) {
                     HttpLoggingInterceptor.Level.HEADERS
@@ -497,6 +503,10 @@ val dataSourceModule = module {
             backupArchive = get(),
             backupRestorer = get(),
         )
+    }
+
+    single<ClashApiClient> {
+        ClashApiClient(json = get())
     }
 
     single<HttpClient> {

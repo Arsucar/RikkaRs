@@ -62,6 +62,25 @@ class ClashApiClient(
             }
         }
 
+    /** Returns the currently selected node of the strategy group, or null when unknown. */
+    suspend fun getCurrentNode(apiBaseUrl: String, groupName: String): String? =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("${apiBaseUrl.trimEnd('/')}/proxies")
+                .get()
+                .build()
+            val response = execute(request)
+            try {
+                val text = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw IllegalStateException("Clash GET /proxies -> ${response.code}: $text")
+                val root = json.parseToJsonElement(text).jsonObject
+                val proxies = root["proxies"]?.jsonObject ?: throw IllegalStateException("Clash /proxies missing 'proxies'")
+                proxies[groupName]?.jsonObject?.get("now")?.jsonPrimitive?.contentOrNull
+            } finally {
+                response.close()
+            }
+        }
+
     /** Switches the active node of the strategy group. Returns true when Clash accepted (200). */
     suspend fun switchNode(apiBaseUrl: String, groupName: String, nodeName: String): Boolean {
         val url = apiBaseUrl.trimEnd('/').toHttpUrl()
