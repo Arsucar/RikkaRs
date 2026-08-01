@@ -20,6 +20,25 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.44
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.43 之后）
+
+- **思考强度方言映射** — 抽象档位与 wire 词汇拆分：`ReasoningDialect`（Auto / OpenAI 扩展 / OpenAI 经典 / DeepSeek max / 仅开关）+ 模型个例可覆盖；官方 DeepSeek 与中转站手选 DeepSeekMax 时「超高」发 `max` 而非 `xhigh`；OnOffOnly 时 Chat picker 收敛为关/自动。（#207）
+  **Reasoning dialect mapping** — Splits abstract effort levels from wire vocabulary via `ReasoningDialect` (Auto / OpenAI extended / OpenAI classic / DeepSeek max / on-off only) with per-model override; official DeepSeek and relay hosts set to DeepSeekMax map XHIGH→`max` not `xhigh`; OnOffOnly collapses the chat picker to off/auto. (#207)
+- **语义记忆设置原子写与输入缓冲** — `updateSemanticMemoryConfig` 对配置键原子 RMW，避免滑块/连点读陈旧快照全量覆盖丢更新；阈值滑块 `onValueChangeFinished` 再持久化，数字与文本失焦提交。（#202）
+  **Atomic semantic-memory config writes** — `updateSemanticMemoryConfig` does atomic RMW on the config key so slider/rapid toggles no longer lose updates via stale full-settings overwrite; threshold slider persists on finish; number/text fields commit on blur. (#202)
+- **取消异常不再被吞** — `SemanticMemoryVM` / `StatsVM` 在 catch / `runCatching` 中 rethrow `CancellationException`，恢复 viewModelScope 结构化取消。（#203）
+  **Do not swallow cancellation** — `SemanticMemoryVM` / `StatsVM` rethrow `CancellationException` from catch/`runCatching`, restoring structured cancellation for viewModelScope. (#203)
+- **语义记忆浏览器弹窗可滚动** — 记忆编辑与清理确认对话框限高 + `verticalScroll`，按钮固定在滚动区外，长内容/多候选不再撑出屏幕。（#204）
+  **Scrollable semantic-memory dialogs** — Memory edit and eviction confirm dialogs use max-height + `verticalScroll` with actions outside the scroll area so long content or many candidates stay usable. (#204)
+- **预设注入去重改为组装期只读过滤** — 不再在加载期静默删除与预设重复的直连绑定；DataStore 保留双绑，发送时只读过滤防双注入；独立注入列表展示并标注「已由预设投递」，可取消勾选管理。（#205）
+  **Non-destructive injection dedupe** — Stops load-time silent deletion of dual-bound direct mode injections; keeps DataStore dual binds and filters only at assembly; Independent Injections lists preset-managed items with a note and allows uncheck. (#205)
+- **语义记忆导出与提示解耦** — 导出在 VM 内写完用户 URI 后用 `ExportResult` 事件通知 UI，不再用 `"Export OK"` 字符串与 3s 自动清除竞态导致文件残缺。（#206）
+  **Semantic-memory export event** — Export copies to the user URI inside the VM then emits `ExportResult`; no more `"Export OK"` string races with the 3s message auto-clear that could truncate files. (#206)
+
+---
+
 ## v2.3.43
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.42 之后）
