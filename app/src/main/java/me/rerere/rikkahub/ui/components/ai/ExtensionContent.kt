@@ -102,12 +102,16 @@ fun ModeInjectionsContent(
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
     onEdit: ((PromptInjection.ModeInjection) -> Unit)? = null,
+    /** When set, dual-bound / preset-managed ids show a supporting note (#205). */
+    presetManagedIds: Set<Uuid> = emptySet(),
 ) {
+    val presetManagedNote = stringResource(R.string.extension_content_preset_managed_injection)
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(modeInjections) { injection ->
+            val isPresetManaged = injection.id in presetManagedIds
             ListItem(
                 modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
                     if (onEdit != null) onEdit(injection) else onManage?.invoke()
@@ -115,6 +119,15 @@ fun ModeInjectionsContent(
                 headlineContent = {
                     Text(injection.name.ifBlank { stringResource(R.string.extension_content_unnamed) })
                 },
+                supportingContent = if (isPresetManaged) {
+                    {
+                        Text(
+                            text = presetManagedNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                } else null,
                 trailingContent = {
                     Switch(
                         checked = selectedIds.contains(injection.id),

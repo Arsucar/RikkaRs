@@ -589,6 +589,7 @@
   <string name="export_to_file_desc">Save as JSON file</string>
   <string name="extension_content_manage">Manage</string>
   <string name="extension_content_preset_entries_count">%1$d entries</string>
+  <string name="extension_content_preset_managed_injection">Also delivered by a bound preset; direct binding is kept. Uncheck to remove the direct binding. Delivery uses the preset path while the preset entry is enabled (no double inject).</string>
   <string name="extension_content_unnamed">Unnamed</string>
   <string name="extension_content_unnamed_lorebook">Unnamed Lorebook</string>
   <string name="extension_content_unnamed_preset">Unnamed Preset</string>

@@ -573,6 +573,7 @@
   <string name="export_to_file_desc">保存为JSON文件</string>
   <string name="extension_content_manage">管理</string>
   <string name="extension_content_preset_entries_count">%1$d 个条目</string>
+  <string name="extension_content_preset_managed_injection">已由已绑定预设投递；直连绑定会保留。取消勾选可移除直连。预设条目启用期间走预设路径（不会双注入）。</string>
   <string name="extension_content_unnamed">未命名</string>
   <string name="extension_content_unnamed_lorebook">未命名Lorebook</string>
   <string name="extension_content_unnamed_preset">未命名预设</string>

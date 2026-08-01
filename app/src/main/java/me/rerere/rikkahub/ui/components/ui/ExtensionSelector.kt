@@ -275,14 +275,14 @@ fun ExtensionSelector(
                 }
 
                 4 -> {
-                    // #201: 已由已绑定预设「实际投递」的注入会被 settings 清理去重，勾选必然被回滚。
-                    // 这里在非会话模式下把它们过滤出「独立注入」列表，避免出现「勾了不生效」。
-                    val visibleInjections = if (useConversationInjections) {
-                        settings.modeInjections
+                    // #205: 双绑直连数据保留在 DataStore；组装期只读过滤避免双注入。
+                    // 独立注入列表展示全部条目（含预设已投递），预设管理项带说明文案，允许取消勾选管理直连绑定。
+                    val presetManagedIds = if (useConversationInjections) {
+                        emptySet()
                     } else {
-                        val presetManagedIds = boundPresetInjectionIds(assistant.presetIds, settings.presets)
-                        settings.modeInjections.filter { it.id !in presetManagedIds }
+                        boundPresetInjectionIds(assistant.presetIds, settings.presets)
                     }
+                    val visibleInjections = settings.modeInjections
                     if (visibleInjections.isNotEmpty()) {
                         ModeInjectionsContent(
                             modeInjections = visibleInjections,
@@ -301,6 +301,7 @@ fun ExtensionSelector(
                             },
                             onManage = onNavigateToPrompts,
                             onEdit = { modeInjectionEditState.open(it) },
+                            presetManagedIds = presetManagedIds,
                         )
                     } else {
                         ExtensionEmptyState(
