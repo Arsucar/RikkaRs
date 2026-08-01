@@ -118,7 +118,8 @@ class ModeInjectionDirectBindingDedupeTest {
     fun `load-time pruning keeps dual-bound direct ids in DataStore`() {
         val sharedId = Uuid.random()
         val independentId = Uuid.random()
-        val injection = PromptInjection.ModeInjection(id = sharedId, content = "shared")
+        val sharedInjection = PromptInjection.ModeInjection(id = sharedId, content = "shared")
+        val independentInjection = PromptInjection.ModeInjection(id = independentId, content = "solo")
         val preset = Preset(
             entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
             entriesVersion = PRESET_ENTRIES_VERSION,
@@ -128,7 +129,7 @@ class ModeInjectionDirectBindingDedupeTest {
             presetIds = setOf(preset.id),
         )
         val settings = Settings(init = true).copy(
-            modeInjections = listOf(injection),
+            modeInjections = listOf(sharedInjection, independentInjection),
             presets = listOf(preset),
             assistants = listOf(assistant),
         )
