@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.stats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -162,7 +163,8 @@ class StatsVM(
                     apiHealthTimeRange = timeRange,
                     apiHealth = apiHealth,
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _stats.value = _stats.value.copy(
                     isLoading = false,
                     isRefreshing = false,
@@ -193,7 +195,8 @@ class StatsVM(
                 apiHealth = apiHealth,
                 apiHealthDetail = detail,
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             _stats.value = _stats.value.copy(
                 isRefreshing = false,
                 loadError = true,

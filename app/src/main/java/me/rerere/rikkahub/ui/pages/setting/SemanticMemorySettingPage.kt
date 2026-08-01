@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -63,22 +63,19 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
     val testResult by vm.testResult.collectAsStateWithLifecycle()
     val isProcessing by vm.isProcessing.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
+    val exportResult by vm.exportResult.collectAsStateWithLifecycle()
     val stats by vm.stats.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val navController = LocalNavController.current
 
-    var pendingExportUri by remember { mutableStateOf<Uri?>(null) }
     var showImportConfirm by remember { mutableStateOf(false) }
     var pendingImportPath by remember { mutableStateOf<String?>(null) }
+    var exportNotice by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
-        uri?.let {
-            pendingExportUri = it
-            val cacheFile = java.io.File(context.cacheDir, "semantic_memory_export.gz")
-            vm.exportData(cacheFile.absolutePath)
-        }
+        uri?.let { vm.exportData(it) }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -149,7 +146,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = config.enabled,
-                                onCheckedChange = { vm.updateConfig(config.copy(enabled = it)) },
+                                onCheckedChange = { newValue -> vm.updateConfig { it.copy(enabled = newValue) } },
                             )
                         }
                     )
@@ -186,11 +183,11 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 allowClear = true,
                                 onSelect = { model ->
                                     // ModelSelector clear calls onSelect(Model()) with blank modelId
-                                    vm.updateConfig(
-                                        config.copy(
+                                    vm.updateConfig {
+                                        it.copy(
                                             embeddingModelId = model.id.takeUnless { model.modelId.isBlank() },
-                                        ),
-                                    )
+                                        )
+                                    }
                                 },
                             )
                             Button(
@@ -224,12 +221,22 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            // 数字输入局部缓冲: 只更新本地文本, 失焦时解析并提交 (避免每次按键全量写)
+                            var topKText by remember(config.topK) { mutableStateOf(config.topK.toString()) }
                             OutlinedTextField(
-                                value = config.topK.toString(),
-                                onValueChange = { v -> v.toIntOrNull()?.let { vm.updateConfig(config.copy(topK = it.coerceIn(1, 100))) } },
+                                value = topKText,
+                                onValueChange = { topKText = it },
                                 label = { Text("每次召回最大记忆条数 (1-100)") },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            topKText.toIntOrNull()?.let { parsed ->
+                                                vm.updateConfig { it.copy(topK = parsed.coerceIn(1, 100)) }
+                                            }
+                                        }
+                                    },
                                 singleLine = true,
                             )
                             Text(
@@ -237,66 +244,83 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
+                            // Slider: 拖动只更新本地缓冲, 松手时才持久化 (#202)
+                            var localThreshold by remember(config.similarityThreshold) { mutableStateOf(config.similarityThreshold) }
                             Slider(
-                                value = config.similarityThreshold,
-                                onValueChange = { vm.updateConfig(config.copy(similarityThreshold = it)) },
+                                value = localThreshold,
+                                onValueChange = { localThreshold = it },
+                                onValueChangeFinished = {
+                                    vm.updateConfig { it.copy(similarityThreshold = localThreshold) }
+                                },
                                 valueRange = 0f..1f,
                             )
+                            var maxCoreInjectText by remember(config.maxCoreInject) { mutableStateOf(config.maxCoreInject?.toString().orEmpty()) }
                             OutlinedTextField(
-                                value = config.maxCoreInject?.toString().orEmpty(),
-                                onValueChange = { v ->
-                                    if (v.isBlank()) {
-                                        vm.updateConfig(config.copy(maxCoreInject = null))
-                                    } else {
-                                        v.toIntOrNull()?.let {
-                                            vm.updateConfig(config.copy(maxCoreInject = it.takeIf { n -> n > 0 }))
-                                        }
-                                    }
-                                },
+                                value = maxCoreInjectText,
+                                onValueChange = { maxCoreInjectText = it },
                                 label = { Text("注入核心记忆上限") },
                                 supportingText = { Text("空 = 不限制；注入 system 时最多带入多少条 core") },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            if (maxCoreInjectText.isBlank()) {
+                                                vm.updateConfig { it.copy(maxCoreInject = null) }
+                                            } else {
+                                                maxCoreInjectText.toIntOrNull()?.let { parsed ->
+                                                    vm.updateConfig { it.copy(maxCoreInject = parsed.takeIf { n -> n > 0 }) }
+                                                }
+                                            }
+                                        }
+                                    },
                                 singleLine = true,
                             )
+                            var maxInjectCharsText by remember(config.maxInjectChars) { mutableStateOf(config.maxInjectChars?.toString().orEmpty()) }
                             OutlinedTextField(
-                                value = config.maxInjectChars?.toString().orEmpty(),
-                                onValueChange = { v ->
-                                    if (v.isBlank()) {
-                                        vm.updateConfig(config.copy(maxInjectChars = null))
-                                    } else {
-                                        v.toIntOrNull()?.let {
-                                            vm.updateConfig(config.copy(maxInjectChars = it.takeIf { n -> n > 0 }))
-                                        }
-                                    }
-                                },
+                                value = maxInjectCharsText,
+                                onValueChange = { maxInjectCharsText = it },
                                 label = { Text("注入总字符预算") },
                                 supportingText = { Text("空 = 不限制；记忆正文总长度上限") },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            if (maxInjectCharsText.isBlank()) {
+                                                vm.updateConfig { it.copy(maxInjectChars = null) }
+                                            } else {
+                                                maxInjectCharsText.toIntOrNull()?.let { parsed ->
+                                                    vm.updateConfig { it.copy(maxInjectChars = parsed.takeIf { n -> n > 0 }) }
+                                                }
+                                            }
+                                        }
+                                    },
                                 singleLine = true,
                             )
+                            var maxMemoryContentLenText by remember(config.maxMemoryContentLen) { mutableStateOf(config.maxMemoryContentLen?.toString().orEmpty()) }
                             OutlinedTextField(
-                                value = config.maxMemoryContentLen?.toString().orEmpty(),
-                                onValueChange = { v ->
-                                    if (v.isBlank()) {
-                                        vm.updateConfig(config.copy(maxMemoryContentLen = null))
-                                    } else {
-                                        v.toIntOrNull()?.let {
-                                            vm.updateConfig(config.copy(maxMemoryContentLen = it.takeIf { n -> n > 0 }))
-                                        }
-                                    }
-                                },
+                                value = maxMemoryContentLenText,
+                                onValueChange = { maxMemoryContentLenText = it },
                                 label = { Text("单条记忆内容上限") },
                                 supportingText = { Text("空 = 不截断；sanitize 后单条最长字符") },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            if (maxMemoryContentLenText.isBlank()) {
+                                                vm.updateConfig { it.copy(maxMemoryContentLen = null) }
+                                            } else {
+                                                maxMemoryContentLenText.toIntOrNull()?.let { parsed ->
+                                                    vm.updateConfig { it.copy(maxMemoryContentLen = parsed.takeIf { n -> n > 0 }) }
+                                                }
+                                            }
+                                        }
+                                    },
                                 singleLine = true,
                             )
                         }
@@ -307,7 +331,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = config.enableFallbackKeyword,
-                                onCheckedChange = { vm.updateConfig(config.copy(enableFallbackKeyword = it)) },
+                                onCheckedChange = { newValue -> vm.updateConfig { it.copy(enableFallbackKeyword = newValue) } },
                             )
                         }
                     )
@@ -355,62 +379,78 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 Text("自动总结", style = MaterialTheme.typography.bodyMedium)
                                 Switch(
                                     checked = config.autoSummarizeEnabled,
-                                    onCheckedChange = { vm.updateConfig(config.copy(autoSummarizeEnabled = it)) },
+                                    onCheckedChange = { newValue -> vm.updateConfig { it.copy(autoSummarizeEnabled = newValue) } },
                                 )
                             }
+                            var summarizeIntervalText by remember(config.summarizeInterval) { mutableStateOf(config.summarizeInterval.toString()) }
                             OutlinedTextField(
-                                value = config.summarizeInterval.toString(),
-                                onValueChange = {
-                                    it.toIntOrNull()?.let { v ->
-                                        vm.updateConfig(config.copy(summarizeInterval = v.coerceAtLeast(1)))
-                                    }
-                                },
+                                value = summarizeIntervalText,
+                                onValueChange = { summarizeIntervalText = it },
                                 label = { Text("总结间隔 (对话轮数)") },
                                 supportingText = { Text("每 N 轮用户消息自动触发一次总结") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            summarizeIntervalText.toIntOrNull()?.let { parsed ->
+                                                vm.updateConfig { it.copy(summarizeInterval = parsed.coerceAtLeast(1)) }
+                                            }
+                                        }
+                                    },
                             )
+                            var autoSummarizeMessageCountText by remember(config.autoSummarizeMessageCount) { mutableStateOf(config.autoSummarizeMessageCount.toString()) }
                             OutlinedTextField(
-                                value = config.autoSummarizeMessageCount.toString(),
-                                onValueChange = {
-                                    it.toIntOrNull()?.let { v ->
-                                        vm.updateConfig(config.copy(autoSummarizeMessageCount = v.coerceIn(4, 100)))
-                                    }
-                                },
+                                value = autoSummarizeMessageCountText,
+                                onValueChange = { autoSummarizeMessageCountText = it },
                                 label = { Text("自动总结取最近消息条数 (4-100)") },
                                 supportingText = { Text("自动总结时从最新消息往上取多少条对话") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            autoSummarizeMessageCountText.toIntOrNull()?.let { parsed ->
+                                                vm.updateConfig { it.copy(autoSummarizeMessageCount = parsed.coerceIn(4, 100)) }
+                                            }
+                                        }
+                                    },
                             )
+                            var maxMemoriesPerSummaryText by remember(config.maxMemoriesPerSummary) { mutableStateOf(config.maxMemoriesPerSummary.toString()) }
                             OutlinedTextField(
-                                value = config.maxMemoriesPerSummary.toString(),
-                                onValueChange = {
-                                    it.toIntOrNull()?.let { v ->
-                                        vm.updateConfig(config.copy(maxMemoriesPerSummary = v.coerceAtLeast(1)))
-                                    }
-                                },
+                                value = maxMemoriesPerSummaryText,
+                                onValueChange = { maxMemoriesPerSummaryText = it },
                                 label = { Text("每次总结最多提取记忆数") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            maxMemoriesPerSummaryText.toIntOrNull()?.let { parsed ->
+                                                vm.updateConfig { it.copy(maxMemoriesPerSummary = parsed.coerceAtLeast(1)) }
+                                            }
+                                        }
+                                    },
                             )
+                            var maxMemoriesPerAssistantText by remember(config.maxMemoriesPerAssistant) { mutableStateOf(config.maxMemoriesPerAssistant.toString()) }
                             OutlinedTextField(
-                                value = config.maxMemoriesPerAssistant.toString(),
-                                onValueChange = {
-                                    it.toIntOrNull()?.let { v ->
-                                        vm.updateConfig(config.copy(maxMemoriesPerAssistant = v.coerceAtLeast(100)))
-                                    }
-                                },
+                                value = maxMemoriesPerAssistantText,
+                                onValueChange = { maxMemoriesPerAssistantText = it },
                                 label = { Text("每个助手最大记忆数") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp),
+                                    .padding(top = 8.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            maxMemoriesPerAssistantText.toIntOrNull()?.let { parsed ->
+                                                vm.updateConfig { it.copy(maxMemoriesPerAssistant = parsed.coerceAtLeast(100)) }
+                                            }
+                                        }
+                                    },
                             )
                             // 总结用模型选择
                             Text(
@@ -425,7 +465,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 providers = settings.providers,
                                 type = me.rerere.ai.provider.ModelType.CHAT,
                                 allowClear = true,
-                                onSelect = { vm.updateConfig(config.copy(summarizeModelId = it.id)) },
+                                onSelect = { model -> vm.updateConfig { it.copy(summarizeModelId = model.id) } },
                             )
                             // 提示词编辑器
                             Text(
@@ -435,17 +475,19 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                     .fillMaxWidth()
                                     .padding(top = 12.dp),
                             )
-                            var promptText by remember { mutableStateOf(config.summarizePrompt ?: "") }
+                            var promptText by remember(config.summarizePrompt) { mutableStateOf(config.summarizePrompt ?: "") }
                             OutlinedTextField(
                                 value = promptText,
-                                onValueChange = {
-                                    promptText = it
-                                    vm.updateConfig(config.copy(summarizePrompt = it.ifBlank { null }))
-                                },
+                                onValueChange = { promptText = it },
                                 placeholder = { Text(me.rerere.rikkahub.data.memory.semantic.MemorySummarizer.DEFAULT_PROMPT.take(100) + "...", style = MaterialTheme.typography.bodySmall) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 4.dp),
+                                    .padding(top = 4.dp)
+                                    .onFocusChanged { focusState ->
+                                        if (!focusState.isFocused) {
+                                            vm.updateConfig { it.copy(summarizePrompt = promptText.ifBlank { null }) }
+                                        }
+                                    },
                                 minLines = 3,
                                 maxLines = 8,
                             )
@@ -456,7 +498,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 OutlinedButton(
                                     onClick = {
                                         promptText = me.rerere.rikkahub.data.memory.semantic.MemorySummarizer.DEFAULT_PROMPT
-                                        vm.updateConfig(config.copy(summarizePrompt = promptText))
+                                        vm.updateConfig { it.copy(summarizePrompt = promptText) }
                                     },
                                 ) {
                                     Text("载入默认")
@@ -464,7 +506,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 OutlinedButton(
                                     onClick = {
                                         promptText = ""
-                                        vm.updateConfig(config.copy(summarizePrompt = null))
+                                        vm.updateConfig { it.copy(summarizePrompt = null) }
                                     },
                                 ) {
                                     Text("恢复默认")
@@ -478,7 +520,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = config.autoEvictionEnabled,
-                                onCheckedChange = { vm.updateConfig(config.copy(autoEvictionEnabled = it)) },
+                                onCheckedChange = { newValue -> vm.updateConfig { it.copy(autoEvictionEnabled = newValue) } },
                             )
                         }
                     )
@@ -597,10 +639,32 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                     }
                 }
             }
+
+            // 导出结果提示 (#206): 由 VM 的 exportResult 事件驱动, 不复用 message/魔数
+            exportNotice?.let { notice ->
+                item("exportNotice") {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        Text(
+                            text = notice,
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (exportResult?.success == true) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 
-    // 自动清除消息
+    // 自动清除消息 (仅作用于提示文案, 与导出任务解耦)
     if (message != null) {
         androidx.compose.runtime.LaunchedEffect(message) {
             kotlinx.coroutines.delay(3000)
@@ -608,19 +672,10 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
         }
     }
 
-    // 导出完成后, 将缓存文件复制到用户选择的 URI (VM 消息为 "Export OK")
-    LaunchedEffect(message) {
-        if (message == "Export OK") {
-            pendingExportUri?.let { uri ->
-                val cacheFile = java.io.File(context.cacheDir, "semantic_memory_export.gz")
-                if (cacheFile.exists() && cacheFile.length() > 0) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        cacheFile.inputStream().use { input -> input.copyTo(output) }
-                    }
-                }
-                cacheFile.delete()
-                pendingExportUri = null
-            }
+    // 导出完成事件 (#206): 只消费 VM 的 exportResult 并展示, 不再依赖 "Export OK" 魔数
+    LaunchedEffect(exportResult) {
+        exportResult?.let { res ->
+            exportNotice = res.message
         }
     }
 }
