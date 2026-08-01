@@ -459,14 +459,11 @@ class SettingsStore(
                     }
                 },
                 assistants = settings.assistants.distinctBy { it.id }.map { assistant ->
+                    // #201: 过滤无效引用，并去掉与已绑定 preset entries 同 id 的直连（消除双路径）。
                     assistant.copy(
                         // 过滤掉不存在的 MCP 服务器 ID
                         mcpServers = assistant.mcpServers.filter { serverId ->
                             serverId in validMcpServerIds
-                        }.toSet(),
-                        // 过滤掉不存在的模式注入 ID
-                        modeInjectionIds = assistant.modeInjectionIds.filter { id ->
-                            id in validModeInjectionIds
                         }.toSet(),
                         // 过滤掉不存在的 Lorebook ID
                         lorebookIds = assistant.lorebookIds.filter { id ->
@@ -480,6 +477,9 @@ class SettingsStore(
                         presetIds = assistant.presetIds.filter { id ->
                             id in validPresetIds
                         }.toSet()
+                    ).withModeInjectionsDedupedAgainstPresets(
+                        presets = migratedPresets,
+                        validModeInjectionIds = validModeInjectionIds,
                     )
                 },
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },
@@ -1265,6 +1265,14 @@ enum class ChatFontFamily {
 }
 
 @Serializable
+enum class UploadInjectMode {
+    @SerialName("path_only")
+    PATH_ONLY,
+    @SerialName("full_body")
+    FULL_BODY,
+}
+
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -1303,6 +1311,7 @@ data class DisplaySetting(
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
+    val documentUploadInjectMode: UploadInjectMode = UploadInjectMode.PATH_ONLY,
 )
 
 @Serializable

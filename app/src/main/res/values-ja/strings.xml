@@ -352,11 +352,11 @@
   <string name="extension_selector_go_to_extensions">拡張機能を管理</string>
   <string name="extension_selector_go_to_skills">スキルを管理する</string>
   <string name="extension_selector_lorebooks_empty">利用可能なロアブックがありません</string>
-  <string name="extension_selector_mode_injections_empty">利用可能なモードインジェクションがありません</string>
+  <string name="extension_selector_mode_injections_empty">利用可能な独立インジェクションがありません</string>
   <string name="extension_selector_quick_messages_empty">クイックメッセージがありません</string>
   <string name="extension_selector_skills_empty">利用可能なスキルがありません</string>
   <string name="extension_selector_tab_lorebooks">ロアブックス</string>
-  <string name="extension_selector_tab_mode_injections">モードインジェクション</string>
+  <string name="extension_selector_tab_mode_injections">独立インジェクション</string>
   <string name="extension_selector_tab_quick_messages">クイックメッセージ</string>
   <string name="extension_selector_tab_skills">スキル</string>
   <string name="extensions_page_agent_skills">エージェントスキル</string>
@@ -662,6 +662,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">テキストを貼り付けた際にしきい値を超える場合、自動的にファイル添付として保存します</string>
   <string name="setting_display_page_paste_long_text_as_file_title">長いテキストをファイルとして貼り付け</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字数しきい値</string>
+  <string name="setting_display_page_upload_inject_mode_title">添付ファイル本文を注入</string>
+  <string name="setting_display_page_upload_inject_mode_desc">オフ：ファイル名と /upload パスのみ注入（トークン節約。ワークスペースツールが使えない場合は本文注入にフォールバック）。オン：添付本文をプロンプトに全文注入。</string>
   <string name="setting_display_page_send_on_enter_desc">Enterキーでメッセージを送信し、改行しない</string>
   <string name="setting_display_page_send_on_enter_title">Enterキーで送信</string>
   <string name="setting_display_page_show_assistant_bubble_desc">アシスタントメッセージのバブル背景を表示するかどうか</string>

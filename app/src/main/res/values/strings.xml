@@ -595,12 +595,12 @@
   <string name="extension_selector_go_to_extensions">Manage Extensions</string>
   <string name="extension_selector_go_to_skills">Go to manage Skills</string>
   <string name="extension_selector_lorebooks_empty">No lorebooks available</string>
-  <string name="extension_selector_mode_injections_empty">No mode injections available</string>
+  <string name="extension_selector_mode_injections_empty">No independent injections available</string>
   <string name="extension_selector_presets_empty">No presets available</string>
   <string name="extension_selector_quick_messages_empty">No quick messages available</string>
   <string name="extension_selector_skills_empty">No skills available</string>
   <string name="extension_selector_tab_lorebooks">Lorebooks</string>
-  <string name="extension_selector_tab_mode_injections">Mode Injections</string>
+  <string name="extension_selector_tab_mode_injections">Independent Injections</string>
   <string name="extension_selector_tab_presets">Presets</string>
   <string name="extension_selector_tab_quick_messages">Quick Messages</string>
   <string name="extension_selector_tab_skills">Skills</string>
@@ -990,6 +990,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">When pasting text exceeds the threshold, automatically save it as a file attachment</string>
   <string name="setting_display_page_paste_long_text_as_file_title">Paste Long Text as File</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Text Length Threshold</string>
+  <string name="setting_display_page_upload_inject_mode_title">Inject Full Attachment Content</string>
+  <string name="setting_display_page_upload_inject_mode_desc">Off: inject only file name and /upload path (saves tokens; falls back to full content if workspace tools are unavailable). On: inject full file body into the prompt.</string>
   <string name="setting_display_page_send_on_enter_desc">Press Enter to send message instead of adding a new line</string>
   <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>

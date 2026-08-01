@@ -352,11 +352,11 @@
   <string name="extension_selector_go_to_extensions">Управление расширениями</string>
   <string name="extension_selector_go_to_skills">Перейти к управлению навыками</string>
   <string name="extension_selector_lorebooks_empty">Нет доступных lorebooks</string>
-  <string name="extension_selector_mode_injections_empty">Нет доступных внедрений режима</string>
+  <string name="extension_selector_mode_injections_empty">Нет доступных независимых внедрений</string>
   <string name="extension_selector_quick_messages_empty">Быстрые сообщения отсутствуют</string>
   <string name="extension_selector_skills_empty">Навыки отсутствуют</string>
   <string name="extension_selector_tab_lorebooks">Лорбуки</string>
-  <string name="extension_selector_tab_mode_injections">Внедрения режимов</string>
+  <string name="extension_selector_tab_mode_injections">Независимые внедрения</string>
   <string name="extension_selector_tab_quick_messages">Быстрые сообщения</string>
   <string name="extension_selector_tab_skills">Навыки</string>
   <string name="extensions_page_agent_skills">Навыки агента</string>
@@ -662,6 +662,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">При вставке текста, превышающего порог, автоматически сохранять его как файл-вложение</string>
   <string name="setting_display_page_paste_long_text_as_file_title">Вставлять длинный текст как файл</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Порог длины текста</string>
+  <string name="setting_display_page_upload_inject_mode_title">Вставлять полный текст вложения</string>
+  <string name="setting_display_page_upload_inject_mode_desc">Выкл.: только имя файла и путь /upload (экономит токены; при недоступных инструментах workspace — полный текст). Вкл.: полный текст файла в промпт.</string>
   <string name="setting_display_page_send_on_enter_desc">Нажмите Enter, чтобы отправить сообщение, а не добавить новую строку</string>
   <string name="setting_display_page_send_on_enter_title">Отправлять по Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Показывать фоновый пузырь для сообщений ассистента</string>

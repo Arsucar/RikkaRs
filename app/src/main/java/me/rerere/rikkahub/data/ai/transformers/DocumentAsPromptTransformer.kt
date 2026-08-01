@@ -10,6 +10,7 @@ import me.rerere.document.DocxParser
 import me.rerere.document.EpubParser
 import me.rerere.document.PdfParser
 import me.rerere.document.PptxParser
+import me.rerere.rikkahub.data.datastore.UploadInjectMode
 import java.io.File
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
@@ -18,6 +19,8 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
+        val mode = ctx.settings.displaySetting.documentUploadInjectMode
+        val workspaceReady = ctx.workspaceToolAvailable
         return withContext(Dispatchers.IO) {
             messages.map { message ->
                 message.copy(
@@ -26,6 +29,8 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                             parts = this,
                             readContent = ::readDocumentContent,
                             resolvePath = ::resolveWorkspacePath,
+                            mode = mode,
+                            workspaceReady = workspaceReady,
                         )
                     }
                 )
@@ -81,19 +86,30 @@ internal fun appendDocumentPromptsInOrder(
     parts: MutableList<UIMessagePart>,
     readContent: (UIMessagePart.Document) -> String,
     resolvePath: (UIMessagePart.Document) -> String?,
+    mode: UploadInjectMode = UploadInjectMode.FULL_BODY,
+    workspaceReady: Boolean = false,
 ) {
+    val injectBody = mode == UploadInjectMode.FULL_BODY ||
+        (mode == UploadInjectMode.PATH_ONLY && !workspaceReady)
     val prompts = parts.filterIsInstance<UIMessagePart.Document>().map { document ->
-        val content = readContent(document)
-        val pathAttr = resolvePath(document)?.let { " path=\"$it\"" } ?: ""
-        UIMessagePart.Text(
-            """
+        if (injectBody) {
+            val content = readContent(document)
+            val pathAttr = resolvePath(document)?.let { " path=\"$it\"" } ?: ""
+            UIMessagePart.Text(
+                """
                                   <UploadFile name="${document.fileName}"$pathAttr>
                                   ```
                                   $content
                                   ```
                                   </UploadFile>
                                   """.trimMargin()
-        )
+            )
+        } else {
+            val pathAttr = resolvePath(document)?.let { " path=\"$it\"" } ?: ""
+            UIMessagePart.Text(
+                """<UploadFile name="${document.fileName}"$pathAttr></UploadFile>"""
+            )
+        }
     }
     parts.addAll(prompts)
 }

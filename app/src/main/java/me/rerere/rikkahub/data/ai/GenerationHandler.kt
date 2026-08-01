@@ -116,6 +116,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        workspaceToolAvailable: Boolean = false,
         mode: GenerationPreparationMode,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ): PreparedProviderInput = prepareProviderInput(
@@ -130,6 +131,7 @@ class GenerationHandler(
         conversationModeInjectionIds = conversationModeInjectionIds,
         conversationLorebookIds = conversationLorebookIds,
         workspaceCwd = workspaceCwd,
+        workspaceToolAvailable = workspaceToolAvailable,
         mode = mode,
         processingStatus = processingStatus,
     )
@@ -152,6 +154,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        workspaceToolAvailable: Boolean = false,
         firstPreparedInput: PreparedProviderInput? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
@@ -240,6 +243,7 @@ class GenerationHandler(
                     conversationModeInjectionIds = conversationModeInjectionIds,
                     conversationLorebookIds = conversationLorebookIds,
                     workspaceCwd = workspaceCwd,
+                    workspaceToolAvailable = workspaceToolAvailable,
                     preparedInput = if (canReuseFirstPreparedInput) checkNotNull(firstPreparedInput) else null,
                 )
                 messages = messages.visualTransforms(
@@ -420,6 +424,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        workspaceToolAvailable: Boolean = false,
         preparedInput: PreparedProviderInput? = null,
     ) {
         val prepared = preparedInput ?: prepareProviderInput(
@@ -434,6 +439,7 @@ class GenerationHandler(
             conversationModeInjectionIds = conversationModeInjectionIds,
             conversationLorebookIds = conversationLorebookIds,
             workspaceCwd = workspaceCwd,
+            workspaceToolAvailable = workspaceToolAvailable,
             mode = GenerationPreparationMode.Send,
             processingStatus = processingStatus,
         )
@@ -563,6 +569,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid>,
         conversationLorebookIds: Set<Uuid>,
         workspaceCwd: String?,
+        workspaceToolAvailable: Boolean = false,
         mode: GenerationPreparationMode,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ): PreparedProviderInput {
@@ -610,6 +617,7 @@ class GenerationHandler(
             } else {
                 TransformerExecutionMode.Send
             },
+            workspaceToolAvailable = workspaceToolAvailable,
         )
         return PreparedProviderInput(
             messages = internalMessages,

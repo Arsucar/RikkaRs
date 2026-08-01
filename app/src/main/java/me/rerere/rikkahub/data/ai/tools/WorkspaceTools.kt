@@ -83,6 +83,7 @@ private fun createReadFileTool(
     description = """
         Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
         Use /workspace for the workspace files area. Use /skills for global skill files and /skills_private for this assistant's private skill files.
+        User-uploaded files are mounted read-only at /upload; read them as /upload/<file-name> and never modify that path.
         Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp, svg, heic, heif, avif, ico).
     """.trimIndent().replace("\n", " "),
     parameters = {

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.UploadInjectMode
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
@@ -192,6 +193,26 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.pasteLongTextAsFile,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(pasteLongTextAsFile = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_upload_inject_mode_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_upload_inject_mode_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.documentUploadInjectMode == UploadInjectMode.FULL_BODY,
+                                onCheckedChange = {
+                                    updateDisplaySetting(
+                                        displaySetting.copy(
+                                            documentUploadInjectMode = if (it) {
+                                                UploadInjectMode.FULL_BODY
+                                            } else {
+                                                UploadInjectMode.PATH_ONLY
+                                            }
+                                        )
+                                    )
                                 }
                             )
                         },

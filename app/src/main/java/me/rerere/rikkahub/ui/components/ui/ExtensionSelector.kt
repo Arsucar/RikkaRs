@@ -27,12 +27,16 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
+import me.rerere.rikkahub.data.datastore.boundPresetInjectionIds
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
+import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
@@ -40,6 +44,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
+import me.rerere.rikkahub.ui.pages.extensions.ModeInjectionEditSheet
 import org.koin.compose.koinInject
 
 
@@ -62,6 +67,16 @@ fun ExtensionSelector(
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
     // 点击单个条目 -> 直接打开该条目的编辑弹窗（全局条目改动落到 SettingsStore）
+    val modeInjectionEditState = useEditState<PromptInjection.ModeInjection> { edited ->
+        val newInjections = if (settings.modeInjections.any { it.id == edited.id }) {
+            settings.modeInjections.map { if (it.id == edited.id) edited else it }
+        } else {
+            settings.modeInjections + edited
+        }
+        scope.launch {
+            settingsStore.update(settings.withModeInjectionsPreservingPresetSnapshots(newInjections))
+        }
+    }
     val lorebookEditState = useEditState<Lorebook> { edited ->
         val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
             settings.lorebooks.map { if (it.id == edited.id) edited else it }
@@ -86,8 +101,13 @@ fun ExtensionSelector(
     } else {
         assistant.lorebookIds
     }
+    val selectedModeInjectionIds = if (useConversationInjections) {
+        conversation.modeInjectionIds
+    } else {
+        assistant.modeInjectionIds
+    }
 
-    val pagerState = rememberPagerState { 4 }
+    val pagerState = rememberPagerState { 5 }
 
     Column(
         modifier = modifier
@@ -125,6 +145,13 @@ fun ExtensionSelector(
                     scope.launch { pagerState.animateScrollToPage(3) }
                 },
                 text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
+            )
+            Tab(
+                selected = pagerState.currentPage == 4,
+                onClick = {
+                    scope.launch { pagerState.animateScrollToPage(4) }
+                },
+                text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
             )
         }
 
@@ -246,7 +273,55 @@ fun ExtensionSelector(
                         )
                     }
                 }
+
+                4 -> {
+                    // #201: 已由已绑定预设「实际投递」的注入会被 settings 清理去重，勾选必然被回滚。
+                    // 这里在非会话模式下把它们过滤出「独立注入」列表，避免出现「勾了不生效」。
+                    val visibleInjections = if (useConversationInjections) {
+                        settings.modeInjections
+                    } else {
+                        val presetManagedIds = boundPresetInjectionIds(assistant.presetIds, settings.presets)
+                        settings.modeInjections.filter { it.id !in presetManagedIds }
+                    }
+                    if (visibleInjections.isNotEmpty()) {
+                        ModeInjectionsContent(
+                            modeInjections = visibleInjections,
+                            selectedIds = selectedModeInjectionIds,
+                            onToggle = { id, checked ->
+                                val newIds = if (checked) {
+                                    selectedModeInjectionIds + id
+                                } else {
+                                    selectedModeInjectionIds - id
+                                }
+                                if (useConversationInjections) {
+                                    onUpdateConversation(conversation.copy(modeInjectionIds = newIds))
+                                } else {
+                                    onUpdate(assistant.copy(modeInjectionIds = newIds))
+                                }
+                            },
+                            onManage = onNavigateToPrompts,
+                            onEdit = { modeInjectionEditState.open(it) },
+                        )
+                    } else {
+                        ExtensionEmptyState(
+                            message = stringResource(R.string.extension_selector_mode_injections_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    if (modeInjectionEditState.isEditing) {
+        modeInjectionEditState.currentState?.let { state ->
+            ModeInjectionEditSheet(
+                injection = state,
+                onDismiss = { modeInjectionEditState.dismiss() },
+                onConfirm = { modeInjectionEditState.confirm() },
+                onEdit = { modeInjectionEditState.currentState = it },
+            )
         }
     }
 

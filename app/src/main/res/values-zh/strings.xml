@@ -579,12 +579,12 @@
   <string name="extension_selector_go_to_extensions">管理扩展</string>
   <string name="extension_selector_go_to_skills">前往管理 Skills</string>
   <string name="extension_selector_lorebooks_empty">无可用的lorebooks</string>
-  <string name="extension_selector_mode_injections_empty">无可用的模式注入</string>
+  <string name="extension_selector_mode_injections_empty">无可用的独立注入</string>
   <string name="extension_selector_presets_empty">暂无可用预设</string>
   <string name="extension_selector_quick_messages_empty">暂无快捷消息</string>
   <string name="extension_selector_skills_empty">暂无 Skills</string>
   <string name="extension_selector_tab_lorebooks">世界书</string>
-  <string name="extension_selector_tab_mode_injections">模式注入</string>
+  <string name="extension_selector_tab_mode_injections">独立注入</string>
   <string name="extension_selector_tab_presets">预设</string>
   <string name="extension_selector_tab_quick_messages">快捷消息</string>
   <string name="extension_selector_tab_skills">Skills</string>
@@ -955,6 +955,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">当粘贴的文本超过阈值时，自动将其保存为文件附件</string>
   <string name="setting_display_page_paste_long_text_as_file_title">粘贴长文本为文件</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文本长度阈值</string>
+  <string name="setting_display_page_upload_inject_mode_title">注入附件全文</string>
+  <string name="setting_display_page_upload_inject_mode_desc">关闭：仅注入文件名与 /upload 路径（节省 token；工作区工具不可用时回退全文）。开启：将附件正文完整注入提示词。</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 发送消息而非换行</string>
   <string name="setting_display_page_send_on_enter_title">按Enter发送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>

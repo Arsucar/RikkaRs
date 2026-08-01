@@ -20,6 +20,19 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.43
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.42 之后）
+
+- **工作区可读上传目录 `/upload`** — 主代理与子代理 knownMounts 均挂载 `filesDir/upload`；`workspace_read_file("/upload/<文件名>")` 与 fork 后 UUID 路径可读；工具描述声明只读；越界路径拒绝。（#199）
+  **Workspace can read `/upload`** — Main and subagent knownMounts bind `filesDir/upload`; `workspace_read_file("/upload/<name>")` and post-fork UUID paths resolve; tool description marks read-only; path traversal rejected. (#199)
+- **上传附件注入方式偏好** — 设置→偏好/通用新增「注入附件全文」：默认仅注入文件名与 `/upload` 路径（PATH_ONLY）以省 token；可选全文注入（FULL_BODY）；工作区工具实际不可用（无 TOOL 能力或工具被权限过滤）时回退全文，避免空附件进模型。（#200）
+  **Upload attachment inject mode preference** — Settings → Preferences adds “Inject Full Attachment Content”: default PATH_ONLY (name + `/upload` path stub) to save tokens; optional FULL_BODY; falls back to full body when workspace tools are not actually available (no TOOL ability or tools filtered by permissions). (#200)
+- **清理模式注入双路径残留** — settings 清洗去掉与已绑定预设「实际投递」条目同 id 的直连（含 Reference 目标、legacy 生效 id）；禁用预设条目时保留直连；聊天扩展面板新增「独立注入」Tab，会话/助手级开关；预设已管理的项不在独立列表重复勾选。（#201）
+  **Clear dual-path mode-injection residue** — Settings sanitize drops assistant direct bindings that match effectively delivered bound-preset entries (including Reference targets and legacy effective ids); keeps direct binds when the preset entry is disabled; chat extension panel adds an Independent Injections tab (conversation/assistant scope); preset-managed ids are filtered from that list. (#201)
+
+---
+
 ## v2.3.42
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.41 之后）

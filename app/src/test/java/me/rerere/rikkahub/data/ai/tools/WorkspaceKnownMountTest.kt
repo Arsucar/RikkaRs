@@ -46,6 +46,56 @@ class WorkspaceKnownMountTest {
     }
 
     @Test
+    fun resolveKnownMountFile_mapsUploadPathToSource() {
+        val root = Files.createTempDirectory("known-mount-upload").toFile()
+        val uploadFile = File(root, "a.txt").apply { writeText("uploaded") }
+
+        try {
+            val resolved = resolveKnownMountFile(
+                path = "/upload/a.txt",
+                knownMounts = listOf(WorkspaceKnownMount("/upload", root)),
+            )
+
+            assertEquals(uploadFile.canonicalFile, resolved)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun resolveKnownMountFile_rejectsUploadTraversal() {
+        val root = Files.createTempDirectory("known-mount-upload").toFile()
+        try {
+            val resolved = resolveKnownMountFile(
+                path = "/upload/../secret",
+                knownMounts = listOf(WorkspaceKnownMount("/upload", root)),
+            )
+
+            assertNull(resolved)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun resolveKnownMountFile_mapsUploadUuidFileAfterFork() {
+        val root = Files.createTempDirectory("known-mount-upload-fork").toFile()
+        val forkedName = "a1b2c3d4-e5f6-7890-abcd-ef1234567890.txt"
+        val forkedFile = File(root, forkedName).apply { writeText("forked-content") }
+
+        try {
+            val resolved = resolveKnownMountFile(
+                path = "/upload/$forkedName",
+                knownMounts = listOf(WorkspaceKnownMount("/upload", root)),
+            )
+
+            assertEquals(forkedFile.canonicalFile, resolved)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun resolveKnownMountFile_allowsSymlinkUnderExplicitRoot() {
         val root = Files.createTempDirectory("known-mount").toFile()
         val skillDir = File(root, "demo").apply { mkdirs() }

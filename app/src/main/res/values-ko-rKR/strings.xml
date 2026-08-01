@@ -352,11 +352,11 @@
   <string name="extension_selector_go_to_extensions">확장 기능 관리</string>
   <string name="extension_selector_go_to_skills">스킬 관리로 이동</string>
   <string name="extension_selector_lorebooks_empty">사용 가능한 러북이 없습니다</string>
-  <string name="extension_selector_mode_injections_empty">사용 가능한 모드 삽입이 없습니다</string>
+  <string name="extension_selector_mode_injections_empty">사용 가능한 독립 주입이 없습니다</string>
   <string name="extension_selector_quick_messages_empty">빠른 메시지가 없습니다</string>
   <string name="extension_selector_skills_empty">사용 가능한 스킬이 없습니다</string>
   <string name="extension_selector_tab_lorebooks">로어북</string>
-  <string name="extension_selector_tab_mode_injections">모드 주입</string>
+  <string name="extension_selector_tab_mode_injections">독립 주입</string>
   <string name="extension_selector_tab_quick_messages">빠른 메시지</string>
   <string name="extension_selector_tab_skills">스킬</string>
   <string name="extensions_page_agent_skills">에이전트 스킬</string>
@@ -662,6 +662,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">복사한 텍스트가 임계값을 초과하면 자동으로 파일 첨부로 저장</string>
   <string name="setting_display_page_paste_long_text_as_file_title">긴 텍스트를 파일로 붙여넣기</string>
   <string name="setting_display_page_paste_long_text_threshold_title">텍스트 길이 임계값</string>
+  <string name="setting_display_page_upload_inject_mode_title">첨부 파일 본문 주입</string>
+  <string name="setting_display_page_upload_inject_mode_desc">끄기: 파일 이름과 /upload 경로만 주입(토큰 절약; 워크스페이스 도구를 사용할 수 없으면 본문 주입으로 폴백). 켜기: 첨부 본문을 프롬프트에 전체 주입.</string>
   <string name="setting_display_page_send_on_enter_desc">Enter 키를 누르면 줄 바꿈 대신 메시지를 전송합니다</string>
   <string name="setting_display_page_send_on_enter_title">Enter 키로 전송</string>
   <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>

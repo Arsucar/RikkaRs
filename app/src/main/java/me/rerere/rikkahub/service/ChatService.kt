@@ -131,12 +131,14 @@ import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.resolveAssistant
+import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.resolveWorkspaceToolCapability
+import me.rerere.rikkahub.data.model.WORKSPACE_TOOL_NAMES
 import me.rerere.rikkahub.data.model.isValidMcpServerRuntimeName
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
@@ -183,6 +185,7 @@ import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.workspace.WorkspaceBindMount
+import java.io.File
 import java.time.Instant
 import java.security.MessageDigest
 import java.util.Locale
@@ -206,6 +209,7 @@ private data class PreparedGenerationRequest(
     val inputTransformers: List<InputMessageTransformer>,
     val tools: List<Tool>,
     val workspaceCwd: String?,
+    val workspaceToolAvailable: Boolean = false,
     val providerInput: PreparedProviderInput?,
 )
 
@@ -838,6 +842,7 @@ class ChatService(
                 conversationModeInjectionIds = prepared.conversation.modeInjectionIds,
                 conversationLorebookIds = prepared.conversation.lorebookIds,
                 workspaceCwd = prepared.workspaceCwd,
+                workspaceToolAvailable = prepared.workspaceToolAvailable,
                 memories = prepared.memories,
                 inputTransformers = prepared.inputTransformers,
                 outputTransformers = outputTransformers,
@@ -1702,6 +1707,11 @@ class ChatService(
         val memories = memoryPlan.readOrdinaryMemories {
             memoryRepository.getEffectiveMemories(assistant.id.toString())
         }
+        // #200: workspace 工具「实际可用」= 模型支持工具调用 且 本对话经权限过滤后的工具列表真含 workspace 工具。
+        // 仅看 workspace 实体 READY 会在「模型无 TOOL 能力 / 工具被 toolPermissions 拒绝」时误判可用，
+        // 导致 PATH_ONLY 只注入 path stub 而模型读不到文件，静默丢失正文。
+        val workspaceToolAvailable = model.abilities.contains(ModelAbility.TOOL) &&
+            tools.any { it.name in WORKSPACE_TOOL_NAMES }
         val providerInput = if (hasResumablePendingTool) {
             // The send loop must execute the approved/denied/answered tool first. Its output changes
             // the next provider input, so preparing/transformation here would be both stale and unsafe.
@@ -1719,6 +1729,7 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = effectiveWorkspaceCwd,
+                workspaceToolAvailable = workspaceToolAvailable,
                 mode = mode,
                 processingStatus = processingStatus,
             )
@@ -1733,6 +1744,7 @@ class ChatService(
             inputTransformers = transformers,
             tools = tools,
             workspaceCwd = effectiveWorkspaceCwd,
+            workspaceToolAvailable = workspaceToolAvailable,
             providerInput = providerInput,
         )
     }
@@ -1944,7 +1956,8 @@ class ChatService(
                     allowedSymlinkRoots = listOf(
                         skillManager.getSkillSharedDir(createIfMissing = createSkillDirectories),
                     ),
-                )
+                ),
+                uploadKnownMount(),
             ) + privateSkillMounts.knownMounts,
             extraBindMounts = privateSkillMounts.bindMounts,
             approvalOverrides = resolvedWorkspace.toolApprovalOverrides(),
@@ -1974,6 +1987,13 @@ class ChatService(
             ),
         )
     }
+
+    /** Host dir for user-uploaded files, mounted read-only at `/upload` for workspace tools. */
+    private fun uploadKnownMount(): WorkspaceKnownMount =
+        WorkspaceKnownMount(
+            target = "/upload",
+            source = File(context.filesDir, FileFolders.UPLOAD).apply { mkdirs() },
+        )
 
     private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
         return tool.copy(
@@ -3079,7 +3099,8 @@ class ChatService(
                     target = "/skills",
                     source = skillManager.getSkillsDir(),
                     allowedSymlinkRoots = listOf(skillManager.getSkillSharedDir()),
-                )
+                ),
+                uploadKnownMount(),
             ) + privateSkillMounts.knownMounts,
             extraBindMounts = privateSkillMounts.bindMounts,
         )

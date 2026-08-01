@@ -352,11 +352,11 @@
   <string name="extension_selector_go_to_extensions">管理擴充功能</string>
   <string name="extension_selector_go_to_skills">前往管理技能</string>
   <string name="extension_selector_lorebooks_empty">沒有可用的 lorebooks</string>
-  <string name="extension_selector_mode_injections_empty">無可用的模式注入</string>
+  <string name="extension_selector_mode_injections_empty">無可用的獨立注入</string>
   <string name="extension_selector_quick_messages_empty">目前沒有可用的快速訊息</string>
   <string name="extension_selector_skills_empty">無可用技能</string>
   <string name="extension_selector_tab_lorebooks">Lorebooks</string>
-  <string name="extension_selector_tab_mode_injections">模式注入</string>
+  <string name="extension_selector_tab_mode_injections">獨立注入</string>
   <string name="extension_selector_tab_quick_messages">快速訊息</string>
   <string name="extension_selector_tab_skills">技能</string>
   <string name="extensions_page_agent_skills">代理人技能</string>
@@ -662,6 +662,8 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">貼上文字超過上限時，自動儲存為檔案附件</string>
   <string name="setting_display_page_paste_long_text_as_file_title">貼上長文字為檔案</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字長度閾值</string>
+  <string name="setting_display_page_upload_inject_mode_title">注入附件全文</string>
+  <string name="setting_display_page_upload_inject_mode_desc">關閉：僅注入檔名與 /upload 路徑（節省 token；工作區工具不可用時回退全文）。開啟：將附件正文完整注入提示詞。</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 鍵即可傳送訊息，而非換行</string>
   <string name="setting_display_page_send_on_enter_title">按 Enter 鍵傳送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否顯示助理訊息的泡泡背景</string>

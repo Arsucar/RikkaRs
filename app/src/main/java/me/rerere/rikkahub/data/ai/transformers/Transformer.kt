@@ -18,6 +18,7 @@ class TransformerContext(
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     val workspaceCwd: String? = null,
     val executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
+    val workspaceToolAvailable: Boolean = false,
 )
 
 enum class TransformerExecutionMode {
@@ -89,6 +90,7 @@ suspend fun List<UIMessage>.transforms(
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     workspaceCwd: String? = null,
     executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
+    workspaceToolAvailable: Boolean = false,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -100,6 +102,7 @@ suspend fun List<UIMessage>.transforms(
         processingStatus = processingStatus,
         workspaceCwd = workspaceCwd,
         executionMode = executionMode,
+        workspaceToolAvailable = workspaceToolAvailable,
     )
     return transformers.fold(this) { acc, transformer ->
         if (
