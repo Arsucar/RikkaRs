@@ -1466,6 +1466,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_prompt_compress">上下文压缩</string>
   <string name="setting_display_page_bubble_opacity_title">气泡不透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回传历史思考过程</string>
+  <string name="setting_provider_page_enable_429_rotation">429 自动切换代理节点（实验性）</string>
+  <string name="setting_provider_page_enable_429_rotation_warning">换 IP 属于敏感操作，部分中转站可能因此触发风控/封号，请自行评估风险后开启。</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_title">开启 429 自动切节点？</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_text">换 IP 属于敏感操作，部分中转站可能因此触发风控/封号，请自行评估风险后开启。</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_accept">我已了解风险，开启</string>
   <string name="setting_model_page_fast_model">快速模型</string>
   <string name="setting_model_page_fast_model_desc">用于快速或后台任务的模型，当未设置时也用作标题和建议模型的后备</string>
   <string name="setting_model_page_enable_suggestion">启用聊天建议</string>

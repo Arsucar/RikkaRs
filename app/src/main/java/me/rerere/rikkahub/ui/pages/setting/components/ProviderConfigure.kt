@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +19,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -133,6 +137,41 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         )
         else -> error("Unsupported provider type: $type")
     }
+}
+
+/**
+ * Risk confirmation dialog shown before enabling 429 auto proxy-node switching.
+ * Enabling switches IP on 429, which may trigger relay-provider risk control (AC5).
+ */
+@Composable
+fun Enable429RotationConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = stringResource(R.string.setting_provider_page_enable_429_rotation_confirm_title))
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_confirm_text),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = stringResource(R.string.setting_provider_page_enable_429_rotation_confirm_accept))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -339,6 +378,33 @@ private fun ProviderConfigureOpenAI(
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) }
         )
     }
+
+    var show429Confirm by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation),
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = provider.enable429IpRotation,
+            onCheckedChange = {
+                if (it) show429Confirm = true else onEdit(provider.copy(enable429IpRotation = false))
+            }
+        )
+    }
+    if (show429Confirm) {
+        Enable429RotationConfirmDialog(
+            onConfirm = {
+                onEdit(provider.copy(enable429IpRotation = true))
+                show429Confirm = false
+            },
+            onDismiss = { show429Confirm = false }
+        )
+    }
 }
 
 @Composable
@@ -425,6 +491,33 @@ private fun ProviderConfigureClaude(
                 )
             }
         }
+    }
+
+    var show429Confirm by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation),
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = provider.enable429IpRotation,
+            onCheckedChange = {
+                if (it) show429Confirm = true else onEdit(provider.copy(enable429IpRotation = false))
+            }
+        )
+    }
+    if (show429Confirm) {
+        Enable429RotationConfirmDialog(
+            onConfirm = {
+                onEdit(provider.copy(enable429IpRotation = true))
+                show429Confirm = false
+            },
+            onDismiss = { show429Confirm = false }
+        )
     }
 }
 
@@ -581,6 +674,33 @@ private fun ProviderConfigureGoogle(
             onValueChange = { onEdit(provider.copy(projectId = it.trim())) },
             label = { Text(stringResource(R.string.setting_provider_page_project_id)) },
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    var show429Confirm by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_enable_429_rotation),
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = provider.enable429IpRotation,
+            onCheckedChange = {
+                if (it) show429Confirm = true else onEdit(provider.copy(enable429IpRotation = false))
+            }
+        )
+    }
+    if (show429Confirm) {
+        Enable429RotationConfirmDialog(
+            onConfirm = {
+                onEdit(provider.copy(enable429IpRotation = true))
+                show429Confirm = false
+            },
+            onDismiss = { show429Confirm = false }
         )
     }
 }

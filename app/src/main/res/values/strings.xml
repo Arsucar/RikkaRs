@@ -1510,6 +1510,11 @@
   <string name="setting_model_page_prompt_compress">Context Compression</string>
   <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
   <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
+  <string name="setting_provider_page_enable_429_rotation">429 Auto Switch Proxy Node (Experimental)</string>
+  <string name="setting_provider_page_enable_429_rotation_warning">Switching IP is a sensitive operation. Some relay providers may trigger risk control or ban your account. Use at your own risk.</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_title">Enable 429 Auto Switch?</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_text">Switching IP is a sensitive operation. Some relay providers may trigger risk control or ban your account. Use at your own risk.</string>
+  <string name="setting_provider_page_enable_429_rotation_confirm_accept">I understand the risk, enable</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
   <string name="assistant_page_gradient_background_desc">Use a dynamic gradient background on the chat page</string>
   <string name="assistant_page_workspace">Workspace</string>
