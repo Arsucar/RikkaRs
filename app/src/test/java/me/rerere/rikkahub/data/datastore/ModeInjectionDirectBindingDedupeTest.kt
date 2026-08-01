@@ -5,221 +5,156 @@ import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.migratedWithEntries
-import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
 /**
- * #201: assistant.modeInjectionIds 与已绑定 preset entries 同 id 时清理直连，
- * 与 preset 无关的独立注入保留；幂等。
+ * #205: 「与已绑定 preset entries 重复的 assistant.modeInjectionIds 直连」去重从
+ * 加载期持久化删除（#201）改为组装期只读过滤。
+ *
+ * 本文件覆盖：
+ * - [boundPresetInjectionIds] 语义（启用条目 / Reference 引用 id / 旧字段 / 未绑定预设），
+ *   供组装期过滤与 ExtensionSelector UI 共用；
+ * - 加载期（[Settings.withPrunedAssistantExtensionIds]）只过滤无效引用，
+ *   双绑直连数据保留在 DataStore 不销毁（#201 会静默删除 sharedId）；
+ * - 组装输出不含重复注入、关闭预设后不残留，见 PromptInjectionTransformerTest。
  */
 class ModeInjectionDirectBindingDedupeTest {
+
+    // ---- boundPresetInjectionIds 语义（#201/#205） ----
+
     @Test
-    fun `dedupe removes direct ids that match bound migrated preset entry ids`() {
+    fun `bound ids include enabled custom entry id`() {
         val sharedId = Uuid.random()
-        val independentId = Uuid.random()
-        val injections = listOf(
-            PromptInjection.ModeInjection(id = sharedId, content = "from preset"),
-            PromptInjection.ModeInjection(id = independentId, content = "independent"),
-        )
-        val preset = Preset(modeInjectionIds = setOf(sharedId))
-            .migratedWithEntries(injections)
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId, independentId),
-            presetIds = setOf(preset.id),
-        )
-        val validIds = injections.map { it.id }.toSet()
-
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(preset),
-            validModeInjectionIds = validIds,
+        val preset = Preset(
+            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
+            entriesVersion = PRESET_ENTRIES_VERSION,
         )
 
-        assertEquals(setOf(independentId), cleaned.modeInjectionIds)
-        assertTrue(preset.entries.any { it.id == sharedId })
+        assertEquals(
+            setOf(sharedId),
+            boundPresetInjectionIds(setOf(preset.id), listOf(preset)),
+        )
     }
 
     @Test
-    fun `dedupe removes direct ids that match bound legacy preset modeInjectionIds`() {
-        val sharedId = Uuid.random()
-        val independentId = Uuid.random()
-        val legacyPreset = Preset(modeInjectionIds = setOf(sharedId))
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId, independentId),
-            presetIds = setOf(legacyPreset.id),
-        )
-        val validIds = setOf(sharedId, independentId)
-
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(legacyPreset),
-            validModeInjectionIds = validIds,
-        )
-
-        assertEquals(setOf(independentId), cleaned.modeInjectionIds)
-        assertFalse(legacyPreset.hasEntries())
-    }
-
-    @Test
-    fun `dedupe keeps direct id when bound preset entry is disabled`() {
+    fun `bound ids exclude disabled custom entry id`() {
         val sharedId = Uuid.random()
         val preset = Preset(
             entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap", enabled = false)),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId),
-            presetIds = setOf(preset.id),
-        )
 
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(preset),
-            validModeInjectionIds = setOf(sharedId),
-        )
-
-        assertEquals(setOf(sharedId), cleaned.modeInjectionIds)
+        assertTrue(boundPresetInjectionIds(setOf(preset.id), listOf(preset)).isEmpty())
     }
 
     @Test
-    fun `dedupe keeps direct id disabled in legacy preset`() {
-        val sharedId = Uuid.random()
-        val legacyPreset = Preset(
-            modeInjectionIds = setOf(sharedId),
-            disabledEntryIds = setOf(sharedId),
-        )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId),
-            presetIds = setOf(legacyPreset.id),
-        )
-
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(legacyPreset),
-            validModeInjectionIds = setOf(sharedId),
-        )
-
-        assertEquals(setOf(sharedId), cleaned.modeInjectionIds)
-    }
-
-    @Test
-    fun `dedupe removes direct id referenced by bound preset reference entry`() {
-        val sharedId = Uuid.random()
+    fun `bound ids include reference entry id and referenced global id`() {
+        val entryId = Uuid.random()
+        val globalId = Uuid.random()
         val preset = Preset(
-            entries = listOf(PresetEntry.Reference(modeInjectionId = sharedId)),
+            entries = listOf(PresetEntry.Reference(id = entryId, modeInjectionId = globalId)),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId),
-            presetIds = setOf(preset.id),
-        )
 
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(preset),
-            validModeInjectionIds = setOf(sharedId),
+        assertEquals(
+            setOf(entryId, globalId),
+            boundPresetInjectionIds(setOf(preset.id), listOf(preset)),
         )
-
-        assertTrue(cleaned.modeInjectionIds.isEmpty())
     }
 
     @Test
-    fun `dedupe keeps direct id when preset entry is disabled but reference entry enabled`() {
-        val sharedId = Uuid.random()
+    fun `bound ids exclude disabled reference entry`() {
+        val entryId = Uuid.random()
+        val globalId = Uuid.random()
         val preset = Preset(
             entries = listOf(
-                PresetEntry.Custom(id = sharedId, content = "snap", enabled = false),
-                PresetEntry.Reference(modeInjectionId = sharedId, enabled = true),
+                PresetEntry.Reference(id = entryId, modeInjectionId = globalId, enabled = false),
             ),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId),
-            presetIds = setOf(preset.id),
-        )
 
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(preset),
-            validModeInjectionIds = setOf(sharedId),
-        )
-
-        assertTrue(cleaned.modeInjectionIds.isEmpty())
+        assertTrue(boundPresetInjectionIds(setOf(preset.id), listOf(preset)).isEmpty())
     }
 
     @Test
-    fun `dedupe keeps direct ids when assistant does not bind the preset`() {
+    fun `bound ids include legacy effective injection ids minus disabled`() {
+        val activeId = Uuid.random()
+        val disabledId = Uuid.random()
+        val legacyPreset = Preset(
+            modeInjectionIds = setOf(activeId, disabledId),
+            disabledEntryIds = setOf(disabledId),
+        )
+
+        assertEquals(
+            setOf(activeId),
+            boundPresetInjectionIds(setOf(legacyPreset.id), listOf(legacyPreset)),
+        )
+    }
+
+    @Test
+    fun `bound ids ignore preset not bound by assistant`() {
         val sharedId = Uuid.random()
         val preset = Preset(
-            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snapshot")),
+            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
+            entriesVersion = PRESET_ENTRIES_VERSION,
+        )
+
+        assertTrue(boundPresetInjectionIds(emptySet(), listOf(preset)).isEmpty())
+    }
+
+    @Test
+    fun `bound ids ignore preset missing from presets list`() {
+        val presetId = Uuid.random()
+
+        assertTrue(boundPresetInjectionIds(setOf(presetId), emptyList()).isEmpty())
+    }
+
+    // ---- 加载期不再持久化删除直连绑定（#205） ----
+
+    @Test
+    fun `load-time pruning keeps dual-bound direct ids in DataStore`() {
+        val sharedId = Uuid.random()
+        val independentId = Uuid.random()
+        val sharedInjection = PromptInjection.ModeInjection(id = sharedId, content = "shared")
+        val independentInjection = PromptInjection.ModeInjection(id = independentId, content = "solo")
+        val preset = Preset(
+            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )
         val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId),
-            presetIds = emptySet(),
+            modeInjectionIds = setOf(sharedId, independentId),
+            presetIds = setOf(preset.id),
         )
-
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
+        val settings = Settings(init = true).copy(
+            modeInjections = listOf(sharedInjection, independentInjection),
             presets = listOf(preset),
-            validModeInjectionIds = setOf(sharedId),
+            assistants = listOf(assistant),
         )
 
-        assertEquals(setOf(sharedId), cleaned.modeInjectionIds)
+        val pruned = settings.withPrunedAssistantExtensionIds()
+
+        // #205: 直连绑定即使与预设条目重复也不再被静默删除（#201 会删 sharedId），仅过滤无效引用。
+        assertEquals(
+            setOf(sharedId, independentId),
+            pruned.assistants.first().modeInjectionIds,
+        )
     }
 
     @Test
-    fun `dedupe drops invalid mode injection ids`() {
+    fun `load-time pruning still drops invalid mode injection ids`() {
         val validId = Uuid.random()
         val orphanId = Uuid.random()
         val assistant = Assistant(modeInjectionIds = setOf(validId, orphanId))
-
-        val cleaned = assistant.withModeInjectionsDedupedAgainstPresets(
-            presets = emptyList(),
-            validModeInjectionIds = setOf(validId),
+        val settings = Settings(init = true).copy(
+            modeInjections = listOf(PromptInjection.ModeInjection(id = validId, content = "v")),
+            assistants = listOf(assistant),
         )
 
-        assertEquals(setOf(validId), cleaned.modeInjectionIds)
-    }
+        val pruned = settings.withPrunedAssistantExtensionIds()
 
-    @Test
-    fun `dedupe is idempotent`() {
-        val sharedId = Uuid.random()
-        val independentId = Uuid.random()
-        val preset = Preset(
-            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
-            entriesVersion = PRESET_ENTRIES_VERSION,
-        )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId, independentId),
-            presetIds = setOf(preset.id),
-        )
-        val validIds = setOf(sharedId, independentId)
-
-        val once = assistant.withModeInjectionsDedupedAgainstPresets(listOf(preset), validIds)
-        val twice = once.withModeInjectionsDedupedAgainstPresets(listOf(preset), validIds)
-
-        assertEquals(setOf(independentId), once.modeInjectionIds)
-        assertEquals(once.modeInjectionIds, twice.modeInjectionIds)
-    }
-
-    @Test
-    fun `cleaned modeInjectionIds round-trip through assistant serialization`() {
-        val sharedId = Uuid.random()
-        val independentId = Uuid.random()
-        val preset = Preset(
-            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
-            entriesVersion = PRESET_ENTRIES_VERSION,
-        )
-        val assistant = Assistant(
-            modeInjectionIds = setOf(sharedId, independentId),
-            presetIds = setOf(preset.id),
-        ).withModeInjectionsDedupedAgainstPresets(
-            presets = listOf(preset),
-            validModeInjectionIds = setOf(sharedId, independentId),
-        )
-
-        val decoded = JsonInstant.decodeFromString<Assistant>(JsonInstant.encodeToString(assistant))
-
-        assertEquals(setOf(independentId), decoded.modeInjectionIds)
-        assertEquals(setOf(preset.id), decoded.presetIds)
+        assertEquals(setOf(validId), pruned.assistants.first().modeInjectionIds)
     }
 }

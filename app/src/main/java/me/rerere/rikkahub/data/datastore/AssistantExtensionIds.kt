@@ -36,32 +36,21 @@ fun Assistant.pruneExtensionIds(settings: Settings): Assistant {
 }
 
 /**
- * #201: 去掉与已绑定 preset 的 entry id（及未迁移旧 [Preset.modeInjectionIds]）重复的直连，
- * 消除「preset 路径 + assistant 直连」双路径残留；与 preset 无关的独立注入保留。
+ * 计算「经预设路径投递」的注入 id 集合（#201/#205 语义）：
+ * - 已迁移（entries）：仅启用条目算重复（禁用的条目不会注入，直连是唯一生效路径，须保留）；
+ *   Reference 条目额外计入其引用的全局 id，消除 reference 路径双注入残留。
+ * - 未迁移（旧 modeInjectionIds）：扣除 disabledEntryIds（effectiveInjectionIds）后同样算重复。
+ *
+ * 用途：
+ * - PromptInjectionTransformer.collectInjections 组装期只读过滤直连绑定（#205，不再持久化删除）；
+ * - ExtensionSelector 的「预设管理」UI 标记（presetManagedIds）。
  */
-internal fun Assistant.withModeInjectionsDedupedAgainstPresets(
-    presets: List<Preset>,
-    validModeInjectionIds: Set<Uuid>,
-): Assistant {
-    val boundPresetEntryIds = boundPresetInjectionIds(presetIds, presets)
-    return copy(
-        modeInjectionIds = modeInjectionIds
-            .filter { it !in boundPresetEntryIds }
-            .filter { it in validModeInjectionIds }
-            .toSet(),
-    )
-}
-
 internal fun boundPresetInjectionIds(
     presetIds: Set<Uuid>,
     presets: List<Preset>,
 ): Set<Uuid> = presetIds
     .flatMap { presetId ->
         val preset = presets.firstOrNull { it.id == presetId } ?: return@flatMap emptyList()
-        // 只统计「实际经 preset 路径投递」的 id（#201）：
-        // - 已迁移（entries）：仅启用条目算重复（禁用的条目不会注入，直连是唯一生效路径，须保留）；
-        //   Reference 条目额外计入其引用的全局 id，消除 reference 路径双注入残留。
-        // - 未迁移（旧 modeInjectionIds）：扣除 disabledEntryIds（effectiveInjectionIds）后同样算重复。
         val entryIds = preset.entries
             .filter { it.enabled }
             .flatMap { entry ->

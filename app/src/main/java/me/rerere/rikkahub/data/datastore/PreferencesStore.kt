@@ -459,11 +459,17 @@ class SettingsStore(
                     }
                 },
                 assistants = settings.assistants.distinctBy { it.id }.map { assistant ->
-                    // #201: 过滤无效引用，并去掉与已绑定 preset entries 同 id 的直连（消除双路径）。
+                    // #205: 只做无效引用过滤；不再像 #201 那样在加载期删除与已绑定 preset entries
+                    // 重复的直连绑定（改为 PromptInjectionTransformer 组装期只读过滤，直连数据保留在
+                    // DataStore 不销毁，用户可随时在「独立注入」中管理）。
                     assistant.copy(
                         // 过滤掉不存在的 MCP 服务器 ID
                         mcpServers = assistant.mcpServers.filter { serverId ->
                             serverId in validMcpServerIds
+                        }.toSet(),
+                        // 过滤掉不存在的模式注入 ID
+                        modeInjectionIds = assistant.modeInjectionIds.filter { id ->
+                            id in validModeInjectionIds
                         }.toSet(),
                         // 过滤掉不存在的 Lorebook ID
                         lorebookIds = assistant.lorebookIds.filter { id ->
@@ -477,9 +483,6 @@ class SettingsStore(
                         presetIds = assistant.presetIds.filter { id ->
                             id in validPresetIds
                         }.toSet()
-                    ).withModeInjectionsDedupedAgainstPresets(
-                        presets = migratedPresets,
-                        validModeInjectionIds = validModeInjectionIds,
                     )
                 },
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },

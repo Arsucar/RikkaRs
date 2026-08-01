@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -37,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
@@ -412,11 +415,19 @@ private fun MemoryEditDialog(
     var importance by remember { mutableStateOf(memory.importance.toFloat()) }
     var isCore by remember { mutableStateOf(memory.isCore) }
 
+    val configuration = LocalConfiguration.current
+    val formMaxHeight = (configuration.screenHeightDp * 0.6f).dp
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isNew) "添加记忆" else "编辑记忆") },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = formMaxHeight)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
@@ -479,17 +490,30 @@ private fun EvictionConfirmDialog(
     onConfirm: (List<EpisodicMemoryEntity>) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val configuration = LocalConfiguration.current
+    val listMaxHeight = (configuration.screenHeightDp * 0.5f).dp
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("清理低重要性记忆") },
         text = {
-            Column {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text("以下 ${candidates.size} 条低重要性记忆建议清理:")
-                Text(
-                    text = candidates.joinToString("\n") { "- ${"\u2605".repeat(it.importance)} ${it.content.take(60)}" },
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = listMaxHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                ) {
+                    candidates.forEach { memory ->
+                        Text(
+                            text = "- ${"\u2605".repeat(memory.importance)} ${memory.content.take(60)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                }
             }
         },
         confirmButton = {

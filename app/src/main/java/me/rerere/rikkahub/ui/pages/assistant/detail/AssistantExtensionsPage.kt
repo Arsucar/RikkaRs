@@ -50,6 +50,7 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.boundPresetInjectionIds
 import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
@@ -243,6 +244,10 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                             vm.update(assistant.copy(modeInjectionIds = newIds))
                                         },
                                         onEdit = { modeInjectionEditState.open(it) },
+                                        presetManagedIds = boundPresetInjectionIds(
+                                            assistant.presetIds,
+                                            settings.presets,
+                                        ),
                                     )
                                 }
                                 TextButton(
