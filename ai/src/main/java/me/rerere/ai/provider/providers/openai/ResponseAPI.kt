@@ -809,10 +809,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
     }
 }
 
-ent = false
-        )
-
-        else -> ResponseProviderCapabilities()
-    }
-}
-
