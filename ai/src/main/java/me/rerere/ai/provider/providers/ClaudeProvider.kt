@@ -28,6 +28,8 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.mapReasoningEffort
+import me.rerere.ai.core.resolveDialect
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
@@ -59,6 +61,7 @@ import me.rerere.common.http.asJsonObjectLenient
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -351,9 +354,19 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                             put("type", "adaptive")
                             put("display", "summarized")
                         })
-                        put("output_config", buildJsonObject {
-                            put("effort", params.reasoningLevel.effort)
-                        })
+                        val host = runCatching {
+                            providerSetting.baseUrl.toHttpUrl().host
+                        }.getOrDefault("")
+                        val dialect = resolveDialect(
+                            explicit = params.model.reasoningDialect,
+                            host = host,
+                            modelId = params.model.modelId,
+                        )
+                        mapReasoningEffort(dialect, params.reasoningLevel)?.let { effort ->
+                            put("output_config", buildJsonObject {
+                                put("effort", effort)
+                            })
+                        }
                     }
                 }
             }
@@ -616,6 +629,32 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         val inputTokens = usageJson["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
         val cachedInputTokens = usageJson["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
         val cachedCreationTokens = usageJson["cache_creation_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
+        val completionTokens = usageJson["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+        val promptTokens = inputTokens + cachedInputTokens + cachedCreationTokens
+        return TokenUsage(
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+            totalTokens = promptTokens + completionTokens,
+            cachedTokens = cachedInputTokens,
+        )
+    }
+}
+veOrNull?.intOrNull ?: 0
+        val completionTokens = usageJson["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+        val promptTokens = inputTokens + cachedInputTokens + cachedCreationTokens
+        return TokenUsage(
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+            totalTokens = promptTokens + completionTokens,
+            cachedTokens = cachedInputTokens,
+        )
+    }
+}
+s = cachedInputTokens,
+        )
+    }
+}
+veOrNull?.intOrNull ?: 0
         val completionTokens = usageJson["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
         val promptTokens = inputTokens + cachedInputTokens + cachedCreationTokens
         return TokenUsage(

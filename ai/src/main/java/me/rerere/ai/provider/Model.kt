@@ -3,6 +3,7 @@ package me.rerere.ai.provider
 import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import me.rerere.ai.core.ReasoningDialect
 import kotlin.uuid.Uuid
 
 @Immutable
@@ -21,6 +22,13 @@ data class Model(
     val providerOverwrite: ProviderSetting? = null,
     /** Optional output dim for embedding APIs that support truncation (e.g. OpenAI `dimensions`). */
     val embeddingDimensions: Int? = null,
+    /**
+     * Per-model override for reasoning effort wire vocabulary (#207).
+     * Default [ReasoningDialect.Auto] follows host / model-id recognition so official
+     * DeepSeek works out of the box; set [ReasoningDialect.DeepSeekMax] explicitly for
+     * proxy / mid-station baseUrls whose host is not `api.deepseek.com`.
+     */
+    val reasoningDialect: ReasoningDialect = ReasoningDialect.Auto,
 )
 
 @Serializable

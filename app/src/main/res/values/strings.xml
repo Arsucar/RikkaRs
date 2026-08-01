@@ -837,7 +837,7 @@
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
-  <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
+  <string name="reasoning_picker_hint">Not all models support depth adjustment. XHigh means the highest strength the model allows (e.g. max on DeepSeek). Set the reasoning dialect in model settings for mid-station proxies. Refer to provider docs.</string>
   <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
   <string name="reasoning_xhigh">XHigh</string>
   <string name="regenerate">Regenerate</string>
@@ -1245,6 +1245,13 @@
   <string name="setting_provider_page_embedding_dimensions">Embedding dimensions</string>
   <string name="setting_provider_page_embedding_dimensions_desc">Optional. Truncates / requests reduced vector size when the API supports it (e.g. OpenAI dimensions). Leave empty for full size.</string>
   <string name="setting_provider_page_embedding_model">Embedding</string>
+  <string name="setting_provider_page_reasoning_dialect">Reasoning effort dialect</string>
+  <string name="setting_provider_page_reasoning_dialect_desc">Maps abstract thinking depth (Low…XHigh) to the provider\'s wire values. Use DeepSeek (max) for official DeepSeek or mid-station proxies that reject xhigh. Auto follows host / model id.</string>
+  <string name="setting_provider_page_reasoning_dialect_auto">Auto</string>
+  <string name="setting_provider_page_reasoning_dialect_openai_extended">OpenAI extended (xhigh)</string>
+  <string name="setting_provider_page_reasoning_dialect_openai_classic">OpenAI classic (high)</string>
+  <string name="setting_provider_page_reasoning_dialect_deepseek_max">DeepSeek (max)</string>
+  <string name="setting_provider_page_reasoning_dialect_on_off">On / off only</string>
   <string name="setting_provider_page_enable">Enable</string>
   <string name="setting_provider_page_enabled">Enabled</string>
   <string name="setting_provider_page_filter_example">e.g.: GPT-3.5</string>

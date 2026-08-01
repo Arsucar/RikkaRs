@@ -28,6 +28,9 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.mapNvidiaDeepSeekV4Effort
+import me.rerere.ai.core.mapReasoningEffort
+import me.rerere.ai.core.resolveDialect
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -305,6 +308,11 @@ class ChatCompletionsAPI(
 
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
+                val dialect = resolveDialect(
+                    explicit = params.model.reasoningDialect,
+                    host = host,
+                    modelId = params.model.modelId,
+                )
                 when (host) {
                     "openrouter.ai" -> {
                         // https://openrouter.ai/docs/use-cases/reasoning-tokens
@@ -312,7 +320,10 @@ class ChatCompletionsAPI(
                             when (level) {
                                 ReasoningLevel.OFF -> put("effort", "none")
                                 ReasoningLevel.AUTO -> put("enabled", true)
-                                else -> put("effort", level.effort)
+                                else -> {
+                                    val effort = mapReasoningEffort(dialect, level) ?: level.effort
+                                    put("effort", effort)
+                                }
                             }
                         })
                     }
@@ -402,38 +413,29 @@ class ChatCompletionsAPI(
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                         if (level.isEnabled && level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", level.effort)
+                            mapReasoningEffort(dialect, level)?.let { put("reasoning_effort", it) }
                         }
                     }
 
                     "integrate.api.nvidia.com" -> {
                         if ("deepseek-v4" in params.model.modelId.lowercase()) {
-                            if (level != ReasoningLevel.AUTO) {
-                                val effort = when (level) {
-                                    ReasoningLevel.XHIGH -> "max"
-                                    ReasoningLevel.OFF -> "none"
-                                    else -> "high"
-                                }
-                                put("reasoning_effort", effort)
-                            }
+                            mapNvidiaDeepSeekV4Effort(level)?.let { put("reasoning_effort", it) }
                         } else {
-                            if (level != ReasoningLevel.AUTO) {
-                                put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                            mapReasoningEffort(dialect, level, noneAsLow = true)?.let {
+                                put("reasoning_effort", it)
                             }
                         }
                     }
 
                     "opencode.ai" -> {
-                        if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", level.effort)
-                        }
+                        mapReasoningEffort(dialect, level)?.let { put("reasoning_effort", it) }
                     }
 
                     else -> {
-                        // OpenAI 官方
+                        // OpenAI 官方 / 通用 OpenAI-compat
                         // 文档中，completions API 只支持 "low", "medium", "high"
-                        if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                        mapReasoningEffort(dialect, level, noneAsLow = true)?.let {
+                            put("reasoning_effort", it)
                         }
                     }
                 }

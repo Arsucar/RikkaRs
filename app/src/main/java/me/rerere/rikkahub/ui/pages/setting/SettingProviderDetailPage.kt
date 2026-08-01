@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.ReasoningDialect
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -720,6 +721,14 @@ private fun ModelSettingsForm(
                                     onModelChange(model.copy(abilities = it))
                                 }
                             )
+                            if (ModelAbility.REASONING in model.abilities) {
+                                ReasoningDialectSelector(
+                                    selected = model.reasoningDialect,
+                                    onSelected = {
+                                        onModelChange(model.copy(reasoningDialect = it))
+                                    },
+                                )
+                            }
                         }
 
                         if (model.type == ModelType.EMBEDDING) {
@@ -1272,6 +1281,58 @@ fun ModalAbilitySelector(
                     )
                 }
             )
+        }
+    }
+}
+
+/**
+ * Per-model reasoning effort vocabulary (#207).
+ * Shown only when REASONING ability is enabled — mid-station DeepSeek etc. can pin DeepSeekMax.
+ */
+@Composable
+private fun ReasoningDialectSelector(
+    selected: ReasoningDialect,
+    onSelected: (ReasoningDialect) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.setting_provider_page_reasoning_dialect),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            stringResource(R.string.setting_provider_page_reasoning_dialect_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            ReasoningDialect.entries.forEach { dialect ->
+                InputChip(
+                    selected = selected == dialect,
+                    onClick = { onSelected(dialect) },
+                    label = {
+                        Text(
+                            text = stringResource(
+                                when (dialect) {
+                                    ReasoningDialect.Auto ->
+                                        R.string.setting_provider_page_reasoning_dialect_auto
+                                    ReasoningDialect.OpenAIExtended ->
+                                        R.string.setting_provider_page_reasoning_dialect_openai_extended
+                                    ReasoningDialect.OpenAIClassic ->
+                                        R.string.setting_provider_page_reasoning_dialect_openai_classic
+                                    ReasoningDialect.DeepSeekMax ->
+                                        R.string.setting_provider_page_reasoning_dialect_deepseek_max
+                                    ReasoningDialect.OnOffOnly ->
+                                        R.string.setting_provider_page_reasoning_dialect_on_off
+                                }
+                            )
+                        )
+                    },
+                )
+            }
         }
     }
 }
