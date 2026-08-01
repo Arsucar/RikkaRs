@@ -95,7 +95,13 @@ internal fun collectInjections(
     val effectiveModeInjectionIds = if (assistant.allowConversationPromptInjection) {
         conversationModeInjectionIds
     } else {
+        // #205: 组装期只读去重（替代 #201 的加载期持久化删除）。
+        // 跳过与已绑定预设条目（启用条目 + Reference 引用的全局 id，语义与 #201 的
+        // boundPresetInjectionIds 一致）重复的直连 id；直连绑定数据保留在 DataStore 不销毁，
+        // 关闭预设后直连恢复生效、system 消息不残留旧注入。
         assistant.modeInjectionIds
+            .filterNot { it in boundPresetInjectionIds(assistant.presetIds, presets) }
+            .toSet()
     }
     val effectiveLorebookIds = if (assistant.allowConversationPromptInjection) {
         conversationLorebookIds

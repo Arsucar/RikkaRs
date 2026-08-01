@@ -2079,4 +2079,165 @@ class PromptInjectionTransformerTest {
         assertTrue(systemText.indexOf("Custom") < systemText.indexOf("Reference"))
     }
     // endregion
+
+    // region #205 assembly-time read-only dedupe tests
+    @Test
+    fun `dual-bound direct and preset entry should inject preset path content once`() {
+        // #205: 直连 + 启用预设条目双绑时，组装期只读过滤直连（不再加载期删除），
+        // 输出只有预设路径一条注入，不出现重复、也不注入被过滤的直连内容。
+        val sharedId = Uuid.random()
+        val presetId = Uuid.random()
+        val marker = "Preset snapshot marker"
+        val globalInjection = createModeInjection(
+            id = sharedId,
+            position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+            content = "Global direct content",
+        )
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(
+                    id = sharedId,
+                    order = 0,
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = marker,
+                ),
+            ),
+        )
+        val messages = listOf(UIMessage.system("System prompt"), UIMessage.user("Hello"))
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(
+                modeInjectionIds = setOf(sharedId),
+                presetIds = setOf(presetId),
+            ),
+            modeInjections = listOf(globalInjection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        // 预设快照内容注入一次；直连内容被过滤（不出现），保证双绑不双注入
+        assertEquals(1, systemText.split(marker).size - 1)
+        assertFalse(systemText.contains("Global direct content"))
+    }
+
+    @Test
+    fun `direct binding matching reference entry id should not double inject`() {
+        // #205: 直连 id 与 Reference 条目 id 相同（entry.id 计入 boundPresetInjectionIds），
+        // 组装期过滤直连，仅经 reference 路径注入一次，消除 reference 路径双注入残留。
+        val entryId = Uuid.random()
+        val targetId = Uuid.random()
+        val presetId = Uuid.random()
+        val directInjection = createModeInjection(id = entryId, content = "Direct entry-id content")
+        val targetInjection = createModeInjection(id = targetId, content = "Referenced target content")
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Reference(
+                    id = entryId,
+                    order = 0,
+                    modeInjectionId = targetId,
+                ),
+            ),
+        )
+        val messages = listOf(UIMessage.system("System"), UIMessage.user("Hello"))
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(
+                modeInjectionIds = setOf(entryId),
+                presetIds = setOf(presetId),
+            ),
+            modeInjections = listOf(directInjection, targetInjection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        val systemText = getMessageText(result.first())
+        // 仅 reference 目标注入一次；entry.id 的直连被过滤，不出现直连内容
+        assertEquals(1, systemText.split("Referenced target content").size - 1)
+        assertFalse(systemText.contains("Direct entry-id content"))
+    }
+
+    @Test
+    fun `disabled preset entry restores direct binding without residue`() {
+        // #205 + #201: 预设条目启用时直连被过滤（只走预设路径）；
+        // 条目禁用后直连恢复生效，且不出现「预设条目残留 + 直连」双路径。
+        val sharedId = Uuid.random()
+        val presetId = Uuid.random()
+        val globalContent = "Global direct content"
+        val snapshotContent = "Preset snapshot content"
+        val globalInjection = createModeInjection(
+            id = sharedId,
+            position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+            content = globalContent,
+        )
+        val enabledPreset = Preset(
+            id = presetId,
+            entries = listOf(
+                PresetEntry.Custom(id = sharedId, order = 0, enabled = true, content = snapshotContent),
+            ),
+        )
+        val disabledPreset = enabledPreset.copy(
+            entries = listOf(
+                PresetEntry.Custom(id = sharedId, order = 0, enabled = false, content = snapshotContent),
+            ),
+        )
+        val messages = listOf(UIMessage.system("System prompt"), UIMessage.user("Hello"))
+        val assistant = createAssistant(
+            modeInjectionIds = setOf(sharedId),
+            presetIds = setOf(presetId),
+        )
+
+        val withEntry = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = listOf(globalInjection),
+            lorebooks = emptyList(),
+            presets = listOf(enabledPreset),
+        )
+        val afterDisable = transformMessages(
+            messages = messages,
+            assistant = assistant,
+            modeInjections = listOf(globalInjection),
+            lorebooks = emptyList(),
+            presets = listOf(disabledPreset),
+        )
+
+        val withEntryText = getMessageText(withEntry.first())
+        val afterDisableText = getMessageText(afterDisable.first())
+        // 启用：只注入预设快照内容一次，无直连内容
+        assertEquals(1, withEntryText.split(snapshotContent).size - 1)
+        assertFalse(withEntryText.contains(globalContent))
+        // 禁用：直连恢复生效且无预设残留（#201 场景：关闭预设后 system 无残留旧注入）
+        assertEquals(1, afterDisableText.split(globalContent).size - 1)
+        assertFalse(afterDisableText.contains(snapshotContent))
+    }
+
+    @Test
+    fun `collectInjections should not return duplicate ids for dual-bound direct and preset entry`() {
+        val sharedId = Uuid.random()
+        val presetId = Uuid.random()
+        val globalInjection = createModeInjection(id = sharedId, content = "shared")
+        val preset = Preset(
+            id = presetId,
+            entries = listOf(PresetEntry.Custom(id = sharedId, content = "snap")),
+        )
+
+        val result = collectInjections(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = createAssistant(
+                modeInjectionIds = setOf(sharedId),
+                presetIds = setOf(presetId),
+            ),
+            modeInjections = listOf(globalInjection),
+            lorebooks = emptyList(),
+            presets = listOf(preset),
+        )
+
+        assertEquals(1, result.size)
+    }
+    // endregion
 }
