@@ -2,28 +2,37 @@ package me.rerere.rikkahub.data.ai
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.ai.clash.ClashApiClient
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 
 /**
  * Retries a 429 response by switching the Clash proxy node and replaying the request.
  * Experimental, off by default: only applies when the provider has enabled it and a
  * Clash external controller is reachable. Any failure -> original 429 passes through.
+ *
+ * Threading note: OkHttp application interceptors run synchronously on the OkHttp
+ * dispatcher thread pool, so suspend calls are bridged with [runBlocking] (the app
+ * already bridges OkHttp-suspend calls this way). The switch mutation (query + select
+ * + PUT) is guarded by a coroutine [Mutex] so concurrent 429s never switch at the same
+ * time (AC6). The wait ([delay]) and the request replay run OUTSIDE the lock so a slow
+ * retry of one request does not stall unrelated AI traffic.
  */
 class AIRequestInterceptor(
     private val settingsStore: SettingsStore,
     private val clashApiClient: ClashApiClient,
 ) : Interceptor {
 
-    private val switchLock = ReentrantLock() // 并发 429 互斥（AC6）
+    // 并发 429 互斥（AC6）：只保护"选节点 + 切换"这个快动作
+    private val switchMutex = Mutex()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -39,27 +48,29 @@ class AIRequestInterceptor(
         // 当前仍存活的 429 响应（未被 close），供上层读取/分类
         var lastResponse: Response = response
         return try {
-            switchLock.withLock { // AC6 互斥：并发 429 串行切换
+            runBlocking {
                 for (attempt in 1..clashConfig.maxRetries) {
-                    // 选与当前不同节点；失败抛异常 -> 走 catch 放行原 429（AC3）
-                    val nodes = clashApiClient.getSelectableNodes(clashConfig.apiBaseUrl, clashConfig.groupName)
-                    val currentName = clashApiClient.getCurrentNode(clashConfig.apiBaseUrl, clashConfig.groupName)
-                    val next = nodes.firstOrNull { it != currentName }
-                        ?: throw IllegalStateException("no alternate node")
-                    clashApiClient.switchNode(clashConfig.apiBaseUrl, clashConfig.groupName, next)
-                    Thread.sleep(clashConfig.switchDelayMs)
+                    // 互斥：查询 + 选不同节点 + 切换（快动作）；失败抛异常 -> 外层 catch 放行原 429（AC3）
+                    switchMutex.withLock {
+                        val nodes = clashApiClient.getSelectableNodes(clashConfig.apiBaseUrl, clashConfig.groupName)
+                        val currentName = clashApiClient.getCurrentNode(clashConfig.apiBaseUrl, clashConfig.groupName)
+                        val next = nodes.firstOrNull { it != currentName }
+                            ?: throw IllegalStateException("no alternate node")
+                        clashApiClient.switchNode(clashConfig.apiBaseUrl, clashConfig.groupName, next)
+                    }
+                    delay(clashConfig.switchDelayMs) // 挂起式等待，不占 dispatcher 线程
 
-                    val replayed = chain.proceed(request) // 重放原请求
+                    val replayed = chain.proceed(request) // 重放原请求（不持锁）
                     if (replayed.code != 429) {
                         lastResponse.close() // 丢弃旧 429 body，避免连接泄漏
-                        return replayed // 重放成功（AC2）
+                        return@runBlocking replayed // 重放成功（AC2）
                     }
                     lastResponse.close()
                     lastResponse = replayed
                     Log.i("ClashRetry", "attempt $attempt still 429, switched to $next")
                 }
+                lastResponse // 重试耗尽 -> 最后一次 429 原样返回（AC4）
             }
-            lastResponse // 重试耗尽 -> 最后一次 429 原样返回（AC4）
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.i("ClashRetry", "429 retry skipped: ${e.message}")

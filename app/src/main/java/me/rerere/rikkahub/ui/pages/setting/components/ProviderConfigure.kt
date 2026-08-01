@@ -397,13 +397,21 @@ private fun ProviderConfigureOpenAI(
         )
     }
     if (provider.enable429IpRotation) {
-        Text(
-            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        )
-    }
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            } else {
+                // 常驻可见（AC5）：开关关闭时也显示风险提示，只是用更弱的对比度
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            }
     if (show429Confirm) {
         Enable429RotationConfirmDialog(
             onConfirm = {
@@ -519,13 +527,21 @@ private fun ProviderConfigureClaude(
         )
     }
     if (provider.enable429IpRotation) {
-        Text(
-            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        )
-    }
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            } else {
+                // 常驻可见（AC5）：开关关闭时也显示风险提示，只是用更弱的对比度
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            }
     if (show429Confirm) {
         Enable429RotationConfirmDialog(
             onConfirm = {
@@ -711,13 +727,21 @@ private fun ProviderConfigureGoogle(
         )
     }
     if (provider.enable429IpRotation) {
-        Text(
-            text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        )
-    }
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            } else {
+                // 常驻可见（AC5）：开关关闭时也显示风险提示，只是用更弱的对比度
+                Text(
+                    text = stringResource(R.string.setting_provider_page_enable_429_rotation_warning),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                )
+            }
     if (show429Confirm) {
         Enable429RotationConfirmDialog(
             onConfirm = {
