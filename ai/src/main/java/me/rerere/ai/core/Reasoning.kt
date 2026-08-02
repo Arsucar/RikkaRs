@@ -38,11 +38,13 @@ enum class ReasoningLevel(
  * [ReasoningDialect] decides how that ladder is encoded for a given model/provider
  * (e.g. DeepSeek uses `max` instead of `xhigh`).
  *
- * Priority when resolving: per-model override → host rules → model-id hints → [OpenAIExtended].
+ * Priority when resolving: per-model override → official-host rules → [OpenAIExtended].
+ * Unknown hosts (custom proxies) stay on [OpenAIExtended] passthrough; users opt into a
+ * dialect explicitly via the per-model override.
  */
 @Serializable
 enum class ReasoningDialect {
-    /** Follow host / model-id recognition. */
+    /** Resolve from official host rules; unknown hosts default to [OpenAIExtended]. */
     @SerialName("auto")
     Auto,
 
@@ -81,8 +83,8 @@ fun resolveDialect(
     return when {
         host == "api.deepseek.com" -> ReasoningDialect.DeepSeekMax
         host == "integrate.api.nvidia.com" && "deepseek-v4" in id -> ReasoningDialect.DeepSeekMax
-        // Weak hint for proxies whose host is not official DeepSeek.
-        looksLikeDeepSeekReasoningModel(id) -> ReasoningDialect.DeepSeekMax
+        // Unknown hosts (custom proxies) keep OpenAI-compat passthrough of level.effort;
+        // users opt into DeepSeekMax explicitly via the per-model dialect override (#214).
         else -> ReasoningDialect.OpenAIExtended
     }
 }
@@ -92,13 +94,10 @@ fun resolveDialect(
  *
  * @return wire token, or `null` when the field should be omitted ([ReasoningLevel.AUTO],
  *   or [ReasoningDialect.OnOffOnly] which only toggles enable/disable in the host branch).
- * @param noneAsLow some Chat Completions defaults historically map OFF/`none` → `"low"`
- *   because those models cannot fully disable reasoning via effort.
  */
 fun mapReasoningEffort(
     dialect: ReasoningDialect,
     level: ReasoningLevel,
-    noneAsLow: Boolean = false,
 ): String? {
     if (level == ReasoningLevel.AUTO) return null
     // Auto should already be resolved by resolveDialect; treat residual Auto as extended.
@@ -110,13 +109,10 @@ fun mapReasoningEffort(
 
     return when (effective) {
         ReasoningDialect.Auto,
-        ReasoningDialect.OpenAIExtended -> when {
-            level == ReasoningLevel.OFF && noneAsLow -> "low"
-            else -> level.effort
-        }
+        ReasoningDialect.OpenAIExtended -> level.effort
 
         ReasoningDialect.OpenAIClassic -> when (level) {
-            ReasoningLevel.OFF -> if (noneAsLow) "low" else "none"
+            ReasoningLevel.OFF -> "none"
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH,
@@ -125,7 +121,7 @@ fun mapReasoningEffort(
         }
 
         ReasoningDialect.DeepSeekMax -> when (level) {
-            ReasoningLevel.OFF -> if (noneAsLow) "low" else "none"
+            ReasoningLevel.OFF -> "none"
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH -> "high"
@@ -148,17 +144,4 @@ fun mapNvidiaDeepSeekV4Effort(level: ReasoningLevel): String? {
         ReasoningLevel.OFF -> "none"
         else -> "high"
     }
-}
-
-private fun looksLikeDeepSeekReasoningModel(modelIdLower: String): Boolean {
-    if (!modelIdLower.contains("deepseek")) return false
-    return modelIdLower.contains("reasoner") ||
-        modelIdLower.contains("r1") ||
-        modelIdLower.contains("v3.1") ||
-        modelIdLower.contains("v3_1") ||
-        modelIdLower.contains("v3-1") ||
-        modelIdLower.contains("v3.2") ||
-        modelIdLower.contains("v3_2") ||
-        modelIdLower.contains("v3-2") ||
-        modelIdLower.contains("v4")
 }
