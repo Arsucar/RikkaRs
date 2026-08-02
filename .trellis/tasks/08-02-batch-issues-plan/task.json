@@ -1,0 +1,32 @@
+{
+  "id": "batch-issues-plan",
+  "name": "batch-issues-plan",
+  "title": "rail-batch: 6 open issues规划",
+  "description": "父任务承载6个open issue的规划子任务树（5个实际子任务，#217+#216合并）。本轮仅规划5套PRD/design/implement + 交付矩阵，不写生产代码。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": "material3/material-color-utilities",
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-08-02",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "release/rikka-arsucar",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-02-issue-214-reasoning-dialect",
+    "08-02-issue-218-preset-switch-jank",
+    "08-02-issue-220-checkpoint-cache",
+    "08-02-issue-219-keepalive-fgs",
+    "08-02-issue-217-216-conversation-variables"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
