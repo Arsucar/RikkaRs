@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
+import java.io.IOException
 
 /**
  * Retries a 429 response by switching the Clash proxy node and replaying the request.
@@ -65,7 +66,14 @@ class AIRequestInterceptor(
                     }
                     delay(clashConfig.switchDelayMs) // 挂起式等待，不占 dispatcher 线程
 
-                    val replayed = chain.proceed(request) // 重放原请求（不持锁）
+                    // 单独包一层 try：proceed 抛 IOException 时不要泄漏 replayed（异常时无 Response 对象），
+                    // 也不要返回已 close 的 lastResponse；直接返回当前未 close 的最近一次 429。
+                    val replayed = try {
+                        chain.proceed(request) // 重放原请求（不持锁）
+                    } catch (io: IOException) {
+                        Log.i("ClashRetry", "attempt $attempt proceed IOException: ${io.message}")
+                        return@runBlocking lastResponse
+                    }
                     if (replayed.code != 429) {
                         lastResponse.close() // 丢弃旧 429 body，避免连接泄漏
                         return@runBlocking replayed // 重放成功（AC2）

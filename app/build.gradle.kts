@@ -20,8 +20,8 @@ android {
         applicationId = "me.arsucar.rikka"
         minSdk = 26
         targetSdk = 37
-        versionCode = 206
-        versionName = "2.3.44"
+        versionCode = 207
+        versionName = "2.3.45"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

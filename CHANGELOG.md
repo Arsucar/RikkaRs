@@ -20,6 +20,21 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.45
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.44 之后）
+
+- **Clash 429 自动 IP 轮换重试** — 全新 Clash 外部控制设置页（host/port/secret/group/重试次数/切换延迟）+ 供应商品级 429 轮换开关附带风险确认对话框；AI 请求命中 429 时通过 `AIRequestInterceptor` 调用 Clash API 按轮询切换可选节点并串行重试，请求体为可重读 JSON，重试状态用 `Mutex` 互斥保护，取消异常正确传播。（#209）
+  **Clash 429 auto IP-rotation retry** — Adds a global Clash external-control settings page (host/port/secret/group/retries/switch delay) and a per-provider 429-rotation toggle with a risk-confirm dialog; when an AI request hits 429, `AIRequestInterceptor` calls the Clash API to switch the selectable node round-robin and replays the request, with replayable JSON body, mutex-guarded retry state and propagated cancellation. (#209)
+- **Clash `apiBaseUrl` SSRF 防护** — `ClashProxyConfig.validate()` 强制 `apiBaseUrl` 主机为 IP 字面量或 `localhost`（不触发 DNS），仅接受 loopback 与 site-local 私网地址，拒绝任意公网/域名主机，避免开启 429 轮换后向外部主机发送 PUT。（#209）
+  **Clash `apiBaseUrl` SSRF guard** — `ClashProxyConfig.validate()` now requires `apiBaseUrl` host to be an IP literal or `localhost` (no DNS lookup), accepting only loopback and site-local private addresses, rejecting any public/host-name target to prevent PUTs to arbitrary external hosts once 429 rotation is enabled. (#209)
+- **429 重试响应泄漏修复** — 重放 `chain.proceed` 抛 `IOException` 时改为返回最近一次未关闭的 429 响应，杜绝原代码进入外层 catch 返回已 `close()` 旧响应导致上层读取 `IOException: Closed` 与连接泄漏。（#209）
+  **429 retry response-leak fix** — When the replayed `chain.proceed` throws `IOException`, the interceptor now returns the most recent still-open 429 response instead of falling through to the outer catch and returning an already-`close()`d previous response (which broke upstream reads with `IOException: Closed` and leaked a connection). (#209)
+- **Clash 设置页输入越界可见提示** — `maxRetries` 与 `switchDelayMs` 输入越界时 TextField `supportingText` 显示合法范围，告别越界静默回弹旧值。（#209）
+  **Clash settings range hint on invalid input** — `maxRetries` / `switchDelayMs` TextFields now show the legal range via `supportingText` when out of bounds, replacing the old silent revert-on-recompose behavior. (#209)
+
+---
+
 ## v2.3.44
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.43 之后）

@@ -171,6 +171,13 @@ fun SettingClashPage() {
                                 singleLine = true,
                                 isError = maxRetriesText.toIntOrNull()?.let { it !in 1..5 } ?: true,
                                 modifier = Modifier.width(100.dp),
+                                supportingText = {
+                                    val error =
+                                        maxRetriesText.toIntOrNull()?.let { it !in 1..5 } ?: true
+                                    if (error) {
+                                        Text(stringResource(R.string.setting_clash_page_max_retries_desc))
+                                    }
+                                },
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
@@ -203,6 +210,14 @@ fun SettingClashPage() {
                                 singleLine = true,
                                 isError = switchDelayMsText.toLongOrNull()?.let { it !in 100..2000 } ?: true,
                                 modifier = Modifier.width(100.dp),
+                                supportingText = {
+                                    val error = switchDelayMsText.toLongOrNull()?.let {
+                                        it !in 100..2000
+                                    } ?: true
+                                    if (error) {
+                                        Text(stringResource(R.string.setting_clash_page_switch_delay_ms_desc))
+                                    }
+                                },
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
