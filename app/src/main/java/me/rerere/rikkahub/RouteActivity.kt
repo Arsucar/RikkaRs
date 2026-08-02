@@ -849,6 +849,7 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingWeb : Screen
+    @Serializable
     data object SettingClash : Screen
 
     @Serializable
