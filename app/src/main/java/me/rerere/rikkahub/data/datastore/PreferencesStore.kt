@@ -715,14 +715,17 @@ class SettingsStore(
     suspend fun updateSemanticMemoryConfig(
         transform: (me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig) -> me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig,
     ) {
-        val fallbackSettings = settingsFlow.value
-        dataStore.edit { preferences ->
-            val current = preferences[SEMANTIC_MEMORY_CONFIG]?.let {
-                runCatching {
-                    JsonInstant.decodeFromString<me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig>(it)
-                }.getOrNull()
-            } ?: fallbackSettings.semanticMemoryConfig
-            preferences[SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(transform(current))
+        updateMutex.withLock {
+            val fallbackSettings = settingsFlow.value
+            dataStore.edit { preferences ->
+                val current = preferences[SEMANTIC_MEMORY_CONFIG]?.let {
+                    runCatching {
+                        JsonInstant.decodeFromString<me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig>(it)
+                    }.getOrNull()
+                } ?: fallbackSettings.semanticMemoryConfig
+                preferences[SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(transform(current))
+            }
+            syncSettingsFlowFromStore()
         }
     }
 
