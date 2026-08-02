@@ -3,7 +3,7 @@
   "name": "issue-219-keepalive-fgs",
   "title": "issue-219: 生成期间常驻前台服务保活",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": "material3/material-color-utilities",
