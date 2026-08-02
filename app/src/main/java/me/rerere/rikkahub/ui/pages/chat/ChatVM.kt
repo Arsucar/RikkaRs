@@ -771,6 +771,20 @@ class ChatVM(
         }
     }
 
+    fun upsertConversationVariable(name: String, value: String) {
+        chatService.updateConversationVariables(_conversationId) { current ->
+            me.rerere.rikkahub.data.ai.variables.ConversationVariables.applyTransform(current) { map ->
+                me.rerere.rikkahub.data.ai.variables.ConversationVariables.putVar(map, name, value)
+            }
+        }
+    }
+
+    fun deleteConversationVariable(name: String) {
+        chatService.updateConversationVariables(_conversationId) { current ->
+            current - name.trim()
+        }
+    }
+
     fun toggleMessageFavorite(node: MessageNode) {
         viewModelScope.launch {
             val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)

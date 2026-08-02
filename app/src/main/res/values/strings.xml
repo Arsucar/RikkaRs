@@ -2355,4 +2355,21 @@
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
+  <string name="assistant_page_variable_system">Conversation variables</string>
+  <string name="assistant_page_variable_system_desc">Enable SillyTavern-style variable macros (getvar/setvar/addvar) and MVU UpdateVariable parsing for this assistant. Off by default.</string>
+  <string name="conversation_variables_menu_title">Variables</string>
+  <string name="conversation_variables_menu_subtitle">View and edit conversation-level variables</string>
+  <string name="conversation_variables_title">Variables</string>
+  <string name="conversation_variables_empty">No variables yet</string>
+  <string name="conversation_variables_empty_desc">Variables are set by macros, MVU output, or manually here.</string>
+  <string name="conversation_variables_add">Add variable</string>
+  <string name="conversation_variables_edit">Edit variable</string>
+  <string name="conversation_variables_name">Name</string>
+  <string name="conversation_variables_value">Value</string>
+  <string name="conversation_variables_delete_title">Delete variable?</string>
+  <string name="conversation_variables_delete_message">Delete “%1$s”? This cannot be undone.</string>
+  <string name="conversation_variables_save">Save</string>
+  <string name="conversation_variables_cancel">Cancel</string>
+  <string name="conversation_variables_delete">Delete</string>
+  <string name="conversation_variables_name_required">Name is required</string>
 </resources>

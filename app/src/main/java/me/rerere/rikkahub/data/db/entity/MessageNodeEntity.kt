@@ -33,4 +33,7 @@ data class MessageNodeEntity(
     val hidden: Boolean = false,
     @ColumnInfo("compress_hidden_count")
     val compressHiddenCount: Int? = null,
+    /** #217/#216: per-messageId variable snapshots JSON Map<String, Map<String, String>>. */
+    @ColumnInfo("variable_snapshots", defaultValue = "{}")
+    val variableSnapshots: String = "{}",
 )

@@ -86,6 +86,7 @@ import me.rerere.rikkahub.data.datastore.resolveChatModelId
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.isVariableSystemEnabled
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -399,6 +400,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                         toaster.show(it.message ?: "操作失败", type = ToastType.Error)
                                     }
                                 }
+                            },
+                            variableSystemEnabled = currentAssistant?.isVariableSystemEnabled() == true,
+                            conversationVariables = conversation.variables,
+                            onUpsertVariable = { name, value ->
+                                vm.upsertConversationVariable(name, value)
+                            },
+                            onDeleteVariable = { name ->
+                                vm.deleteConversationVariable(name)
                             },
                             contextPreviewState = contextPreviewState,
                             onLoadContextPreview = vm::loadContextPreview,

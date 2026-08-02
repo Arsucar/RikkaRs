@@ -121,6 +121,7 @@ class GenerationHandler(
         workspaceToolAvailable: Boolean = false,
         mode: GenerationPreparationMode,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        conversationVariables: MutableMap<String, String>? = null,
     ): PreparedProviderInput = prepareProviderInput(
         settings = settings,
         model = model,
@@ -136,6 +137,7 @@ class GenerationHandler(
         workspaceToolAvailable = workspaceToolAvailable,
         mode = mode,
         processingStatus = processingStatus,
+        conversationVariables = conversationVariables,
     )
 
     fun generateText(
@@ -158,6 +160,7 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         workspaceToolAvailable: Boolean = false,
         firstPreparedInput: PreparedProviderInput? = null,
+        conversationVariables: MutableMap<String, String>? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -209,7 +212,7 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
-                generateInternal(
+                    generateInternal(
                     assistant = assistant,
                     settings = settings,
                     messages = messages,
@@ -219,7 +222,8 @@ class GenerationHandler(
                             context = context,
                             model = model,
                             assistant = assistant,
-                            settings = settings
+                            settings = settings,
+                            conversationVariables = conversationVariables,
                         )
                         emit(
                             GenerationChunk.Messages(
@@ -228,7 +232,8 @@ class GenerationHandler(
                                     context = context,
                                     model = model,
                                     assistant = assistant,
-                                    settings = settings
+                                    settings = settings,
+                                    conversationVariables = conversationVariables,
                                 ),
                                 stepIndex = stepIndex,
                             )
@@ -248,13 +253,15 @@ class GenerationHandler(
                     workspaceCwd = workspaceCwd,
                     workspaceToolAvailable = workspaceToolAvailable,
                     preparedInput = if (canReuseFirstPreparedInput) checkNotNull(firstPreparedInput) else null,
+                    conversationVariables = conversationVariables,
                 )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,
                     model = model,
                     assistant = assistant,
-                    settings = settings
+                    settings = settings,
+                    conversationVariables = conversationVariables,
                 )
                 messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                     finishedAt = Clock.System.now()
@@ -390,7 +397,8 @@ class GenerationHandler(
                         context = context,
                         model = model,
                         assistant = assistant,
-                        settings = settings
+                        settings = settings,
+                        conversationVariables = conversationVariables,
                     ),
                     stepIndex = stepIndex,
                 )
@@ -423,6 +431,7 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         workspaceToolAvailable: Boolean = false,
         preparedInput: PreparedProviderInput? = null,
+        conversationVariables: MutableMap<String, String>? = null,
     ) {
         val prepared = preparedInput ?: prepareProviderInput(
             settings = settings,
@@ -439,6 +448,7 @@ class GenerationHandler(
             workspaceToolAvailable = workspaceToolAvailable,
             mode = GenerationPreparationMode.Send,
             processingStatus = processingStatus,
+            conversationVariables = conversationVariables,
         )
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
@@ -569,6 +579,7 @@ class GenerationHandler(
         workspaceToolAvailable: Boolean = false,
         mode: GenerationPreparationMode,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        conversationVariables: MutableMap<String, String>? = null,
     ): PreparedProviderInput {
         val preparedTools = tools.snapshotToolDefinitions()
         val usedConversationSystemPrompt =
@@ -615,6 +626,7 @@ class GenerationHandler(
                 TransformerExecutionMode.Send
             },
             workspaceToolAvailable = workspaceToolAvailable,
+            conversationVariables = conversationVariables,
         )
         return PreparedProviderInput(
             messages = internalMessages,

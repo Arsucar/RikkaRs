@@ -19,6 +19,13 @@ class TransformerContext(
     val workspaceCwd: String? = null,
     val executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
     val workspaceToolAvailable: Boolean = false,
+    /**
+     * Working copy of conversation variables for this generation (#217/#216).
+     * Populated by ChatService/GenerationHandler when variable system is enabled;
+     * mutated by VariableMacroTransformer / UpdateVariableOutputTransformer;
+     * persisted atomically after input transform and after generation finish.
+     */
+    val conversationVariables: MutableMap<String, String>? = null,
 )
 
 enum class TransformerExecutionMode {
@@ -91,6 +98,7 @@ suspend fun List<UIMessage>.transforms(
     workspaceCwd: String? = null,
     executionMode: TransformerExecutionMode = TransformerExecutionMode.Send,
     workspaceToolAvailable: Boolean = false,
+    conversationVariables: MutableMap<String, String>? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -103,6 +111,7 @@ suspend fun List<UIMessage>.transforms(
         workspaceCwd = workspaceCwd,
         executionMode = executionMode,
         workspaceToolAvailable = workspaceToolAvailable,
+        conversationVariables = conversationVariables,
     )
     return transformers.fold(this) { acc, transformer ->
         if (
@@ -124,8 +133,15 @@ suspend fun List<UIMessage>.visualTransforms(
     model: Model,
     assistant: Assistant,
     settings: Settings,
+    conversationVariables: MutableMap<String, String>? = null,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant, settings)
+    val ctx = TransformerContext(
+        context = context,
+        model = model,
+        assistant = assistant,
+        settings = settings,
+        conversationVariables = conversationVariables,
+    )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
             transformer.visualTransform(ctx, acc)
@@ -141,8 +157,15 @@ suspend fun List<UIMessage>.onGenerationFinish(
     model: Model,
     assistant: Assistant,
     settings: Settings,
+    conversationVariables: MutableMap<String, String>? = null,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant, settings)
+    val ctx = TransformerContext(
+        context = context,
+        model = model,
+        assistant = assistant,
+        settings = settings,
+        conversationVariables = conversationVariables,
+    )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
             transformer.onGenerationFinish(ctx, acc)

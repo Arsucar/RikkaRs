@@ -42,4 +42,7 @@ data class ConversationEntity(
     /** #220: 1 = mid-generation checkpoint snapshot, 0 = final/completed snapshot. */
     @ColumnInfo("is_checkpoint_snapshot", defaultValue = "0")
     val isCheckpointSnapshot: Boolean = false,
+    /** #217/#216: conversation variables JSON map (string→string). */
+    @ColumnInfo("variables", defaultValue = "{}")
+    val variables: String = "{}",
 )

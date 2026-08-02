@@ -120,7 +120,11 @@ import me.rerere.rikkahub.data.ai.transformers.SemanticMemoryTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.UpdateVariableOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.VariableMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
+import me.rerere.rikkahub.data.ai.variables.ConversationVariables
+import me.rerere.rikkahub.data.model.isVariableSystemEnabled
 import me.rerere.rikkahub.data.memory.semantic.SemanticMemoryManager
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -147,6 +151,7 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
 import me.rerere.rikkahub.data.model.toMessageNode
+import me.rerere.rikkahub.data.model.withVariableSnapshot
 import me.rerere.rikkahub.data.model.finalizeGenerationTools
 import me.rerere.rikkahub.data.model.applyToolPermission
 import me.rerere.rikkahub.data.model.ToolPermission
@@ -369,6 +374,7 @@ private val inputTransformers by lazy {
     listOf(
         TimeReminderTransformer,
         PromptInjectionTransformer,
+        VariableMacroTransformer,
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,
@@ -381,6 +387,7 @@ private val outputTransformers by lazy {
         ThinkTagTransformer,
         Base64ImageToLocalFileTransformer,
         RegexOutputTransformer,
+        UpdateVariableOutputTransformer,
     )
 }
 
@@ -863,6 +870,13 @@ class ChatService(
                 updateConversation(conversationId, conversation)
             }
             val session = getOrCreateSession(conversationId)
+            // #217/#216: working copy shared across input macros + output MVU for this generation.
+            val generationVariables: MutableMap<String, String>? =
+                if (assistant.isVariableSystemEnabled()) {
+                    conversation.variables.toMutableMap()
+                } else {
+                    null
+                }
             val preparedOriginal = prepareGenerationRequest(
                 settings = settings,
                 assistant = assistant,
@@ -871,12 +885,25 @@ class ChatService(
                 messageRange = messageRange,
                 mode = GenerationPreparationMode.Send,
                 processingStatus = session.processingStatus,
+                conversationVariables = generationVariables,
             )
+            // Persist setvar/addvar from the first input transform before compress/rebuild can re-run macros.
+            if (generationVariables != null) {
+                val afterInput = ConversationVariables.sanitize(generationVariables)
+                if (afterInput != conversation.variables) {
+                    updateConversationState(conversationId) { prev ->
+                        prev.copy(variables = afterInput)
+                    }
+                    generationVariables.clear()
+                    generationVariables.putAll(afterInput)
+                }
+            }
             val prepared = maybeAutoCompressBeforeSend(
                 conversationId = conversationId,
                 invocationKind = invocationKind,
                 preparedOriginal = preparedOriginal,
                 session = session,
+                conversationVariables = generationVariables,
             )
 
             // #220: reset in-memory checkpoint cursor for this generation attempt
@@ -900,6 +927,7 @@ class ChatService(
                 outputTransformers = outputTransformers,
                 tools = prepared.tools,
                 firstPreparedInput = prepared.providerInput,
+                conversationVariables = generationVariables,
             ).onCompletion {
                 // Invalidate in-flight checkpoint writers before Final save so they cannot clobber it.
                 sessions[conversationId]?.lastCheckpointStep = -1
@@ -941,7 +969,15 @@ class ChatService(
                 when (chunk) {
                     is GenerationChunk.Messages -> {
                         updateConversationState(conversationId) { prev ->
-                            prev.updateCurrentMessages(chunk.messages)
+                            var next = prev.updateCurrentMessages(chunk.messages)
+                            // Sync variables working copy (MVU may mutate during onGenerationFinish).
+                            if (generationVariables != null) {
+                                val sanitized = ConversationVariables.sanitize(generationVariables)
+                                if (sanitized != next.variables) {
+                                    next = next.copy(variables = sanitized)
+                                }
+                            }
+                            next
                         }
 
                         // 通知等边缘副作用由 ChatNotificationManager 消费；
@@ -957,6 +993,16 @@ class ChatService(
                             stepIndex = chunk.stepIndex,
                         )
                     }
+                }
+            }
+            // Final branch snapshot for the completed assistant alternative (after stream ends).
+            if (generationVariables != null) {
+                val finalVars = ConversationVariables.sanitize(generationVariables)
+                updateConversationState(conversationId) { prev ->
+                    val lastAssistant = prev.currentMessages.lastOrNull {
+                        it.role == me.rerere.ai.core.MessageRole.ASSISTANT
+                    } ?: return@updateConversationState prev.copy(variables = finalVars)
+                    prev.withVariableSnapshot(messageId = lastAssistant.id, variables = finalVars)
                 }
             }
         }.onFailure {
@@ -1594,6 +1640,7 @@ class ChatService(
         invocationKind: GenerationInvocationKind,
         preparedOriginal: PreparedGenerationRequest,
         session: ConversationSession,
+        conversationVariables: MutableMap<String, String>? = null,
     ): PreparedGenerationRequest {
         // The eligibility gate encloses every policy mutation and compression side effect.
         return runAutoCompressionIfEligible(
@@ -1645,6 +1692,11 @@ class ChatService(
                         session.snapshotState().conversation
                     },
                     prepareReloaded = { refreshedConversation ->
+                        // Re-seed working copy from refreshed conversation so macros see post-compress state.
+                        if (conversationVariables != null) {
+                            conversationVariables.clear()
+                            conversationVariables.putAll(refreshedConversation.variables)
+                        }
                         prepareGenerationRequest(
                             settings = preparedOriginal.settings,
                             assistant = preparedOriginal.assistant,
@@ -1653,6 +1705,7 @@ class ChatService(
                             messageRange = null,
                             mode = GenerationPreparationMode.Send,
                             processingStatus = session.processingStatus,
+                            conversationVariables = conversationVariables,
                         )
                     },
                     onSuccess = { rebuilt ->
@@ -1710,6 +1763,7 @@ class ChatService(
         messageRange: ClosedRange<Int>?,
         mode: GenerationPreparationMode,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        conversationVariables: MutableMap<String, String>? = null,
     ): PreparedGenerationRequest {
         val effectiveWorkspaceCwd = resolveEffectiveWorkspaceCwd(conversation, assistant)
         val workspace = assistant.workspaceId
@@ -1792,6 +1846,13 @@ class ChatService(
         // 导致 PATH_ONLY 只注入 path stub 而模型读不到文件，静默丢失正文。
         val workspaceToolAvailable = model.abilities.contains(ModelAbility.TOOL) &&
             tools.any { it.name in WORKSPACE_TOOL_NAMES }
+        // Preview: expand macros on a disposable copy so context inspector sees resolved text without persisting.
+        val effectiveVariables = conversationVariables
+            ?: if (assistant.isVariableSystemEnabled() && mode == GenerationPreparationMode.Preview) {
+                conversation.variables.toMutableMap()
+            } else {
+                null
+            }
         val providerInput = if (hasResumablePendingTool) {
             // The send loop must execute the approved/denied/answered tool first. Its output changes
             // the next provider input, so preparing/transformation here would be both stale and unsafe.
@@ -1812,6 +1873,7 @@ class ChatService(
                 workspaceToolAvailable = workspaceToolAvailable,
                 mode = mode,
                 processingStatus = processingStatus,
+                conversationVariables = effectiveVariables,
             )
         }
         return PreparedGenerationRequest(
@@ -2962,6 +3024,7 @@ class ChatService(
             customSystemPrompt = currentConversation.customSystemPrompt,
             modeInjectionIds = currentConversation.modeInjectionIds,
             lorebookIds = currentConversation.lorebookIds,
+            variables = currentConversation.variables,
         )
 
         conversationRepo.insertForkConversation(
@@ -3002,6 +3065,10 @@ class ChatService(
             return
         }
 
+        val selectedMessage = targetNode.messages[selectIndex]
+        val restoredVariables = targetNode.variableSnapshots[selectedMessage.id.toString()]
+            ?: currentConversation.variables
+
         val updatedNodes = currentConversation.messageNodes.map { node ->
             if (node.id == nodeId) {
                 node.copy(selectIndex = selectIndex)
@@ -3010,7 +3077,38 @@ class ChatService(
             }
         }
 
-        saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+        saveConversation(
+            conversationId,
+            currentConversation.copy(
+                messageNodes = updatedNodes,
+                variables = restoredVariables,
+            ),
+        )
+    }
+
+    /**
+     * #217/#216: atomic conversation variable update (in-memory + Room).
+     * Serialized under [ConversationSession.persistenceMutex] so concurrent UI/macro writers
+     * cannot clobber each other with stale snapshots (AC8 / #202).
+     */
+    fun updateConversationVariables(
+        conversationId: Uuid,
+        transform: (Map<String, String>) -> Map<String, String>,
+    ) {
+        val session = getOrCreateSession(conversationId)
+        appScope.launch {
+            session.persistenceMutex.withLock {
+                var nextVariables: Map<String, String> = emptyMap()
+                session.updateState { prev ->
+                    nextVariables = ConversationVariables.sanitize(transform(prev.variables))
+                    prev.copy(variables = nextVariables)
+                }
+                runCatching {
+                    // Apply the already-sanitized result; mutex + session state make this a single writer.
+                    conversationRepo.updateConversationVariables(conversationId) { nextVariables }
+                }
+            }
+        }
     }
 
     suspend fun deleteMessage(

@@ -2337,4 +2337,21 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_context_message_limit_count">上下文消息限制: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">无限上下文消息</string>
   <string name="assistant_page_context_message_limit_warning">限制上下文会在每次上下文被修剪时使提示词缓存失效。更大的限制修剪频率更低；无限制则从不修剪，并保持缓存完全完好。</string>
+  <string name="assistant_page_variable_system">对话变量</string>
+  <string name="assistant_page_variable_system_desc">为本助手启用 SillyTavern 风格变量宏（getvar/setvar/addvar）与 MVU UpdateVariable 解析。默认关闭。</string>
+  <string name="conversation_variables_menu_title">变量</string>
+  <string name="conversation_variables_menu_subtitle">查看并编辑对话级变量</string>
+  <string name="conversation_variables_title">变量</string>
+  <string name="conversation_variables_empty">暂无变量</string>
+  <string name="conversation_variables_empty_desc">变量可由宏、MVU 输出设置，或在此手动添加。</string>
+  <string name="conversation_variables_add">添加变量</string>
+  <string name="conversation_variables_edit">编辑变量</string>
+  <string name="conversation_variables_name">名称</string>
+  <string name="conversation_variables_value">值</string>
+  <string name="conversation_variables_delete_title">删除变量？</string>
+  <string name="conversation_variables_delete_message">确定删除「%1$s」？此操作不可撤销。</string>
+  <string name="conversation_variables_save">保存</string>
+  <string name="conversation_variables_cancel">取消</string>
+  <string name="conversation_variables_delete">删除</string>
+  <string name="conversation_variables_name_required">名称不能为空</string>
 </resources>

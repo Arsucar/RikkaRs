@@ -106,6 +106,10 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId")
     suspend fun clearFolder(folderId: String)
 
+    /** #217/#216: atomic column write for conversation variables JSON. */
+    @Query("UPDATE conversationentity SET variables = :variables, update_at = :updateAt WHERE id = :id")
+    suspend fun updateVariables(id: String, variables: String, updateAt: Long)
+
     @Query("SELECT COUNT(*) FROM conversationentity")
     suspend fun countAll(): Int
 

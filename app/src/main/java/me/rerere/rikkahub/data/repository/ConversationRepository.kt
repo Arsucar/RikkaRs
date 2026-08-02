@@ -446,6 +446,7 @@ class ConversationRepository(
             memoryTableIsolation = conversation.memoryTableIsolation,
             checkpointStep = conversation.checkpointStep?.toString() ?: "",
             isCheckpointSnapshot = conversation.isCheckpointSnapshot,
+            variables = JsonInstant.encodeToString(conversation.variables),
         )
     }
 
@@ -471,6 +472,7 @@ class ConversationRepository(
             memoryTableIsolation = conversationEntity.memoryTableIsolation,
             checkpointStep = conversationEntity.checkpointStep.ifEmpty { null }?.toIntOrNull(),
             isCheckpointSnapshot = conversationEntity.isCheckpointSnapshot,
+            variables = decodeStringMap(conversationEntity.variables),
         )
     }
 
@@ -506,6 +508,25 @@ class ConversationRepository(
             id = conversationId.toString(),
             folderId = folderId?.toString() ?: ""
         )
+    }
+
+    /**
+     * #217/#216: atomic transform of conversation variables (Room transaction, no unlocked RMW).
+     * Returns the sanitized map written to DB, or null if conversation does not exist.
+     */
+    suspend fun updateConversationVariables(
+        conversationId: Uuid,
+        transform: (Map<String, String>) -> Map<String, String>,
+    ): Map<String, String>? = database.withTransaction {
+        val entity = conversationDAO.getConversationById(conversationId.toString()) ?: return@withTransaction null
+        val current = decodeStringMap(entity.variables)
+        val next = me.rerere.rikkahub.data.ai.variables.ConversationVariables.sanitize(transform(current))
+        conversationDAO.updateVariables(
+            id = conversationId.toString(),
+            variables = JsonInstant.encodeToString(next),
+            updateAt = Instant.now().toEpochMilli(),
+        )
+        next
     }
 
     private suspend fun loadMessageNodes(
@@ -950,6 +971,7 @@ internal fun messageNodeToEntity(
     selectIndex = node.selectIndex,
     hidden = node.hidden,
     compressHiddenCount = node.compressHiddenCount,
+    variableSnapshots = JsonInstant.encodeToString(node.variableSnapshots),
 )
 
 internal fun messageNodeEntityToMessageNode(
@@ -961,8 +983,23 @@ internal fun messageNodeEntityToMessageNode(
     selectIndex = entity.selectIndex,
     hidden = entity.hidden,
     compressHiddenCount = entity.compressHiddenCount,
+    variableSnapshots = decodeNestedStringMap(entity.variableSnapshots),
     isFavorite = isFavorite,
 )
+
+internal fun decodeStringMap(raw: String): Map<String, String> {
+    if (raw.isBlank() || raw == "{}") return emptyMap()
+    return runCatching {
+        JsonInstant.decodeFromString<Map<String, String>>(raw)
+    }.getOrDefault(emptyMap())
+}
+
+internal fun decodeNestedStringMap(raw: String): Map<String, Map<String, String>> {
+    if (raw.isBlank() || raw == "{}") return emptyMap()
+    return runCatching {
+        JsonInstant.decodeFromString<Map<String, Map<String, String>>>(raw)
+    }.getOrDefault(emptyMap())
+}
 
 /**
  * Pure diff for [ConversationRepository.syncMessageNodes]: orphan ids to delete and nodes to upsert (order preserved).

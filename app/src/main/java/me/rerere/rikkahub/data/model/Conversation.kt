@@ -38,6 +38,11 @@ data class Conversation(
     val checkpointStep: Int? = null,
     /** #220: whether the durable snapshot is a mid-generation checkpoint (not a completed turn). */
     val isCheckpointSnapshot: Boolean = false,
+    /**
+     * #217/#216: working copy of conversation variables for the currently selected branch.
+     * Branch alternatives store per-message snapshots on [MessageNode.variableSnapshots].
+     */
+    val variables: Map<String, String> = emptyMap(),
     @Transient
     val newConversation: Boolean = false
 ) {
@@ -127,6 +132,11 @@ data class MessageNode(
     val selectIndex: Int = 0,
     val hidden: Boolean = false,
     val compressHiddenCount: Int? = null,
+    /**
+     * #217/#216: per-alternative variable snapshot keyed by message id (string).
+     * Written when that assistant alternative finishes generation; restored on selectIndex change.
+     */
+    val variableSnapshots: Map<String, Map<String, String>> = emptyMap(),
     @Transient
     val isFavorite: Boolean = false,
 ) {
@@ -150,6 +160,26 @@ fun UIMessage.toMessageNode(): MessageNode {
         messages = listOf(this),
         selectIndex = 0
     )
+}
+
+/**
+ * Store a branch variable snapshot for [messageId] on the node that contains that message.
+ */
+fun Conversation.withVariableSnapshot(
+    messageId: Uuid,
+    variables: Map<String, String>,
+): Conversation {
+    val key = messageId.toString()
+    val updatedNodes = messageNodes.map { node ->
+        if (node.messages.any { it.id == messageId }) {
+            node.copy(
+                variableSnapshots = node.variableSnapshots + (key to variables),
+            )
+        } else {
+            node
+        }
+    }
+    return copy(messageNodes = updatedNodes, variables = variables)
 }
 
 /**

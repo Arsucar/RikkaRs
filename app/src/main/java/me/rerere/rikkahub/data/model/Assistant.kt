@@ -73,7 +73,16 @@ data class Assistant(
     val hooks: List<ConversationHook> = emptyList(),
     /** Per-tool policy keyed by stable ToolCapabilityCatalog ids. Missing entries inherit defaults. */
     val toolPermissions: Map<String, ToolPermission> = emptyMap(),
+    /**
+     * #217/#216: conversation variable system (macros + MVU). Default off for zero side effects.
+     * Transition field until #215 experimental feature registry lands; consumers must use
+     * [isVariableSystemEnabled] so the read API stays stable after migration.
+     */
+    val enableVariableSystem: Boolean = false,
 )
+
+/** Stable feature gate for variable_system (featureId). #215 will redirect this body. */
+fun Assistant.isVariableSystemEnabled(): Boolean = enableVariableSystem
 
 @Serializable
 enum class ToolPermission { INHERIT, ALLOW, ASK, DENY }

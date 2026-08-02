@@ -199,6 +199,7 @@ private fun scopeLabel(scopeType: MemoryTableScopeType): String = when (scopeTyp
 private enum class ConversationDrawerScreen {
     Menu,
     MemoryTable,
+    Variables,
     ContextInspector,
     HookHistory,
     GitStatus,
@@ -230,6 +231,10 @@ fun ConversationDrawerContent(
     onCreateConversationDocument: (templateId: String) -> Unit,
     onDeleteDocument: (documentId: String) -> Unit,
     onSetFollow: (documentId: String, follow: Boolean) -> Unit,
+    variableSystemEnabled: Boolean = false,
+    conversationVariables: Map<String, String> = emptyMap(),
+    onUpsertVariable: (name: String, value: String) -> Unit = { _, _ -> },
+    onDeleteVariable: (name: String) -> Unit = {},
     contextPreviewState: UiState<ContextPreview>,
     onLoadContextPreview: () -> Unit,
     onClearContextPreview: () -> Unit,
@@ -283,6 +288,11 @@ fun ConversationDrawerContent(
     when (screen) {
         ConversationDrawerScreen.Menu -> ConversationDrawerMenu(
             onOpenMemoryTable = { screen = ConversationDrawerScreen.MemoryTable },
+            onOpenVariables = if (variableSystemEnabled) {
+                { screen = ConversationDrawerScreen.Variables }
+            } else {
+                null
+            },
             onOpenHookHistory = { screen = ConversationDrawerScreen.HookHistory },
             onOpenGitStatus = { screen = ConversationDrawerScreen.GitStatus },
             gitStatusState = displayGitStatusState,
@@ -290,6 +300,13 @@ fun ConversationDrawerContent(
                 screen = ConversationDrawerScreen.ContextInspector
                 onLoadContextPreview()
             },
+        )
+
+        ConversationDrawerScreen.Variables -> ConversationVariablesDrawerContent(
+            variables = conversationVariables,
+            onBack = { screen = ConversationDrawerScreen.Menu },
+            onUpsert = onUpsertVariable,
+            onDelete = onDeleteVariable,
         )
 
         ConversationDrawerScreen.MemoryTable -> ConversationMemoryTableDrawerContent(
@@ -906,6 +923,7 @@ private fun HookExecutionStatus.isFailure(): Boolean = when (this) {
 @Composable
 private fun ConversationDrawerMenu(
     onOpenMemoryTable: () -> Unit,
+    onOpenVariables: (() -> Unit)?,
     onOpenContextInspector: () -> Unit,
     onOpenHookHistory: () -> Unit,
     onOpenGitStatus: () -> Unit,
@@ -923,6 +941,14 @@ private fun ConversationDrawerMenu(
             subtitle = "查看并管理当前对话生效的记忆表",
             onClick = onOpenMemoryTable,
         )
+        if (onOpenVariables != null) {
+            ConversationDrawerMenuItem(
+                icon = Lucide.Pencil,
+                title = stringResource(R.string.conversation_variables_menu_title),
+                subtitle = stringResource(R.string.conversation_variables_menu_subtitle),
+                onClick = onOpenVariables,
+            )
+        }
         ConversationDrawerMenuItem(
             icon = Lucide.ScanEye,
             title = stringResource(R.string.context_inspector_menu_title),
@@ -940,6 +966,230 @@ private fun ConversationDrawerMenu(
             title = stringResource(R.string.git_status_menu_title),
             subtitle = gitStatusMenuSubtitle(gitStatusState),
             onClick = onOpenGitStatus,
+        )
+    }
+}
+
+@Composable
+private fun ConversationVariablesDrawerContent(
+    variables: Map<String, String>,
+    onBack: () -> Unit,
+    onUpsert: (name: String, value: String) -> Unit,
+    onDelete: (name: String) -> Unit,
+) {
+    var editorTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<String?>(null) }
+    val entries = remember(variables) { variables.entries.sortedBy { it.key } }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Lucide.ArrowLeft, stringResource(R.string.context_inspector_back))
+            }
+            Text(
+                stringResource(R.string.conversation_variables_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { creating = true }) {
+                Icon(Lucide.Plus, stringResource(R.string.conversation_variables_add))
+            }
+        }
+        HorizontalDivider()
+        if (entries.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.conversation_variables_empty),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        stringResource(R.string.conversation_variables_empty_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(entries, key = { it.key }) { entry ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { editorTarget = entry.key to entry.value },
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = entry.key,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = entry.value.ifEmpty { " " },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            IconButton(onClick = { deleteTarget = entry.key }) {
+                                Icon(
+                                    Lucide.Trash2,
+                                    contentDescription = stringResource(R.string.conversation_variables_delete),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (creating || editorTarget != null) {
+        val initialName = editorTarget?.first.orEmpty()
+        val initialValue = editorTarget?.second.orEmpty()
+        var name by remember(editorTarget, creating) { mutableStateOf(initialName) }
+        var value by remember(editorTarget, creating) { mutableStateOf(initialValue) }
+        var nameError by remember { mutableStateOf(false) }
+        val isEdit = editorTarget != null
+        AlertDialog(
+            onDismissRequest = {
+                creating = false
+                editorTarget = null
+            },
+            title = {
+                Text(
+                    stringResource(
+                        if (isEdit) R.string.conversation_variables_edit
+                        else R.string.conversation_variables_add,
+                    ),
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.conversation_variables_name),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    BasicTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it
+                            nameError = false
+                        },
+                        enabled = !isEdit,
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                    )
+                    if (nameError) {
+                        Text(
+                            stringResource(R.string.conversation_variables_name_required),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.conversation_variables_value),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp)
+                            .padding(4.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = name.trim()
+                        if (trimmed.isEmpty()) {
+                            nameError = true
+                            return@TextButton
+                        }
+                        onUpsert(trimmed, value)
+                        creating = false
+                        editorTarget = null
+                    },
+                ) {
+                    Text(stringResource(R.string.conversation_variables_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        creating = false
+                        editorTarget = null
+                    },
+                ) {
+                    Text(stringResource(R.string.conversation_variables_cancel))
+                }
+            },
+        )
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.conversation_variables_delete_title)) },
+            text = {
+                Text(stringResource(R.string.conversation_variables_delete_message, target))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(target)
+                        deleteTarget = null
+                    },
+                ) {
+                    Text(stringResource(R.string.conversation_variables_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.conversation_variables_cancel))
+                }
+            },
         )
     }
 }
