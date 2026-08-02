@@ -22,7 +22,8 @@ import org.junit.Test
  * Chat Completions reasoning effort dialect mapping (#207):
  * - official DeepSeek XHIGH → max
  * - mid-station proxy + per-model DeepSeekMax
- * - default OpenAI-compat none→low / xhigh passthrough
+ * - default OpenAI-compat OFF→none / xhigh passthrough (#214)
+ * - unknown hosts keep passthrough for deepseek model ids (#214)
  * - nvidia deepseek-v4 regression
  */
 class ChatCompletionsAPIReasoningDialectTest {
@@ -121,13 +122,34 @@ class ChatCompletionsAPIReasoningDialectTest {
     }
 
     @Test
-    fun `default openai-compat OFF maps none to low`() {
+    fun `proxy host Auto with deepseek id keeps xhigh passthrough`() {
+        // #214: weak model-id hints must not force DeepSeekMax on unknown hosts.
+        val body = buildRequest(
+            baseUrl = "https://mid.station.example/v1",
+            modelId = "deepseek-reasoner",
+            reasoningLevel = ReasoningLevel.XHIGH,
+        )
+        assertEquals("xhigh", body["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `proxy host Auto OFF maps to none not low`() {
+        val body = buildRequest(
+            baseUrl = "https://mid.station.example/v1",
+            modelId = "deepseek-reasoner",
+            reasoningLevel = ReasoningLevel.OFF,
+        )
+        assertEquals("none", body["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `default openai-compat OFF maps to none not low`() {
         val body = buildRequest(
             baseUrl = "https://api.openai.com/v1",
             modelId = "o3-mini",
             reasoningLevel = ReasoningLevel.OFF,
         )
-        assertEquals("low", body["reasoning_effort"]?.jsonPrimitive?.content)
+        assertEquals("none", body["reasoning_effort"]?.jsonPrimitive?.content)
     }
 
     @Test

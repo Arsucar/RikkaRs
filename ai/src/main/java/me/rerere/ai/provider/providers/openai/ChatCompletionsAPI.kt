@@ -422,7 +422,7 @@ class ChatCompletionsAPI(
                         if ("deepseek-v4" in params.model.modelId.lowercase()) {
                             mapNvidiaDeepSeekV4Effort(level)?.let { put("reasoning_effort", it) }
                         } else {
-                            mapReasoningEffort(dialect, level, noneAsLow = true)?.let {
+                            mapReasoningEffort(dialect, level)?.let {
                                 put("reasoning_effort", it)
                             }
                         }
@@ -435,7 +435,7 @@ class ChatCompletionsAPI(
                     else -> {
                         // OpenAI 官方 / 通用 OpenAI-compat
                         // 文档中，completions API 只支持 "low", "medium", "high"
-                        mapReasoningEffort(dialect, level, noneAsLow = true)?.let {
+                        mapReasoningEffort(dialect, level)?.let {
                             put("reasoning_effort", it)
                         }
                     }

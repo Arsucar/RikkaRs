@@ -40,13 +40,15 @@ class ReasoningDialectTest {
     }
 
     @Test
-    fun `auto uses model-id hint for deepseek reasoner on unknown host`() {
+    fun `auto keeps passthrough for deepseek id on unknown host`() {
+        // #214: weak model-id hints must not override unknown (proxy) hosts; users
+        // opt into DeepSeekMax explicitly via the per-model dialect override.
         val dialect = resolveDialect(
             explicit = ReasoningDialect.Auto,
             host = "proxy.example.com",
             modelId = "deepseek-reasoner",
         )
-        assertEquals(ReasoningDialect.DeepSeekMax, dialect)
+        assertEquals(ReasoningDialect.OpenAIExtended, dialect)
     }
 
     @Test
@@ -92,22 +94,18 @@ class ReasoningDialectTest {
     }
 
     @Test
-    fun `noneAsLow rewrites OFF`() {
+    fun `OFF maps to none never low`() {
         assertEquals(
-            "low",
-            mapReasoningEffort(
-                ReasoningDialect.OpenAIExtended,
-                ReasoningLevel.OFF,
-                noneAsLow = true,
-            ),
+            "none",
+            mapReasoningEffort(ReasoningDialect.OpenAIExtended, ReasoningLevel.OFF),
         )
         assertEquals(
             "none",
-            mapReasoningEffort(
-                ReasoningDialect.OpenAIExtended,
-                ReasoningLevel.OFF,
-                noneAsLow = false,
-            ),
+            mapReasoningEffort(ReasoningDialect.OpenAIClassic, ReasoningLevel.OFF),
+        )
+        assertEquals(
+            "none",
+            mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.OFF),
         )
     }
 
