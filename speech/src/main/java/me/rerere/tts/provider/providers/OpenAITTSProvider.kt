@@ -45,25 +45,25 @@ class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(httpRequest).execute()
+        httpClient.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception("TTS request failed: ${response.code} ${response.message}")
+            }
 
-        if (!response.isSuccessful) {
-            throw Exception("TTS request failed: ${response.code} ${response.message}")
-        }
+            val audioData = response.body.bytes()
 
-        val audioData = response.body.bytes()
-
-        emit(
-            AudioChunk(
-                data = audioData,
-                format = AudioFormat.MP3,
-                isLast = true,
-                metadata = mapOf(
-                    "provider" to "openai",
-                    "model" to providerSetting.model,
-                    "voice" to providerSetting.voice
+            emit(
+                AudioChunk(
+                    data = audioData,
+                    format = AudioFormat.MP3,
+                    isLast = true,
+                    metadata = mapOf(
+                        "provider" to "openai",
+                        "model" to providerSetting.model,
+                        "voice" to providerSetting.voice
+                    )
                 )
             )
-        )
+        }
     }
 }

@@ -505,7 +505,7 @@ private fun mergeTools(storedTools: List<McpTool>, serverTools: List<Tool>): Lis
         ) ?: McpTool(
             name = serverTool.name,
             description = serverTool.description,
-            enable = true,
+            enable = false,
             inputSchema = serverTool.inputSchema.toSchema(),
         )
     }

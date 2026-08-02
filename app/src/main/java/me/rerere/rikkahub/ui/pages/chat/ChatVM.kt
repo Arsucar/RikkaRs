@@ -584,12 +584,13 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
+            chatService.stopGeneration(conversation.id)
             conversationRepo.deleteConversation(conversation)
         }
 
     fun updatePinnedStatus(conversation: Conversation) {
         viewModelScope.launch {
-            conversationRepo.togglePinStatus(conversation.id)
+            chatService.togglePinStatus(conversation.id)
         }
     }
 

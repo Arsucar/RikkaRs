@@ -28,6 +28,13 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
     ): Flow<AudioChunk> = flow {
         val audioData = suspendCancellableCoroutine<ByteArray> { continuation ->
             var tts: TextToSpeech? = null
+            val audioFile = File(context.appTempFolder, "tts_${System.currentTimeMillis()}.wav")
+            fun cleanupTts() {
+                runCatching { tts?.stop() }
+                runCatching { tts?.shutdown() }
+                tts = null
+                runCatching { if (audioFile.exists()) audioFile.delete() }
+            }
             val listener = TextToSpeech.OnInitListener { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     val ttsInstance = tts ?: error("TextToSpeech instance is null")
@@ -45,10 +52,6 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                 // Set speech parameters
                 ttsInstance.setSpeechRate(providerSetting.speechRate)
                 ttsInstance.setPitch(providerSetting.pitch)
-
-                // Create temporary file for audio output using temp directory like RikkaHubApp
-                val tempDir = context.appTempFolder
-                val audioFile = File(tempDir, "tts_${System.currentTimeMillis()}.wav")
 
                 val utteranceId = UUID.randomUUID().toString()
 
@@ -72,7 +75,8 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                         } catch (e: Exception) {
                             if (continuation.isActive) continuation.resumeWithException(e)
                         } finally {
-                            ttsInstance.shutdown()
+                            runCatching { ttsInstance.shutdown() }
+                            tts = null
                         }
                     }
 
@@ -82,7 +86,8 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                         if (continuation.isActive) continuation.resumeWithException(
                             Exception("TTS synthesis failed")
                         )
-                        ttsInstance.shutdown()
+                        runCatching { ttsInstance.shutdown() }
+                        tts = null
                     }
                 })
 
@@ -97,19 +102,20 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                     if (continuation.isActive) continuation.resumeWithException(
                         Exception("Failed to start TTS synthesis")
                     )
-                    ttsInstance.shutdown()
+                    cleanupTts()
                 }
 
             } else {
                 if (continuation.isActive) continuation.resumeWithException(
                     Exception("Failed to initialize TextToSpeech engine")
                 )
+                cleanupTts()
             }
         }
         tts = TextToSpeech(context, listener)
 
         continuation.invokeOnCancellation {
-            tts?.shutdown()
+            cleanupTts()
         }
     }
 

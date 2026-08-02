@@ -767,7 +767,17 @@ class ChatService(
     ) {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
-        val target = settings.resolveGenerationTarget(initialConversation) ?: return
+        val target = settings.resolveGenerationTarget(initialConversation)
+        if (target == null) {
+            addError(
+                error = IllegalStateException(
+                    context.getString(R.string.chat_input_default_model_unavailable)
+                ),
+                conversationId = conversationId,
+                title = context.getString(R.string.error_title_generation),
+            )
+            return
+        }
         val assistant = target.assistant
         val model = target.model
         val sourceNode = initialConversation.messageNodes.lastOrNull { !it.hidden }
@@ -849,7 +859,7 @@ class ChatService(
                 tools = prepared.tools,
                 firstPreparedInput = prepared.providerInput,
             ).onCompletion {
-                // 可能被取消了，或者意外结束，兜底更新
+                // 可能被取消了，或者意外结束，兜底更新并落盘（取消路径不会走 onSuccess）
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
                     messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
                         node.copy(messages = node.messages.map { it.finishReasoning() })
@@ -863,6 +873,9 @@ class ChatService(
                         },
                         updateAt = Instant.now(),
                     ).cleanStaleStreamingMetadata()
+                }
+                runCatching {
+                    saveConversation(conversationId, getConversationFlow(conversationId).value)
                 }
 
                 // 生成结束：取消 Live Update 通知，后台时发送完成通知
@@ -894,6 +907,9 @@ class ChatService(
         }.onFailure {
             if (it is CancellationException) {
                 hookRepository.markTurnCancelled(activeLogicalTurnId)
+                runCatching {
+                    saveConversation(conversationId, getConversationFlow(conversationId).value)
+                }
                 throw it
             }
             hookRepository.markTurnFailed(activeLogicalTurnId)
@@ -2101,13 +2117,10 @@ class ChatService(
                 )
             }
 
-            // 生成完，conversation可能不是最新了，因此需要重新获取
-            conversationRepo.getConversationById(conversation.id)?.let {
-                saveConversation(
-                    conversationId,
-                    it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
-                )
-            }
+            // Patch title on live session only — never reload full DB object (clobbers concurrent stream edits).
+            val newTitle = result.choices[0].message?.toText()?.trim() ?: ""
+            updateConversationState(conversationId) { prev -> prev.copy(title = newTitle) }
+            saveConversation(conversationId, getConversationFlow(conversationId).value)
         }.onFailure {
             it.printStackTrace()
             addError(
@@ -2128,12 +2141,7 @@ class ChatService(
             val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
 
-            sessions[conversationId]?.let { session ->
-                updateConversation(
-                    conversationId,
-                    session.state.value.copy(chatSuggestions = emptyList())
-                )
-            }
+            updateConversationState(conversationId) { prev -> prev.copy(chatSuggestions = emptyList()) }
 
             val providerHandler = providerManager.getProviderByType(provider)
             // #182: 预设内启用的 suggestion 覆盖 > 全局 settings.suggestionPrompt（仅当有非空覆盖）。
@@ -2160,19 +2168,15 @@ class ChatService(
             }
             val suggestions =
                 result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
-                    ?.filter { it.isNotBlank() } ?: emptyList()
+                    ?.filter { it.isNotBlank() }
+                    ?.take(10)
+                    ?: emptyList()
 
-            val latestConversation = conversationRepo.getConversationById(conversationId)
-                ?: sessions[conversationId]?.state?.value
-                ?: conversation
-            saveConversation(
-                conversationId,
-                latestConversation.copy(
-                    chatSuggestions = suggestions.take(
-                        10
-                    )
-                )
-            )
+            // Patch suggestions on live session only — never reload full DB object.
+            updateConversationState(conversationId) { prev ->
+                prev.copy(chatSuggestions = suggestions)
+            }
+            saveConversation(conversationId, getConversationFlow(conversationId).value)
         }.onFailure {
             it.printStackTrace()
         }
@@ -2571,6 +2575,23 @@ class ChatService(
     }
 
     /**
+     * 切换会话置顶。与 moveConversationToFolder 同理：活跃 session 须先同步 isPinned，
+     * 否则后续 saveConversation 整对象写回会覆盖 DB 列更新。
+     */
+    suspend fun togglePinStatus(conversationId: Uuid) {
+        val currentPinned = if (sessions.containsKey(conversationId)) {
+            getConversationFlow(conversationId).value.isPinned
+        } else {
+            conversationRepo.getConversationById(conversationId)?.isPinned ?: false
+        }
+        val nextPinned = !currentPinned
+        if (sessions.containsKey(conversationId)) {
+            updateConversationState(conversationId) { it.copy(isPinned = nextPinned) }
+        }
+        conversationRepo.setPinStatus(conversationId, nextPinned)
+    }
+
+    /**
      * #89: 把会话移动到另一个助手。除了改 assistantId 之外，
      * 文件夹是助手内分组，切换助手后原文件夹在新助手下不可见，需清空 folderId 避免会话丢失。
      * 同时把该会话中 followSource=true 的对话级记忆文档重绑到新助手的同模板文档；
@@ -2901,12 +2922,17 @@ class ChatService(
                 return@mapIndexedNotNull node
             }
 
+            val deletedIndex = node.messages.indexOfFirst { it.id == messageId }
             val nextMessages = node.messages.filterNot { it.id == messageId }
             if (nextMessages.isEmpty()) {
                 return@mapIndexedNotNull null
             }
 
-            val nextSelectIndex = node.selectIndex.coerceAtMost(nextMessages.lastIndex)
+            val nextSelectIndex = when {
+                deletedIndex < 0 -> node.selectIndex.coerceIn(0, nextMessages.lastIndex)
+                deletedIndex < node.selectIndex -> (node.selectIndex - 1).coerceIn(0, nextMessages.lastIndex)
+                else -> node.selectIndex.coerceAtMost(nextMessages.lastIndex)
+            }
             node.copy(
                 messages = nextMessages,
                 selectIndex = nextSelectIndex,
@@ -3278,11 +3304,18 @@ class ChatService(
         subagentHost.requestCancel(conversationId, SUBAGENT_USER_CANCEL_REASON)
         val job = sessions[conversationId]?.getJob() ?: run {
             finishInterruptedPendingTools(conversationId)
+            runCatching {
+                saveConversation(conversationId, getConversationFlow(conversationId).value)
+            }
             return
         }
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
+        // Stream chunks only live in memory until success; always persist partial reply on cancel.
+        runCatching {
+            saveConversation(conversationId, getConversationFlow(conversationId).value)
+        }
     }
 }
 

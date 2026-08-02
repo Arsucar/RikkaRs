@@ -50,7 +50,10 @@ data class Conversation(
         get(): List<UIMessage> {
             return messageNodes
                 .filter { !it.hidden }
-                .map { node -> node.messages[node.selectIndex] }
+                .mapNotNull { node ->
+                    if (node.messages.isEmpty()) null
+                    else node.messages[node.selectIndex.coerceIn(0, node.messages.lastIndex)]
+                }
         }
 
     fun getMessageNodeByMessage(message: UIMessage): MessageNode? {
@@ -123,10 +126,9 @@ data class MessageNode(
     @Transient
     val isFavorite: Boolean = false,
 ) {
-    val currentMessage get() = if (messages.isEmpty() || selectIndex !in messages.indices) {
-        throw IllegalStateException("MessageNode has no valid current message: messages.size=${messages.size}, selectIndex=$selectIndex")
-    } else {
-        messages[selectIndex]
+    val currentMessage get() = when {
+        messages.isEmpty() -> throw IllegalStateException("MessageNode has no messages")
+        else -> messages[selectIndex.coerceIn(0, messages.lastIndex)]
     }
 
     val role get() = messages.firstOrNull()?.role ?: MessageRole.USER

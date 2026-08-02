@@ -71,35 +71,36 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body.string()
-                val bochaResponse = runCatching {
-                    json.decodeFromString<BochaResponse>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println(bodyRaw)
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body.string()
+                    val bochaResponse = runCatching {
+                        json.decodeFromString<BochaResponse>(bodyRaw)
+                    }.onFailure {
+                        it.printStackTrace()
+                        println(bodyRaw)
+                        error("Failed to decode response: $bodyRaw")
+                    }.getOrThrow()
 
-                if (bochaResponse.code != 200) {
-                    error("Bocha API error: ${bochaResponse.msg ?: "Unknown error"}")
-                }
+                    if (bochaResponse.code != 200) {
+                        error("Bocha API error: ${bochaResponse.msg ?: "Unknown error"}")
+                    }
 
-                return@withContext Result.success(
-                    SearchResult(
-                        items = bochaResponse.data?.webPages?.value?.map {
-                            SearchResultItem(
-                                title = it.name,
-                                url = it.url,
-                                text = it.summary ?: it.snippet,
-                            )
-                        } ?: emptyList()
+                    return@withContext Result.success(
+                        SearchResult(
+                            items = bochaResponse.data?.webPages?.value?.map {
+                                SearchResultItem(
+                                    title = it.name,
+                                    url = it.url,
+                                    text = it.summary ?: it.snippet,
+                                )
+                            } ?: emptyList()
+                        )
                     )
-                )
-            } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                } else {
+                    println(response.body.string())
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

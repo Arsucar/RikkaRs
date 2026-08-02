@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -536,14 +538,19 @@ class SettingsStore(
 
     private val presetEntriesMigrationPersistScheduled = AtomicBoolean(false)
 
+    /** Serializes full and partial settings writes so concurrent RMW cannot interleave mid-update. */
+    private val updateMutex = Mutex()
+
     private fun schedulePresetEntriesMigrationPersist() {
         appScope.launch {
             if (!presetEntriesMigrationPersistScheduled.compareAndSet(false, true)) {
                 return@launch
             }
             try {
-                dataStore.edit { preferences ->
-                    preferences.migratePresetEntriesIfNeeded()
+                updateMutex.withLock {
+                    dataStore.edit { preferences ->
+                        preferences.migratePresetEntriesIfNeeded()
+                    }
                 }
             } finally {
                 presetEntriesMigrationPersistScheduled.set(false)
@@ -587,156 +594,94 @@ class SettingsStore(
         }
 
     suspend fun update(settings: Settings) {
-        if(settings.init) {
-            Log.w(TAG, "Cannot update dummy settings")
-            return
-        }
-        settingsFlow.value = settings
-        dataStore.edit { preferences ->
-            preferences[DYNAMIC_COLOR] = settings.dynamicColor
-            preferences[THEME_ID] = settings.themeId
-            preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
-            preferences[DEVELOPER_MODE] = settings.developerMode
-            preferences[REQUEST_LOGGING_ENABLED] = settings.requestLoggingEnabled
-            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
-
-            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
-            preferences[RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
-            preferences[SELECT_MODEL] = settings.chatModelId.toString()
-            preferences[FAST_MODEL] = settings.fastModelId.toString()
-            settings.titleModelId?.let {
-                preferences[TITLE_MODEL] = it.toString()
-            } ?: preferences.remove(TITLE_MODEL)
-            preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
-            preferences[ENABLE_SUGGESTION] = settings.enableSuggestion
-            settings.suggestionModelId?.let {
-                preferences[SUGGESTION_MODEL] = it.toString()
-            } ?: preferences.remove(SUGGESTION_MODEL)
-            preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
-            preferences[TITLE_PROMPT] = settings.titlePrompt
-            preferences[TRANSLATION_PROMPT] = settings.translatePrompt
-            preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
-            preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
-            preferences[OCR_MODEL] = settings.ocrModelId.toString()
-            preferences[OCR_PROMPT] = settings.ocrPrompt
-            preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
-            preferences[COMPRESS_PROMPT] = settings.compressPrompt
-            preferences.writeCompressionPreferences(
-                targetTokens = settings.compressTargetTokens,
-                keepRecentMessages = settings.compressKeepRecentMessages,
-            )
-
-            preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
-            preferences[PROVIDER_TAG_ORDER] = JsonInstant.encodeToString(settings.providerTagOrder)
-            preferences[HIDDEN_PROVIDER_TAGS] = JsonInstant.encodeToString(settings.hiddenProviderTags)
-
-            preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
-            preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
-            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
-            preferences[ENABLE_MEMORY_TABLE] = settings.enableMemoryTable
-            preferences[MEMORY_TABLE_MAX_INJECT_DOCUMENTS] = encodeMemoryTableBudget(
-                settings.memoryTableMaxInjectDocuments
-            )
-            preferences[MEMORY_TABLE_MAX_INJECT_TOKENS] = encodeMemoryTableBudget(
-                settings.memoryTableMaxInjectTokens
-            )
-            preferences[MEMORY_TABLE_MAX_INJECT_CHARS] = encodeMemoryTableBudget(
-                settings.memoryTableMaxInjectChars
-            )
-            preferences.writeMemoryTableAutoSyncEnabled(settings.memoryTableAutoSyncEnabled)
-
-            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
-            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
-
-            preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
-            preferences[GLOBAL_SUBAGENT_PROFILES] = JsonInstant.encodeToString(settings.globalSubagentProfiles)
-            preferences[SUBAGENT_BUILTIN_MIGRATED] = settings.subagentBuiltinMigrated
-            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
-            preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
-            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
-            settings.selectedTTSProviderId?.let {
-                preferences[SELECTED_TTS_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-            preferences[DEFAULT_TTS_PLAYBACK_SPEED] = settings.defaultTTSPlaybackSpeed.coerceIn(0.5f, 2.0f)
-            preferences[ASR_PROVIDERS] = JsonInstant.encodeToString(settings.asrProviders)
-            settings.selectedASRProviderId?.let {
-                preferences[SELECTED_ASR_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_ASR_PROVIDER)
-            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-            preferences[PRESETS] = JsonInstant.encodeToString(settings.presets)
-            preferences[TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(
-                settings.toolPermissionPresets.take(TOOL_PERMISSION_PRESET_MAX_COUNT).filter { it.isValidForPersistence() }
-            )
-            preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
-            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
-            preferences[IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
-            preferences[IMAGE_GENERATION_SETTINGS] = JsonInstant.encodeToString(settings.imageGenerationSettings)
-            preferences[IMAGE_GALLERY_SETTINGS] = JsonInstant.encodeToString(settings.imageGallerySettings)
-            preferences[IMAGE_FAVORITE_COLLECTIONS] = JsonInstant.encodeToString(settings.imageFavoriteCollections)
-            preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
-            preferences[WEB_SERVER_PORT] = settings.webServerPort
-            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
-            preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
-            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
-            preferences[LAUNCH_COUNT] = settings.launchCount
-            preferences[WORKSPACE_FILES_STORAGE] = settings.workspaceFilesStorage.name
-            preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
-            // [SemanticMemory Plugin]
-            preferences[SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
+        updateMutex.withLock {
+            updateUnlocked(settings)
         }
     }
 
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        updateMutex.withLock {
+            updateUnlocked(fn(settingsFlow.value))
+        }
+    }
+
+    private suspend fun updateUnlocked(settings: Settings) {
+        if (settings.init) {
+            Log.w(TAG, "Cannot update dummy settings")
+            return
+        }
+        dataStore.edit { preferences ->
+            preferences.writeFullSettings(settings)
+        }
+        // Assign only after a successful edit so a failed write cannot leave memory ahead of disk.
+        settingsFlow.value = settings
+    }
+
+    private suspend fun syncSettingsFlowFromStore() {
+        settingsFlow.value = settingsFlowRaw.first()
     }
 
     suspend fun updateCompressionPreferences(targetTokens: Int, keepRecentMessages: Int) {
-        dataStore.edit { preferences ->
-            preferences.writeCompressionPreferences(
-                targetTokens = targetTokens,
-                keepRecentMessages = keepRecentMessages,
-            )
+        updateMutex.withLock {
+            dataStore.edit { preferences ->
+                preferences.writeCompressionPreferences(
+                    targetTokens = targetTokens,
+                    keepRecentMessages = keepRecentMessages,
+                )
+            }
+            syncSettingsFlowFromStore()
         }
     }
 
     suspend fun updateAssistant(assistantId: Uuid): Boolean {
-        val fallbackAssistants = settingsFlow.value.assistants
-        var selected = false
-        dataStore.edit { preferences ->
-            selected = preferences.selectActiveAssistant(
-                assistantId = assistantId,
-                fallbackAssistants = fallbackAssistants,
-            )
+        return updateMutex.withLock {
+            val fallbackAssistants = settingsFlow.value.assistants
+            var selected = false
+            dataStore.edit { preferences ->
+                selected = preferences.selectActiveAssistant(
+                    assistantId = assistantId,
+                    fallbackAssistants = fallbackAssistants,
+                )
+            }
+            if (selected) {
+                syncSettingsFlowFromStore()
+            }
+            selected
         }
-        return selected
     }
 
     suspend fun setAssistantArchived(
         assistantId: Uuid,
         archived: Boolean,
     ): AssistantArchiveResult {
-        val fallbackSettings = settingsFlow.value
-        var result: AssistantArchiveResult = AssistantArchiveResult.AssistantNotFound
-        dataStore.edit { preferences ->
-            result = preferences.writeAssistantArchiveState(
-                assistantId = assistantId,
-                archived = archived,
-                fallbackAssistants = fallbackSettings.assistants,
-                fallbackSelectedAssistantId = fallbackSettings.assistantId,
-            )
+        return updateMutex.withLock {
+            val fallbackSettings = settingsFlow.value
+            var result: AssistantArchiveResult = AssistantArchiveResult.AssistantNotFound
+            dataStore.edit { preferences ->
+                result = preferences.writeAssistantArchiveState(
+                    assistantId = assistantId,
+                    archived = archived,
+                    fallbackAssistants = fallbackSettings.assistants,
+                    fallbackSelectedAssistantId = fallbackSettings.assistantId,
+                )
+            }
+            if (result is AssistantArchiveResult.Success) {
+                syncSettingsFlowFromStore()
+            }
+            result
         }
-        return result
     }
 
     suspend fun updateAssistantConfig(assistant: Assistant) {
-        val fallbackAssistants = settingsFlow.value.assistants
-        dataStore.edit { preferences ->
-            preferences.writeAssistantConfig(
-                assistant = assistant,
-                fallbackAssistants = fallbackAssistants,
-            )
+        updateMutex.withLock {
+            val fallbackAssistants = settingsFlow.value.assistants
+            dataStore.edit { preferences ->
+                preferences.writeAssistantConfig(
+                    assistant = assistant,
+                    fallbackAssistants = fallbackAssistants,
+                )
+            }
+            syncSettingsFlowFromStore()
         }
     }
 
@@ -745,17 +690,22 @@ class SettingsStore(
         presetId: Uuid,
         transform: (Preset) -> Preset,
     ): Boolean {
-        val fallbackSettings = settingsFlow.value
-        var updated = false
-        dataStore.edit { preferences ->
-            updated = preferences.writePresetUpdate(
-                presetId = presetId,
-                fallbackPresets = fallbackSettings.presets,
-                fallbackModeInjections = fallbackSettings.modeInjections,
-                transform = transform,
-            )
+        return updateMutex.withLock {
+            val fallbackSettings = settingsFlow.value
+            var updated = false
+            dataStore.edit { preferences ->
+                updated = preferences.writePresetUpdate(
+                    presetId = presetId,
+                    fallbackPresets = fallbackSettings.presets,
+                    fallbackModeInjections = fallbackSettings.modeInjections,
+                    transform = transform,
+                )
+            }
+            if (updated) {
+                syncSettingsFlowFromStore()
+            }
+            updated
         }
-        return updated
     }
 
     /**
@@ -780,16 +730,21 @@ class SettingsStore(
         assistantId: Uuid,
         workspaceId: Uuid?,
     ): AssistantWorkspaceBindingUpdateResult {
-        val fallbackAssistants = settingsFlow.value.assistants
-        var result = AssistantWorkspaceBindingUpdateResult.NOT_FOUND
-        dataStore.edit { preferences ->
-            result = preferences.writeAssistantWorkspaceBinding(
-                assistantId = assistantId,
-                workspaceId = workspaceId,
-                fallbackAssistants = fallbackAssistants,
-            )
+        return updateMutex.withLock {
+            val fallbackAssistants = settingsFlow.value.assistants
+            var result = AssistantWorkspaceBindingUpdateResult.NOT_FOUND
+            dataStore.edit { preferences ->
+                result = preferences.writeAssistantWorkspaceBinding(
+                    assistantId = assistantId,
+                    workspaceId = workspaceId,
+                    fallbackAssistants = fallbackAssistants,
+                )
+            }
+            if (result == AssistantWorkspaceBindingUpdateResult.UPDATED) {
+                syncSettingsFlowFromStore()
+            }
+            result
         }
-        return result
     }
 
     suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
@@ -914,6 +869,102 @@ internal fun Settings.withModeInjectionsPreservingPresetSnapshots(
     modeInjections = updatedModeInjections,
     presets = presets.map { preset -> preset.migratedWithEntries(modeInjections) },
 )
+
+/** Full settings rewrite used by [SettingsStore.update]; kept private to the store call path. */
+private fun MutablePreferences.writeFullSettings(settings: Settings) {
+    this[SettingsStore.DYNAMIC_COLOR] = settings.dynamicColor
+    this[SettingsStore.THEME_ID] = settings.themeId
+    this[SettingsStore.CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
+    this[SettingsStore.DEVELOPER_MODE] = settings.developerMode
+    this[SettingsStore.REQUEST_LOGGING_ENABLED] = settings.requestLoggingEnabled
+    this[SettingsStore.DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+
+    this[SettingsStore.FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
+    this[SettingsStore.RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
+    this[SettingsStore.SELECT_MODEL] = settings.chatModelId.toString()
+    this[SettingsStore.FAST_MODEL] = settings.fastModelId.toString()
+    settings.titleModelId?.let {
+        this[SettingsStore.TITLE_MODEL] = it.toString()
+    } ?: this.remove(SettingsStore.TITLE_MODEL)
+    this[SettingsStore.TRANSLATE_MODEL] = settings.translateModeId.toString()
+    this[SettingsStore.ENABLE_SUGGESTION] = settings.enableSuggestion
+    settings.suggestionModelId?.let {
+        this[SettingsStore.SUGGESTION_MODEL] = it.toString()
+    } ?: this.remove(SettingsStore.SUGGESTION_MODEL)
+    this[SettingsStore.IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
+    this[SettingsStore.TITLE_PROMPT] = settings.titlePrompt
+    this[SettingsStore.TRANSLATION_PROMPT] = settings.translatePrompt
+    this[SettingsStore.TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
+    this[SettingsStore.SUGGESTION_PROMPT] = settings.suggestionPrompt
+    this[SettingsStore.OCR_MODEL] = settings.ocrModelId.toString()
+    this[SettingsStore.OCR_PROMPT] = settings.ocrPrompt
+    this[SettingsStore.COMPRESS_MODEL] = settings.compressModelId.toString()
+    this[SettingsStore.COMPRESS_PROMPT] = settings.compressPrompt
+    writeCompressionPreferences(
+        targetTokens = settings.compressTargetTokens,
+        keepRecentMessages = settings.compressKeepRecentMessages,
+    )
+
+    this[SettingsStore.PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+    this[SettingsStore.PROVIDER_TAG_ORDER] = JsonInstant.encodeToString(settings.providerTagOrder)
+    this[SettingsStore.HIDDEN_PROVIDER_TAGS] = JsonInstant.encodeToString(settings.hiddenProviderTags)
+
+    this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
+    this[SettingsStore.SELECT_ASSISTANT] = settings.assistantId.toString()
+    this[SettingsStore.ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
+    this[SettingsStore.ENABLE_MEMORY_TABLE] = settings.enableMemoryTable
+    this[SettingsStore.MEMORY_TABLE_MAX_INJECT_DOCUMENTS] = encodeMemoryTableBudget(
+        settings.memoryTableMaxInjectDocuments
+    )
+    this[SettingsStore.MEMORY_TABLE_MAX_INJECT_TOKENS] = encodeMemoryTableBudget(
+        settings.memoryTableMaxInjectTokens
+    )
+    this[SettingsStore.MEMORY_TABLE_MAX_INJECT_CHARS] = encodeMemoryTableBudget(
+        settings.memoryTableMaxInjectChars
+    )
+    writeMemoryTableAutoSyncEnabled(settings.memoryTableAutoSyncEnabled)
+
+    this[SettingsStore.SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
+    this[SettingsStore.SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
+    this[SettingsStore.SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+
+    this[SettingsStore.MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
+    this[SettingsStore.GLOBAL_SUBAGENT_PROFILES] = JsonInstant.encodeToString(settings.globalSubagentProfiles)
+    this[SettingsStore.SUBAGENT_BUILTIN_MIGRATED] = settings.subagentBuiltinMigrated
+    this[SettingsStore.WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
+    this[SettingsStore.S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
+    this[SettingsStore.TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
+    settings.selectedTTSProviderId?.let {
+        this[SettingsStore.SELECTED_TTS_PROVIDER] = it.toString()
+    } ?: this.remove(SettingsStore.SELECTED_TTS_PROVIDER)
+    this[SettingsStore.DEFAULT_TTS_PLAYBACK_SPEED] = settings.defaultTTSPlaybackSpeed.coerceIn(0.5f, 2.0f)
+    this[SettingsStore.ASR_PROVIDERS] = JsonInstant.encodeToString(settings.asrProviders)
+    settings.selectedASRProviderId?.let {
+        this[SettingsStore.SELECTED_ASR_PROVIDER] = it.toString()
+    } ?: this.remove(SettingsStore.SELECTED_ASR_PROVIDER)
+    this[SettingsStore.MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
+    this[SettingsStore.PRESETS] = JsonInstant.encodeToString(settings.presets)
+    this[SettingsStore.TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(
+        settings.toolPermissionPresets.take(TOOL_PERMISSION_PRESET_MAX_COUNT).filter { it.isValidForPersistence() }
+    )
+    this[SettingsStore.LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
+    this[SettingsStore.QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+    this[SettingsStore.IMAGE_QUICK_MESSAGES] = JsonInstant.encodeToString(settings.imageQuickMessages)
+    this[SettingsStore.IMAGE_GENERATION_SETTINGS] = JsonInstant.encodeToString(settings.imageGenerationSettings)
+    this[SettingsStore.IMAGE_GALLERY_SETTINGS] = JsonInstant.encodeToString(settings.imageGallerySettings)
+    this[SettingsStore.IMAGE_FAVORITE_COLLECTIONS] = JsonInstant.encodeToString(settings.imageFavoriteCollections)
+    this[SettingsStore.WEB_SERVER_ENABLED] = settings.webServerEnabled
+    this[SettingsStore.WEB_SERVER_PORT] = settings.webServerPort
+    this[SettingsStore.WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
+    this[SettingsStore.WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
+    this[SettingsStore.WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
+    this[SettingsStore.BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
+    this[SettingsStore.LAUNCH_COUNT] = settings.launchCount
+    this[SettingsStore.WORKSPACE_FILES_STORAGE] = settings.workspaceFilesStorage.name
+    this[SettingsStore.SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+    // [SemanticMemory Plugin]
+    this[SettingsStore.SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
+}
 
 /** Reads the latest persisted preset list and changes only [presetId]. */
 internal fun MutablePreferences.writePresetUpdate(

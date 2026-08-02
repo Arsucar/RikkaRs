@@ -4,6 +4,7 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.InputStream
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
 private data class ManifestItem(
@@ -12,25 +13,52 @@ private data class ManifestItem(
     val mediaType: String
 )
 
+private const val MAX_ZIP_ENTRY_BYTES = 50L * 1024 * 1024
+private const val MAX_TOTAL_ZIP_BYTES = 100L * 1024 * 1024
+private const val MAX_EXTRACTED_TEXT_CHARS = 5 * 1024 * 1024
+private const val MAX_ZIP_ENTRIES = 10_000
+
 object EpubParser {
     fun parse(file: File): String {
         return try {
             ZipFile(file).use { zip ->
+                val allEntries = zip.entries().toList()
+                if (allEntries.size > MAX_ZIP_ENTRIES) {
+                    return "EPUB zip exceeds max entry count"
+                }
+                var totalDeclared = 0L
+                for (entry in allEntries) {
+                    if (!acceptZipEntry(entry)) {
+                        return "EPUB zip entry too large"
+                    }
+                    if (entry.size > 0) {
+                        totalDeclared += entry.size
+                        if (totalDeclared > MAX_TOTAL_ZIP_BYTES) {
+                            return "EPUB zip exceeds max total expansion size"
+                        }
+                    }
+                }
+
                 val opfPath = findOpfPath(zip)
                     ?: return "Unable to find OPF file in EPUB"
                 val opfDir = opfPath.substringBeforeLast('/', "")
 
                 val opfEntry = zip.getEntry(opfPath)
                     ?: return "Unable to read OPF file in EPUB"
+                if (!acceptZipEntry(opfEntry)) {
+                    return "EPUB OPF entry too large"
+                }
                 val (manifest, spine) = zip.getInputStream(opfEntry).use { parseOpf(it) }
 
                 val result = StringBuilder()
                 for (itemId in spine) {
+                    if (result.length >= MAX_EXTRACTED_TEXT_CHARS) break
                     val item = manifest[itemId] ?: continue
                     if (!item.mediaType.contains("html")) continue
 
                     val itemPath = if (opfDir.isEmpty()) item.href else "$opfDir/${item.href}"
                     val entry = zip.getEntry(itemPath) ?: continue
+                    if (!acceptZipEntry(entry)) continue
                     val content = zip.getInputStream(entry).use { parseXhtml(it) }
                     if (content.isNotBlank()) {
                         result.append(content)
@@ -45,8 +73,14 @@ object EpubParser {
         }
     }
 
+    private fun acceptZipEntry(entry: ZipEntry): Boolean {
+        val size = entry.size
+        return size < 0 || size <= MAX_ZIP_ENTRY_BYTES
+    }
+
     private fun findOpfPath(zip: ZipFile): String? {
         val containerEntry = zip.getEntry("META-INF/container.xml") ?: return null
+        if (!acceptZipEntry(containerEntry)) return null
         return zip.getInputStream(containerEntry).use { stream ->
             val factory = XmlPullParserFactory.newInstance()
             factory.isNamespaceAware = true
@@ -166,7 +200,7 @@ object EpubParser {
                     }
 
                     XmlPullParser.TEXT -> {
-                        if (inBody) {
+                        if (inBody && result.length < MAX_EXTRACTED_TEXT_CHARS) {
                             val text = parser.text
                                 ?.replace('\n', ' ')
                                 ?.replace('\r', ' ')

@@ -71,7 +71,7 @@ class BackupArchive(
                 }
 
                 if (options.includeFiles) {
-                    addTopLevelFiles(zipOut, FileFolders.UPLOAD)
+                    addFolderRecursive(zipOut, FileFolders.UPLOAD)
                     addSkills(zipOut)
                     addTopLevelFiles(zipOut, FileFolders.FONTS)
                 }
@@ -99,18 +99,22 @@ class BackupArchive(
             .forEach { file -> addFileToZip(zipOut, file, "$folderName/${file.name}") }
     }
 
-    private suspend fun addSkills(zipOut: ZipOutputStream) {
-        val root = File(context.filesDir, FileFolders.SKILLS)
+    private suspend fun addFolderRecursive(zipOut: ZipOutputStream, folderName: String) {
+        val root = File(context.filesDir, folderName)
         if (!root.exists()) return
-        if (!root.isDirectory) throw IOException("Skills backup path is not a directory: ${root.absolutePath}")
+        if (!root.isDirectory) throw IOException("Backup path is not a directory: ${root.absolutePath}")
 
         addDirectoryToZip(
             zipOut = zipOut,
             rootDir = root.canonicalFile,
             currentDir = root.canonicalFile,
-            entryPrefix = "${FileFolders.SKILLS}/",
+            entryPrefix = "$folderName/",
             visitedDirectories = mutableSetOf(),
         )
+    }
+
+    private suspend fun addSkills(zipOut: ZipOutputStream) {
+        addFolderRecursive(zipOut, FileFolders.SKILLS)
     }
 
     private suspend fun addDirectoryToZip(

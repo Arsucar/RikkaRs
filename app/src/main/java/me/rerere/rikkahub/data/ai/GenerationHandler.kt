@@ -246,13 +246,6 @@ class GenerationHandler(
                     workspaceToolAvailable = workspaceToolAvailable,
                     preparedInput = if (canReuseFirstPreparedInput) checkNotNull(firstPreparedInput) else null,
                 )
-                messages = messages.visualTransforms(
-                    transformers = outputTransformers,
-                    context = context,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings
-                )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,
@@ -685,26 +678,23 @@ class GenerationHandler(
                 }
                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                 val result = withToolCallId(tool.toolCallId) { toolDef.execute(args) }
-                val hasShellAccess = toolsInternal.any { it.name == "workspace_shell" }
-                tool.copy(output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess))
+                tool.copy(output = maybeTruncateToolOutput(tool.toolCallId, result))
             }.onFailure {
                 if (it is CancellationException) throw it
-                it.printStackTrace()
+                Log.e(TAG, "generateText: tool ${tool.toolName} failed", it)
             }.getOrElse {
+                val shortError = (it.message?.takeIf { msg -> msg.isNotBlank() } ?: it.toString())
+                    .lineSequence()
+                    .firstOrNull()
+                    .orEmpty()
+                    .take(500)
+                    .ifBlank { it.javaClass.simpleName ?: "Tool execution failed" }
                 tool.copy(
                     output = listOf(
                         UIMessagePart.Text(
                             json.encodeToString(
                                 buildJsonObject {
-                                    put(
-                                        "error",
-                                        JsonPrimitive(
-                                            buildString {
-                                                append("[${it.javaClass.name}] ${it.message}")
-                                                append("\n${it.stackTraceToString()}")
-                                            },
-                                        ),
-                                    )
+                                    put("error", JsonPrimitive(shortError))
                                 },
                             ),
                         ),
@@ -717,13 +707,12 @@ class GenerationHandler(
     private fun maybeTruncateToolOutput(
         toolCallId: String,
         output: List<UIMessagePart>,
-        hasShellAccess: Boolean,
     ): List<UIMessagePart> {
         val textParts = output.filterIsInstance<UIMessagePart.Text>()
         val nonTextParts = output.filter { it !is UIMessagePart.Text }
         val totalChars = textParts.sumOf { it.text.length }
 
-        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS) return output
 
         Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
 

@@ -39,13 +39,22 @@ import me.rerere.rikkahub.web.routes.settingsRoutes
 import java.security.MessageDigest
 import java.util.Date
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 private const val WEB_JWT_ISSUER = "rikkahub-web"
 private const val WEB_JWT_AUDIENCE = "rikkahub-web-client"
 private const val WEB_JWT_SUBJECT = "web-access"
-private const val WEB_JWT_TTL_MILLIS = 30L * 24 * 60 * 60 * 1000
+/** Short-lived tokens reduce leak window from query-string media URLs and logs. */
+private const val WEB_JWT_TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
+/**
+ * Query fallback for media/file URLs that cannot set Authorization (e.g. img src).
+ * Prefer Authorization: Bearer for all fetch/SSE clients.
+ */
 private const val WEB_ACCESS_TOKEN_QUERY_KEY = "access_token"
 private const val WEB_AUTH_REALM = "rikkahub-web-api"
+/** App-fixed salt so the raw access password is never used directly as HMAC key. */
+private const val WEB_JWT_SECRET_SALT = "rikkahub-web-jwt-v1"
 
 /**
  * Configure Web API for the Ktor application.
@@ -66,7 +75,8 @@ fun Application.configureWebApi(
     settingsStore: SettingsStore,
     filesManager: FilesManager
 ) {
-    val jwtEnabled = settingsStore.settingsFlow.value.webServerJwtEnabled
+    val bootSettings = settingsStore.settingsFlow.value
+    val jwtEnabled = bootSettings.webServerJwtEnabled || !bootSettings.webServerLocalhostOnly
 
     install(ContentNegotiation) {
         json(JsonInstant)
@@ -92,16 +102,19 @@ fun Application.configureWebApi(
             jwt("auth-jwt") {
                 realm = WEB_AUTH_REALM
                 verifier { _ ->
-                    // Dynamically read the current password on each request so that
+                    // Dynamically derive the signing secret from the live password so
                     // tokens signed after a password change are validated correctly.
                     val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
-                    val secret = currentPassword.ifBlank {
+                    val secret = if (currentPassword.isBlank()) {
                         // Keep protected routes closed when jwt is enabled but password is missing.
                         "__missing_password_${UUID.randomUUID()}__"
+                    } else {
+                        deriveWebJwtSecret(currentPassword)
                     }
                     buildWebJwtVerifier(secret)
                 }
                 authHeader { call ->
+                    // Prefer Authorization header; query is only for media/file URL fallback.
                     extractAccessToken(
                         authorizationHeader = call.request.headers[HttpHeaders.Authorization],
                         queryToken = call.request.queryParameters[WEB_ACCESS_TOKEN_QUERY_KEY]
@@ -141,7 +154,9 @@ fun Application.configureWebApi(
         route("/api") {
             post("/auth/token") {
                 val settings = settingsStore.settingsFlow.value
-                if (!settings.webServerJwtEnabled) {
+                val effectiveJwt =
+                    settings.webServerJwtEnabled || !settings.webServerLocalhostOnly
+                if (!effectiveJwt) {
                     throw BadRequestException("JWT auth is disabled")
                 }
 
@@ -155,7 +170,7 @@ fun Application.configureWebApi(
                     throw UnauthorizedException("Invalid password")
                 }
 
-                val (token, expiresAt) = createWebJwt(accessPassword)
+                val (token, expiresAt) = createWebJwt(deriveWebJwtSecret(accessPassword))
                 call.respond(
                     HttpStatusCode.OK,
                     WebAuthTokenResponse(
@@ -209,6 +224,18 @@ private fun buildWebJwtVerifier(secret: String): JWTVerifier {
         .build()
 }
 
+/**
+ * Derive a fixed-length HMAC key from the access password so weak/short passwords
+ * are not used raw as Algorithm.HMAC256 secrets. Changing the salt or password
+ * invalidates outstanding tokens (acceptable for this security fix).
+ */
+private fun deriveWebJwtSecret(password: String): String {
+    val mac = Mac.getInstance("HmacSHA256")
+    mac.init(SecretKeySpec(WEB_JWT_SECRET_SALT.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+    val digest = mac.doFinal(password.toByteArray(Charsets.UTF_8))
+    return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+}
+
 private fun extractBearerToken(authorizationHeader: String?): String? {
     if (authorizationHeader.isNullOrBlank()) return null
     val prefix = "Bearer "
@@ -216,6 +243,10 @@ private fun extractBearerToken(authorizationHeader: String?): String? {
     return authorizationHeader.substring(prefix.length).trim().takeIf { it.isNotEmpty() }
 }
 
+/**
+ * Resolve the access token with Authorization header preferred over query.
+ * Query support remains only for resource URLs that cannot set headers (img/src).
+ */
 private fun extractAccessToken(authorizationHeader: String?, queryToken: String?): String? {
     return extractBearerToken(authorizationHeader)
         ?: queryToken?.trim()?.takeIf { it.isNotEmpty() }

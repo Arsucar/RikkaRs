@@ -6,7 +6,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.net.toFile
 import androidx.core.net.toUri
+import android.provider.OpenableColumns
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +36,10 @@ class FilesManager(
 ) {
     companion object {
         private const val TAG = "FilesManager"
+        private const val HTTP_CONNECT_TIMEOUT_MS = 30_000
+        private const val HTTP_READ_TIMEOUT_MS = 30_000
+        /** Chat/upload file size cap (50MB), aligned with typical web upload limits. */
+        const val MAX_UPLOAD_BYTES = 50L * 1024 * 1024
     }
 
     suspend fun saveManagedFromUri(
@@ -43,11 +50,29 @@ class FilesManager(
     ): ManagedFileEntity = withContext(Dispatchers.IO) {
         val resolvedName = displayName ?: getFileNameFromUri(uri) ?: "file"
         val resolvedMime = mimeType ?: getFileMimeType(uri) ?: "application/octet-stream"
+        val enforceUploadCap = folder == FileFolders.UPLOAD
+        if (enforceUploadCap) {
+            ensureUploadSizeAllowed(uri)
+        }
         val target = createTargetFile(folder, resolvedName, resolvedMime)
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            target.outputStream().use { output ->
-                input.copyTo(output)
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: run {
+                    target.delete()
+                    error("Failed to open input stream for $uri")
+                }
+            input.use { stream ->
+                target.outputStream().use { output ->
+                    if (enforceUploadCap) {
+                        copyWithSizeLimit(stream, output)
+                    } else {
+                        stream.copyTo(output)
+                    }
+                }
             }
+        } catch (e: Exception) {
+            target.delete()
+            throw e
         }
         createManagedFileEntity(
             folder = folder,
@@ -63,6 +88,9 @@ class FilesManager(
         displayName: String,
         mimeType: String = "application/octet-stream",
     ): ManagedFileEntity = withContext(Dispatchers.IO) {
+        if (folder == FileFolders.UPLOAD && bytes.size.toLong() > MAX_UPLOAD_BYTES) {
+            error("File too large: max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB")
+        }
         val target = createTargetFile(folder, displayName, mimeType)
         target.writeBytes(bytes)
         createManagedFileEntity(
@@ -112,6 +140,7 @@ class FilesManager(
             runCatching {
                 val sourceName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
                 val sourceMime = getFileMimeType(uri)
+                ensureUploadSizeAllowed(uri)
                 val fileName = buildUuidFileName(displayName = sourceName, mimeType = sourceMime)
                 val file = dir.resolve(fileName)
                 if (!file.exists()) {
@@ -121,7 +150,7 @@ class FilesManager(
                     ?: error("Failed to open input stream for $uri")
                 inputStream.use { input ->
                     file.outputStream().use { output ->
-                        input.copyTo(output)
+                        copyWithSizeLimit(input, output)
                     }
                 }
                 val guessedMime = sourceMime ?: guessMimeType(file, sourceName)
@@ -151,6 +180,9 @@ class FilesManager(
             dir.mkdirs()
         }
         byteArrays.forEach { byteArray ->
+            if (byteArray.size.toLong() > MAX_UPLOAD_BYTES) {
+                error("File too large: max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB")
+            }
             val fileName = buildUuidFileName(displayName = "image.png", mimeType = "image/png")
             val file = dir.resolve(fileName)
             if (!file.exists()) {
@@ -305,16 +337,24 @@ class FilesManager(
                 runCatching {
                     val url = URL(image)
                     val connection = url.openConnection() as HttpURLConnection
-                    connection.connect()
+                    try {
+                        connection.connectTimeout = HTTP_CONNECT_TIMEOUT_MS
+                        connection.readTimeout = HTTP_READ_TIMEOUT_MS
+                        connection.connect()
 
-                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        val bitmap = BitmapFactory.decodeStream(connection.inputStream)
-                        activityContext.exportImage(activity, bitmap)
-                    } else {
-                        Log.e(
-                            TAG,
-                            "saveMessageImage: Failed to download image from $image, response code: ${connection.responseCode}"
-                        )
+                        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                            connection.inputStream.use { input ->
+                                val bitmap = BitmapFactory.decodeStream(input)
+                                activityContext.exportImage(activity, bitmap)
+                            }
+                        } else {
+                            Log.e(
+                                TAG,
+                                "saveMessageImage: Failed to download image from $image, response code: ${connection.responseCode}"
+                            )
+                        }
+                    } finally {
+                        connection.disconnect()
                     }
                 }.getOrNull()
             }
@@ -479,6 +519,52 @@ class FilesManager(
 
     private fun guessMimeType(file: File, fileName: String): String =
         FileUtils.guessMimeType(file, fileName)
+
+    private fun ensureUploadSizeAllowed(uri: Uri) {
+        val knownSize = queryUriSizeBytes(uri) ?: return
+        if (knownSize > MAX_UPLOAD_BYTES) {
+            error("File too large: max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB")
+        }
+    }
+
+    private fun queryUriSizeBytes(uri: Uri): Long? {
+        return runCatching {
+            when (uri.scheme) {
+                "file" -> uri.toFile().length()
+                "content" -> {
+                    context.contentResolver.query(
+                        uri,
+                        arrayOf(OpenableColumns.SIZE),
+                        null,
+                        null,
+                        null,
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (index >= 0 && !cursor.isNull(index)) cursor.getLong(index) else null
+                        } else {
+                            null
+                        }
+                    }
+                }
+                else -> null
+            }
+        }.getOrNull()?.takeIf { it >= 0 }
+    }
+
+    private fun copyWithSizeLimit(input: InputStream, output: OutputStream) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > MAX_UPLOAD_BYTES) {
+                error("File too large: max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB")
+            }
+            output.write(buffer, 0, read)
+        }
+    }
 }
 
 data class SyncResult(

@@ -26,6 +26,8 @@ import java.io.File
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
+private const val MAX_READ_IMAGE_BYTES = 10L * 1024 * 1024
+private const val MAX_WRITE_FILE_BYTES = 5L * 1024 * 1024
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_read_file" to false,
@@ -341,6 +343,10 @@ private fun fileTooLargeMessage(path: String, sizeBytes: Long): String =
         "max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). " +
         "Use shell commands like head, tail, or grep to read parts of it."
 
+private fun imageTooLargeMessage(path: String, sizeBytes: Long): String =
+    "Image is too large to read: $path (${sizeBytes / 1024 / 1024}MB, " +
+        "max ${MAX_READ_IMAGE_BYTES / 1024 / 1024}MB)."
+
 internal fun resolveKnownMountFile(path: String, knownMounts: List<WorkspaceKnownMount>): File? {
     val normalized = normalizeRootfsAbsolutePath(path) ?: return null
     for (mount in knownMounts) {
@@ -389,8 +395,17 @@ private suspend fun WorkspaceRepository.readImageInRootfs(
 ): List<UIMessagePart> {
     val bytes = resolveKnownMountFile(path, knownMounts)?.let { file ->
         require(file.isFile) { "Path is not a file: $path" }
+        require(file.length() <= MAX_READ_IMAGE_BYTES) {
+            imageTooLargeMessage(path, file.length())
+        }
         file.readBytes()
-    } ?: readRootfsBuffer(workspaceId, path).toByteArray()
+    } ?: run {
+        val size = rootfsFileSize(workspaceId, path)
+        require(size <= MAX_READ_IMAGE_BYTES) {
+            imageTooLargeMessage(path, size)
+        }
+        ByteArrayOutputStream(size.toInt()).also { exportRootfsFile(workspaceId, path, it) }.toByteArray()
+    }
 
     val filesManager = getKoin().get<FilesManager>()
     val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
@@ -412,6 +427,11 @@ private suspend fun WorkspaceRepository.writeTextInRootfs(
     overwrite: Boolean,
     extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): WorkspaceFileEntry {
+    val stdin = text.toByteArray(Charsets.UTF_8)
+    require(stdin.size <= MAX_WRITE_FILE_BYTES) {
+        "Content is too large to write: ${stdin.size} bytes " +
+            "(max ${MAX_WRITE_FILE_BYTES / 1024 / 1024}MB)"
+    }
     val pathArg = path.shellQuote()
     val result = runRootfsCommand(
         workspaceId = workspaceId,
@@ -430,7 +450,7 @@ private suspend fun WorkspaceRepository.writeTextInRootfs(
             cat > $pathArg || exit 1
             ${statEntryCommand(path)}
         """.trimIndent(),
-        stdin = text.toByteArray(Charsets.UTF_8),
+        stdin = stdin,
         extraBindMounts = extraBindMounts,
     )
     return result.stdout.parseRootfsEntry()

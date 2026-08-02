@@ -3,6 +3,8 @@ package me.rerere.tts.controller
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -32,7 +34,15 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class AudioPlayer(context: Context) {
-    private val player = ExoPlayer.Builder(context).build()
+    private val player = ExoPlayer.Builder(context).build().also { exo ->
+        exo.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                .build(),
+            /* handleAudioFocus= */ true
+        )
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _playbackState = MutableStateFlow(PlaybackState())

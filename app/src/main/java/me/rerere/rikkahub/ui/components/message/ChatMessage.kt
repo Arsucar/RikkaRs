@@ -132,7 +132,7 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     selectionCompact: Boolean = false,
 ) {
-    val message = node.messages[node.selectIndex]
+    val message = node.currentMessage
     val settings = LocalSettings.current.displaySetting
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(

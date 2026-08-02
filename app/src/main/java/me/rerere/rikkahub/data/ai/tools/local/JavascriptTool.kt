@@ -54,21 +54,25 @@ internal fun buildJavascriptTool(): Tool = Tool(
                 logs.add("[ERROR] $info")
             }
         })
-        val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
-        val result = context.evaluate(code)
-        val payload = buildJsonObject {
-            if (logs.isNotEmpty()) {
-                put("logs", JsonPrimitive(logs.joinToString("\n")))
-            }
-            put(
-                key = "result",
-                element = when (result) {
-                    null -> JsonNull
-                    is QuickJSObject -> JsonPrimitive(result.stringify())
-                    else -> JsonPrimitive(result.toString())
+        try {
+            val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
+            val result = context.evaluate(code)
+            val payload = buildJsonObject {
+                if (logs.isNotEmpty()) {
+                    put("logs", JsonPrimitive(logs.joinToString("\n")))
                 }
-            )
+                put(
+                    key = "result",
+                    element = when (result) {
+                        null -> JsonNull
+                        is QuickJSObject -> JsonPrimitive(result.stringify())
+                        else -> JsonPrimitive(result.toString())
+                    }
+                )
+            }
+            listOf(UIMessagePart.Text(payload.toString()))
+        } finally {
+            context.destroy()
         }
-        listOf(UIMessagePart.Text(payload.toString()))
     }
 )

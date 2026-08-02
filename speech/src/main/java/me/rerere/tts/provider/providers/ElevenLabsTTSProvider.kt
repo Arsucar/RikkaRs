@@ -46,28 +46,28 @@ class ElevenLabsTTSProvider : TTSProvider<TTSProviderSetting.ElevenLabs> {
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(httpRequest).execute()
+        httpClient.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()
+                Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
+                Log.e(TAG, "generateSpeech: $errorBody")
+                throw Exception("ElevenLabs TTS request failed: ${response.code} ${response.message}")
+            }
 
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string()
-            Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
-            Log.e(TAG, "generateSpeech: $errorBody")
-            throw Exception("ElevenLabs TTS request failed: ${response.code} ${response.message}")
-        }
+            val audioData = response.body.bytes()
 
-        val audioData = response.body.bytes()
-
-        emit(
-            AudioChunk(
-                data = audioData,
-                format = AudioFormat.MP3,
-                isLast = true,
-                metadata = mapOf(
-                    "provider" to "elevenlabs",
-                    "model" to providerSetting.model,
-                    "voiceId" to providerSetting.voiceId
+            emit(
+                AudioChunk(
+                    data = audioData,
+                    format = AudioFormat.MP3,
+                    isLast = true,
+                    metadata = mapOf(
+                        "provider" to "elevenlabs",
+                        "model" to providerSetting.model,
+                        "voiceId" to providerSetting.voiceId
+                    )
                 )
             )
-        )
+        }
     }
 }

@@ -19,6 +19,9 @@ import me.rerere.rikkahub.data.files.resolveContainedFile
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
@@ -29,6 +32,10 @@ private const val DB_FILE = "rikka_hub.db"
 private const val DB_WAL = "rikka_hub-wal"
 private const val DB_SHM = "rikka_hub-shm"
 private const val BAK_SUFFIX = ".restore-bak"
+private const val MAX_TOTAL_UNCOMPRESSED_BYTES = 512L * 1024 * 1024
+private const val MAX_ENTRY_UNCOMPRESSED_BYTES = 200L * 1024 * 1024
+private const val MAX_ZIP_ENTRY_COUNT = 50_000
+private const val ZIP_COPY_BUFFER_SIZE = 64 * 1024
 
 /**
  * #184: Shared, atomic restore used by both [me.rerere.rikkahub.data.sync.webdav.WebDavSync] and
@@ -71,6 +78,8 @@ class BackupRestorer(
         var tempDb: File? = null
         var tempWal: File? = null
         var tempShm: File? = null
+        var entryCount = 0
+        var totalUncompressedBytes = 0L
 
         try {
             ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
@@ -78,12 +87,37 @@ class BackupRestorer(
                 while (zipIn.nextEntry.also { entry = it } != null) {
                     val zipEntry = entry ?: continue
                     currentCoroutineContext().ensureActive()
+                    entryCount++
+                    if (entryCount > MAX_ZIP_ENTRY_COUNT) {
+                        throw IOException("Backup zip exceeds max entry count ($MAX_ZIP_ENTRY_COUNT)")
+                    }
+                    validateZipEntryName(zipEntry.name)
+                    val declaredSize = zipEntry.size
+                    if (declaredSize >= 0) {
+                        if (declaredSize > MAX_ENTRY_UNCOMPRESSED_BYTES) {
+                            throw IOException(
+                                "Backup zip entry exceeds max size (${zipEntry.name}: $declaredSize bytes)"
+                            )
+                        }
+                        if (totalUncompressedBytes + declaredSize > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                            throw IOException(
+                                "Backup zip exceeds max total uncompressed size ($MAX_TOTAL_UNCOMPRESSED_BYTES bytes)"
+                            )
+                        }
+                    }
                     Log.i(TAG, "restore: processing entry ${zipEntry.name}")
 
                     when (zipEntry.name) {
                         "settings.json" -> {
                             // Decode + migrate now, but do NOT apply until the database swap succeeds.
-                            val raw = zipIn.readBytes().toString(Charsets.UTF_8)
+                            val rawBytes = zipIn.readBounded(MAX_ENTRY_UNCOMPRESSED_BYTES)
+                            totalUncompressedBytes += rawBytes.size.toLong()
+                            if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                                throw IOException(
+                                    "Backup zip exceeds max total uncompressed size ($MAX_TOTAL_UNCOMPRESSED_BYTES bytes)"
+                                )
+                            }
+                            val raw = rawBytes.toString(Charsets.UTF_8)
                             pendingSettings = try {
                                 json.decodeFromString<Settings>(SettingsJsonMigrator.migrate(raw))
                             } catch (e: CancellationException) {
@@ -96,7 +130,15 @@ class BackupRestorer(
                         DB_FILE, DB_WAL, DB_SHM -> {
                             if (includeDatabase) {
                                 val target = File(workDir, zipEntry.name)
-                                FileOutputStream(target).use { zipIn.copyToCancellable(it) }
+                                val written = FileOutputStream(target).use {
+                                    zipIn.copyToCancellableLimited(it, MAX_ENTRY_UNCOMPRESSED_BYTES)
+                                }
+                                totalUncompressedBytes += written
+                                if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                                    throw IOException(
+                                        "Backup zip exceeds max total uncompressed size ($MAX_TOTAL_UNCOMPRESSED_BYTES bytes)"
+                                    )
+                                }
                                 when (zipEntry.name) {
                                     DB_FILE -> tempDb = target
                                     DB_WAL -> tempWal = target
@@ -106,7 +148,14 @@ class BackupRestorer(
                             }
                         }
 
-                        else -> if (includeFiles) restoreFileEntry(zipIn, zipEntry.name)
+                        else -> if (includeFiles) {
+                            totalUncompressedBytes += restoreFileEntry(zipIn, zipEntry.name)
+                            if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                                throw IOException(
+                                    "Backup zip exceeds max total uncompressed size ($MAX_TOTAL_UNCOMPRESSED_BYTES bytes)"
+                                )
+                            }
+                        }
                     }
 
                     zipIn.closeEntry()
@@ -236,40 +285,50 @@ class BackupRestorer(
         }
     }
 
-    private suspend fun restoreFileEntry(zipIn: ZipInputStream, entryName: String) {
-        when {
+    private suspend fun restoreFileEntry(zipIn: ZipInputStream, entryName: String): Long {
+        return when {
             entryName.startsWith("${FileFolders.UPLOAD}/") -> {
                 val fileName = entryName.substringAfter("${FileFolders.UPLOAD}/")
-                if (fileName.isEmpty()) return
+                if (fileName.isEmpty() || fileName.endsWith('/')) return 0L
                 val uploadFolder = File(context.filesDir, FileFolders.UPLOAD).apply { mkdirs() }
                 val targetFile = resolveContainedFile(uploadFolder, fileName)
                     ?: throw IllegalArgumentException("Invalid backup file path: $entryName")
-                FileOutputStream(targetFile).use { zipIn.copyToCancellable(it) }
+                targetFile.parentFile?.mkdirs()
+                val written = FileOutputStream(targetFile).use {
+                    zipIn.copyToCancellableLimited(it, MAX_ENTRY_UNCOMPRESSED_BYTES)
+                }
                 Log.i(TAG, "restore: restored $entryName (${targetFile.length()} bytes)")
+                written
             }
 
             entryName.startsWith("${FileFolders.SKILLS}/") -> restoreSkillEntry(zipIn, entryName)
 
             entryName.startsWith("${FileFolders.FONTS}/") -> {
                 val fileName = entryName.substringAfter("${FileFolders.FONTS}/")
-                if (fileName.isEmpty() || fileName.contains('/')) return
+                if (fileName.isEmpty() || fileName.contains('/')) return 0L
                 val fontsFolder = File(context.filesDir, FileFolders.FONTS).apply { mkdirs() }
                 val targetFile = File(fontsFolder, fileName)
-                FileOutputStream(targetFile).use { zipIn.copyToCancellable(it) }
+                val written = FileOutputStream(targetFile).use {
+                    zipIn.copyToCancellableLimited(it, MAX_ENTRY_UNCOMPRESSED_BYTES)
+                }
                 Log.i(TAG, "restore: restored $entryName (${targetFile.length()} bytes)")
+                written
             }
 
-            else -> Log.i(TAG, "restore: skipping entry $entryName")
+            else -> {
+                Log.i(TAG, "restore: skipping entry $entryName")
+                0L
+            }
         }
     }
 
-    private suspend fun restoreSkillEntry(zipIn: ZipInputStream, entryName: String) {
+    private suspend fun restoreSkillEntry(zipIn: ZipInputStream, entryName: String): Long {
         val relativePath = entryName.substringAfter("${FileFolders.SKILLS}/")
         val skillName = relativePath.substringBefore('/', missingDelimiterValue = "")
         val skillRelativePath = relativePath.substringAfter('/', missingDelimiterValue = "")
         if (skillName.isBlank() || skillRelativePath.isBlank()) {
             Log.w(TAG, "restore: invalid skill entry $entryName")
-            return
+            return 0L
         }
 
         val skillsRoot = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
@@ -280,7 +339,58 @@ class BackupRestorer(
 
         skillDir.mkdirs()
         targetFile.parentFile?.mkdirs()
-        FileOutputStream(targetFile).use { zipIn.copyToCancellable(it) }
+        val written = FileOutputStream(targetFile).use {
+            zipIn.copyToCancellableLimited(it, MAX_ENTRY_UNCOMPRESSED_BYTES)
+        }
         Log.i(TAG, "restore: restored $entryName (${targetFile.length()} bytes)")
+        return written
+    }
+
+    private fun validateZipEntryName(name: String) {
+        val normalized = name.replace('\\', '/')
+        if (normalized.isBlank()) {
+            throw IOException("Backup zip entry name is blank")
+        }
+        if (normalized.startsWith("/") || normalized.startsWith("//")) {
+            throw IOException("Backup zip entry has absolute path: $name")
+        }
+        if (normalized.length >= 2 && normalized[1] == ':') {
+            throw IOException("Backup zip entry has absolute path: $name")
+        }
+        if (normalized.split('/').any { it == ".." }) {
+            throw IOException("Backup zip entry path traversal rejected: $name")
+        }
+    }
+
+    private suspend fun InputStream.copyToCancellableLimited(output: OutputStream, maxBytes: Long): Long {
+        val buffer = ByteArray(ZIP_COPY_BUFFER_SIZE)
+        var bytesCopied = 0L
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val bytesRead = read(buffer)
+            if (bytesRead < 0) break
+            bytesCopied += bytesRead
+            if (bytesCopied > maxBytes) {
+                throw IOException("Backup zip entry exceeds max size ($maxBytes bytes)")
+            }
+            output.write(buffer, 0, bytesRead)
+        }
+        return bytesCopied
+    }
+
+    private fun InputStream.readBounded(maxBytes: Long): ByteArray {
+        val buffer = ByteArray(ZIP_COPY_BUFFER_SIZE)
+        val out = java.io.ByteArrayOutputStream()
+        var total = 0L
+        while (true) {
+            val bytesRead = read(buffer)
+            if (bytesRead < 0) break
+            total += bytesRead
+            if (total > maxBytes) {
+                throw IOException("Backup zip entry exceeds max size ($maxBytes bytes)")
+            }
+            out.write(buffer, 0, bytesRead)
+        }
+        return out.toByteArray()
     }
 }

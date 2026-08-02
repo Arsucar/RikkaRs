@@ -131,8 +131,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
-                Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
+                Log.d(TAG, "listModels: count=${bodyObject["models"]?.jsonArray?.size ?: 0}")
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
 
                 models.mapNotNull {
@@ -241,7 +241,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .build()
         )
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "streamText: model=${params.model.modelId}")
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -420,8 +420,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             buildContents(messages)
         )
 
-        // Tools
-        if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
+        // Tools — custom function tools take priority; built-in tools are API-incompatible with them
+        val hasCustomTools =
+            params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)
+        if (hasCustomTools) {
             put("tools", buildJsonArray {
                 add(buildJsonObject {
                     put("functionDeclarations", buildJsonArray {
@@ -448,10 +450,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     })
                 })
             })
-        }
-        // Model BuiltIn Tools
-        // 目前不能和工具调用兼容
-        if (params.model.tools.isNotEmpty()) {
+        } else if (params.model.tools.isNotEmpty()) {
+            // Built-in tools only when no custom function tools (API incompatibility)
             put("tools", buildJsonArray {
                 params.model.tools.forEach { builtInTool ->
                     when (builtInTool) {
