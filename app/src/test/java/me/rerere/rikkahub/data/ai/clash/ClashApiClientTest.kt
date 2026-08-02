@@ -91,20 +91,20 @@ class ClashApiClientTest {
     }
 
     @Test
-    fun `switchNode throws on non 200`() = runBlocking {
+    fun `switchNode throws on non 200`() {
         enqueueJson("""{"error":"boom"}""", code = 500)
 
         assertThrows(IllegalStateException::class.java) {
-            runBlocking<Unit> { client.switchNode(baseUrl, "GLOBAL", "🇯🇵 JP") }
+            runBlocking { client.switchNode(baseUrl, "GLOBAL", "🇯🇵 JP") }
         }
     }
 
     @Test
-    fun `getSelectableNodes throws when group missing`() = runBlocking {
+    fun `getSelectableNodes throws when group missing`() {
         enqueueJson("""{"proxies":{}}""", code = 200)
 
         assertThrows(IllegalStateException::class.java) {
-            runBlocking<Unit> { client.getSelectableNodes(baseUrl, "GLOBAL") }
+            runBlocking { client.getSelectableNodes(baseUrl, "GLOBAL") }
         }
     }
 }
