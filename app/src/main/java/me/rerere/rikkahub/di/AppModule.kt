@@ -5,6 +5,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
+import me.rerere.rikkahub.service.ChatKeepAliveController
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.hooks.HookActionRegistry
@@ -100,6 +101,13 @@ val appModule = module {
         SoundEffectPlayer(get())
     }
 
+    single {
+        ChatKeepAliveController(
+            context = get(),
+            settingsStore = get(),
+        )
+    }
+
     // 生成通知与业务解耦：ChatService 只发事件，通知由这里消费；
     // createdAtStart 保证进程启动即订阅，否则后台生成的事件会因无订阅者而丢失
     single(createdAtStart = true) {
@@ -108,6 +116,7 @@ val appModule = module {
             appScope = get(),
             eventBus = get(),
             settingsStore = get(),
+            keepAliveController = get(),
         )
     }
 
@@ -127,6 +136,7 @@ val appModule = module {
             providerManager = get(),
             localTools = get(),
             mcpManager = get(),
+            keepAliveController = get(),
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),

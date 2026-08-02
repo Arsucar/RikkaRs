@@ -415,6 +415,7 @@ class ChatService(
     // [SemanticMemory Plugin]
     private val semanticMemoryTransformer: SemanticMemoryTransformer,
     private val semanticMemoryManager: SemanticMemoryManager,
+    private val keepAliveController: ChatKeepAliveController,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -802,6 +803,22 @@ class ChatService(
             model.displayName
         }
 
+        // #219: ref-counted FGS keep-alive for the duration of this generation attempt.
+        // Pair every start with end on ALL paths (success / failure before stream / cancel via onCompletion).
+        // Only mark started when the controller actually accepts the start (setting enabled).
+        var keepAliveStarted = false
+        fun startKeepAliveIfNeeded() {
+            if (keepAliveStarted) return
+            if (!settingsStore.settingsFlow.value.enableKeepAliveNotification) return
+            keepAliveController.onGenerationStart(conversationId, senderName)
+            keepAliveStarted = true
+        }
+        fun endKeepAliveIfNeeded() {
+            if (!keepAliveStarted) return
+            keepAliveController.onGenerationEnd(conversationId)
+            keepAliveStarted = false
+        }
+
         runCatching {
 
             // reset suggestions
@@ -841,7 +858,8 @@ class ChatService(
                 session = session,
             )
 
-            // start generating
+            // start generating (user-initiated path already ran; start FGS only once stream begins)
+            startKeepAliveIfNeeded()
             generationHandler.generateText(
                 settings = prepared.settings,
                 model = prepared.model,
@@ -887,6 +905,7 @@ class ChatService(
                             ?.toText()?.take(50)?.trim() ?: "",
                     )
                 )
+                endKeepAliveIfNeeded()
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
@@ -910,11 +929,14 @@ class ChatService(
                 runCatching {
                     saveConversation(conversationId, getConversationFlow(conversationId).value)
                 }
+                // onCompletion already ends keep-alive when the stream started; this covers pre-stream cancel.
+                endKeepAliveIfNeeded()
                 throw it
             }
             hookRepository.markTurnFailed(activeLogicalTurnId)
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
+            endKeepAliveIfNeeded()
 
             it.printStackTrace()
             if (it is GenerationPreparationException.InvalidMcpServerName) {

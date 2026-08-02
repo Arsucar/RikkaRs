@@ -2,14 +2,14 @@
 
 ## 有序 Checklist
 
-1. [ ] Settings 字段 + PreferencesStore partial + 通知页 Switch + 权限流。
-2. [ ] Manifest 声明 ChatGenerationService + specialUse meta。
-3. [ ] 渠道 chat_keepalive。
-4. [ ] 实现 ChatGenerationService（对照 WebServerService）。
-5. [ ] ChatService 钩子 + AtomicInteger 计数。
-6. [ ] 与 ChatNotificationManager 消双通知。
-7. [ ] PendingIntent 跳转 Chat(id)。
-8. [ ] 手动矩阵 + installDebug。
+1. [x] Settings 字段 + PreferencesStore partial + 通知页 Switch + 权限流。
+2. [x] Manifest 声明 ChatGenerationService + specialUse meta。
+3. [x] 渠道 chat_keepalive。
+4. [x] 实现 ChatGenerationService（对照 WebServerService）。
+5. [x] ChatService 钩子 + AtomicInteger 计数。
+6. [x] 与 ChatNotificationManager 消双通知。
+7. [x] PendingIntent 跳转 Chat(id)。
+8. [ ] 手动矩阵 + installDebug（主代理负责）。
 
 ## 验证命令
 

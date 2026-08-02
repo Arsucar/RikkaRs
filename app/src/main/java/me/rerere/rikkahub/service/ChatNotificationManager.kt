@@ -12,7 +12,6 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
@@ -40,6 +39,7 @@ class ChatNotificationManager(
     appScope: AppScope,
     eventBus: AppEventBus,
     private val settingsStore: SettingsStore,
+    private val keepAliveController: ChatKeepAliveController,
 ) {
     private val isForeground = MutableStateFlow(false)
     private val liveUpdateLastSentAt = ConcurrentHashMap<Uuid, Long>()
@@ -73,6 +73,22 @@ class ChatNotificationManager(
     }
 
     private fun handleGenerationUpdate(event: AppEvent.ChatGenerationUpdate) {
+        val (chipText, statusText, contentText) = determineNotificationContent(event.lastMessage.parts)
+
+        // When keep-alive FGS is actually running, merge progress into that single notification
+        // and skip live-update (AC7 no dual notify). If FGS failed (OEM), fall through to live update.
+        if (keepAliveController.isActive) {
+            // Drop any live-update that may have been posted before FGS became active.
+            cancelLiveUpdateNotification(event.conversationId)
+            keepAliveController.onGenerationProgress(
+                conversationId = event.conversationId,
+                senderName = event.senderName,
+                statusText = statusText,
+                contentText = contentText,
+            )
+            return
+        }
+
         if (isForeground.value) return
         val displaySetting = settingsStore.settingsFlow.value.displaySetting
         if (!displaySetting.enableNotificationOnMessageGeneration) return
@@ -83,7 +99,13 @@ class ChatNotificationManager(
         if (lastSentAt != null && now - lastSentAt < LIVE_UPDATE_NOTIFICATION_THROTTLE_MS) return
         liveUpdateLastSentAt[event.conversationId] = now
 
-        sendLiveUpdateNotification(event.conversationId, event.lastMessage, event.senderName)
+        sendLiveUpdateNotification(
+            conversationId = event.conversationId,
+            senderName = event.senderName,
+            chipText = chipText,
+            statusText = statusText,
+            contentText = contentText,
+        )
     }
 
     private fun handleGenerationEnded(event: AppEvent.ChatGenerationEnded) {
@@ -119,12 +141,11 @@ class ChatNotificationManager(
 
     private fun sendLiveUpdateNotification(
         conversationId: Uuid,
-        lastMessage: UIMessage,
-        senderName: String
+        senderName: String,
+        chipText: String,
+        statusText: String,
+        contentText: String,
     ) {
-        // 确定当前状态
-        val (chipText, statusText, contentText) = determineNotificationContent(lastMessage.parts)
-
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
             notificationId = getLiveUpdateNotificationId(conversationId)

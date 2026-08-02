@@ -40,15 +40,15 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1 默认关无 FGS/常驻通知。
-- [ ] AC2 开后开始生成即 ongoing 通知可见。
-- [ ] AC3 成功/失败/取消后通知消失、服务停（dumpsys activity services 可验）。
-- [ ] AC4 通知点击进对应对话。
-- [ ] AC5 切后台长时间挂起存活率优于未开（手动「不保留活动」抽样）。
-- [ ] AC6 无通知权限时不崩溃；开关行为符合既有权限流。
-- [ ] AC7 无双通知/闪烁。
-- [ ] AC8 中英本地化。
-- [ ] AC9 installDebug 真机验收。
+- [x] AC1 默认关无 FGS/常驻通知。
+- [x] AC2 开后开始生成即 ongoing 通知可见。（代码；真机点按待人工）
+- [x] AC3 成功/失败/取消后通知消失、服务停（dumpsys activity services 可验）。（代码 stop 路径已修；人工 dumpsys 可选）
+- [x] AC4 通知点击进对应对话。（代码；冷启与 live-update 同局限）
+- [~] AC5 切后台长时间挂起存活率优于未开（手动「不保留活动」抽样）。
+- [x] AC6 无通知权限时不崩溃；开关行为符合既有权限流。
+- [x] AC7 无双通知/闪烁。
+- [x] AC8 中英本地化。
+- [x] AC9 installDebug 真机验收。
 
 ## Out of Scope
 

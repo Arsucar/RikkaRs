@@ -229,6 +229,9 @@ class SettingsStore(
 
         // Clash proxy rotation for 429 retry (#209)
         val CLASH_PROXY_CONFIG = stringPreferencesKey("clash_proxy_config")
+
+        // #219: experimental FGS keep-alive during chat generation
+        val ENABLE_KEEP_ALIVE_NOTIFICATION = booleanPreferencesKey("enable_keep_alive_notification")
     }
 
     private val dataStore = context.settingsStore
@@ -382,6 +385,7 @@ class SettingsStore(
                 clashConfig = preferences[CLASH_PROXY_CONFIG]?.let {
                     runCatching { JsonInstant.decodeFromString<ClashProxyConfig>(it) }.getOrNull()
                 } ?: ClashProxyConfig(),
+                enableKeepAliveNotification = preferences[ENABLE_KEEP_ALIVE_NOTIFICATION] == true,
             )
         }
         .map {
@@ -753,6 +757,16 @@ class SettingsStore(
         }
     }
 
+    /** Partial write for experimental generation keep-alive switch (#219). */
+    suspend fun updateEnableKeepAliveNotification(enabled: Boolean) {
+        updateMutex.withLock {
+            dataStore.edit { preferences ->
+                preferences[ENABLE_KEEP_ALIVE_NOTIFICATION] = enabled
+            }
+            syncSettingsFlowFromStore()
+        }
+    }
+
     suspend fun updateAssistantWorkspaceBinding(
         assistantId: Uuid,
         workspaceId: Uuid?,
@@ -1059,6 +1073,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     // [SemanticMemory Plugin]
     this[SettingsStore.SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
     this[SettingsStore.CLASH_PROXY_CONFIG] = JsonInstant.encodeToString(settings.clashConfig)
+    this[SettingsStore.ENABLE_KEEP_ALIVE_NOTIFICATION] = settings.enableKeepAliveNotification
 }
 
 /** Reads the latest persisted preset list and changes only [presetId]. */
@@ -1311,6 +1326,8 @@ data class Settings(
     val semanticMemoryConfig: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig =
         me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
     val clashConfig: ClashProxyConfig = ClashProxyConfig(),
+    /** Experimental: show an ongoing FGS notification while chat generation is active (#219). */
+    val enableKeepAliveNotification: Boolean = false,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

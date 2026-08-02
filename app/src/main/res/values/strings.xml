@@ -693,7 +693,11 @@
   <string name="no_text_content_to_copy">No text content available to copy</string>
   <string name="notification_channel_chat_completed">Chat Completed</string>
   <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
+  <string name="notification_channel_chat_keepalive">Chat Generation Keep-Alive</string>
   <string name="notification_channel_web_server">Web Server</string>
+  <string name="notification_keepalive_active_count">%d conversations generating…</string>
+  <string name="notification_keepalive_content">Task in progress. Keep this notification to improve survival while generating.</string>
+  <string name="notification_keepalive_title">Generating…</string>
   <string name="notification_live_update_chip_thinking">Thinking</string>
   <string name="notification_live_update_chip_tool">Tool</string>
   <string name="notification_live_update_chip_writing">Writing</string>
@@ -982,6 +986,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Message Generation Haptic Effect</string>
   <string name="setting_display_page_font_size_preview">At four in the morning, I saw the begonia flowers still awake. I am often like this — lying awake alone in the quiet night, thinking: if someone is thinking of me at this moment, that would be wonderful.</string>
   <string name="setting_display_page_font_size_title">Chat Font Size</string>
+  <string name="setting_display_page_keep_alive_notification">Keep-alive notification while generating (experimental)</string>
+  <string name="setting_display_page_keep_alive_notification_desc">Show an ongoing foreground notification during chat generation to reduce the chance of the process being killed. Default off.</string>
   <string name="setting_display_page_live_update_notification">Live Update Notification</string>
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">Move  Message Jumper to left side</string>

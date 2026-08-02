@@ -24,6 +24,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 | [Tool Diagnostics and Connection Status](./tool-diagnostics-and-connection-status.md) | Read-only diagnostics, redaction, probes, and revision-safe status |
 | [Preset Entries](./preset-entries.md) | Versioned entries, migration, Builtin consumers, and UI invariants |
 | [Assistant Preset Toggle](./assistant-preset-toggle.md) | Partial ASSISTANTS write + optimistic Switch for assistant preset bindings (#218) |
+| [Chat Generation Keep-Alive](./chat-generation-keepalive.md) | Experimental specialUse FGS + ref-count + dual-notification rules (#219) |
 
 ## Pre-Development Checklist
 

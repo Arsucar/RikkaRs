@@ -663,7 +663,11 @@
   <string name="no_text_content_to_copy">暂无可复制的文本内容</string>
   <string name="notification_channel_chat_completed">聊天完成</string>
   <string name="notification_channel_chat_live_update">聊天生成进度</string>
+  <string name="notification_channel_chat_keepalive">聊天生成保活</string>
   <string name="notification_channel_web_server">Web服务器</string>
+  <string name="notification_keepalive_active_count">正在生成 %d 个对话…</string>
+  <string name="notification_keepalive_content">任务进行中。保留此通知可降低生成过程中进程被杀的概率。</string>
+  <string name="notification_keepalive_title">正在生成…</string>
   <string name="notification_live_update_chip_thinking">思考中</string>
   <string name="notification_live_update_chip_tool">工具</string>
   <string name="notification_live_update_chip_writing">正在书写</string>
@@ -947,6 +951,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">消息生成触觉反馈</string>
   <string name="setting_display_page_font_size_preview">凌晨四点钟，看到海棠花未眠。我常常这样，在无人的夜里独自醒着，想，若有人此刻也在想我，那就好了。</string>
   <string name="setting_display_page_font_size_title">聊天字体大小</string>
+  <string name="setting_display_page_keep_alive_notification">生成期间常驻通知（实验性）</string>
+  <string name="setting_display_page_keep_alive_notification_desc">对话生成期间显示常驻前台通知，降低进程被系统杀掉的概率。默认关闭。</string>
   <string name="setting_display_page_live_update_notification">实时更新通知</string>
   <string name="setting_display_page_live_update_notification_desc">在生成消息时显示实时通知更新（Android 15+）</string>
   <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>

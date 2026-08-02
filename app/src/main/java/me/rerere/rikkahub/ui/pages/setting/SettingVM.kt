@@ -25,6 +25,12 @@ class SettingVM(
         }
     }
 
+    fun updateEnableKeepAliveNotification(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateEnableKeepAliveNotification(enabled)
+        }
+    }
+
     fun deleteGlobalSubagent(name: String) {
         viewModelScope.launch {
             settingsStore.update { settings ->

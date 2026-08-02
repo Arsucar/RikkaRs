@@ -117,6 +117,21 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                     }
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_keep_alive_notification)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_keep_alive_notification_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.enableKeepAliveNotification,
+                                onCheckedChange = {
+                                    if (it && !permissionState.allPermissionsGranted) {
+                                        permissionState.requestPermissions()
+                                    }
+                                    vm.updateEnableKeepAliveNotification(it)
+                                }
+                            )
+                        },
+                    )
                 }
             }
         }
