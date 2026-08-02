@@ -94,6 +94,7 @@ import me.rerere.rikkahub.data.ai.subagent.mergeSubagentProfiles
 import me.rerere.rikkahub.data.ai.subagent.removeSubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.shouldWriteCheckpoint
 
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
@@ -449,6 +450,21 @@ class ChatService(
     private val _generationDoneFlow = MutableSharedFlow<Uuid>()
     val generationDoneFlow: SharedFlow<Uuid> = _generationDoneFlow.asSharedFlow()
 
+    /**
+     * #220: one-shot recovery hint after hydrate loads a mid-generation checkpoint snapshot.
+     * Also stashed in [pendingCheckpointRecoveryHints] so UI can consume after initialize returns
+     * without racing SharedFlow subscription timing.
+     */
+    private val _checkpointRecoveryHintFlow =
+        MutableSharedFlow<CheckpointRecoveryHint>(extraBufferCapacity = 1)
+    val checkpointRecoveryHintFlow: SharedFlow<CheckpointRecoveryHint> =
+        _checkpointRecoveryHintFlow.asSharedFlow()
+    private val pendingCheckpointRecoveryHints =
+        java.util.concurrent.ConcurrentHashMap<Uuid, CheckpointRecoveryHint>()
+
+    fun consumeCheckpointRecoveryHint(conversationId: Uuid): CheckpointRecoveryHint? =
+        pendingCheckpointRecoveryHints.remove(conversationId)
+
     fun cleanup() = runCatching {
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
@@ -551,9 +567,14 @@ class ChatService(
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
             val hydrated = hydrateConversationFromDb(conversation, session, json)
-            updateConversation(conversationId, hydrated)
-            if (hydrated != conversation) {
-                saveConversation(conversationId, hydrated)
+            val afterRecovery = acknowledgeCheckpointRecoveryIfNeeded(
+                conversationId = conversationId,
+                loaded = hydrated,
+                session = session,
+            )
+            updateConversation(conversationId, afterRecovery)
+            if (afterRecovery != conversation) {
+                saveConversation(conversationId, afterRecovery)
             }
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
@@ -858,6 +879,9 @@ class ChatService(
                 session = session,
             )
 
+            // #220: reset in-memory checkpoint cursor for this generation attempt
+            session.lastCheckpointStep = -1
+
             // start generating (user-initiated path already ran; start FGS only once stream begins)
             startKeepAliveIfNeeded()
             generationHandler.generateText(
@@ -877,6 +901,9 @@ class ChatService(
                 tools = prepared.tools,
                 firstPreparedInput = prepared.providerInput,
             ).onCompletion {
+                // Invalidate in-flight checkpoint writers before Final save so they cannot clobber it.
+                sessions[conversationId]?.lastCheckpointStep = -1
+
                 // 可能被取消了，或者意外结束，兜底更新并落盘（取消路径不会走 onSuccess）
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
                     messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
@@ -891,9 +918,13 @@ class ChatService(
                         },
                         updateAt = Instant.now(),
                     ).cleanStaleStreamingMetadata()
+                        .asFinalSnapshot()
                 }
                 runCatching {
-                    saveConversation(conversationId, getConversationFlow(conversationId).value)
+                    saveConversation(
+                        conversationId,
+                        getConversationFlow(conversationId).value.asFinalSnapshot(),
+                    )
                 }
 
                 // 生成结束：取消 Live Update 通知，后台时发送完成通知
@@ -920,14 +951,23 @@ class ChatService(
                                 AppEvent.ChatGenerationUpdate(conversationId, lastMessage, senderName)
                             )
                         }
+
+                        maybeWriteGenerationCheckpoint(
+                            conversationId = conversationId,
+                            stepIndex = chunk.stepIndex,
+                        )
                     }
                 }
             }
         }.onFailure {
             if (it is CancellationException) {
                 hookRepository.markTurnCancelled(activeLogicalTurnId)
+                sessions[conversationId]?.lastCheckpointStep = -1
                 runCatching {
-                    saveConversation(conversationId, getConversationFlow(conversationId).value)
+                    saveConversation(
+                        conversationId,
+                        getConversationFlow(conversationId).value.asFinalSnapshot(),
+                    )
                 }
                 // onCompletion already ends keep-alive when the stream started; this covers pre-stream cancel.
                 endKeepAliveIfNeeded()
@@ -949,7 +989,9 @@ class ChatService(
             Logging.log(TAG, it.stackTraceToString())
             cleanupStreamingSubagentMetadata(conversationId)
         }.onSuccess {
-            val finalConversation = getConversationFlow(conversationId).value
+            sessions[conversationId]?.lastCheckpointStep = -1
+            val finalConversation = getConversationFlow(conversationId).value.asFinalSnapshot()
+            updateConversation(conversationId, finalConversation)
             saveConversation(conversationId, finalConversation)
 
             dispatchFinalResponseHooks(
@@ -2678,6 +2720,90 @@ class ChatService(
         }
     }
 
+    /**
+     * #220: async mid-generation checkpoint. Failures only log; never throw into the generation chain.
+     * Skips FTS reindex to keep the hot path lighter; final/cancel saves rebuild FTS as usual.
+     */
+    private fun maybeWriteGenerationCheckpoint(conversationId: Uuid, stepIndex: Int) {
+        val settings = settingsStore.settingsFlow.value
+        val session = sessions[conversationId] ?: return
+        if (!shouldWriteCheckpoint(
+                enableCheckpointCache = settings.enableCheckpointCache,
+                stepIndex = stepIndex,
+                lastCheckpointStep = session.lastCheckpointStep,
+                interval = settings.checkpointStepInterval,
+            )
+        ) {
+            return
+        }
+        val previousStep = session.lastCheckpointStep
+        session.lastCheckpointStep = stepIndex
+        launchWithConversationReference(conversationId) {
+            runCatching {
+                persistGenerationCheckpoint(conversationId, stepIndex)
+            }.onFailure { error ->
+                sessions[conversationId]?.let { live ->
+                    if (live.lastCheckpointStep == stepIndex) {
+                        live.lastCheckpointStep = previousStep
+                    }
+                }
+                Log.w(TAG, "checkpoint save failed at step=$stepIndex: ${error.message}")
+            }
+        }
+    }
+
+    private suspend fun persistGenerationCheckpoint(conversationId: Uuid, stepIndex: Int) {
+        val session = getOrCreateSession(conversationId)
+        session.persistenceMutex.withLock {
+            // Finalization resets lastCheckpointStep to -1 first; stale writers then no-op.
+            if (session.lastCheckpointStep != stepIndex) {
+                Log.d(
+                    TAG,
+                    "checkpoint skip conversation=$conversationId step=$stepIndex last=${session.lastCheckpointStep}",
+                )
+                return@withLock
+            }
+            // Point-in-time DB snapshot only. Do NOT replaceConversation/updateConversation with this
+            // copy — streaming may already have advanced session.state, and a full replace would
+            // roll back live messages (revision/data loss during generation).
+            val latest = session.state.value
+            val checkpointed = latest.copy(
+                checkpointStep = stepIndex,
+                isCheckpointSnapshot = true,
+                updateAt = Instant.now(),
+            )
+            val exists = conversationRepo.existsConversationById(conversationId)
+            if (!exists) {
+                conversationRepo.insertConversation(checkpointed)
+            } else {
+                conversationRepo.updateConversation(checkpointed, skipFts = true)
+            }
+            Log.i(TAG, "checkpoint saved conversation=$conversationId step=$stepIndex")
+        }
+    }
+
+    /**
+     * #220: when hydrating a mid-generation checkpoint after process death, emit a one-shot UI hint
+     * and clear durable checkpoint flags so re-entry does not re-prompt forever.
+     */
+    private fun acknowledgeCheckpointRecoveryIfNeeded(
+        conversationId: Uuid,
+        loaded: Conversation,
+        session: ConversationSession,
+    ): Conversation {
+        if (session.isGenerating || !loaded.isCheckpointSnapshot) return loaded
+        val hint = CheckpointRecoveryHint(
+            conversationId = conversationId,
+            checkpointStep = loaded.checkpointStep,
+        )
+        pendingCheckpointRecoveryHints[conversationId] = hint
+        _checkpointRecoveryHintFlow.tryEmit(hint)
+        return loaded.copy(
+            isCheckpointSnapshot = false,
+            checkpointStep = null,
+        )
+    }
+
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
         val session = getOrCreateSession(conversationId)
         session.persistenceMutex.withLock {
@@ -3324,10 +3450,14 @@ class ChatService(
 
     suspend fun stopGeneration(conversationId: Uuid) {
         subagentHost.requestCancel(conversationId, SUBAGENT_USER_CANCEL_REASON)
+        sessions[conversationId]?.lastCheckpointStep = -1
         val job = sessions[conversationId]?.getJob() ?: run {
             finishInterruptedPendingTools(conversationId)
             runCatching {
-                saveConversation(conversationId, getConversationFlow(conversationId).value)
+                saveConversation(
+                    conversationId,
+                    getConversationFlow(conversationId).value.asFinalSnapshot(),
+                )
             }
             return
         }
@@ -3336,10 +3466,26 @@ class ChatService(
         finishInterruptedPendingTools(conversationId)
         // Stream chunks only live in memory until success; always persist partial reply on cancel.
         runCatching {
-            saveConversation(conversationId, getConversationFlow(conversationId).value)
+            saveConversation(
+                conversationId,
+                getConversationFlow(conversationId).value.asFinalSnapshot(),
+            )
         }
     }
 }
+
+/** #220: UI payload after hydrating a mid-generation checkpoint. */
+data class CheckpointRecoveryHint(
+    val conversationId: Uuid,
+    val checkpointStep: Int?,
+)
+
+internal fun Conversation.asFinalSnapshot(): Conversation =
+    if (!isCheckpointSnapshot && checkpointStep == null) {
+        this
+    } else {
+        copy(isCheckpointSnapshot = false, checkpointStep = null)
+    }
 
 internal fun shouldSkipInitializeOnGenerating(session: ConversationSession): Boolean =
     session.isGenerating

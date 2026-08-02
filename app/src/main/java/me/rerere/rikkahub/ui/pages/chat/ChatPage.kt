@@ -145,6 +145,24 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val toaster = LocalToaster.current
     val moveToTrashSuccess = stringResource(R.string.assistant_page_memory_table_move_to_trash_success)
     val moveToTrashError = stringResource(R.string.assistant_page_memory_table_move_to_trash_error)
+    val checkpointRecoveryGeneric = stringResource(R.string.chat_page_checkpoint_recovered)
+    val resources = LocalResources.current
+    val checkpointRecoveryHint by vm.checkpointRecoveryHint.collectAsStateWithLifecycle()
+
+    // #220: show recovery hint once after hydrate loads a mid-generation checkpoint
+    LaunchedEffect(checkpointRecoveryHint) {
+        val hint = checkpointRecoveryHint ?: return@LaunchedEffect
+        val message = if (hint.checkpointStep != null) {
+            resources.getString(
+                R.string.chat_page_checkpoint_recovered_with_step,
+                hint.checkpointStep,
+            )
+        } else {
+            checkpointRecoveryGeneric
+        }
+        toaster.show(message = message, type = ToastType.Info)
+        vm.consumeCheckpointRecoveryHintUi()
+    }
 
     // #89: 右侧对话级记忆表抽屉。Compose 无原生右侧抽屉，用 RTL 包裹 ModalNavigationDrawer 实现，
     // drawerContent 与主内容都翻回 LTR 防止整页镜像。

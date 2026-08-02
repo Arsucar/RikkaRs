@@ -36,4 +36,10 @@ data class ConversationEntity(
     val folderId: String = "",
     @ColumnInfo("memory_table_isolation", defaultValue = "0")
     val memoryTableIsolation: Boolean = false,
+    /** #220: last checkpoint tool step; empty string means none (Final snapshot). */
+    @ColumnInfo("checkpoint_step", defaultValue = "")
+    val checkpointStep: String = "",
+    /** #220: 1 = mid-generation checkpoint snapshot, 0 = final/completed snapshot. */
+    @ColumnInfo("is_checkpoint_snapshot", defaultValue = "0")
+    val isCheckpointSnapshot: Boolean = false,
 )

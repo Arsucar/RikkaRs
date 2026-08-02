@@ -36,6 +36,13 @@ class ConversationSession(
     /** Serializes durable conversation writes without blocking in-memory streaming updates. */
     val persistenceMutex = Mutex()
 
+    /**
+     * #220: last tool-step index successfully written as a mid-generation checkpoint for this
+     * in-memory generation. Reset to -1 when a generation starts or a Final snapshot is saved.
+     */
+    @Volatile
+    var lastCheckpointStep: Int = -1
+
     /** Shared by manual and automatic compression for this conversation only. */
     internal val compressionCoordinator = ConversationCompressionCoordinator()
 

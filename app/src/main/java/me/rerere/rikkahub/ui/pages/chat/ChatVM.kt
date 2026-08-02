@@ -62,6 +62,7 @@ import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.CheckpointRecoveryHint
 import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
 import me.rerere.rikkahub.domain.git.GetAssistantGitStatusUseCase
 import me.rerere.rikkahub.domain.git.GetGitFileDiffUseCase
@@ -142,6 +143,15 @@ class ChatVM(
     // 带 1 格缓冲 + tryEmit，避免 emit 时无活跃订阅者（页面切换/销毁）导致挂起。
     private val _inputDraftSuccessFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val inputDraftSuccessFlow: SharedFlow<Unit> = _inputDraftSuccessFlow
+
+    /** #220: one-shot recovery toast after process death mid-generation (this conversation only). */
+    private val _checkpointRecoveryHint = MutableStateFlow<CheckpointRecoveryHint?>(null)
+    val checkpointRecoveryHint: StateFlow<CheckpointRecoveryHint?> = _checkpointRecoveryHint.asStateFlow()
+
+    fun consumeCheckpointRecoveryHintUi() {
+        _checkpointRecoveryHint.value = null
+    }
+
     val contextPreviewState = MutableStateFlow<UiState<ContextPreview>>(UiState.Idle)
 
     val hookHistoryState: StateFlow<UiState<List<HookRunHistory>>> = hookRepository
@@ -183,6 +193,10 @@ class ChatVM(
         // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
+            // #220: surface recovery hint after hydrate (StateFlow so UI cannot miss it)
+            chatService.consumeCheckpointRecoveryHint(_conversationId)?.let { hint ->
+                _checkpointRecoveryHint.value = hint
+            }
         }
 
         // 记住对话ID, 方便下次启动恢复

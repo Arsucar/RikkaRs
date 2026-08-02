@@ -93,7 +93,9 @@ private suspend fun <T> withToolCallId(toolCallId: String, block: suspend () -> 
 @Serializable
 sealed interface GenerationChunk {
     data class Messages(
-        val messages: List<UIMessage>
+        val messages: List<UIMessage>,
+        /** Current tool-loop step index from GenerationHandler (0-based). Used by #220 checkpoints. */
+        val stepIndex: Int = 0,
     ) : GenerationChunk
 }
 
@@ -221,13 +223,14 @@ class GenerationHandler(
                         )
                         emit(
                             GenerationChunk.Messages(
-                                messages.visualTransforms(
+                                messages = messages.visualTransforms(
                                     transformers = outputTransformers,
                                     context = context,
                                     model = model,
                                     assistant = assistant,
                                     settings = settings
-                                )
+                                ),
+                                stepIndex = stepIndex,
                             )
                         )
                     },
@@ -257,7 +260,7 @@ class GenerationHandler(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
-                emit(GenerationChunk.Messages(messages))
+                emit(GenerationChunk.Messages(messages = messages, stepIndex = stepIndex))
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
@@ -297,7 +300,7 @@ class GenerationHandler(
                         }
                     }
                     messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
-                    emit(GenerationChunk.Messages(messages))
+                    emit(GenerationChunk.Messages(messages = messages, stepIndex = stepIndex))
                 }
 
                 // If there are pending approvals, break and wait for user
@@ -382,13 +385,14 @@ class GenerationHandler(
             messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
             emit(
                 GenerationChunk.Messages(
-                    messages.transforms(
+                    messages = messages.transforms(
                         transformers = outputTransformers,
                         context = context,
                         model = model,
                         assistant = assistant,
                         settings = settings
-                    )
+                    ),
+                    stepIndex = stepIndex,
                 )
             )
 

@@ -25,6 +25,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 | [Preset Entries](./preset-entries.md) | Versioned entries, migration, Builtin consumers, and UI invariants |
 | [Assistant Preset Toggle](./assistant-preset-toggle.md) | Partial ASSISTANTS write + optimistic Switch for assistant preset bindings (#218) |
 | [Chat Generation Keep-Alive](./chat-generation-keepalive.md) | Experimental specialUse FGS + ref-count + dual-notification rules (#219) |
+| [Conversation Checkpoint Cache](./conversation-checkpoint-cache.md) | Experimental N-step MessageNode checkpoints + recovery toast (#220) |
 
 ## Pre-Development Checklist
 

@@ -341,7 +341,7 @@ class ConversationRepository(
         }
     }
 
-    suspend fun updateConversation(conversation: Conversation) {
+    suspend fun updateConversation(conversation: Conversation, skipFts: Boolean = false) {
         database.withTransaction {
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
@@ -351,7 +351,9 @@ class ConversationRepository(
                 nodes = conversation.messageNodes,
                 operation = "update",
             )
-            messageFtsManager.indexConversationInPlace(conversation)
+            if (!skipFts) {
+                messageFtsManager.indexConversationInPlace(conversation)
+            }
         }
     }
 
@@ -442,6 +444,8 @@ class ConversationRepository(
             workspaceCwd = conversation.workspaceCwd ?: "",
             folderId = conversation.folderId?.toString() ?: "",
             memoryTableIsolation = conversation.memoryTableIsolation,
+            checkpointStep = conversation.checkpointStep?.toString() ?: "",
+            isCheckpointSnapshot = conversation.isCheckpointSnapshot,
         )
     }
 
@@ -465,6 +469,8 @@ class ConversationRepository(
             workspaceCwd = conversationEntity.workspaceCwd.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
             memoryTableIsolation = conversationEntity.memoryTableIsolation,
+            checkpointStep = conversationEntity.checkpointStep.ifEmpty { null }?.toIntOrNull(),
+            isCheckpointSnapshot = conversationEntity.isCheckpointSnapshot,
         )
     }
 

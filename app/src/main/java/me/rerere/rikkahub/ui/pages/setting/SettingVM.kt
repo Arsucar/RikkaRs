@@ -31,6 +31,12 @@ class SettingVM(
         }
     }
 
+    fun updateCheckpointCache(enabled: Boolean? = null, stepInterval: Int? = null) {
+        viewModelScope.launch {
+            settingsStore.updateCheckpointCache(enabled = enabled, stepInterval = stepInterval)
+        }
+    }
+
     fun deleteGlobalSubagent(name: String) {
         viewModelScope.launch {
             settingsStore.update { settings ->

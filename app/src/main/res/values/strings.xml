@@ -988,6 +988,12 @@
   <string name="setting_display_page_font_size_title">Chat Font Size</string>
   <string name="setting_display_page_keep_alive_notification">Keep-alive notification while generating (experimental)</string>
   <string name="setting_display_page_keep_alive_notification_desc">Show an ongoing foreground notification during chat generation to reduce the chance of the process being killed. Default off.</string>
+  <string name="setting_display_page_checkpoint_cache">Checkpoint cache while generating (experimental)</string>
+  <string name="setting_display_page_checkpoint_cache_desc">During long tool-call generation, periodically save the conversation so a process kill can resume from the last checkpoint (at most N tool steps may be lost). Default off.</string>
+  <string name="setting_display_page_checkpoint_interval">Checkpoint interval (tool steps)</string>
+  <string name="setting_display_page_checkpoint_interval_desc">Write a checkpoint every N tool steps. Disabled when checkpoint cache is off.</string>
+  <string name="chat_page_checkpoint_recovered">Restored from a generation checkpoint. Recent tool steps after the checkpoint may be lost.</string>
+  <string name="chat_page_checkpoint_recovered_with_step">Restored from checkpoint at step %1$d. Later tool steps may be lost.</string>
   <string name="setting_display_page_live_update_notification">Live Update Notification</string>
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">Move  Message Jumper to left side</string>

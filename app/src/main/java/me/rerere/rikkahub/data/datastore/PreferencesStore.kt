@@ -90,6 +90,27 @@ const val IMAGE_GALLERY_MAX_COLUMNS = 6
 private const val TOOL_PERMISSION_PRESET_JSON_MAX_CHARS = 512_000
 private const val TOOL_PERMISSION_PRESET_MAX_COUNT = 128
 
+/** Allowed tool-step intervals for mid-generation checkpoint cache (#220). */
+val CHECKPOINT_STEP_INTERVAL_OPTIONS = listOf(4, 8, 16, 32)
+const val DEFAULT_CHECKPOINT_STEP_INTERVAL = 8
+
+fun coerceCheckpointStepInterval(value: Int): Int {
+    return CHECKPOINT_STEP_INTERVAL_OPTIONS.minByOrNull { kotlin.math.abs(it - value) }
+        ?: DEFAULT_CHECKPOINT_STEP_INTERVAL
+}
+
+/** Pure trigger math for #220 checkpoints: fire when steps advanced since last checkpoint >= N. */
+fun shouldWriteCheckpoint(
+    enableCheckpointCache: Boolean,
+    stepIndex: Int,
+    lastCheckpointStep: Int,
+    interval: Int,
+): Boolean {
+    if (!enableCheckpointCache) return false
+    val n = coerceCheckpointStepInterval(interval)
+    return (stepIndex - lastCheckpointStep) >= n
+}
+
 internal fun decodeToolPermissionPresets(json: String?): List<ToolPermissionPreset> {
     if (json == null || json.length > TOOL_PERMISSION_PRESET_JSON_MAX_CHARS) return emptyList()
     return runCatching { JsonInstant.decodeFromString<List<ToolPermissionPreset>>(json) }
@@ -232,6 +253,10 @@ class SettingsStore(
 
         // #219: experimental FGS keep-alive during chat generation
         val ENABLE_KEEP_ALIVE_NOTIFICATION = booleanPreferencesKey("enable_keep_alive_notification")
+
+        // #220: experimental mid-generation conversation checkpoint cache
+        val ENABLE_CHECKPOINT_CACHE = booleanPreferencesKey("enable_checkpoint_cache")
+        val CHECKPOINT_STEP_INTERVAL = intPreferencesKey("checkpoint_step_interval")
     }
 
     private val dataStore = context.settingsStore
@@ -386,6 +411,10 @@ class SettingsStore(
                     runCatching { JsonInstant.decodeFromString<ClashProxyConfig>(it) }.getOrNull()
                 } ?: ClashProxyConfig(),
                 enableKeepAliveNotification = preferences[ENABLE_KEEP_ALIVE_NOTIFICATION] == true,
+                enableCheckpointCache = preferences[ENABLE_CHECKPOINT_CACHE] == true,
+                checkpointStepInterval = coerceCheckpointStepInterval(
+                    preferences[CHECKPOINT_STEP_INTERVAL] ?: DEFAULT_CHECKPOINT_STEP_INTERVAL,
+                ),
             )
         }
         .map {
@@ -767,6 +796,24 @@ class SettingsStore(
         }
     }
 
+    /** Partial write for experimental mid-generation checkpoint cache (#220). */
+    suspend fun updateCheckpointCache(
+        enabled: Boolean? = null,
+        stepInterval: Int? = null,
+    ) {
+        updateMutex.withLock {
+            dataStore.edit { preferences ->
+                if (enabled != null) {
+                    preferences[ENABLE_CHECKPOINT_CACHE] = enabled
+                }
+                if (stepInterval != null) {
+                    preferences[CHECKPOINT_STEP_INTERVAL] = coerceCheckpointStepInterval(stepInterval)
+                }
+            }
+            syncSettingsFlowFromStore()
+        }
+    }
+
     suspend fun updateAssistantWorkspaceBinding(
         assistantId: Uuid,
         workspaceId: Uuid?,
@@ -1074,6 +1121,8 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
     this[SettingsStore.CLASH_PROXY_CONFIG] = JsonInstant.encodeToString(settings.clashConfig)
     this[SettingsStore.ENABLE_KEEP_ALIVE_NOTIFICATION] = settings.enableKeepAliveNotification
+    this[SettingsStore.ENABLE_CHECKPOINT_CACHE] = settings.enableCheckpointCache
+    this[SettingsStore.CHECKPOINT_STEP_INTERVAL] = coerceCheckpointStepInterval(settings.checkpointStepInterval)
 }
 
 /** Reads the latest persisted preset list and changes only [presetId]. */
@@ -1328,6 +1377,10 @@ data class Settings(
     val clashConfig: ClashProxyConfig = ClashProxyConfig(),
     /** Experimental: show an ongoing FGS notification while chat generation is active (#219). */
     val enableKeepAliveNotification: Boolean = false,
+    /** Experimental: persist conversation checkpoints every N tool steps during generation (#220). */
+    val enableCheckpointCache: Boolean = false,
+    /** Tool-step interval for #220 checkpoints; coerced to 4|8|16|32. */
+    val checkpointStepInterval: Int = DEFAULT_CHECKPOINT_STEP_INTERVAL,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

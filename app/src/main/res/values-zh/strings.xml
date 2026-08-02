@@ -953,6 +953,12 @@
   <string name="setting_display_page_font_size_title">聊天字体大小</string>
   <string name="setting_display_page_keep_alive_notification">生成期间常驻通知（实验性）</string>
   <string name="setting_display_page_keep_alive_notification_desc">对话生成期间显示常驻前台通知，降低进程被系统杀掉的概率。默认关闭。</string>
+  <string name="setting_display_page_checkpoint_cache">生成中检查点缓存（实验性）</string>
+  <string name="setting_display_page_checkpoint_cache_desc">长任务多步工具调用期间周期性落盘对话，进程被杀后可从最近检查点恢复（最多丢失 N 步工具结果）。默认关闭。</string>
+  <string name="setting_display_page_checkpoint_interval">检查点间隔（工具步数）</string>
+  <string name="setting_display_page_checkpoint_interval_desc">每 N 步工具调用写入一次检查点。关闭检查点缓存时不可选。</string>
+  <string name="chat_page_checkpoint_recovered">已从生成检查点恢复。检查点之后的近期工具步骤可能已丢失。</string>
+  <string name="chat_page_checkpoint_recovered_with_step">已从检查点恢复（第 %1$d 步），后续工具步骤结果可能已丢失。</string>
   <string name="setting_display_page_live_update_notification">实时更新通知</string>
   <string name="setting_display_page_live_update_notification_desc">在生成消息时显示实时通知更新（Android 15+）</string>
   <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>

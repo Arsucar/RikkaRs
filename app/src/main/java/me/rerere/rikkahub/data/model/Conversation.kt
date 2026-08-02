@@ -34,6 +34,10 @@ data class Conversation(
     val folderId: Uuid? = null,
     // #89: 对话级记忆表隔离开关。true = 仅注入对话级记忆表，屏蔽助手级/全局，避免重复注入。
     val memoryTableIsolation: Boolean = false,
+    /** #220: last tool-step index written as a mid-generation checkpoint; null when Final. */
+    val checkpointStep: Int? = null,
+    /** #220: whether the durable snapshot is a mid-generation checkpoint (not a completed turn). */
+    val isCheckpointSnapshot: Boolean = false,
     @Transient
     val newConversation: Boolean = false
 ) {
