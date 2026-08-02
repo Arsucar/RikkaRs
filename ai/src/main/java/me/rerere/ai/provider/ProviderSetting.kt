@@ -76,7 +76,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.openai.com/v1",
-        var enable429IpRotation: Boolean = false,
+        override var enable429IpRotation: Boolean = false,
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
         var includeHistoryReasoning: Boolean = true,
@@ -147,7 +147,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
-        var enable429IpRotation: Boolean = false,
+        override var enable429IpRotation: Boolean = false,
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
         var privateKey: String = "", // only for vertex AI service account
@@ -221,7 +221,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
-        var enable429IpRotation: Boolean = false,
+        override var enable429IpRotation: Boolean = false,
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
     ) : ProviderSetting() {
