@@ -38,6 +38,7 @@ import me.rerere.ai.ui.ImageModerationOption
 import me.rerere.ai.ui.ImageQualityOption
 import me.rerere.ai.ui.ImageSizeOption
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.clash.ClashProxyConfig
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.subagent.SubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.SubagentRegistry
@@ -224,6 +225,9 @@ class SettingsStore(
 
         // [SemanticMemory Plugin]
         val SEMANTIC_MEMORY_CONFIG = stringPreferencesKey("semantic_memory_config")
+
+        // Clash proxy rotation for 429 retry (#209)
+        val CLASH_PROXY_CONFIG = stringPreferencesKey("clash_proxy_config")
     }
 
     private val dataStore = context.settingsStore
@@ -374,6 +378,9 @@ class SettingsStore(
                         JsonInstant.decodeFromString<me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig>(it)
                     }.getOrNull()
                 } ?: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
+                clashConfig = preferences[CLASH_PROXY_CONFIG]?.let {
+                    runCatching { JsonInstant.decodeFromString<ClashProxyConfig>(it) }.getOrNull()
+                } ?: ClashProxyConfig(),
             )
         }
         .map {
@@ -729,6 +736,22 @@ class SettingsStore(
         }
     }
 
+    /** Atomically applies a mutation to the latest persisted Clash proxy config (#209). */
+    suspend fun updateClashProxyConfig(
+        transform: (ClashProxyConfig) -> ClashProxyConfig,
+    ) {
+        updateMutex.withLock {
+            val fallbackSettings = settingsFlow.value
+            dataStore.edit { preferences ->
+                val current = preferences[CLASH_PROXY_CONFIG]?.let {
+                    runCatching { JsonInstant.decodeFromString<ClashProxyConfig>(it) }.getOrNull()
+                } ?: fallbackSettings.clashConfig
+                preferences[CLASH_PROXY_CONFIG] = JsonInstant.encodeToString(transform(current))
+            }
+            syncSettingsFlowFromStore()
+        }
+    }
+
     suspend fun updateAssistantWorkspaceBinding(
         assistantId: Uuid,
         workspaceId: Uuid?,
@@ -967,6 +990,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
     // [SemanticMemory Plugin]
     this[SettingsStore.SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
+    this[SettingsStore.CLASH_PROXY_CONFIG] = JsonInstant.encodeToString(settings.clashConfig)
 }
 
 /** Reads the latest persisted preset list and changes only [presetId]. */
@@ -1191,6 +1215,7 @@ data class Settings(
     // [SemanticMemory Plugin]
     val semanticMemoryConfig: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig =
         me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
+    val clashConfig: ClashProxyConfig = ClashProxyConfig(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
