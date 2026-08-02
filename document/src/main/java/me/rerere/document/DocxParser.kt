@@ -17,13 +17,34 @@ private data class ParagraphProperties(
     val headingLevel: Int
 )
 
+private const val MAX_ZIP_ENTRY_BYTES = 50L * 1024 * 1024
+private const val MAX_TOTAL_ZIP_BYTES = 100L * 1024 * 1024
+private const val MAX_EXTRACTED_TEXT_CHARS = 5 * 1024 * 1024
+private const val MAX_ZIP_ENTRIES = 10_000
+
 object DocxParser {
     fun parse(file: File): String {
         return try {
             file.inputStream().use { fileInputStream ->
                 ZipInputStream(fileInputStream).use { zipStream ->
                     var entry = zipStream.nextEntry
+                    var entryCount = 0
+                    var totalDeclared = 0L
                     while (entry != null) {
+                        entryCount++
+                        if (entryCount > MAX_ZIP_ENTRIES) {
+                            return "DOCX zip exceeds max entry count"
+                        }
+                        val size = entry.size
+                        if (size >= 0) {
+                            if (size > MAX_ZIP_ENTRY_BYTES) {
+                                return "DOCX zip entry too large"
+                            }
+                            totalDeclared += size
+                            if (totalDeclared > MAX_TOTAL_ZIP_BYTES) {
+                                return "DOCX zip exceeds max total expansion size"
+                            }
+                        }
                         if (entry.name == "word/document.xml") {
                             return parseDocumentXml(zipStream)
                         }
@@ -48,6 +69,7 @@ object DocxParser {
             var inBody = false
 
             while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+                if (result.length >= MAX_EXTRACTED_TEXT_CHARS) break
                 when (parser.eventType) {
                     XmlPullParser.START_TAG -> {
                         when (parser.name) {

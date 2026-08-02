@@ -10,11 +10,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
+import me.rerere.asr.ASRStatus
 import me.rerere.asr.providers.DashScopeASRController
 import me.rerere.asr.providers.MiMoASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
@@ -63,6 +70,8 @@ private class CustomAsrStateImpl(
 ) : CustomAsrState {
     private var controller: ASRController? = null
     private val idleState = MutableStateFlow(ASRState())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var focusWatchJob: Job? = null
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
@@ -79,28 +88,56 @@ private class CustomAsrStateImpl(
         get() = controller?.state ?: idleState
 
     fun updateProvider(provider: ASRProviderSetting?) {
+        stopFocusWatch()
         controller?.dispose()
         controller = provider?.let { createController(it) }
         if (controller == null) {
             idleState.value = ASRState()
         }
+        abandonAudioFocus()
     }
 
     override fun start(onTranscriptChange: (String) -> Unit) {
         val result = audioManager.requestAudioFocus(audioFocusRequest)
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             controller?.start(onTranscriptChange)
+            watchFocusOnError()
         }
     }
 
     override fun stop() {
+        stopFocusWatch()
         controller?.stop()
-        audioManager.abandonAudioFocusRequest(audioFocusRequest)
+        abandonAudioFocus()
     }
 
     override fun cleanup() {
+        stopFocusWatch()
         controller?.dispose()
         controller = null
+        abandonAudioFocus()
+        scope.cancel()
+    }
+
+    private fun watchFocusOnError() {
+        stopFocusWatch()
+        val current = controller ?: return
+        focusWatchJob = scope.launch {
+            current.state.collect { asrState ->
+                if (asrState.status == ASRStatus.Error) {
+                    abandonAudioFocus()
+                    stopFocusWatch()
+                }
+            }
+        }
+    }
+
+    private fun stopFocusWatch() {
+        focusWatchJob?.cancel()
+        focusWatchJob = null
+    }
+
+    private fun abandonAudioFocus() {
         audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 

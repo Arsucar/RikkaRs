@@ -13,14 +13,36 @@ private data class SlideContent(
     val notes: String = ""
 )
 
+private const val MAX_ZIP_ENTRY_BYTES = 50L * 1024 * 1024
+private const val MAX_TOTAL_ZIP_BYTES = 100L * 1024 * 1024
+private const val MAX_EXTRACTED_TEXT_CHARS = 5 * 1024 * 1024
+private const val MAX_ZIP_ENTRIES = 10_000
+
 object PptxParser {
     fun parse(file: File): String {
         return try {
             ZipFile(file).use { zipFile ->
+                val allEntries = zipFile.entries().toList()
+                if (allEntries.size > MAX_ZIP_ENTRIES) {
+                    return "PPTX zip exceeds max entry count"
+                }
+                var totalDeclared = 0L
+                for (entry in allEntries) {
+                    if (!acceptZipEntry(entry)) {
+                        return "PPTX zip entry too large"
+                    }
+                    if (entry.size > 0) {
+                        totalDeclared += entry.size
+                        if (totalDeclared > MAX_TOTAL_ZIP_BYTES) {
+                            return "PPTX zip exceeds max total expansion size"
+                        }
+                    }
+                }
+
                 val slides = mutableListOf<SlideContent>()
 
                 // Find all slide XML files and sort them by number
-                val slideEntries = zipFile.entries().toList()
+                val slideEntries = allEntries
                     .filter { it.name.matches(Regex("ppt/slides/slide\\d+\\.xml")) }
                     .sortedBy { entry ->
                         entry.name.substringAfter("slide").substringBefore(".xml").toIntOrNull() ?: 0
@@ -30,8 +52,10 @@ object PptxParser {
                     return "No slides found in PPTX file"
                 }
 
+                var totalTextChars = 0
                 // Parse each slide
-                slideEntries.forEachIndexed { index, entry ->
+                for ((index, entry) in slideEntries.withIndex()) {
+                    if (totalTextChars >= MAX_EXTRACTED_TEXT_CHARS) break
                     val slideNumber = index + 1
                     val slideContent = zipFile.getInputStream(entry).use { stream ->
                         parseSlideXml(stream)
@@ -39,12 +63,13 @@ object PptxParser {
 
                     // Try to get notes for this slide
                     val notesEntry = zipFile.getEntry("ppt/notesSlides/notesSlide${slideNumber}.xml")
-                    val notes = if (notesEntry != null) {
+                    val notes = if (notesEntry != null && acceptZipEntry(notesEntry)) {
                         zipFile.getInputStream(notesEntry).use { stream ->
                             parseNotesXml(stream)
                         }
                     } else ""
 
+                    totalTextChars += slideContent.length + notes.length
                     slides.add(SlideContent(slideNumber, slideContent, notes))
                 }
 
@@ -56,10 +81,16 @@ object PptxParser {
         }
     }
 
+    private fun acceptZipEntry(entry: ZipEntry): Boolean {
+        val size = entry.size
+        return size < 0 || size <= MAX_ZIP_ENTRY_BYTES
+    }
+
     private fun formatOutput(slides: List<SlideContent>): String {
         val result = StringBuilder()
 
-        slides.forEach { slide ->
+        for (slide in slides) {
+            if (result.length >= MAX_EXTRACTED_TEXT_CHARS) break
             result.append("## Slide ${slide.slideNumber}\n\n")
             result.append(slide.content)
 

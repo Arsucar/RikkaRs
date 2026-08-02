@@ -2,6 +2,7 @@ package me.rerere.workspace
 
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystems
@@ -57,8 +58,32 @@ class WorkspaceFileSystem(
         val file = resolvePath(root, path)
         file.parentFile?.mkdirs()
         val target = if (!file.exists()) file else resolveConflict(file)
-        inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
+        try {
+            inputStream.use { input ->
+                target.outputStream().use { output ->
+                    copyLimited(input, output, config.maxImportBytes)
+                }
+            }
+        } catch (error: Exception) {
+            target.delete()
+            throw error
+        }
         return target.toEntry(root)
+    }
+
+    private fun copyLimited(input: InputStream, output: OutputStream, maxBytes: Long): Long {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var bytesCopied = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            bytesCopied += read
+            require(bytesCopied <= maxBytes) {
+                "Import file is too large: $bytesCopied bytes (max ${maxBytes / 1024 / 1024}MB)"
+            }
+            output.write(buffer, 0, read)
+        }
+        return bytesCopied
     }
 
     private fun resolveConflict(file: File): File {

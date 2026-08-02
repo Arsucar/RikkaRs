@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
@@ -96,28 +97,38 @@ class OpenAIRealtimeASRController(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Realtime ASR websocket failed", t)
-                releaseRecorder()
-                setError(t.message ?: "ASR websocket failed")
+                if (this@OpenAIRealtimeASRController.webSocket === webSocket) {
+                    this@OpenAIRealtimeASRController.webSocket = null
+                }
+                if (_state.value.status != ASRStatus.Error) {
+                    setError(t.message ?: "ASR websocket failed")
+                } else {
+                    releaseRecorder()
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (this@OpenAIRealtimeASRController.webSocket === webSocket) {
+                    this@OpenAIRealtimeASRController.webSocket = null
+                }
                 releaseRecorder()
                 _state.update {
-                    it.copy(
-                        status = ASRStatus.Idle,
-                        errorMessage = null
-                    )
+                    if (it.status == ASRStatus.Error) it
+                    else it.copy(status = ASRStatus.Idle, errorMessage = null)
                 }
             }
         })
     }
 
     override fun stop() {
-        recorderJob?.cancel()
-        releaseRecorder()
+        releaseSession(closeSocketGracefully = true)
+        _state.update {
+            it.copy(
+                status = if (webSocket != null) ASRStatus.Stopping else ASRStatus.Idle
+            )
+        }
         val socket = webSocket
         if (socket != null) {
-            _state.update { it.copy(status = ASRStatus.Stopping) }
             scope.launch {
                 delay(500)
                 socket.close(1000, "stop")
@@ -126,13 +137,11 @@ class OpenAIRealtimeASRController(
                     _state.update { it.copy(status = ASRStatus.Idle) }
                 }
             }
-        } else {
-            _state.update { it.copy(status = ASRStatus.Idle) }
         }
     }
 
     override fun dispose() {
-        stop()
+        releaseSession(closeSocketGracefully = false)
         scope.cancel()
     }
 
@@ -182,11 +191,20 @@ class OpenAIRealtimeASRController(
                         throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
-                setError(e.message ?: "Audio recording failed")
+                val status = _state.value.status
+                if (status == ASRStatus.Stopping || status == ASRStatus.Idle || status == ASRStatus.Error) {
+                    Log.d(TAG, "Ignoring recorder error during shutdown", e)
+                } else {
+                    Log.e(TAG, "Audio recording failed", e)
+                    setError(e.message ?: "Audio recording failed")
+                }
             } finally {
-                releaseRecorder()
+                if (_state.value.status != ASRStatus.Error) {
+                    releaseRecorder()
+                }
             }
         }
     }
@@ -232,18 +250,34 @@ class OpenAIRealtimeASRController(
         val transcript = (completedTranscripts + partialTranscripts.values)
             .filter { it.isNotBlank() }
             .joinToString(" ")
-        _state.update { it.copy(transcript = transcript, errorMessage = null) }
+        _state.update {
+            it.copy(
+                transcript = transcript,
+                errorMessage = if (it.status == ASRStatus.Error) it.errorMessage else null,
+            )
+        }
         scope.launch {
             onTranscriptChange?.invoke(transcript)
         }
     }
 
     private fun setError(message: String) {
+        releaseSession(closeSocketGracefully = false)
         _state.update {
             it.copy(
                 status = ASRStatus.Error,
                 errorMessage = message
             )
+        }
+    }
+
+    private fun releaseSession(closeSocketGracefully: Boolean) {
+        recorderJob?.cancel()
+        releaseRecorder()
+        val socket = webSocket
+        if (socket != null && !closeSocketGracefully) {
+            webSocket = null
+            runCatching { socket.cancel() }
         }
     }
 

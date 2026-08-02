@@ -31,12 +31,17 @@ class DocumentAsPromptTransformerTest {
             resolvePath = { if (it.fileName == "a.txt") "/upload/a.txt" else null },
         )
 
-        assertEquals(originalParts.size + documents.size, parts.size)
-        originalParts.indices.forEach { index ->
-            assertSame(originalParts[index], parts[index])
-        }
+        assertEquals(
+            listOf(
+                UIMessagePart.Text("before"),
+                UIMessagePart.Text("between"),
+            ),
+            parts.filterIsInstance<UIMessagePart.Text>().take(2),
+        )
+        assertFalse(parts.any { it is UIMessagePart.Document })
+        assertEquals(2 + documents.size, parts.size)
 
-        val prompts = parts.drop(originalParts.size).map { (it as UIMessagePart.Text).text }
+        val prompts = parts.drop(2).map { (it as UIMessagePart.Text).text }
         assertTrue(prompts[0].contains("<UploadFile name=\"a.txt\" path=\"/upload/a.txt\">"))
         assertTrue(prompts[0].contains("body-a.txt"))
         assertTrue(prompts[1].contains("<UploadFile name=\"b.txt\">"))
@@ -55,8 +60,9 @@ class DocumentAsPromptTransformerTest {
         val singleDocument = mutableListOf<UIMessagePart>(document)
         appendDocumentPromptsInOrder(singleDocument, { "only body" }, { null })
 
-        assertSame(document, singleDocument[0])
-        val prompt = (singleDocument[1] as UIMessagePart.Text).text
+        assertFalse(singleDocument.any { it is UIMessagePart.Document })
+        assertEquals(1, singleDocument.size)
+        val prompt = (singleDocument[0] as UIMessagePart.Text).text
         assertTrue(prompt.contains("<UploadFile name=\"only.txt\">"))
         assertTrue(prompt.contains("only body"))
     }

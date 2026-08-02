@@ -19,12 +19,35 @@ class KeyRouletteTest {
 
             assertEquals("first", firstInstance.next("first, second", "provider"))
             assertTrue(cacheFile.exists())
+            val cacheText = cacheFile.readText()
+            assertTrue(cacheText.startsWith("{"))
+            assertTrue(!cacheText.contains("first") && !cacheText.contains("second"))
+            assertTrue(cacheText.contains(fingerprintApiKey("first")))
 
             cacheFile.writeText("invalid json")
             val secondInstance = lruKeyRoulette(cacheFile) { ++now }
 
             assertEquals("second", secondInstance.next("first, second", "provider"))
             assertTrue(cacheFile.readText().startsWith("{"))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `lru cache never stores plaintext api keys`() {
+        val directory = Files.createTempDirectory("key-roulette-redact-test").toFile()
+        try {
+            val cacheFile = directory.resolve("lru.json")
+            var now = 0L
+            val roulette = lruKeyRoulette(cacheFile) { ++now }
+            val secret = "sk-live-super-secret-key"
+
+            roulette.next("$secret, other-key", "provider")
+            val text = cacheFile.readText()
+            assertTrue(!text.contains(secret))
+            assertTrue(!text.contains("other-key"))
+            assertTrue(text.contains(fingerprintApiKey(secret)))
         } finally {
             directory.deleteRecursively()
         }

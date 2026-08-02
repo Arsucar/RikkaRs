@@ -95,7 +95,7 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "generateText: model=${params.model.modelId}")
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -103,7 +103,6 @@ class ResponseAPI(
         }
 
         val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
 
@@ -132,8 +131,9 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "streamText: model=${params.model.modelId}")
 
+        val functionCallIdByItemId = mutableMapOf<String, String>()
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -147,7 +147,7 @@ class ResponseAPI(
                 }
                 Log.d(TAG, "onEvent: $id/$type $data")
                 val json = json.parseToJsonElement(data).jsonObject
-                val chunk = parseResponseDelta(json)
+                val chunk = parseResponseDelta(json, functionCallIdByItemId)
                 if (chunk != null) {
                     trySend(chunk).onFailure { e ->
                         Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
@@ -468,7 +468,10 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    private fun parseResponseDelta(
+        jsonObject: JsonObject,
+        functionCallIdByItemId: MutableMap<String, String> = mutableMapOf(),
+    ): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -519,6 +522,8 @@ class ResponseAPI(
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val callId = item["call_id"]?.jsonPrimitive?.content ?: id
+                    functionCallIdByItemId[id] = callId
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -530,7 +535,7 @@ class ResponseAPI(
                                     role = MessageRole.ASSISTANT,
                                     parts = listOf(
                                         UIMessagePart.Tool(
-                                            toolCallId = id,
+                                            toolCallId = callId,
                                             toolName = item["name"]?.jsonPrimitive?.content ?: "",
                                             input = item["arguments"]?.jsonPrimitive?.content
                                                 ?: "",
@@ -642,12 +647,15 @@ class ResponseAPI(
             }
 
             "response.function_call_arguments.done" -> {
-                val toolCallId =
+                val itemId =
                     jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+                val callId = jsonObject["call_id"]?.jsonPrimitive?.content
+                    ?: functionCallIdByItemId[itemId]
+                    ?: itemId
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
-                    id = toolCallId,
+                    id = itemId,
                     model = "",
                     choices = listOf(
                         UIMessageChoice(
@@ -656,7 +664,7 @@ class ResponseAPI(
                                 role = MessageRole.ASSISTANT,
                                 parts = listOf(
                                     UIMessagePart.Tool(
-                                        toolCallId = toolCallId,
+                                        toolCallId = callId,
                                         toolName = "",
                                         input = arguments,
                                         output = emptyList()
@@ -684,7 +692,6 @@ class ResponseAPI(
     }
 
     private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
-        println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
 

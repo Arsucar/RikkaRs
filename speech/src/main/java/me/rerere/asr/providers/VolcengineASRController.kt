@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
@@ -111,20 +112,31 @@ class VolcengineASRController(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Volcengine ASR websocket failed", t)
-                releaseRecorder()
-                setError(t.message ?: "ASR websocket failed")
+                if (this@VolcengineASRController.webSocket === webSocket) {
+                    this@VolcengineASRController.webSocket = null
+                }
+                if (_state.value.status != ASRStatus.Error) {
+                    setError(t.message ?: "ASR websocket failed")
+                } else {
+                    releaseRecorder()
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (this@VolcengineASRController.webSocket === webSocket) {
+                    this@VolcengineASRController.webSocket = null
+                }
                 releaseRecorder()
-                _state.update { it.copy(status = ASRStatus.Idle, errorMessage = null) }
+                _state.update {
+                    if (it.status == ASRStatus.Error) it
+                    else it.copy(status = ASRStatus.Idle, errorMessage = null)
+                }
             }
         })
     }
 
     override fun stop() {
-        recorderJob?.cancel()
-        releaseRecorder()
+        releaseSession(closeSocketGracefully = true)
         val socket = webSocket
         if (socket != null) {
             _state.update { it.copy(status = ASRStatus.Stopping) }
@@ -150,7 +162,7 @@ class VolcengineASRController(
     }
 
     override fun dispose() {
-        stop()
+        releaseSession(closeSocketGracefully = false)
         scope.cancel()
     }
 
@@ -219,7 +231,12 @@ class VolcengineASRController(
                 val text = json.optJSONObject("result")?.optString("text", "") ?: ""
                 if (text.isNotEmpty() && text != lastText) {
                     lastText = text
-                    _state.update { it.copy(transcript = text, errorMessage = null) }
+                    _state.update {
+                        it.copy(
+                            transcript = text,
+                            errorMessage = if (it.status == ASRStatus.Error) it.errorMessage else null,
+                        )
+                    }
                     scope.launch { onTranscriptChange?.invoke(text) }
                 }
             }
@@ -290,17 +307,37 @@ class VolcengineASRController(
                         throw IllegalStateException("AudioRecord read error: $read")
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
-                setError(e.message ?: "Audio recording failed")
+                val status = _state.value.status
+                if (status == ASRStatus.Stopping || status == ASRStatus.Idle || status == ASRStatus.Error) {
+                    Log.d(TAG, "Ignoring recorder error during shutdown", e)
+                } else {
+                    Log.e(TAG, "Audio recording failed", e)
+                    setError(e.message ?: "Audio recording failed")
+                }
             } finally {
-                releaseRecorder()
+                if (_state.value.status != ASRStatus.Error) {
+                    releaseRecorder()
+                }
             }
         }
     }
 
     private fun setError(message: String) {
+        releaseSession(closeSocketGracefully = false)
         _state.update { it.copy(status = ASRStatus.Error, errorMessage = message) }
+    }
+
+    private fun releaseSession(closeSocketGracefully: Boolean) {
+        recorderJob?.cancel()
+        releaseRecorder()
+        val socket = webSocket
+        if (socket != null && !closeSocketGracefully) {
+            webSocket = null
+            runCatching { socket.cancel() }
+        }
     }
 
     private fun releaseRecorder() {

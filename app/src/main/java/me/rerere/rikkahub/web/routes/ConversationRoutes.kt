@@ -157,6 +157,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
+            chatService.stopGeneration(uuid)
             conversationRepo.deleteConversation(conversation)
             call.respond(HttpStatusCode.NoContent)
         }

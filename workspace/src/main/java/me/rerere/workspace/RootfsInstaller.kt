@@ -179,16 +179,20 @@ class RootfsInstaller(
 
     private fun createSymlink(root: File, target: File, linkName: String) {
         if (linkName.isBlank()) return
-        val linkTarget = if (File(linkName).isAbsolute) {
-            File(linkName)
+        val rootFile = root.canonicalFile
+        val resolved = if (File(linkName).isAbsolute) {
+            // Absolute targets are treated as paths inside the rootfs; host-absolute links are rejected.
+            val relative = linkName.trimStart('/', '\\')
+            if (relative.isBlank() || relative.split('/', '\\').any { it == ".." }) return
+            File(root, relative).canonicalFile
         } else {
-            val resolved = File(target.parentFile ?: root, linkName).canonicalFile
-            val rootFile = root.canonicalFile
-            require(resolved.path == rootFile.path || resolved.path.startsWith(rootFile.path + File.separator)) {
-                "Symlink escapes rootfs: ${target.name}"
-            }
-            (target.parentFile ?: root).toPath().relativize(resolved.toPath()).toFile()
+            File(target.parentFile ?: root, linkName).canonicalFile
         }
+        if (resolved.path != rootFile.path && !resolved.path.startsWith(rootFile.path + File.separator)) {
+            // Escapes staging directory — skip rather than create a host-escaping link.
+            return
+        }
+        val linkTarget = (target.parentFile ?: root).toPath().relativize(resolved.toPath()).toFile()
         target.delete()
         Files.createSymbolicLink(target.toPath(), linkTarget.toPath())
     }

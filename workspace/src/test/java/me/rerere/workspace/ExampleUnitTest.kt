@@ -42,6 +42,33 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun importBytesRejectsOversizedStream() {
+        val root = Files.createTempDirectory("workspace-import-test").toFile()
+        val fileSystem = WorkspaceFileSystem(WorkspaceConfig(maxImportBytes = 16))
+        val oversized = ByteArray(32) { 1 }
+
+        var rejected = false
+        try {
+            fileSystem.importBytes(root, "big.bin", oversized.inputStream())
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertFalse(File(root, "big.bin").exists())
+    }
+
+    @Test
+    fun importBytesAcceptsWithinLimit() {
+        val root = Files.createTempDirectory("workspace-import-ok").toFile()
+        val fileSystem = WorkspaceFileSystem(WorkspaceConfig(maxImportBytes = 64))
+        val data = "hello-import".toByteArray()
+        val entry = fileSystem.importBytes(root, "ok.bin", data.inputStream())
+        assertEquals("ok.bin", entry.path)
+        assertEquals(data.size.toLong(), entry.sizeBytes)
+        assertArrayEquals(data, File(root, "ok.bin").readBytes())
+    }
+
+    @Test
     fun rootfsRequiresShellEntryPoint() {
         val baseDir = Files.createTempDirectory("workspace-manager-test").toFile()
         val manager = WorkspaceManager(baseDir)

@@ -13,6 +13,9 @@ import me.rerere.document.PptxParser
 import me.rerere.rikkahub.data.datastore.UploadInjectMode
 import java.io.File
 
+private const val MAX_DOCUMENT_FILE_BYTES = 20L * 1024 * 1024
+private const val MAX_DOCUMENT_CONTENT_CHARS = 200_000
+
 object DocumentAsPromptTransformer : InputMessageTransformer {
     override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
     override suspend fun transform(
@@ -68,13 +71,21 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         if (!file.exists() || !file.isFile) {
             return "[ERROR, file not found: ${document.fileName}]"
         }
+        if (file.length() > MAX_DOCUMENT_FILE_BYTES) {
+            return "[ERROR, file too large (>20MB): ${document.fileName}]"
+        }
         return runCatching {
-            when (document.mime) {
+            val content = when (document.mime) {
                 "application/pdf" -> parsePdfAsText(file)
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
                 "application/epub+zip" -> parseEpubAsText(file)
                 else -> file.readText()
+            }
+            if (content.length > MAX_DOCUMENT_CONTENT_CHARS) {
+                content.take(MAX_DOCUMENT_CONTENT_CHARS) + "\n...[truncated]"
+            } else {
+                content
             }
         }.getOrElse {
             "[ERROR, failed to read file: ${document.fileName}]"
@@ -112,4 +123,5 @@ internal fun appendDocumentPromptsInOrder(
         }
     }
     parts.addAll(prompts)
+    parts.removeAll { it is UIMessagePart.Document }
 }

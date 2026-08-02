@@ -94,6 +94,7 @@ class MiMoASRController(
             segmentStartElapsedMs = SystemClock.elapsedRealtime()
         }
         completedTranscripts.clear()
+        flushJob?.cancel()
         flushJob = null
 
         // MiMo 是 HTTP 一次性接口, 没有 WebSocket 连接阶段, 直接进入 Listening
@@ -121,7 +122,10 @@ class MiMoASRController(
                 Log.e(TAG, "Final flush failed", e)
                 setError(e.message ?: "MiMo ASR final flush failed")
             } finally {
-                _state.update { it.copy(status = ASRStatus.Idle) }
+                _state.update {
+                    if (it.status == ASRStatus.Error) it
+                    else it.copy(status = ASRStatus.Idle)
+                }
             }
         }
     }
@@ -279,11 +283,19 @@ class MiMoASRController(
         val transcript = completedTranscripts
             .filter { it.isNotBlank() }
             .joinToString(" ")
-        _state.update { it.copy(transcript = transcript, errorMessage = null) }
+        _state.update {
+            it.copy(
+                transcript = transcript,
+                errorMessage = if (it.status == ASRStatus.Error) it.errorMessage else null,
+            )
+        }
         scope.launch { onTranscriptChange?.invoke(transcript) }
     }
 
     private fun setError(message: String) {
+        flushJob?.cancel()
+        recorderJob?.cancel()
+        releaseRecorder()
         _state.update {
             it.copy(
                 status = ASRStatus.Error,

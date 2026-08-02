@@ -130,6 +130,11 @@ export function onWebAuthRequired(
   };
 }
 
+/**
+ * Attach JWT as query param for resource URLs that cannot set Authorization
+ * (e.g. <img src>, media). Prefer Bearer header via ky hooks for fetch/SSE.
+ * Tokens expire in ~7d server-side; avoid logging or sharing these URLs.
+ */
 export function appendWebAuthQuery(url: string): string {
   if (!isBrowser() || !url.startsWith("/api/")) return url;
 

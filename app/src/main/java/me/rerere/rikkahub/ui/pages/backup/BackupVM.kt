@@ -270,7 +270,7 @@ class BackupVM(
             throw IllegalArgumentException("No importable providers found in Cherry Studio backup")
         }
 
-        Log.i(TAG, "restoreFromCherryStudio: import ${importProviders.size} providers: $importProviders")
+        Log.i(TAG, "restoreFromCherryStudio: import ${importProviders.size} providers")
 
         settingsStore.update(
             settings.value.copy(

@@ -41,7 +41,7 @@
 
 ### 2.3 签名
 
-- Release 使用**专用 keystore**，密码沿用本地习惯：`Mima1234_`。
+- Release 使用**专用 keystore**，密码通过本地配置 / GitHub Secrets 注入（占位：`<KEYSTORE_PASSWORD>`），**勿**把真实密码写进文档或仓库。
 - **Key alias**：`rikka-arsucar`。
 - Keystore **不进 Git**；CI 通过 **GitHub Secrets** 注入。
 - **注意**：`app/build.gradle.kts` 读取 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`，并**兼容**旧版 `local.properties` 键名（`keystore.path`、`keystore.password` 等）。新配置请优先使用 `storeFile` 等标准键名。
@@ -258,7 +258,7 @@ app/build/outputs/apk/release/*arm64-v8a*release*.apk
 ```bash
 keytool -genkeypair -v -storetype PKCS12 -keystore rikka-arsucar-release.jks \
   -alias rikka-arsucar -keyalg RSA -keysize 2048 -validity 10000 \
-  -storepass 'Mima1234_' -keypass 'Mima1234_' \
+  -storepass '<KEYSTORE_PASSWORD>' -keypass '<KEY_PASSWORD>' \
   -dname "CN=Rikka-arsucar, OU=Arsucar, O=Arsucar, L=Unknown, ST=Unknown, C=CN"
 ```
 
@@ -269,9 +269,9 @@ keytool -genkeypair -v -storetype PKCS12 -keystore rikka-arsucar-release.jks \
 | Secret 名 | 内容 |
 |-----------|------|
 | `KEYSTORE_BASE64` | `base64` 编码后的整个 `.jks` 文件（Linux: `base64 -w0 rikka-arsucar-release.jks`；macOS 无 `-w0` 则注意换行） |
-| `KEYSTORE_PASSWORD` | `Mima1234_` |
+| `KEYSTORE_PASSWORD` | `<KEYSTORE_PASSWORD>`（与本地 keystore 一致） |
 | `KEY_ALIAS` | `rikka-arsucar` |
-| `KEY_PASSWORD` | `Mima1234_` |
+| `KEY_PASSWORD` | `<KEY_PASSWORD>`（可与 store 密码相同） |
 
 ### 6.3 CI 中还原 keystore
 

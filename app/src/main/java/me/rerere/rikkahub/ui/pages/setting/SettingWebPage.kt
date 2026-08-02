@@ -341,7 +341,9 @@ fun SettingWebPage() {
                                         }
                                     }
                                 },
-                                enabled = settings.webServerJwtEnabled || accessPasswordText.isNotBlank(),
+                                // Auth policy is snapshotted at server start; require restart to apply.
+                                enabled = !serverState.isRunning &&
+                                    (settings.webServerJwtEnabled || accessPasswordText.isNotBlank()),
                             )
                         },
                     )

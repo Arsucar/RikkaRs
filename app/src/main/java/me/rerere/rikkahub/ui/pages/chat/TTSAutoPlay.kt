@@ -19,20 +19,20 @@ fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {
     val updatedSetting by rememberUpdatedState(setting)
     LaunchedEffect(Unit) {
         vm.generationDoneFlow.collect { conversationId ->
-            if (updatedSetting.displaySetting.autoPlayTTSAfterGeneration) {
-                val lastMessage = currentConversation.currentMessages.lastOrNull()
-                if (lastMessage != null && lastMessage.role == MessageRole.ASSISTANT) {
-                    val text = lastMessage.toText()
-                    var textToSpeak = text
-                    if (updatedSetting.displaySetting.ttsOnlyReadQuoted) {
-                        textToSpeak = textToSpeak.extractQuotedContentAsText() ?: textToSpeak
-                    }
-                    if (updatedSetting.displaySetting.ttsOnlyReadOutsideBrackets) {
-                        textToSpeak = textToSpeak.removeBracketedContent() ?: textToSpeak
-                    }
-                    if (textToSpeak.isNotBlank()) {
-                        tts.speak(textToSpeak)
-                    }
+            if (conversationId != currentConversation.id) return@collect
+            if (!updatedSetting.displaySetting.autoPlayTTSAfterGeneration) return@collect
+            val lastMessage = currentConversation.currentMessages.lastOrNull()
+            if (lastMessage != null && lastMessage.role == MessageRole.ASSISTANT) {
+                val text = lastMessage.toText()
+                var textToSpeak = text
+                if (updatedSetting.displaySetting.ttsOnlyReadQuoted) {
+                    textToSpeak = textToSpeak.extractQuotedContentAsText() ?: textToSpeak
+                }
+                if (updatedSetting.displaySetting.ttsOnlyReadOutsideBrackets) {
+                    textToSpeak = textToSpeak.removeBracketedContent() ?: textToSpeak
+                }
+                if (textToSpeak.isNotBlank()) {
+                    tts.speak(textToSpeak)
                 }
             }
         }

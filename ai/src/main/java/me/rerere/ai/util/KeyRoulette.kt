@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.security.MessageDigest
 import java.util.WeakHashMap
 
 interface KeyRoulette {
@@ -14,6 +15,7 @@ interface KeyRoulette {
 
         /**
          * LRU 轮询，持久化存储到 cacheDir/lru_key_roulette.json
+         * 磁盘仅存 key 指纹（SHA-256），不写明文 API key
          * 通过 providerId 区分同类型的多个 provider 实例，在 next() 调用时传入
          */
         fun lru(context: Context): KeyRoulette = lruKeyRoulette(File(context.cacheDir, LRU_CACHE_FILE))
@@ -28,6 +30,12 @@ private fun splitKey(key: String): List<String> {
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
+}
+
+internal fun fingerprintApiKey(key: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val bytes = digest.digest(key.toByteArray(Charsets.UTF_8))
+    return bytes.joinToString("") { "%02x".format(it) }
 }
 
 private class DefaultKeyRoulette : KeyRoulette {
@@ -47,7 +55,7 @@ private const val EXPIRE_DURATION_MS = 24 * 60 * 60 * 1000L // 1 天
 // 全局文件锁，防止多个 provider 实例并发读写同一文件
 private object LruFileLock
 
-// 文件结构: Map<providerId, Map<apiKey, lastUsedTimestamp>>
+// 文件结构: Map<providerId, Map<keyFingerprint, lastUsedTimestamp>>
 private typealias LruCache = Map<String, Map<String, Long>>
 private val lruMemoryCache = WeakHashMap<File, LruCache>()
 
@@ -68,17 +76,19 @@ private class LruKeyRoulette(
         synchronized(LruFileLock) {
             val now = nowMillis()
             val allCache = loadCache().toMutableMap()
+            val fingerprints = keyList.associateWith(::fingerprintApiKey)
+            val fingerprintSet = fingerprints.values.toSet()
 
-            // 取本 provider 的记录，过滤掉已过期条目和不在当前 key 列表中的条目
+            // 取本 provider 的记录，过滤掉已过期条目和不在当前 key 列表中的指纹
             val providerCache = (allCache[providerId] ?: emptyMap())
-                .filter { (k, lastUsed) -> k in keyList && now - lastUsed < EXPIRE_DURATION_MS }
+                .filter { (fp, lastUsed) -> fp in fingerprintSet && now - lastUsed < EXPIRE_DURATION_MS }
                 .toMutableMap()
 
             // 优先选从未使用的 key，否则选最久未使用的
-            val selected = keyList.firstOrNull { it !in providerCache }
-                ?: providerCache.minByOrNull { it.value }!!.key
+            val selected = keyList.firstOrNull { fingerprints[it] !in providerCache }
+                ?: keyList.minByOrNull { providerCache.getValue(fingerprints.getValue(it)) }!!
 
-            providerCache[selected] = now
+            providerCache[fingerprints.getValue(selected)] = now
             allCache[providerId] = providerCache
 
             // 清理整个 provider 条目均已过期的记录

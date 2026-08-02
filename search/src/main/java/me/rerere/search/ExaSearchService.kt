@@ -94,32 +94,33 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body.string()
-                val response = runCatching {
-                    json.decodeFromString<ExaData>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println(bodyRaw)
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body.string()
+                    val decoded = runCatching {
+                        json.decodeFromString<ExaData>(bodyRaw)
+                    }.onFailure {
+                        it.printStackTrace()
+                        println(bodyRaw)
+                        error("Failed to decode response: $bodyRaw")
+                    }.getOrThrow()
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = response.output?.content,
-                        items = response.results.map {
-                            SearchResultItem(
-                                title = it.title,
-                                url = it.url,
-                                text = it.text ?: ""
-                            )
-                        },
-                        images = response.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
-                    ))
-            } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                    return@withContext Result.success(
+                        SearchResult(
+                            answer = decoded.output?.content,
+                            items = decoded.results.map {
+                                SearchResultItem(
+                                    title = it.title,
+                                    url = it.url,
+                                    text = it.text ?: ""
+                                )
+                            },
+                            images = decoded.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
+                        ))
+                } else {
+                    println(response.body.string())
+                    error("response failed #${response.code}")
+                }
             }
         }
     }
@@ -145,33 +146,34 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyRaw = response.body.string()
-                val data = runCatching {
-                    json.decodeFromString<ExaData>(bodyRaw)
-                }.onFailure {
-                    it.printStackTrace()
-                    println(bodyRaw)
-                    error("Failed to decode response: $bodyRaw")
-                }.getOrThrow()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyRaw = response.body.string()
+                    val data = runCatching {
+                        json.decodeFromString<ExaData>(bodyRaw)
+                    }.onFailure {
+                        it.printStackTrace()
+                        println(bodyRaw)
+                        error("Failed to decode response: $bodyRaw")
+                    }.getOrThrow()
 
-                return@withContext Result.success(
-                    ScrapedResult(
-                        urls = data.results.map {
-                            ScrapedResultUrl(
-                                url = it.url,
-                                content = it.text ?: "",
-                                metadata = ScrapedResultMetadata(
-                                    title = it.title,
+                    return@withContext Result.success(
+                        ScrapedResult(
+                            urls = data.results.map {
+                                ScrapedResultUrl(
+                                    url = it.url,
+                                    content = it.text ?: "",
+                                    metadata = ScrapedResultMetadata(
+                                        title = it.title,
+                                    )
                                 )
-                            )
-                        }
+                            }
+                        )
                     )
-                )
-            } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                } else {
+                    println(response.body.string())
+                    error("response failed #${response.code}")
+                }
             }
         }
     }

@@ -8,8 +8,8 @@ import androidx.paging.PagingSource
 import androidx.paging.map
 import androidx.room.withTransaction
 import androidx.sqlite.db.SimpleSQLiteQuery
+import android.net.Uri
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.common.android.Logging
 import me.rerere.ai.ui.UIMessage
@@ -304,8 +304,8 @@ class ConversationRepository(
                 nodes = conversation.messageNodes,
                 operation = "insert",
             )
+            messageFtsManager.indexConversationInPlace(conversation)
         }
-        messageFtsManager.indexConversation(conversation)
     }
 
     fun getConversationsPaging(filter: ConversationFilter): Flow<PagingData<Conversation>> = Pager(
@@ -337,8 +337,8 @@ class ConversationRepository(
                 sourceConversationId = sourceConversationId.toString(),
                 targetConversationId = fork.id.toString(),
             )
+            messageFtsManager.indexConversationInPlace(fork)
         }
-        messageFtsManager.indexConversation(fork)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
@@ -351,8 +351,8 @@ class ConversationRepository(
                 nodes = conversation.messageNodes,
                 operation = "update",
             )
+            messageFtsManager.indexConversationInPlace(conversation)
         }
-        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -362,13 +362,13 @@ class ConversationRepository(
         } else {
             conversation
         }
-        messageFtsManager.deleteConversation(conversation.id.toString())
         database.withTransaction {
             database.memoryTableDao().deleteMemoryTableDataForConversation(conversation.id.toString())
             // message_node 会通过 CASCADE 自动删除
             conversationDAO.delete(
                 conversationToConversationEntity(conversation)
             )
+            messageFtsManager.deleteConversationInPlace(conversation.id.toString())
         }
         filesManager.deleteChatFiles(fullConversation.files)
     }
@@ -393,9 +393,34 @@ class ConversationRepository(
         }
     }
 
+    suspend fun getConversationIdsOfAssistant(assistantId: Uuid): List<Uuid> {
+        return conversationDAO.getIdsOfAssistant(assistantId.toString()).mapNotNull { id ->
+            runCatching { Uuid.parse(id) }.getOrNull()
+        }
+    }
+
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
-        getConversationsOfAssistant(assistantId).first().forEach { conversation ->
-            deleteConversation(conversation)
+        val assistantKey = assistantId.toString()
+        val ids = conversationDAO.getIdsOfAssistant(assistantKey)
+        if (ids.isEmpty()) return
+
+        // Collect chat files one conversation at a time to avoid loading the full entity list.
+        val filesToDelete = mutableListOf<Uri>()
+        for (id in ids) {
+            val uuid = runCatching { Uuid.parse(id) }.getOrNull() ?: continue
+            val full = getConversationById(uuid) ?: continue
+            filesToDelete.addAll(full.files)
+        }
+
+        database.withTransaction {
+            for (id in ids) {
+                database.memoryTableDao().deleteMemoryTableDataForConversation(id)
+            }
+            conversationDAO.deleteByAssistantId(assistantKey)
+            messageFtsManager.deleteConversationsInPlace(ids)
+        }
+        if (filesToDelete.isNotEmpty()) {
+            filesManager.deleteChatFiles(filesToDelete)
         }
     }
 
@@ -454,9 +479,16 @@ class ConversationRepository(
     }
 
     suspend fun togglePinStatus(conversationId: Uuid) {
+        setPinStatus(
+            conversationId,
+            !(getConversationById(conversationId)?.isPinned ?: false),
+        )
+    }
+
+    suspend fun setPinStatus(conversationId: Uuid, isPinned: Boolean) {
         conversationDAO.updatePinStatus(
             id = conversationId.toString(),
-            isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
+            isPinned = isPinned,
         )
     }
 

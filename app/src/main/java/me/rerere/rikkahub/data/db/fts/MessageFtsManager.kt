@@ -32,6 +32,11 @@ class MessageFtsManager(private val database: AppDatabase) {
     private val db get() = database.openHelper.writableDatabase
 
     suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
+        indexConversationInPlace(conversation)
+    }
+
+    /** Same-thread FTS upsert for use inside Room [androidx.room.withTransaction]. */
+    fun indexConversationInPlace(conversation: Conversation) {
         val conversationId = conversation.id.toString()
         db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
         conversation.messageNodes.forEach { node ->
@@ -55,7 +60,20 @@ class MessageFtsManager(private val database: AppDatabase) {
     }
 
     suspend fun deleteConversation(conversationId: String) = withContext(Dispatchers.IO) {
+        deleteConversationInPlace(conversationId)
+    }
+
+    /** Same-thread FTS delete for use inside Room [androidx.room.withTransaction]. */
+    fun deleteConversationInPlace(conversationId: String) {
         db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+    }
+
+    suspend fun deleteConversations(conversationIds: Collection<String>) = withContext(Dispatchers.IO) {
+        conversationIds.forEach { deleteConversationInPlace(it) }
+    }
+
+    fun deleteConversationsInPlace(conversationIds: Collection<String>) {
+        conversationIds.forEach { deleteConversationInPlace(it) }
     }
 
     suspend fun deleteAll() = withContext(Dispatchers.IO) {
