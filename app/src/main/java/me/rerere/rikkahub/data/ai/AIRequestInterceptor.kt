@@ -3,7 +3,6 @@ package me.rerere.rikkahub.data.ai
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,9 +39,10 @@ class AIRequestInterceptor(
         if (response.code != 429) return response
 
         // ① 功能默认关闭（AC1）；任何异常/未启用走原样透传
-        val clashConfig = runBlocking { settingsStore.settingsFlow.first().clashConfig }
+        val settings = settingsStore.settingsFlow.value
+        val clashConfig = settings.clashConfig
         if (clashConfig.maxRetries <= 0) return response
-        val provider = runBlocking { settingsStore.findProviderByBaseUrl(request.url.host) }
+        val provider = settingsStore.findProviderByBaseUrl(request.url.host)
         if (provider == null || !provider.enable429IpRotation) return response
 
         // 当前仍存活的 429 响应（未被 close），供上层读取/分类
@@ -51,12 +51,17 @@ class AIRequestInterceptor(
             runBlocking {
                 for (attempt in 1..clashConfig.maxRetries) {
                     // 互斥：查询 + 选不同节点 + 切换（快动作）；失败抛异常 -> 外层 catch 放行原 429（AC3）
-                    switchMutex.withLock {
+                    val switchedTo = switchMutex.withLock {
                         val nodes = clashApiClient.getSelectableNodes(clashConfig.apiBaseUrl, clashConfig.groupName)
                         val currentName = clashApiClient.getCurrentNode(clashConfig.apiBaseUrl, clashConfig.groupName)
-                        val next = nodes.firstOrNull { it != currentName }
-                            ?: throw IllegalStateException("no alternate node")
+                        val alternates = nodes.filter { it != currentName }
+                        if (alternates.isEmpty()) {
+                            throw IllegalStateException("no alternate node")
+                        }
+                        // Round-robin across alternates so multi-retry can leave the first two nodes
+                        val next = alternates[(attempt - 1) % alternates.size]
                         clashApiClient.switchNode(clashConfig.apiBaseUrl, clashConfig.groupName, next)
+                        next
                     }
                     delay(clashConfig.switchDelayMs) // 挂起式等待，不占 dispatcher 线程
 
@@ -67,7 +72,7 @@ class AIRequestInterceptor(
                     }
                     lastResponse.close()
                     lastResponse = replayed
-                    Log.i("ClashRetry", "attempt $attempt still 429, switched to $next")
+                    Log.i("ClashRetry", "attempt $attempt still 429, switched to $switchedTo")
                 }
                 lastResponse // 重试耗尽 -> 最后一次 429 原样返回（AC4）
             }

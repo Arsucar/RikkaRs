@@ -81,6 +81,16 @@ class ClashApiClientTest {
     }
 
     @Test
+    fun `switchNode JSON-encodes special characters in node name`() = runBlocking {
+        enqueueJson("""{"result":"success"}""", code = 200)
+
+        client.switchNode(baseUrl, "GLOBAL", """node "quoted" \ path""")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertEquals("""{"name":"node \"quoted\" \\ path"}""", body)
+    }
+
+    @Test
     fun `switchNode throws on non 200`() = runBlocking {
         enqueueJson("""{"error":"boom"}""", code = 500)
 

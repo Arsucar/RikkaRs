@@ -3,10 +3,8 @@ package me.rerere.rikkahub.data.ai.clash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -39,67 +37,66 @@ class ClashApiClient(
 
     private companion object {
         val mediaType = "application/json".toMediaType()
+        val nonSelectableNodes = setOf("DIRECT", "REJECT", "REJECT-DROP", "COMPATIBLE", "PASS")
     }
+
+    @Serializable
+    private data class SwitchNodeBody(val name: String)
 
     /** Returns selectable node names of the given strategy group (excluding DIRECT/REJECT/...). */
     suspend fun getSelectableNodes(apiBaseUrl: String, groupName: String): List<String> =
         withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("${apiBaseUrl.trimEnd('/')}/proxies")
-                .get()
-                .build()
-            val response = execute(request)
-            try {
-                val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw IllegalStateException("Clash GET /proxies -> ${response.code}: $text")
-                val root = json.parseToJsonElement(text).jsonObject
-                val proxies = root["proxies"]?.jsonObject ?: throw IllegalStateException("Clash /proxies missing 'proxies'")
-                val group = proxies[groupName]?.jsonObject ?: throw IllegalStateException("Clash group '$groupName' not found")
-                val all = group["all"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
-                all.filterNot { it == "DIRECT" || it == "REJECT" || it == "REJECT-DROP" || it == "COMPATIBLE" || it == "PASS" }
-            } finally {
-                response.close()
-            }
+            val group = fetchGroup(apiBaseUrl, groupName)
+            val all = group["all"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+            all.filterNot { it in nonSelectableNodes }
         }
 
     /** Returns the currently selected node of the strategy group, or null when unknown. */
     suspend fun getCurrentNode(apiBaseUrl: String, groupName: String): String? =
         withContext(Dispatchers.IO) {
+            fetchGroup(apiBaseUrl, groupName)["now"]?.jsonPrimitive?.contentOrNull
+        }
+
+    /** Switches the active node of the strategy group. Returns true when Clash accepted (200). */
+    suspend fun switchNode(apiBaseUrl: String, groupName: String, nodeName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val url = apiBaseUrl.trimEnd('/').toHttpUrl()
+                .newBuilder()
+                .addPathSegment("proxies")
+                .addPathSegment(groupName)
+                .build()
+            val body = json.encodeToString(SwitchNodeBody.serializer(), SwitchNodeBody(nodeName))
             val request = Request.Builder()
-                .url("${apiBaseUrl.trimEnd('/')}/proxies")
-                .get()
+                .url(url)
+                .put(body.toRequestBody(mediaType))
                 .build()
             val response = execute(request)
             try {
-                val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw IllegalStateException("Clash GET /proxies -> ${response.code}: $text")
-                val root = json.parseToJsonElement(text).jsonObject
-                val proxies = root["proxies"]?.jsonObject ?: throw IllegalStateException("Clash /proxies missing 'proxies'")
-                proxies[groupName]?.jsonObject?.get("now")?.jsonPrimitive?.contentOrNull
+                val ok = response.isSuccessful
+                if (!ok) {
+                    val text = response.body?.string().orEmpty()
+                    throw IllegalStateException("Clash PUT /proxies/$groupName -> ${response.code}: $text")
+                }
+                true
             } finally {
                 response.close()
             }
         }
 
-    /** Switches the active node of the strategy group. Returns true when Clash accepted (200). */
-    suspend fun switchNode(apiBaseUrl: String, groupName: String, nodeName: String): Boolean {
-        val url = apiBaseUrl.trimEnd('/').toHttpUrl()
-            .newBuilder()
-            .addPathSegment("proxies")
-            .addPathSegment(groupName)
-            .build()
+    private suspend fun fetchGroup(apiBaseUrl: String, groupName: String): kotlinx.serialization.json.JsonObject {
         val request = Request.Builder()
-            .url(url)
-            .put("{\"name\":\"$nodeName\"}".toRequestBody(mediaType))
+            .url("${apiBaseUrl.trimEnd('/')}/proxies")
+            .get()
             .build()
         val response = execute(request)
         try {
-            val ok = response.isSuccessful
-            if (!ok) {
-                val text = response.body?.string().orEmpty()
-                throw IllegalStateException("Clash PUT /proxies/$groupName -> ${response.code}: $text")
-            }
-            return true
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException("Clash GET /proxies -> ${response.code}: $text")
+            val root = json.parseToJsonElement(text).jsonObject
+            val proxies = root["proxies"]?.jsonObject
+                ?: throw IllegalStateException("Clash /proxies missing 'proxies'")
+            return proxies[groupName]?.jsonObject
+                ?: throw IllegalStateException("Clash group '$groupName' not found")
         } finally {
             response.close()
         }
