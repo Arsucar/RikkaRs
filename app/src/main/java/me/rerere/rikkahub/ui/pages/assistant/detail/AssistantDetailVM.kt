@@ -344,6 +344,17 @@ class AssistantDetailVM(
         }
     }
 
+    /** Partial preset toggle (#218); bypasses full assistant config rewrite. */
+    fun toggleAssistantPreset(presetId: Uuid, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.toggleAssistantPreset(
+                assistantId = assistantId,
+                presetId = presetId,
+                enabled = enabled,
+            )
+        }
+    }
+
     fun saveToolPermission(capabilityId: String, permission: ToolPermission) {
         val requestId = ++toolPermissionRequestId
         viewModelScope.launch {

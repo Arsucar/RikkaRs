@@ -23,6 +23,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 | [Assistant Tool Permissions](./tool-permissions.md) | Four-state per-tool policy and runtime enforcement |
 | [Tool Diagnostics and Connection Status](./tool-diagnostics-and-connection-status.md) | Read-only diagnostics, redaction, probes, and revision-safe status |
 | [Preset Entries](./preset-entries.md) | Versioned entries, migration, Builtin consumers, and UI invariants |
+| [Assistant Preset Toggle](./assistant-preset-toggle.md) | Partial ASSISTANTS write + optimistic Switch for assistant preset bindings (#218) |
 
 ## Pre-Development Checklist
 
@@ -38,6 +39,8 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 - For assistant tool summaries, keep configured/available/effective distinct and construct snapshots without I/O.
 - For preset-entry changes, preserve the entries-version sentinel, snapshot legacy injections before deletion, and keep
   Builtin uniqueness symmetric across create/edit paths.
+- For assistant Presets Switch (chat extension selector / assistant extensions), use `toggleAssistantPreset` partial
+  write with optimistic `settingsFlow`; never full `writeFullSettings` for that toggle.
 
 ## Quality Check
 
@@ -53,3 +56,5 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 - For tool catalog changes, cover dynamic sources and status reasons, then compare effective names at the generation boundary.
 - For preset-entry changes, run serialization, migration persistence, injection ordering, Builtin override, and UI
   projection tests.
+- For assistant preset toggle changes, run `AssistantConfigPersistenceTest` writer cases (exclusive enable/disable,
+  missing id, stale fallback) and device Switch flip when a device is available.

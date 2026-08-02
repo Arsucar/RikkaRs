@@ -159,4 +159,90 @@ class AssistantConfigPersistenceTest {
         assertEquals(AssistantWorkspaceBindingUpdateResult.NOT_FOUND, result)
         assertEquals(originalJson, preferences[SettingsStore.ASSISTANTS])
     }
+
+    @Test
+    fun presetToggleWriterEnablesExclusivelyAndDisablesOnlyTarget() {
+        val presetA = Uuid.random()
+        val presetB = Uuid.random()
+        val target = Assistant(id = Uuid.random(), presetIds = setOf(presetA))
+        val untouched = Assistant(id = Uuid.random(), presetIds = setOf(presetB))
+        val preferences = mutablePreferencesOf(
+            SettingsStore.ASSISTANTS to JsonInstant.encodeToString(listOf(target, untouched)),
+            SettingsStore.COMPRESS_TARGET_TOKENS to 9_999,
+        )
+
+        assertTrue(
+            preferences.writeAssistantPresetToggle(
+                assistantId = target.id,
+                presetId = presetB,
+                enabled = true,
+                fallbackAssistants = emptyList(),
+            ),
+        )
+        var stored = JsonInstant.decodeFromString<List<Assistant>>(
+            checkNotNull(preferences[SettingsStore.ASSISTANTS]),
+        )
+        assertEquals(setOf(presetB), stored.first { it.id == target.id }.presetIds)
+        assertEquals(setOf(presetB), stored.first { it.id == untouched.id }.presetIds)
+        assertEquals(9_999, preferences[SettingsStore.COMPRESS_TARGET_TOKENS])
+
+        assertTrue(
+            preferences.writeAssistantPresetToggle(
+                assistantId = target.id,
+                presetId = presetB,
+                enabled = false,
+                fallbackAssistants = emptyList(),
+            ),
+        )
+        stored = JsonInstant.decodeFromString(
+            checkNotNull(preferences[SettingsStore.ASSISTANTS]),
+        )
+        assertEquals(emptySet<Uuid>(), stored.first { it.id == target.id }.presetIds)
+        assertEquals(setOf(presetB), stored.first { it.id == untouched.id }.presetIds)
+    }
+
+    @Test
+    fun presetToggleWriterReportsMissingAssistantWithoutWriting() {
+        val stored = Assistant(id = Uuid.random(), presetIds = setOf(Uuid.random()))
+        val originalJson = JsonInstant.encodeToString(listOf(stored))
+        val preferences = mutablePreferencesOf(SettingsStore.ASSISTANTS to originalJson)
+
+        assertFalse(
+            preferences.writeAssistantPresetToggle(
+                assistantId = Uuid.random(),
+                presetId = Uuid.random(),
+                enabled = true,
+                fallbackAssistants = emptyList(),
+            ),
+        )
+        assertEquals(originalJson, preferences[SettingsStore.ASSISTANTS])
+    }
+
+    @Test
+    fun presetToggleWriterUsesLatestStoredAssistantNotStaleFallback() {
+        val assistantId = Uuid.random()
+        val presetA = Uuid.random()
+        val presetB = Uuid.random()
+        val stale = Assistant(id = assistantId, name = "Stale", presetIds = setOf(presetA))
+        val latest = stale.copy(name = "Latest", enableWebSearch = true, presetIds = setOf(presetA))
+        val preferences = mutablePreferencesOf(
+            SettingsStore.ASSISTANTS to JsonInstant.encodeToString(listOf(latest)),
+        )
+
+        assertTrue(
+            preferences.writeAssistantPresetToggle(
+                assistantId = assistantId,
+                presetId = presetB,
+                enabled = true,
+                fallbackAssistants = listOf(stale),
+            ),
+        )
+
+        val stored = JsonInstant.decodeFromString<List<Assistant>>(
+            checkNotNull(preferences[SettingsStore.ASSISTANTS]),
+        ).single()
+        assertEquals("Latest", stored.name)
+        assertTrue(stored.enableWebSearch)
+        assertEquals(setOf(presetB), stored.presetIds)
+    }
 }

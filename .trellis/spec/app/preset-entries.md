@@ -20,6 +20,8 @@ DataStore JSON -> Settings normalization/migration -> Preset.entries
 - `Settings.withModeInjectionsPreservingPresetSnapshots(updatedModeInjections): Settings`
 - `SettingsStore.updatePreset(presetId, transform): Boolean`
 - `MutablePreferences.writePresetUpdate(presetId, fallbackPresets, fallbackModeInjections, transform): Boolean`
+- Assistant↔preset binding Switch (not entry edit): see [Assistant Preset Toggle](./assistant-preset-toggle.md)
+  (`toggleAssistantPreset` / `writeAssistantPresetToggle`)
 - `resolveBuiltinOverride(assistant, presets, builtinKey): String?`
 - `availableBuiltinKeys(entries, editingEntryId = null): List<String>`
 

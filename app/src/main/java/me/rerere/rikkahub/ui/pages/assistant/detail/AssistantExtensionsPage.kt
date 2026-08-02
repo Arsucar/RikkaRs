@@ -218,9 +218,8 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                         presets = settings.presets,
                                         selectedIds = assistant.presetIds,
                                         onToggle = { presetId, checked ->
-                                            val newIds = if (checked) setOf(presetId)
-                                            else assistant.presetIds - presetId
-                                            vm.update(assistant.copy(presetIds = newIds))
+                                            // #218: partial ASSISTANTS write via store
+                                            vm.toggleAssistantPreset(presetId, checked)
                                         },
                                         onEdit = {
                                             navController.navigate(Screen.PresetDetail(it.id.toString()))

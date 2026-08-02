@@ -168,12 +168,14 @@ fun ExtensionSelector(
                             presets = settings.presets,
                             selectedIds = assistant.presetIds,
                             onToggle = { id, checked ->
-                                val newIds = if (checked) {
-                                    setOf(id)
-                                } else {
-                                    assistant.presetIds - id
+                                // #218: partial ASSISTANTS write — no full settings snapshot rewrite
+                                scope.launch {
+                                    settingsStore.toggleAssistantPreset(
+                                        assistantId = assistant.id,
+                                        presetId = id,
+                                        enabled = checked,
+                                    )
                                 }
-                                onUpdate(assistant.copy(presetIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
                             onEdit = {

@@ -377,6 +377,13 @@ class ChatVM(
         }
     }
 
+    /** Partial preset toggle (#218); bypasses full writeFullSettings. */
+    fun toggleAssistantPreset(assistantId: Uuid, presetId: Uuid, enabled: Boolean): Job {
+        return viewModelScope.launch {
+            settingsStore.toggleAssistantPreset(assistantId, presetId, enabled)
+        }
+    }
+
     fun switchAssistant(
         targetAssistantId: Uuid,
         navigate: (Uuid) -> Unit,

@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -773,6 +774,73 @@ class SettingsStore(
         }
     }
 
+    /**
+     * Toggles a preset binding on one assistant with a partial ASSISTANTS write (#218).
+     *
+     * Enabling uses exclusive selection (`setOf(presetId)`), matching the chat extension selector.
+     * Optimistically updates [settingsFlow] under [updateMutex] before the disk edit so Switch UI
+     * flips immediately; rolls back via [syncSettingsFlowFromStore] on failure.
+     */
+    suspend fun toggleAssistantPreset(
+        assistantId: Uuid,
+        presetId: Uuid,
+        enabled: Boolean,
+    ): Boolean {
+        return updateMutex.withLock {
+            val fallbackSettings = settingsFlow.value
+            if (fallbackSettings.init) {
+                Log.w(TAG, "Cannot toggleAssistantPreset on dummy settings")
+                return@withLock false
+            }
+            val current = fallbackSettings.assistants.firstOrNull { it.id == assistantId }
+            if (current == null) {
+                Log.w(TAG, "toggleAssistantPreset: assistant $assistantId not found")
+                return@withLock false
+            }
+            val optimisticIds = if (enabled) setOf(presetId) else current.presetIds - presetId
+            settingsFlow.value = fallbackSettings.copy(
+                assistants = fallbackSettings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(presetIds = optimisticIds)
+                    } else {
+                        assistant
+                    }
+                },
+            )
+            try {
+                var updated = false
+                dataStore.edit { preferences ->
+                    updated = preferences.writeAssistantPresetToggle(
+                        assistantId = assistantId,
+                        presetId = presetId,
+                        enabled = enabled,
+                        fallbackAssistants = fallbackSettings.assistants,
+                    )
+                }
+                if (!updated) {
+                    syncSettingsFlowFromStore()
+                    return@withLock false
+                }
+                syncSettingsFlowFromStore()
+                true
+            } catch (error: CancellationException) {
+                // Do not treat structured cancel as IO failure; still drop optimistic if needed.
+                runCatching { syncSettingsFlowFromStore() }
+                    .onFailure { settingsFlow.value = fallbackSettings }
+                throw error
+            } catch (error: Exception) {
+                Log.w(TAG, "toggleAssistantPreset failed", error)
+                // Prefer re-reading disk; if that fails too, restore pre-optimistic snapshot (AC5).
+                runCatching { syncSettingsFlowFromStore() }
+                    .onFailure { syncError ->
+                        Log.w(TAG, "toggleAssistantPreset rollback sync failed", syncError)
+                        settingsFlow.value = fallbackSettings
+                    }
+                false
+            }
+        }
+    }
+
     suspend fun updateAssistantWebSearch(assistantId: Uuid, enabled: Boolean) {
         update { settings ->
             settings.copy(
@@ -1056,6 +1124,33 @@ internal fun MutablePreferences.writeAssistantWorkspaceBinding(
         }
     )
     return AssistantWorkspaceBindingUpdateResult.UPDATED
+}
+
+/**
+ * Partial ASSISTANTS write for preset Switch toggles (#218).
+ * Enabling is exclusive (`setOf(presetId)`); disabling removes only [presetId].
+ * Mutates only the target assistant's [Assistant.presetIds]; other keys stay untouched.
+ */
+internal fun MutablePreferences.writeAssistantPresetToggle(
+    assistantId: Uuid,
+    presetId: Uuid,
+    enabled: Boolean,
+    fallbackAssistants: List<Assistant>,
+): Boolean {
+    val assistants = this[SettingsStore.ASSISTANTS]?.let {
+        JsonInstant.decodeFromString<List<Assistant>>(it)
+    } ?: fallbackAssistants
+    val index = assistants.indexOfFirst { it.id == assistantId }
+    if (index < 0) return false
+    val current = assistants[index]
+    val newIds = if (enabled) setOf(presetId) else current.presetIds - presetId
+    if (newIds == current.presetIds) return true
+    this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(
+        assistants.toMutableList().apply {
+            set(index, current.copy(presetIds = newIds))
+        },
+    )
+    return true
 }
 
 internal fun MutablePreferences.writeAssistantArchiveState(
