@@ -264,6 +264,11 @@ fun SettingClashPage() {
             }
 
             item {
+                val latestTraces = traces.reversed()
+                // 展开态必须在 @Composable 上下文中创建（CardGroup 的 DSL lambda 非 @Composable）
+                val expandedStates = latestTraces.map { trace ->
+                    remember(trace) { mutableStateOf(false) }
+                }
                 CardGroup(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -320,8 +325,8 @@ fun SettingClashPage() {
                                     }
                                 },
                             )
-                            traces.reversed().forEach { trace ->
-                                val expanded = remember(trace) { mutableStateOf(false) }
+                            latestTraces.forEachIndexed { index, trace ->
+                                val expanded = expandedStates[index]
                                 item(
                                     onClick = { expanded.value = !expanded.value },
                                     headlineContent = { Text(traceSummaryHeader(trace)) },

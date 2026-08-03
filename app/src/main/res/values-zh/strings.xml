@@ -1495,7 +1495,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_clash_page_debug_skip_rotation_disabled">开关未开启，跳过</string>
   <string name="setting_clash_page_debug_decision_rotation_on">开</string>
   <string name="setting_clash_page_debug_decision_rotation_off">关</string>
-  <string name="setting_clash_page_debug_decision_match">429 → 匹配 provider: %1$s | rotation: %2$s | maxRetries: %3$d</string>
+  <string name="setting_clash_page_debug_decision_match">429 → 匹配 provider: %1$s | 开关: %2$s | 最大重试: %3$d</string>
   <string name="setting_clash_page_debug_decision_switch">切换: %1$s → %2$s</string>
   <string name="setting_clash_page_debug_decision_switch_failed">切换失败: %1$s</string>
   <string name="setting_clash_page_debug_decision_replay_failed">重放失败: %1$s</string>
