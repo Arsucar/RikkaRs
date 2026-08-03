@@ -71,10 +71,7 @@ class ReasoningDialectTest {
             "high",
             mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.HIGH),
         )
-        assertEquals(
-            "none",
-            mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.OFF),
-        )
+        assertNull(mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.OFF))
     }
 
     @Test
@@ -94,19 +91,10 @@ class ReasoningDialectTest {
     }
 
     @Test
-    fun `OFF maps to none never low`() {
-        assertEquals(
-            "none",
-            mapReasoningEffort(ReasoningDialect.OpenAIExtended, ReasoningLevel.OFF),
-        )
-        assertEquals(
-            "none",
-            mapReasoningEffort(ReasoningDialect.OpenAIClassic, ReasoningLevel.OFF),
-        )
-        assertEquals(
-            "none",
-            mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.OFF),
-        )
+    fun `OFF omits effort token`() {
+        assertNull(mapReasoningEffort(ReasoningDialect.OpenAIExtended, ReasoningLevel.OFF))
+        assertNull(mapReasoningEffort(ReasoningDialect.OpenAIClassic, ReasoningLevel.OFF))
+        assertNull(mapReasoningEffort(ReasoningDialect.DeepSeekMax, ReasoningLevel.OFF))
     }
 
     @Test
