@@ -1537,6 +1537,15 @@
   <string name="setting_clash_page_debug_skip_max_retries">maxRetries &lt;= 0, skipped</string>
   <string name="setting_clash_page_debug_skip_no_provider">no provider matched, skipped</string>
   <string name="setting_clash_page_debug_skip_rotation_disabled">rotation switch off, skipped</string>
+  <string name="setting_clash_page_debug_decision_rotation_on">on</string>
+  <string name="setting_clash_page_debug_decision_rotation_off">off</string>
+  <string name="setting_clash_page_debug_decision_match">429 → match provider: %1$s | rotation: %2$s | maxRetries: %3$d</string>
+  <string name="setting_clash_page_debug_decision_switch">switch: %1$s → %2$s</string>
+  <string name="setting_clash_page_debug_decision_switch_failed">switch failed: %1$s</string>
+  <string name="setting_clash_page_debug_decision_replay_failed">replay failed: %1$s</string>
+  <string name="setting_clash_page_debug_decision_final">final: %1$s%2$s</string>
+  <string name="setting_clash_page_debug_decision_exhausted"> (exhausted)</string>
+  <string name="setting_clash_page_debug_decision_skipped">skipped → final: %1$s</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
   <string name="assistant_page_gradient_background_desc">Use a dynamic gradient background on the chat page</string>
   <string name="assistant_page_workspace">Workspace</string>

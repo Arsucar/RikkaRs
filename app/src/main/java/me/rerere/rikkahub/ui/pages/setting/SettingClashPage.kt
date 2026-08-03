@@ -364,24 +364,48 @@ private fun traceDecisionLines(trace: ClashRetryTrace): List<String> {
         }
         listOf(
             "429 → $reason",
-            "skipped → final ${trace.finalCode ?: trace.responseCode}",
+            stringResource(R.string.setting_clash_page_debug_decision_skipped, (trace.finalCode ?: trace.responseCode).toString()),
         )
     } else {
         buildList {
             add(
-                "429 → match provider: ${trace.matchedProvider ?: "?"} | rotation: " +
-                    "${if (trace.rotationEnabled) "on" else "off"} | maxRetries: ${trace.maxRetries}"
+                stringResource(
+                    R.string.setting_clash_page_debug_decision_match,
+                    trace.matchedProvider ?: "?",
+                    if (trace.rotationEnabled) {
+                        stringResource(R.string.setting_clash_page_debug_decision_rotation_on)
+                    } else {
+                        stringResource(R.string.setting_clash_page_debug_decision_rotation_off)
+                    },
+                    trace.maxRetries,
+                )
             )
             trace.switches.forEach { s ->
-                if (s.nodeName != null && s.success) {
-                    add("switch: ${s.nodeName} → ${s.replayedCode ?: "io-error"}")
-                } else if (!s.success) {
-                    add("switch failed: ${s.error ?: "?"}")
-                } else {
-                    add("replay failed: ${s.error ?: "?"}")
+                when {
+                    !s.success -> add(
+                        stringResource(R.string.setting_clash_page_debug_decision_switch_failed, s.error ?: "?")
+                    )
+                    s.replayedCode != null -> add(
+                        stringResource(
+                            R.string.setting_clash_page_debug_decision_switch,
+                            s.nodeName ?: "?",
+                            s.replayedCode.toString(),
+                        )
+                    )
+                    else -> add(
+                        stringResource(R.string.setting_clash_page_debug_decision_replay_failed, s.error ?: "?")
+                    )
                 }
             }
-            add("final: ${trace.finalCode ?: trace.responseCode}${if (trace.exhausted) " (exhausted)" else ""}")
+            val exhaustedSuffix =
+                if (trace.exhausted) stringResource(R.string.setting_clash_page_debug_decision_exhausted) else ""
+            add(
+                stringResource(
+                    R.string.setting_clash_page_debug_decision_final,
+                    (trace.finalCode ?: trace.responseCode).toString(),
+                    exhaustedSuffix,
+                )
+            )
         }
     }
 }
