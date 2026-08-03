@@ -20,6 +20,31 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.46
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.45 之后）
+
+- **推理强度 OFF 发送 none** — `mapReasoningEffort` 移除 `noneAsLow`；所有方言下 OFF 映射为 `none`，不再被 OpenAI 兼容默认改写成 `low`。（#214）
+  **Reasoning OFF sends none** — Drops `noneAsLow`; OFF maps to `none` in every dialect instead of being rewritten to `low` for OpenAI-compat defaults. (#214)
+- **Auto 方言 DeepSeek 识别收紧** — `resolveDialect` 去掉弱 model-id 提示；Auto 仅对官方主机（`api.deepseek.com`、`integrate.api.nvidia.com` + deepseek-v4）识别 DeepSeekMax；未知代理主机保持 level.effort 透传，需显式按模型覆盖方言。（#214）
+  **Tighter Auto DeepSeek recognition** — Removes weak model-id hints; Auto recognizes DeepSeekMax only on official hosts; unknown proxies keep effort passthrough and require an explicit per-model dialect override. (#214)
+- **预设开关局部写入 + 乐观 UI** — 聊天/助手扩展里的预设 Switch 走 `SettingsStore.toggleAssistantPreset`（mutex + 乐观 `settingsFlow` + 仅写 ASSISTANTS + 失败回滚），避免全量 settings 覆盖导致卡顿与丢写。（#218）
+  **Preset Switch partial write + optimistic UI** — Routes the chat/assistant extension Presets Switch through `toggleAssistantPreset` (mutex, optimistic flow, ASSISTANTS-only edit, rollback) so full-settings overwrites no longer jank or drop updates. (#218)
+- **实验性生成保活前台服务** — `ChatGenerationService` + 引用计数 `ChatKeepAliveController`；设置项默认关闭；与聊天通知 live-update 合并，避免双通知。（#219）
+  **Experimental generation keep-alive FGS** — Adds specialUse `ChatGenerationService` with ref-counted `ChatKeepAliveController`; preference defaults off; merges with chat notification live-updates to avoid dual notifications. (#219)
+- **实验性 N 步会话检查点缓存** — 生成过程中按间隔写入检查点元数据（Room 48→49），中途保存跳过 FTS；hydrate 恢复时 toast；检查点写入不覆盖 live 流式状态。（#220）
+  **Experimental N-step conversation checkpoint cache** — Mid-generation checkpoint metadata (Room 48→49) with interval settings, skip-FTS mid-gen saves, recovery toast on hydrate; checkpoint writers do not overwrite live streaming state. (#220)
+- **会话变量系统（ST 宏 + MVU）** — 助手门控 `enableVariableSystem`；`Conversation.variables` / `MessageNode.variableSnapshots`；VariableMacro / UpdateVariable 变换器（PromptInjection→Macro→Placeholder）；Room 49→50；抽屉 CRUD；支持 ST `<JSONPatch>` XML 外壳解析。（#216, #217）
+  **Conversation variables (ST macros + MVU)** — Assistant-gated `enableVariableSystem`, conversation/node variable snapshots, VariableMacro/UpdateVariable transformers (PromptInjection→Macro→Placeholder), Room 49→50, drawer CRUD, and ST `<JSONPatch>` XML shell parsing inside UpdateVariable blocks. (#216, #217)
+- **实验功能注册表** — 全局/助手实验页由 `ExperimentalFeatureRegistry` 驱动；`chat_keepalive` / `checkpoint_cache` / `variable_system` 经 map+legacy 桥解析；双写旧布尔以兼容迁移。（#215）
+  **Experimental features registry** — Global/Assistant experiment pages driven by `ExperimentalFeatureRegistry`; resolves `chat_keepalive`, `checkpoint_cache`, `variable_system` via map+legacy bridge with dual-write of legacy booleans for migration compat. (#215)
+- **SettingClash 可序列化导航** — `Screen.SettingClash` 补 `@Serializable`，修复 Clash 设置页导航崩溃。（#222）
+  **SettingClash serializable navigation** — Annotates `Screen.SettingClash` with `@Serializable` so the Clash settings route no longer crashes. (#222)
+- **Clash 429 调试面板** — `ClashRetryTracer` + 拦截器埋点 + 设置页调试面板，便于排查 429 轮换过程。（#224）
+  **Clash 429 debug panel** — Adds `ClashRetryTracer`, interceptor instrumentation, and a settings debug panel for inspecting 429 rotation attempts. (#224)
+
+---
+
 ## v2.3.45
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.44 之后）
