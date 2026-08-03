@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,24 +17,30 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.clash.ClashRetryTrace
+import me.rerere.rikkahub.data.ai.clash.ClashRetryTracer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -36,12 +48,17 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.compose.koinInject
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @Composable
 fun SettingClashPage() {
     val settingsStore: SettingsStore = koinInject()
     val settings = LocalSettings.current
     val clashConfig = settings.clashConfig
+    val clashRetryTracer: ClashRetryTracer = koinInject()
+    val traces by clashRetryTracer.traces.collectAsState()
+    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
 
@@ -245,6 +262,126 @@ fun SettingClashPage() {
                     )
                 }
             }
+
+            item {
+                CardGroup(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.setting_clash_page_debug_title)) },
+                ) {
+                    when {
+                        traces.isEmpty() -> item(
+                            headlineContent = { Text(stringResource(R.string.setting_clash_page_debug_empty)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.setting_clash_page_debug_empty_desc))
+                            },
+                        )
+                        else -> {
+                            item(
+                                headlineContent = {
+                                    Text(stringResource(R.string.setting_clash_page_debug_records, traces.size))
+                                },
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        TextButton(onClick = {
+                                            val clipText = buildString {
+                                                traces.reversed().forEach { t ->
+                                                    appendLine(
+                                                        "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(t.timestamp)} ${t.requestHost} ${t.finalCode ?: t.responseCode}"
+                                                    )
+                                                    appendLine(
+                                                        "  ${t.matchedProvider ?: "-"} rotation=${t.rotationEnabled} maxRetries=${t.maxRetries}"
+                                                    )
+                                                    t.switches.forEach { s ->
+                                                        appendLine(
+                                                            "  switch: ${s.nodeName ?: "?"} success=${s.success} replayedCode=${s.replayedCode ?: "?"} error=${s.error ?: ""}"
+                                                        )
+                                                    }
+                                                    appendLine(
+                                                        "  final=${t.finalCode ?: t.responseCode} skipped=${t.skippedReason ?: "-"} exhausted=${t.exhausted}"
+                                                    )
+                                                }
+                                            }
+                                            val clipboard =
+                                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("clash-429-traces", clipText.toString()))
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.setting_clash_page_debug_copied),
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }) {
+                                            Text(stringResource(R.string.setting_clash_page_debug_copy))
+                                        }
+                                        TextButton(onClick = { scope.launch { clashRetryTracer.clear() } }) {
+                                            Text(stringResource(R.string.setting_clash_page_debug_clear))
+                                        }
+                                    }
+                                },
+                            )
+                            traces.reversed().forEach { trace ->
+                                val expanded = remember(trace) { mutableStateOf(false) }
+                                item(
+                                    onClick = { expanded.value = !expanded.value },
+                                    headlineContent = { Text(traceSummaryHeader(trace)) },
+                                    supportingContent = {
+                                        if (expanded.value) {
+                                            // 决策链完整文本（多行）
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                traceDecisionLines(trace).forEach { line ->
+                                                    Text(line, style = MaterialTheme.typography.bodySmall)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    trailingContent = { Text(if (expanded.value) "▾" else "▸") },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun traceSummaryHeader(trace: ClashRetryTrace): String {
+    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(trace.timestamp)
+    val code = trace.finalCode ?: trace.responseCode
+    return "$time  ${trace.requestHost} · $code"
+}
+
+@Composable
+private fun traceDecisionLines(trace: ClashRetryTrace): List<String> {
+    val skipReason = trace.skippedReason
+    return if (skipReason != null) {
+        val reason = when (skipReason) {
+            "SKIP_MAX_RETRIES" -> stringResource(R.string.setting_clash_page_debug_skip_max_retries)
+            "SKIP_NO_PROVIDER" -> stringResource(R.string.setting_clash_page_debug_skip_no_provider)
+            "SKIP_ROTATION_DISABLED" -> stringResource(R.string.setting_clash_page_debug_skip_rotation_disabled)
+            else -> skipReason
+        }
+        listOf(
+            "429 → $reason",
+            "skipped → final ${trace.finalCode ?: trace.responseCode}",
+        )
+    } else {
+        buildList {
+            add(
+                "429 → match provider: ${trace.matchedProvider ?: "?"} | rotation: " +
+                    "${if (trace.rotationEnabled) "on" else "off"} | maxRetries: ${trace.maxRetries}"
+            )
+            trace.switches.forEach { s ->
+                if (s.nodeName != null && s.success) {
+                    add("switch: ${s.nodeName} → ${s.replayedCode ?: "io-error"}")
+                } else if (!s.success) {
+                    add("switch failed: ${s.error ?: "?"}")
+                } else {
+                    add("replay failed: ${s.error ?: "?"}")
+                }
+            }
+            add("final: ${trace.finalCode ?: trace.responseCode}${if (trace.exhausted) " (exhausted)" else ""}")
         }
     }
 }
