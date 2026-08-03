@@ -43,11 +43,6 @@ class AIRequestInterceptor(
     // 并发 429 互斥（AC6）：只保护"选节点 + 切换"这个快动作
     private val switchMutex = Mutex()
 
-    // 前置检查失败分类的稳定代码，供调试面板分类展示（AC1/AC7 透传路径）
-    private const val SKIP_MAX_RETRIES = "SKIP_MAX_RETRIES"
-    private const val SKIP_NO_PROVIDER = "SKIP_NO_PROVIDER"
-    private const val SKIP_ROTATION_DISABLED = "SKIP_ROTATION_DISABLED"
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val response = chain.proceed(request)
@@ -198,5 +193,12 @@ class AIRequestInterceptor(
         is ProviderSetting.OpenAI -> provider.baseUrl
         is ProviderSetting.Google -> provider.baseUrl
         is ProviderSetting.Claude -> provider.baseUrl
+    }
+
+    companion object {
+        // 前置检查失败分类的稳定代码，供调试面板分类展示（AC1/AC7 透传路径）
+        private const val SKIP_MAX_RETRIES = "SKIP_MAX_RETRIES"
+        private const val SKIP_NO_PROVIDER = "SKIP_NO_PROVIDER"
+        private const val SKIP_ROTATION_DISABLED = "SKIP_ROTATION_DISABLED"
     }
 }
