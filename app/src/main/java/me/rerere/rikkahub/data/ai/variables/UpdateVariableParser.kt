@@ -89,8 +89,23 @@ object UpdateVariableParser {
         return openCount > closeCount
     }
 
+    private val jsonPatchXmlRegex = Regex(
+        """<JSONPatch\b[^>]*>([\s\S]*?)</JSONPatch>""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun parseOps(body: String): List<JsonObject>? {
-        val element = runCatching { strictJson.parseToJsonElement(body) }.getOrNull() ?: return null
+        parseJsonOps(body)?.let { return it }
+        // ST MVU shell: <Analysis>…</Analysis><JSONPatch>[…]</JSONPatch>
+        val xmlInner = jsonPatchXmlRegex.find(body)?.groupValues?.get(1)?.trim()
+        if (!xmlInner.isNullOrEmpty()) {
+            return parseJsonOps(xmlInner)
+        }
+        return null
+    }
+
+    private fun parseJsonOps(payload: String): List<JsonObject>? {
+        val element = runCatching { strictJson.parseToJsonElement(payload) }.getOrNull() ?: return null
         val array = when (element) {
             is JsonArray -> element
             is JsonObject -> {
@@ -142,7 +157,6 @@ object UpdateVariableParser {
         is JsonNull -> ""
         is JsonPrimitive -> element.contentOrNull ?: element.toString()
         is JsonObject, is JsonArray -> element.toString()
-        else -> null
     }
 
     private fun stripRanges(text: String, ranges: List<IntRange>): String {

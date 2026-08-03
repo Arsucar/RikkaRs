@@ -17,6 +17,7 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.clash.ClashApiClient
+import me.rerere.rikkahub.data.ai.clash.ClashRetryTracer
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -453,6 +454,7 @@ val dataSourceModule = module {
                 AIRequestInterceptor(
                     settingsStore = get(),
                     clashApiClient = get(),
+                    clashRetryTracer = get(),
                 )
             )
             .addInterceptor(HttpLoggingInterceptor().apply {
@@ -511,6 +513,10 @@ val dataSourceModule = module {
 
     single<ClashApiClient> {
         ClashApiClient(json = get())
+    }
+
+    single<ClashRetryTracer> {
+        ClashRetryTracer()
     }
 
     single<HttpClient> {
