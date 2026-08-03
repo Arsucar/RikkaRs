@@ -148,4 +148,27 @@ class VariableMacroTransformerTest {
         assertEquals("{{char}}=1", out)
         assertEquals("1", vars["n"])
     }
+
+    @Test
+    fun `nested unknown macro does not block outer setvar`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(
+            "{{setvar::name::Hello {{char}}!}}{{getvar::name}}",
+            vars,
+        )
+        assertEquals("Hello {{char}}!", out)
+        assertEquals("Hello {{char}}!", vars["name"])
+    }
+
+    @Test
+    fun `malformed setvar without value separator is left intact`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(
+            "{{setvar::onlyname}}{{setvar::ok::1}}={{getvar::ok}}",
+            vars,
+        )
+        assertEquals("{{setvar::onlyname}}=1", out)
+        assertEquals("1", vars["ok"])
+        assertTrue("onlyname" !in vars)
+    }
 }

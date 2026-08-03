@@ -20,6 +20,17 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.47
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.46 之后）
+
+- **变量宏引擎未知宏死循环修复** — 遇 `{{//}}` / `{{trim}}` / `{{newline}}` 等未知宏时不再「替换成自己」烧尽预算；ST 注释删除、`newline`→换行、`trim` 删除宏本身；全文展开预算与嵌套深度拆分（2000 / 20），大预设 50–200+ 宏可全部展开。（#226, #227）
+  **Variable macro engine: stop spinning on unknown ST macros** — Unknown macros no longer self-replace and burn the expansion budget; ST comments delete, `newline`→LF, `trim` removes the macro; full-text budget split from nested depth (2000 / 20) so large presets expand fully. (#226, #227)
+- **嵌套未知宏不阻断外层 setvar** — 未知宏临时换成非 `{{…}}` token，外层展开后再还原（含写入变量表的值），避免 `{{setvar::n::Hello {{char}}!}}` 永久卡住。（#226 follow-up）
+  **Nested unknown macros no longer block outer setvar** — Parks passthrough macros as non-`{{…}}` tokens, restores them (including values written to the variable map) so nested `{{char}}` inside setvar no longer freezes expansion. (#226 follow-up)
+
+---
+
 ## v2.3.46
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.45 之后）

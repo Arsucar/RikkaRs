@@ -15,6 +15,13 @@ object ConversationVariables {
      */
     const val MAX_MACRO_EXPANSIONS = 2000
 
+    /**
+     * Temporary stand-in for unknown/passthrough macros so outer macros can still expand.
+     * Must not contain `{{` / `}}` or look like ST macro syntax.
+     */
+    private const val PASS_OPEN = "\uE000VARPASS:"
+    private const val PASS_CLOSE = "\uE001"
+
     fun truncateValue(value: String): String =
         if (value.length <= MAX_VALUE_LENGTH) value else value.take(MAX_VALUE_LENGTH)
 
@@ -79,34 +86,70 @@ object ConversationVariables {
         if (text.isEmpty() || depth > MAX_MACRO_DEPTH) return text
         if (!text.contains("{{")) return text
 
+        // Top-level owns passthrough tokens so nested setvar values can hold unknown
+        // macros (e.g. {{char}}) without blocking the outer macro (#226 follow-up).
+        val passthrough = mutableListOf<String>()
+        var result = expandMacrosInternal(text, variables, depth, passthrough)
+        if (passthrough.isNotEmpty()) {
+            result = restorePassthrough(result, passthrough)
+            // Values written while tokens were active must also be restored.
+            for (key in variables.keys.toList()) {
+                val value = variables[key] ?: continue
+                val restored = restorePassthrough(value, passthrough)
+                if (restored != value) {
+                    variables[key] = restored
+                }
+            }
+        }
+        return result
+    }
+
+    private fun expandMacrosInternal(
+        text: String,
+        variables: MutableMap<String, String>,
+        depth: Int,
+        passthrough: MutableList<String>,
+    ): String {
+        if (text.isEmpty() || depth > MAX_MACRO_DEPTH) return text
+        if (!text.contains("{{")) return text
+
         var result = text
-        var searchFrom = 0
         var expansions = 0
         while (expansions < MAX_MACRO_EXPANSIONS) {
-            val innermost = findInnermostMacro(result, searchFrom) ?: break
+            val innermost = findInnermostMacro(result) ?: break
             val (range, body) = innermost
-            val replacement = evaluateMacroBody(body, variables, depth)
-            // Unchanged unknown/passthrough macros must not re-hit forever (#226).
+            val replacement = evaluateMacroBody(body, variables, depth, passthrough)
+            // Unchanged unknown/passthrough: park as a non-macro token so outer macros expand.
             if (replacement == "{{$body}}") {
-                searchFrom = range.last + 1
+                val id = passthrough.size
+                passthrough.add(replacement)
+                result = result.replaceRange(range, "$PASS_OPEN$id$PASS_CLOSE")
+                // Do not count toward expansion budget (many placeholders are common).
                 continue
             }
             result = result.replaceRange(range, replacement)
-            // Real change: re-scan left-to-right so new/shifted macros (incl. nested) resolve.
-            searchFrom = 0
             expansions++
         }
         return result
     }
 
+    private fun restorePassthrough(text: String, passthrough: List<String>): String {
+        if (passthrough.isEmpty() || !text.contains(PASS_OPEN)) return text
+        var out = text
+        // Highest ids first so id 10 is not clobbered by id 1 prefix.
+        for (i in passthrough.indices.reversed()) {
+            out = out.replace("$PASS_OPEN$i$PASS_CLOSE", passthrough[i])
+        }
+        return out
+    }
+
     /**
-     * Find the leftmost non-nested `{{...}}` pair at or after [searchFrom]
-     * (body contains no `{{`). Nested outers are skipped until their inner leaves
-     * are resolved (inner-first); sibling macros then expand left-to-right so
-     * setvar runs before a later getvar.
+     * Find the leftmost non-nested `{{...}}` pair (body contains no `{{`).
+     * Nested outers are skipped until their inner leaves are resolved (inner-first);
+     * sibling macros then expand left-to-right so setvar runs before a later getvar.
      */
-    private fun findInnermostMacro(text: String, searchFrom: Int = 0): Pair<IntRange, String>? {
-        var from = searchFrom.coerceAtLeast(0)
+    private fun findInnermostMacro(text: String): Pair<IntRange, String>? {
+        var from = 0
         while (from < text.length - 1) {
             val start = text.indexOf("{{", from)
             if (start < 0) break
@@ -125,6 +168,7 @@ object ConversationVariables {
         body: String,
         variables: MutableMap<String, String>,
         depth: Int,
+        passthrough: MutableList<String>,
     ): String {
         val trimmed = body.trim()
         val lower = trimmed.lowercase()
@@ -146,7 +190,7 @@ object ConversationVariables {
                 val name = rest.substring(0, sep)
                 val value = rest.substring(sep + 2)
                 // Value may still contain macros if outer scan missed; expand recursively.
-                val resolved = expandMacros(value, variables, depth + 1)
+                val resolved = expandMacrosInternal(value, variables, depth + 1, passthrough)
                 putVar(variables, name, resolved)
                 ""
             }
@@ -156,7 +200,7 @@ object ConversationVariables {
                 if (sep < 0) return "{{$body}}"
                 val name = rest.substring(0, sep)
                 val value = rest.substring(sep + 2)
-                val resolved = expandMacros(value, variables, depth + 1)
+                val resolved = expandMacrosInternal(value, variables, depth + 1, passthrough)
                 addVar(variables, name, resolved)
                 ""
             }
