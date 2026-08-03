@@ -48,7 +48,7 @@ enum class ReasoningDialect {
     @SerialName("auto")
     Auto,
 
-    /** `none|low|medium|high|xhigh` (OpenAI extended / OpenRouter-style). */
+    /** `low|medium|high|xhigh` (OpenAI extended / OpenRouter-style). */
     @SerialName("openai_extended")
     OpenAIExtended,
 
@@ -94,6 +94,8 @@ fun resolveDialect(
  *
  * @return wire token, or `null` when the field should be omitted ([ReasoningLevel.AUTO],
  *   or [ReasoningDialect.OnOffOnly] which only toggles enable/disable in the host branch).
+ *   OFF maps to null (field omitted); OpenAI-compat reasoning_effort vocabularies
+ *   (OpenAI: low|medium|high, DeepSeek: low|high|max) do not accept "none" (#228).
  */
 fun mapReasoningEffort(
     dialect: ReasoningDialect,
@@ -109,10 +111,10 @@ fun mapReasoningEffort(
 
     return when (effective) {
         ReasoningDialect.Auto,
-        ReasoningDialect.OpenAIExtended -> level.effort
+        ReasoningDialect.OpenAIExtended -> if (level == ReasoningLevel.OFF) null else level.effort
 
         ReasoningDialect.OpenAIClassic -> when (level) {
-            ReasoningLevel.OFF -> "none"
+            ReasoningLevel.OFF -> null
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH,
@@ -121,7 +123,7 @@ fun mapReasoningEffort(
         }
 
         ReasoningDialect.DeepSeekMax -> when (level) {
-            ReasoningLevel.OFF -> "none"
+            ReasoningLevel.OFF -> null
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH -> "high"
