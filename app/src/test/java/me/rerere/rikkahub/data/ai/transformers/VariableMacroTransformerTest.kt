@@ -82,4 +82,70 @@ class VariableMacroTransformerTest {
         assertTrue("overflow" !in vars)
         assertEquals(ConversationVariables.MAX_VARIABLE_COUNT, vars.size)
     }
+
+    @Test
+    fun `ST comment prefix does not block setvar getvar`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(
+            "{{// comment}}{{setvar::foo::bar}}value={{getvar::foo}}",
+            vars,
+        )
+        assertEquals("value=bar", out)
+        assertEquals("bar", vars["foo"])
+        assertTrue("//" !in out)
+        assertTrue("comment" !in out)
+    }
+
+    @Test
+    fun `multiline ST comment is deleted and following macros expand`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(
+            "{{//\npreset comment\n}}\n{{setvar::foo::bar}}value={{getvar::foo}}",
+            vars,
+        )
+        assertEquals("\nvalue=bar", out)
+        assertEquals("bar", vars["foo"])
+    }
+
+    @Test
+    fun `many sequential setvars all apply beyond former depth budget`() {
+        val count = 100
+        val sb = StringBuilder()
+        repeat(count) { i ->
+            sb.append("{{setvar::k$i::v$i}}")
+        }
+        sb.append("last={{getvar::k99}}")
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(sb.toString(), vars)
+        assertEquals("last=v99", out)
+        assertEquals(count, vars.size)
+        assertEquals("v0", vars["k0"])
+        assertEquals("v50", vars["k50"])
+        assertEquals("v99", vars["k99"])
+    }
+
+    @Test
+    fun `trim does not block following getvar`() {
+        val vars = mutableMapOf("x" to "ok")
+        val out = ConversationVariables.expandMacros("{{trim}}{{getvar::x}}{{trim}}", vars)
+        assertEquals("ok", out)
+    }
+
+    @Test
+    fun `newline expands to line break`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros("a{{newline}}b", vars)
+        assertEquals("a\nb", out)
+    }
+
+    @Test
+    fun `unknown macros are left intact without blocking later macros`() {
+        val vars = mutableMapOf<String, String>()
+        val out = ConversationVariables.expandMacros(
+            "{{char}}{{setvar::n::1}}={{getvar::n}}",
+            vars,
+        )
+        assertEquals("{{char}}=1", out)
+        assertEquals("1", vars["n"])
+    }
 }
