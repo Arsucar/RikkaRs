@@ -5,6 +5,8 @@ import android.os.SystemClock
 import android.util.Log
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.experimental.FEATURE_CHAT_KEEPALIVE
+import me.rerere.rikkahub.data.experimental.resolveExperimentalFeature
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -35,7 +37,13 @@ class ChatKeepAliveController(
             ChatGenerationService.isForegroundActive()
 
     fun onGenerationStart(conversationId: Uuid, senderName: String) {
-        if (!settingsStore.settingsFlow.value.enableKeepAliveNotification) return
+        if (!resolveExperimentalFeature(
+                id = FEATURE_CHAT_KEEPALIVE,
+                settings = settingsStore.settingsFlow.value,
+            )
+        ) {
+            return
+        }
 
         conversationRefCounts
             .getOrPut(conversationId) { AtomicInteger(0) }

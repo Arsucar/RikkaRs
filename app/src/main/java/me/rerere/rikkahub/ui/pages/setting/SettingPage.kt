@@ -241,6 +241,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_semantic_memory)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.Experiments) },
+                        leadingContent = { Icon(HugeIcons.Alert01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_experiments_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_experiments)) },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingMcp) },
                         leadingContent = { Icon(HugeIcons.McpServer, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_mcp_desc)) },

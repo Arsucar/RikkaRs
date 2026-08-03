@@ -75,14 +75,19 @@ data class Assistant(
     val toolPermissions: Map<String, ToolPermission> = emptyMap(),
     /**
      * #217/#216: conversation variable system (macros + MVU). Default off for zero side effects.
-     * Transition field until #215 experimental feature registry lands; consumers must use
-     * [isVariableSystemEnabled] so the read API stays stable after migration.
+     * Legacy bridge for [FEATURE_VARIABLE_SYSTEM]; consumers must use [isVariableSystemEnabled].
      */
     val enableVariableSystem: Boolean = false,
+    /** #215: assistant-scoped experimental feature overrides (featureId → enabled). */
+    val experimentalFeatureOverrides: Map<String, Boolean> = emptyMap(),
 )
 
-/** Stable feature gate for variable_system (featureId). #215 will redirect this body. */
-fun Assistant.isVariableSystemEnabled(): Boolean = enableVariableSystem
+/** Stable feature gate for variable_system. Map override wins over legacy [enableVariableSystem]. */
+fun Assistant.isVariableSystemEnabled(): Boolean {
+    experimentalFeatureOverrides[me.rerere.rikkahub.data.experimental.FEATURE_VARIABLE_SYSTEM]
+        ?.let { return it }
+    return enableVariableSystem
+}
 
 @Serializable
 enum class ToolPermission { INHERIT, ALLOW, ASK, DENY }

@@ -251,12 +251,15 @@ class SettingsStore(
         // Clash proxy rotation for 429 retry (#209)
         val CLASH_PROXY_CONFIG = stringPreferencesKey("clash_proxy_config")
 
-        // #219: experimental FGS keep-alive during chat generation
+        // #219: experimental FGS keep-alive during chat generation (legacy bridge for #215)
         val ENABLE_KEEP_ALIVE_NOTIFICATION = booleanPreferencesKey("enable_keep_alive_notification")
 
-        // #220: experimental mid-generation conversation checkpoint cache
+        // #220: experimental mid-generation conversation checkpoint cache (legacy bridge for #215)
         val ENABLE_CHECKPOINT_CACHE = booleanPreferencesKey("enable_checkpoint_cache")
         val CHECKPOINT_STEP_INTERVAL = intPreferencesKey("checkpoint_step_interval")
+
+        // #215: global experimental feature map (featureId → enabled)
+        val EXPERIMENTAL_FEATURES = stringPreferencesKey("experimental_features")
     }
 
     private val dataStore = context.settingsStore
@@ -415,6 +418,7 @@ class SettingsStore(
                 checkpointStepInterval = coerceCheckpointStepInterval(
                     preferences[CHECKPOINT_STEP_INTERVAL] ?: DEFAULT_CHECKPOINT_STEP_INTERVAL,
                 ),
+                experimentalFeatures = decodeExperimentalFeatures(preferences[EXPERIMENTAL_FEATURES]),
             )
         }
         .map {
@@ -786,17 +790,15 @@ class SettingsStore(
         }
     }
 
-    /** Partial write for experimental generation keep-alive switch (#219). */
+    /** Partial write for experimental generation keep-alive switch (#219 / #215 dual-write). */
     suspend fun updateEnableKeepAliveNotification(enabled: Boolean) {
-        updateMutex.withLock {
-            dataStore.edit { preferences ->
-                preferences[ENABLE_KEEP_ALIVE_NOTIFICATION] = enabled
-            }
-            syncSettingsFlowFromStore()
-        }
+        updateExperimentalFeature(
+            id = me.rerere.rikkahub.data.experimental.FEATURE_CHAT_KEEPALIVE,
+            enabled = enabled,
+        )
     }
 
-    /** Partial write for experimental mid-generation checkpoint cache (#220). */
+    /** Partial write for experimental mid-generation checkpoint cache (#220 / #215 dual-write). */
     suspend fun updateCheckpointCache(
         enabled: Boolean? = null,
         stepInterval: Int? = null,
@@ -804,11 +806,78 @@ class SettingsStore(
         updateMutex.withLock {
             dataStore.edit { preferences ->
                 if (enabled != null) {
-                    preferences[ENABLE_CHECKPOINT_CACHE] = enabled
+                    preferences.writeExperimentalFeature(
+                        id = me.rerere.rikkahub.data.experimental.FEATURE_CHECKPOINT_CACHE,
+                        enabled = enabled,
+                        fallbackMap = settingsFlow.value.experimentalFeatures,
+                    )
                 }
                 if (stepInterval != null) {
                     preferences[CHECKPOINT_STEP_INTERVAL] = coerceCheckpointStepInterval(stepInterval)
                 }
+            }
+            syncSettingsFlowFromStore()
+        }
+    }
+
+    /**
+     * #215: partial write for a global experimental feature.
+     * Dual-writes legacy booleans for chat_keepalive / checkpoint_cache.
+     */
+    suspend fun updateExperimentalFeature(id: String, enabled: Boolean) {
+        updateMutex.withLock {
+            dataStore.edit { preferences ->
+                preferences.writeExperimentalFeature(
+                    id = id,
+                    enabled = enabled,
+                    fallbackMap = settingsFlow.value.experimentalFeatures,
+                )
+            }
+            syncSettingsFlowFromStore()
+        }
+    }
+
+    /**
+     * #215: partial ASSISTANTS write for an assistant-scoped experimental feature override.
+     * Dual-writes [Assistant.enableVariableSystem] for variable_system.
+     */
+    suspend fun updateAssistantExperimentalFeature(
+        assistantId: Uuid,
+        id: String,
+        enabled: Boolean,
+    ): Boolean {
+        return updateMutex.withLock {
+            val fallbackAssistants = settingsFlow.value.assistants
+            var updated = false
+            dataStore.edit { preferences ->
+                updated = preferences.writeAssistantExperimentalFeature(
+                    assistantId = assistantId,
+                    featureId = id,
+                    enabled = enabled,
+                    fallbackAssistants = fallbackAssistants,
+                )
+            }
+            if (updated) {
+                syncSettingsFlowFromStore()
+            }
+            updated
+        }
+    }
+
+    /**
+     * #215: apply the same assistant-scoped experimental override to every assistant.
+     */
+    suspend fun updateAllAssistantsExperimentalFeature(id: String, enabled: Boolean) {
+        updateMutex.withLock {
+            val fallbackAssistants = settingsFlow.value.assistants
+            dataStore.edit { preferences ->
+                val assistants = preferences[ASSISTANTS]?.let {
+                    runCatching { JsonInstant.decodeFromString<List<Assistant>>(it) }.getOrNull()
+                } ?: fallbackAssistants
+                val next = assistants.map { assistant ->
+                    assistant.withExperimentalFeature(id, enabled)
+                }
+                preferences[ASSISTANTS] = JsonInstant.encodeToString(next)
             }
             syncSettingsFlowFromStore()
         }
@@ -1123,6 +1192,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.ENABLE_KEEP_ALIVE_NOTIFICATION] = settings.enableKeepAliveNotification
     this[SettingsStore.ENABLE_CHECKPOINT_CACHE] = settings.enableCheckpointCache
     this[SettingsStore.CHECKPOINT_STEP_INTERVAL] = coerceCheckpointStepInterval(settings.checkpointStepInterval)
+    this[SettingsStore.EXPERIMENTAL_FEATURES] = JsonInstant.encodeToString(settings.experimentalFeatures)
 }
 
 /** Reads the latest persisted preset list and changes only [presetId]. */
@@ -1286,6 +1356,63 @@ internal fun MutablePreferences.writeCompressionPreferences(
     this[SettingsStore.COMPRESS_KEEP_RECENT_MESSAGES] = keepRecentMessages
 }
 
+internal fun decodeExperimentalFeatures(json: String?): Map<String, Boolean> {
+    if (json.isNullOrBlank()) return emptyMap()
+    return runCatching {
+        JsonInstant.decodeFromString<Map<String, Boolean>>(json)
+    }.getOrDefault(emptyMap())
+}
+
+internal fun MutablePreferences.writeExperimentalFeature(
+    id: String,
+    enabled: Boolean,
+    fallbackMap: Map<String, Boolean>,
+) {
+    val current = this[SettingsStore.EXPERIMENTAL_FEATURES]
+        ?.let { decodeExperimentalFeatures(it) }
+        ?: fallbackMap
+    val next = current + (id to enabled)
+    this[SettingsStore.EXPERIMENTAL_FEATURES] = JsonInstant.encodeToString(next)
+    when (id) {
+        me.rerere.rikkahub.data.experimental.FEATURE_CHAT_KEEPALIVE -> {
+            this[SettingsStore.ENABLE_KEEP_ALIVE_NOTIFICATION] = enabled
+        }
+        me.rerere.rikkahub.data.experimental.FEATURE_CHECKPOINT_CACHE -> {
+            this[SettingsStore.ENABLE_CHECKPOINT_CACHE] = enabled
+        }
+    }
+}
+
+internal fun Assistant.withExperimentalFeature(featureId: String, enabled: Boolean): Assistant {
+    val overrides = experimentalFeatureOverrides + (featureId to enabled)
+    return if (featureId == me.rerere.rikkahub.data.experimental.FEATURE_VARIABLE_SYSTEM) {
+        copy(
+            experimentalFeatureOverrides = overrides,
+            enableVariableSystem = enabled,
+        )
+    } else {
+        copy(experimentalFeatureOverrides = overrides)
+    }
+}
+
+internal fun MutablePreferences.writeAssistantExperimentalFeature(
+    assistantId: Uuid,
+    featureId: String,
+    enabled: Boolean,
+    fallbackAssistants: List<Assistant>,
+): Boolean {
+    val assistants = this[SettingsStore.ASSISTANTS]?.let {
+        runCatching { JsonInstant.decodeFromString<List<Assistant>>(it) }.getOrNull()
+    } ?: fallbackAssistants
+    val index = assistants.indexOfFirst { it.id == assistantId }
+    if (index < 0) return false
+    val next = assistants.toMutableList().apply {
+        set(index, this[index].withExperimentalFeature(featureId, enabled))
+    }
+    this[SettingsStore.ASSISTANTS] = JsonInstant.encodeToString(next)
+    return true
+}
+
 internal fun decodeMemoryTableBudget(storedValue: Int?, defaultValue: Int): Int? = when {
     storedValue == null -> defaultValue
     storedValue == MEMORY_TABLE_BUDGET_UNLIMITED_SENTINEL -> null
@@ -1375,12 +1502,14 @@ data class Settings(
     val semanticMemoryConfig: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig =
         me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig(),
     val clashConfig: ClashProxyConfig = ClashProxyConfig(),
-    /** Experimental: show an ongoing FGS notification while chat generation is active (#219). */
+    /** Experimental: show an ongoing FGS notification while chat generation is active (#219 legacy). */
     val enableKeepAliveNotification: Boolean = false,
-    /** Experimental: persist conversation checkpoints every N tool steps during generation (#220). */
+    /** Experimental: persist conversation checkpoints every N tool steps during generation (#220 legacy). */
     val enableCheckpointCache: Boolean = false,
     /** Tool-step interval for #220 checkpoints; coerced to 4|8|16|32. */
     val checkpointStepInterval: Int = DEFAULT_CHECKPOINT_STEP_INTERVAL,
+    /** #215: global experimental feature map (featureId → enabled). */
+    val experimentalFeatures: Map<String, Boolean> = emptyMap(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

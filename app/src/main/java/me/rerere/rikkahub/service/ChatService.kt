@@ -837,7 +837,13 @@ class ChatService(
         var keepAliveStarted = false
         fun startKeepAliveIfNeeded() {
             if (keepAliveStarted) return
-            if (!settingsStore.settingsFlow.value.enableKeepAliveNotification) return
+            if (!me.rerere.rikkahub.data.experimental.resolveExperimentalFeature(
+                    id = me.rerere.rikkahub.data.experimental.FEATURE_CHAT_KEEPALIVE,
+                    settings = settingsStore.settingsFlow.value,
+                )
+            ) {
+                return
+            }
             keepAliveController.onGenerationStart(conversationId, senderName)
             keepAliveStarted = true
         }
@@ -2790,7 +2796,10 @@ class ChatService(
         val settings = settingsStore.settingsFlow.value
         val session = sessions[conversationId] ?: return
         if (!shouldWriteCheckpoint(
-                enableCheckpointCache = settings.enableCheckpointCache,
+                enableCheckpointCache = me.rerere.rikkahub.data.experimental.resolveExperimentalFeature(
+                    id = me.rerere.rikkahub.data.experimental.FEATURE_CHECKPOINT_CACHE,
+                    settings = settings,
+                ),
                 stepIndex = stepIndex,
                 lastCheckpointStep = session.lastCheckpointStep,
                 interval = settings.checkpointStepInterval,

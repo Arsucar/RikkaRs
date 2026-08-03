@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -182,6 +183,15 @@ fun AssistantDetailPage(id: String) {
                             Text(stringResource(R.string.assistant_hook_settings_description))
                         },
                         headlineContent = { Text(stringResource(R.string.assistant_hook_settings_title)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantExperiments(id)) },
+                        leadingContent = { Icon(HugeIcons.Alert01, null) },
+                        supportingContent = {
+                            Text(stringResource(R.string.assistant_detail_experiments_desc))
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_experiments)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }

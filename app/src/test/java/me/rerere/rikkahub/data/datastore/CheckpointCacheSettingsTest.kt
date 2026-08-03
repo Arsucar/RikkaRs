@@ -80,5 +80,6 @@ class CheckpointCacheSettingsTest {
         val settings = Settings(init = true)
         assertFalse(settings.enableCheckpointCache)
         assertEquals(DEFAULT_CHECKPOINT_STEP_INTERVAL, settings.checkpointStepInterval)
+        assertTrue(settings.experimentalFeatures.isEmpty())
     }
 }

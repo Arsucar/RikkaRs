@@ -37,6 +37,12 @@ class SettingVM(
         }
     }
 
+    fun updateExperimentalFeature(id: String, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateExperimentalFeature(id, enabled)
+        }
+    }
+
     fun deleteGlobalSubagent(name: String) {
         viewModelScope.launch {
             settingsStore.update { settings ->

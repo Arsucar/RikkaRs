@@ -379,21 +379,6 @@ private fun AssistantMemoryContent(
                     )
                 },
             )
-            // #217/#216: conversation variable system (macros + MVU). Transition switch until #215.
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_variable_system)) },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_variable_system_desc))
-                },
-                trailingContent = {
-                    Switch(
-                        checked = assistant.enableVariableSystem,
-                        onCheckedChange = {
-                            onUpdateAssistant(assistant.copy(enableVariableSystem = it))
-                        },
-                    )
-                },
-            )
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_table_global)) },
                 supportingContent = {

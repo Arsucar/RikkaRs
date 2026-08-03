@@ -344,6 +344,22 @@ class AssistantDetailVM(
         }
     }
 
+    fun updateExperimentalFeature(featureId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateAssistantExperimentalFeature(
+                assistantId = assistantId,
+                id = featureId,
+                enabled = enabled,
+            )
+        }
+    }
+
+    fun applyExperimentalFeatureToAllAssistants(featureId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateAllAssistantsExperimentalFeature(featureId, enabled)
+        }
+    }
+
     /** Partial preset toggle (#218); bypasses full assistant config rewrite. */
     fun toggleAssistantPreset(presetId: Uuid, enabled: Boolean) {
         viewModelScope.launch {

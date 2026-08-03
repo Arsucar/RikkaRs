@@ -2,14 +2,10 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -21,15 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.CHECKPOINT_STEP_INTERVAL_OPTIONS
 import me.rerere.rikkahub.data.datastore.DisplaySetting
-import me.rerere.rikkahub.data.datastore.coerceCheckpointStepInterval
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -124,66 +117,6 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                     }
-                    item(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_keep_alive_notification)) },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_keep_alive_notification_desc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.enableKeepAliveNotification,
-                                onCheckedChange = {
-                                    if (it && !permissionState.allPermissionsGranted) {
-                                        permissionState.requestPermissions()
-                                    }
-                                    vm.updateEnableKeepAliveNotification(it)
-                                }
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_display_page_checkpoint_cache))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.setting_display_page_checkpoint_cache_desc))
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.enableCheckpointCache,
-                                onCheckedChange = { vm.updateCheckpointCache(enabled = it) },
-                            )
-                        },
-                    )
-                    item(
-                        modifier = Modifier.alpha(if (settings.enableCheckpointCache) 1f else 0.38f),
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_display_page_checkpoint_interval))
-                        },
-                        supportingContent = {
-                            Column {
-                                Text(stringResource(R.string.setting_display_page_checkpoint_interval_desc))
-                                FlowRow(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    val selected = coerceCheckpointStepInterval(settings.checkpointStepInterval)
-                                    CHECKPOINT_STEP_INTERVAL_OPTIONS.forEach { interval ->
-                                        FilterChip(
-                                            selected = selected == interval,
-                                            onClick = {
-                                                if (settings.enableCheckpointCache) {
-                                                    vm.updateCheckpointCache(stepInterval = interval)
-                                                }
-                                            },
-                                            enabled = settings.enableCheckpointCache,
-                                            label = { Text(interval.toString()) },
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                    )
                 }
             }
         }

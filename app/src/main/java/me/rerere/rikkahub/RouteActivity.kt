@@ -83,6 +83,7 @@ import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExperimentsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantHookEditorPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantHooksPage
@@ -137,10 +138,11 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
+import me.rerere.rikkahub.ui.pages.setting.ExperimentsPage
 import me.rerere.rikkahub.ui.pages.setting.SemanticMemoryBrowserPage
 import me.rerere.rikkahub.ui.pages.setting.SemanticMemorySettingPage
-import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingClashPage
+import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
@@ -450,6 +452,10 @@ class RouteActivity : ComponentActivity() {
                                 AssistantHooksPage(key.id, key.conversationId)
                             }
 
+                            entry<Screen.AssistantExperiments> { key ->
+                                AssistantExperimentsPage(key.id)
+                            }
+
                             entry<Screen.AssistantHookEditor> { key ->
                                 AssistantHookEditorPage(key.id, key.hookId, key.conversationId)
                             }
@@ -543,6 +549,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SemanticMemoryBrowser> {
                                 SemanticMemoryBrowserPage()
+                            }
+
+                            entry<Screen.Experiments> {
+                                ExperimentsPage()
                             }
 
                             entry<Screen.SettingMcp> {
@@ -760,6 +770,9 @@ sealed interface Screen : NavKey {
     data class AssistantHooks(val id: String, val conversationId: String? = null) : Screen
 
     @Serializable
+    data class AssistantExperiments(val id: String) : Screen
+
+    @Serializable
     data class AssistantHookEditor(
         val id: String,
         val hookId: String? = null,
@@ -837,6 +850,10 @@ sealed interface Screen : NavKey {
     /** [SemanticMemory Plugin] episodic memory browser. */
     @Serializable
     data object SemanticMemoryBrowser : Screen
+
+    /** #215: global experimental features registry page. */
+    @Serializable
+    data object Experiments : Screen
 
     @Serializable
     data object SettingMcp : Screen
