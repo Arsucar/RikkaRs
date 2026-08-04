@@ -12,7 +12,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.SkillMetadata
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeNoException
 import org.junit.Rule
@@ -38,8 +37,10 @@ class SkillsToolsTest {
                 tool.execute(json("name" to "demo", "path" to "notes.md")).single() as UIMessagePart.Text
                 ).text
 
-            assertEquals("body", body)
-            assertEquals("subfile", subfile)
+            assertTrue(body.startsWith("body"))
+            assertTrue(body.contains("<skill_files>"))
+            assertTrue(subfile.startsWith("subfile"))
+            assertTrue(subfile.contains("<skill_files>"))
         } finally {
             skillDir.parentFile?.deleteRecursively()
         }
@@ -80,7 +81,8 @@ class SkillsToolsTest {
                 tool.execute(json("name" to "demo", "path" to "guide.md")).single() as UIMessagePart.Text
                 ).text
 
-            assertEquals("shared", subfile)
+            assertTrue(subfile.startsWith("shared"))
+            assertTrue(subfile.contains("guide.md"))
         } finally {
             skillDir.parentFile?.deleteRecursively()
             sharedRoot.deleteRecursively()
@@ -139,7 +141,72 @@ class SkillsToolsTest {
             }
         )
 
-        assertEquals("Skill instructions", (result.single() as UIMessagePart.Text).text)
+        val text = (result.single() as UIMessagePart.Text).text
+        assertTrue(text.startsWith("Skill instructions"))
+        assertTrue(text.contains("<skill_files>"))
+    }
+
+    @Test
+    fun useSkill_fileTreeListsSubfilesInReferences() = runBlocking {
+        val skillDir = createSkillDir("demo")
+        try {
+            val refDir = File(skillDir, "references").apply { mkdirs() }
+            File(refDir, "foo.md").writeText("foo")
+            File(refDir, "bar.md").writeText("bar")
+            val tool = createSkillTools(
+                enabledSkills = setOf("demo"),
+                allSkills = listOf(metadata("demo", skillDir)),
+            ).single()
+
+            val body = (tool.execute(json("name" to "demo")).single() as UIMessagePart.Text).text
+
+            assertTrue(body.contains("<skill_files>"))
+            assertTrue(body.contains("references/foo.md"))
+            assertTrue(body.contains("references/bar.md"))
+            assertTrue(body.contains("SKILL.md"))
+        } finally {
+            skillDir.parentFile?.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun useSkill_fileTreeAppendedWhenReadingSubfile() = runBlocking {
+        val skillDir = createSkillDir("demo")
+        try {
+            val refDir = File(skillDir, "references").apply { mkdirs() }
+            File(refDir, "foo.md").writeText("foo")
+            val tool = createSkillTools(
+                enabledSkills = setOf("demo"),
+                allSkills = listOf(metadata("demo", skillDir)),
+            ).single()
+
+            val text = (tool.execute(json("name" to "demo", "path" to "references/foo.md")).single() as UIMessagePart.Text).text
+
+            assertTrue(text.startsWith("foo"))
+            assertTrue(text.contains("<skill_files>"))
+            assertTrue(text.contains("references/foo.md"))
+        } finally {
+            skillDir.parentFile?.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun useSkill_fileTreeOnlySkillMdWhenNoSubfiles() = runBlocking {
+        val skillDir = createSkillDir("demo")
+        try {
+            val tool = createSkillTools(
+                enabledSkills = setOf("demo"),
+                allSkills = listOf(metadata("demo", skillDir)),
+            ).single()
+
+            val body = (tool.execute(json("name" to "demo")).single() as UIMessagePart.Text).text
+
+            assertTrue(body.contains("<skill_files>"))
+            assertTrue(body.contains("SKILL.md"))
+            assertTrue(body.lineSequence().none { it.trim().startsWith("- ") && !it.contains("SKILL.md") })
+        } finally {
+            skillDir.parentFile?.deleteRecursively()
+        }
     }
 
     private fun createSkillDir(name: String): File {
