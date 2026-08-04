@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import java.io.File
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -80,7 +81,13 @@ fun createSkillTools(
                     require(target.exists()) { "File '$path' not found in skill '$name'" }
                     target.readText()
                 }
-                listOf(UIMessagePart.Text(content))
+                val fileTree = skill.skillDir.walkTopDown()
+                    .filter { it.isFile }
+                    .map { it.relativeTo(skill.skillDir).path.replace(File.separatorChar, '/') }
+                    .sorted()
+                    .joinToString("\n") { "  - $it" }
+                val contentWithTree = content + "\n\n<skill_files>\n$fileTree\n</skill_files>"
+                listOf(UIMessagePart.Text(contentWithTree))
             }
         )
     )
