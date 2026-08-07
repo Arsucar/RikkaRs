@@ -430,6 +430,7 @@ internal fun PresetEditSheet(
     onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
 ) {
     var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
+    var pendingModeInjections by remember { mutableStateOf<List<PromptInjection.ModeInjection>?>(null) }
     val presetModeInjections = remember(modeInjections, preset) {
         val ids = if (preset.hasEntries()) {
             preset.entries.filterIsInstance<PresetEntry.Reference>().mapTo(mutableSetOf()) {
@@ -470,10 +471,16 @@ internal fun PresetEditSheet(
                     style = MaterialTheme.typography.titleLarge
                 )
                 Row {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(onClick = {
+                        pendingModeInjections = null
+                        onDismiss()
+                    }) {
                         Text(stringResource(R.string.prompt_page_cancel))
                     }
-                    TextButton(onClick = onConfirm) {
+                    TextButton(onClick = {
+                        pendingModeInjections?.let { onUpdateModeInjections(it) }
+                        onConfirm()
+                    }) {
                         Text(stringResource(R.string.prompt_page_confirm))
                     }
                 }
@@ -607,9 +614,9 @@ internal fun PresetEditSheet(
                 val edited = editingInjection
                 if (edited != null) {
                     if (index >= 0) {
-                        onUpdateModeInjections(modeInjections.toMutableList().apply { set(index, edited) })
+                        pendingModeInjections = (pendingModeInjections ?: modeInjections).toMutableList().apply { set(index, edited) }
                     } else {
-                        onUpdateModeInjections(modeInjections + edited)
+                        pendingModeInjections = (pendingModeInjections ?: modeInjections) + edited
                         onEditPreset(if (preset.hasEntries()) {
                             preset.copy(
                                 entries = preset.entries + PresetEntry.Reference(
