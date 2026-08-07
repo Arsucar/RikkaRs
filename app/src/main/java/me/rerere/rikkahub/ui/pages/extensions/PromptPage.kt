@@ -867,12 +867,8 @@ internal fun ModeInjectionEditSheet(
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.ModeInjection) -> Unit
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Expanded, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(sheetState) {
-        sheetState.show()
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
