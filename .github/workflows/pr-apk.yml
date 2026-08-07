@@ -1,11 +1,15 @@
-# 轻量试装包：对任意分支 / commit 手动出 arm64 prTest APK。
-# 用法：Actions → PR / Branch APK → Run workflow → 可选填 ref（空则用所选 branch）
+# 轻量试装包：PR 到 release/rikka-arsucar 自动出 arm64 prTest APK；也可手动对任意分支 / commit 出包。
+# 自动触发：Actions → PR / Branch APK（PR 事件 opened/synchronize/reopened/ready_for_review）
+# 手动用法：Actions → PR / Branch APK → Run workflow → 可选填 ref（空则用所选 branch）
 # 产物：Artifacts；applicationId = me.arsucar.rikka.pr，不覆盖正式版 me.arsucar.rikka。
 # 不覆盖 nightly、不 bump 版本、不发 Release。
-# 关联：Closes #167
+# 关联：Closes #167；自动触发见 #256
 name: PR / Branch APK
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [release/rikka-arsucar]
   workflow_dispatch:
     inputs:
       ref:
@@ -18,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-apk-${{ github.event.inputs.ref || github.ref }}
+  group: pr-apk-${{ github.event.inputs.ref || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,7 +34,7 @@ jobs:
         run: |
           REF="${{ github.event.inputs.ref }}"
           if [ -z "$REF" ]; then
-            REF="${{ github.ref_name }}"
+            REF="${{ github.head_ref || github.ref_name }}"
           fi
           echo "value=$REF" >> "$GITHUB_OUTPUT"
           echo "Building ref: $REF"
