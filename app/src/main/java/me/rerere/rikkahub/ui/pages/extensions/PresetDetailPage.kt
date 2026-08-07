@@ -41,13 +41,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -216,6 +219,34 @@ private fun PresetDetailContent(
         }
     }
 
+    // #246: 名称/描述文本字段局部缓冲——输入过程只更新本地 state，失焦/退栈时提交，
+    // 避免每击键一次 DataStore 写导致快速返回时最后几次击键随 viewModelScope 取消而丢失。
+    var nameText by remember(preset.name) { mutableStateOf(preset.name) }
+    var descriptionText by remember(preset.description) { mutableStateOf(preset.description) }
+    val latestNameText by rememberUpdatedState(nameText)
+    val latestDescriptionText by rememberUpdatedState(descriptionText)
+
+    fun commitName() {
+        if (latestNameText != preset.name) {
+            onMutatePreset { it.copy(name = latestNameText) }
+        }
+    }
+
+    fun commitDescription() {
+        if (latestDescriptionText != preset.description) {
+            onMutatePreset { it.copy(description = latestDescriptionText) }
+        }
+    }
+
+    // 退栈/销毁前 flush 未提交的文本缓冲（composition dispose 先于 ViewModel onCleared，
+    // 给最后一次写留出窗口）。与 AssistantMemoryTableDocumentEditorPage 的 DisposableEffect 模式一致。
+    DisposableEffect(Unit) {
+        onDispose {
+            commitName()
+            commitDescription()
+        }
+    }
+
     LazyColumn(
         modifier = modifier.padding(16.dp),
         state = lazyListState,
@@ -224,19 +255,31 @@ private fun PresetDetailContent(
     ) {
         item(key = "name") {
             OutlinedTextField(
-                value = preset.name,
-                onValueChange = { name -> onMutatePreset { it.copy(name = name) } },
+                value = nameText,
+                onValueChange = { nameText = it },
                 label = { Text(stringResource(R.string.prompt_page_name)) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            commitName()
+                        }
+                    },
                 singleLine = true,
             )
         }
         item(key = "description") {
             OutlinedTextField(
-                value = preset.description,
-                onValueChange = { description -> onMutatePreset { it.copy(description = description) } },
+                value = descriptionText,
+                onValueChange = { descriptionText = it },
                 label = { Text(stringResource(R.string.prompt_page_description)) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            commitDescription()
+                        }
+                    },
                 minLines = 2,
             )
         }
