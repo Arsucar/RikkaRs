@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +51,7 @@ import me.rerere.rikkahub.data.model.GitDiffUiState
 import me.rerere.rikkahub.data.model.GitFileChange
 import me.rerere.rikkahub.data.model.GitRepositoryStatus
 import me.rerere.rikkahub.data.model.GitStatusUiState
+import me.rerere.rikkahub.ui.context.LocalHorizontalGestureExclusionState
 
 @Composable
 internal fun gitStatusMenuSubtitle(state: GitStatusUiState): String = when (state) {
@@ -509,12 +514,31 @@ private fun GitTextDiff(state: GitDiffUiState.Text) {
         } else {
             val verticalScroll = rememberScrollState()
             val horizontalScroll = rememberScrollState()
+            val horizontalGestureExclusionState = LocalHorizontalGestureExclusionState.current
             SelectionContainer {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(verticalScroll)
                         .horizontalScroll(horizontalScroll)
+                        .pointerInput(horizontalGestureExclusionState) {
+                            val exclusionState = horizontalGestureExclusionState ?: return@pointerInput
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                val exclusionLease = exclusionState.acquireIfScrollable(
+                                    pointerId = down.id.value,
+                                    maxScrollValue = horizontalScroll.maxValue,
+                                )
+                                try {
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        if (event.changes.none { it.pressed }) break
+                                    }
+                                } finally {
+                                    exclusionLease?.close()
+                                }
+                            }
+                        }
                         .padding(12.dp),
                 ) {
                     Text(
