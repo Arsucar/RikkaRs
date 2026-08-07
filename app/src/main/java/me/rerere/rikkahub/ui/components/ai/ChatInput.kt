@@ -13,6 +13,8 @@ import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.consume
 import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.content.hasMediaType
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +66,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -114,6 +118,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalASRState
+import me.rerere.rikkahub.ui.context.LocalHorizontalGestureExclusionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -150,6 +155,8 @@ fun ChatInput(
     val inputDraftCancelDescription = stringResource(R.string.input_draft_cancel)
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
+    val toolRowScrollState = rememberScrollState()
+    val horizontalGestureExclusionState = LocalHorizontalGestureExclusionState.current
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -264,7 +271,25 @@ fun ChatInput(
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .horizontalScroll(rememberScrollState()),
+                                .horizontalScroll(toolRowScrollState)
+                                .pointerInput(horizontalGestureExclusionState) {
+                                    val exclusionState = horizontalGestureExclusionState ?: return@pointerInput
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                        val exclusionLease = exclusionState.acquireIfScrollable(
+                                            pointerId = down.id.value,
+                                            maxScrollValue = toolRowScrollState.maxValue,
+                                        )
+                                        try {
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                                if (event.changes.none { it.pressed }) break
+                                            }
+                                        } finally {
+                                            exclusionLease?.close()
+                                        }
+                                    }
+                                },
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             // Model Picker
