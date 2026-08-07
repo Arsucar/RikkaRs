@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +43,7 @@ fun ChatMessageBranchSelector(
                 contentDescription = "Prev",
                 modifier = Modifier
                     .clip(CircleShape)
+                    .minimumInteractiveComponentSize()
                     .alpha(if (node.selectIndex == 0) 0.5f else 1f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -72,6 +74,7 @@ fun ChatMessageBranchSelector(
                 contentDescription = "Next",
                 modifier = Modifier
                     .clip(CircleShape)
+                    .minimumInteractiveComponentSize()
                     .alpha(if (node.selectIndex == node.messages.lastIndex) 0.5f else 1f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -183,6 +184,7 @@ private fun AttachmentChip(
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
+                    .minimumInteractiveComponentSize()
                     .size(26.dp)
                     .clickable(onClick = onRemove),
                 contentAlignment = Alignment.Center

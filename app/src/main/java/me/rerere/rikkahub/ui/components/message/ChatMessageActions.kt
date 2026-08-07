@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -104,6 +105,7 @@ fun ColumnScope.ChatMessageActionButtons(
             contentDescription = stringResource(R.string.copy),
             modifier = Modifier
                 .clip(CircleShape)
+                .minimumInteractiveComponentSize()
                 .clickable { context.copyMessageToClipboard(message) }
                 .padding(8.dp)
                 .size(16.dp),
@@ -115,6 +117,7 @@ fun ColumnScope.ChatMessageActionButtons(
             contentDescription = stringResource(R.string.regenerate),
             modifier = Modifier
                 .clip(CircleShape)
+                .minimumInteractiveComponentSize()
                 .clickable {
                     if (message.role == MessageRole.USER) {
                         showRegenerateConfirm = true
@@ -136,6 +139,7 @@ fun ColumnScope.ChatMessageActionButtons(
                 contentDescription = stringResource(R.string.tts),
                 modifier = Modifier
                     .clip(CircleShape)
+                    .minimumInteractiveComponentSize()
                     .clickable(
                         enabled = isAvailable,
                         interactionSource = remember { MutableInteractionSource() },
@@ -168,6 +172,7 @@ fun ColumnScope.ChatMessageActionButtons(
                     contentDescription = stringResource(R.string.translate),
                     modifier = Modifier
                         .clip(CircleShape)
+                        .minimumInteractiveComponentSize()
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = LocalIndication.current,
@@ -187,6 +192,7 @@ fun ColumnScope.ChatMessageActionButtons(
             contentDescription = stringResource(R.string.more_options),
             modifier = Modifier
                 .clip(CircleShape)
+                .minimumInteractiveComponentSize()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = LocalIndication.current,
