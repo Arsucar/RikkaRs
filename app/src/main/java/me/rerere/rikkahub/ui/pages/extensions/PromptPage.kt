@@ -1597,7 +1597,6 @@ private fun RegexInjectionEditFullscreen(
                                     onClick = {
                                         onEdit(entry.copy(keywords = entry.keywords - keyword))
                                     },
-                                    modifier = Modifier.size(16.dp)
                                 ) {
                                     Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
                                 }

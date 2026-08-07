@@ -713,14 +713,14 @@ private fun ActiveGenerationJobSection(
                     )
                 }
                 if (job.isRunning) {
-                    IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onCancel) {
                         Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 } else {
-                    IconButton(onClick = onRegenerateJob, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onRegenerateJob) {
                         Icon(HugeIcons.Refresh01, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onDismiss) {
                         Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -1690,7 +1690,7 @@ private fun CollapsibleSectionHeader(
         }
         if (onRename != null || onDelete != null) {
             Box {
-                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(HugeIcons.MoreVertical, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {

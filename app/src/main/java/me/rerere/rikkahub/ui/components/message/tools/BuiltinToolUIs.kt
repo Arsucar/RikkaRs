@@ -301,7 +301,6 @@ object TextToSpeechToolUI : ToolUIRenderer {
             )
             FilledTonalIconButton(
                 onClick = { scope.launch { eventBus.emit(AppEvent.Speak(text)) } },
-                modifier = Modifier.size(28.dp),
             ) {
                 Icon(
                     imageVector = HugeIcons.Refresh01,

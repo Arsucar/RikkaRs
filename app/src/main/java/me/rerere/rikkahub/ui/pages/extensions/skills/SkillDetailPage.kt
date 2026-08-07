@@ -408,7 +408,7 @@ private fun FileItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onEdit) {
                 Icon(
                     imageVector = Lucide.FilePen,
                     contentDescription = stringResource(R.string.edit),
@@ -416,7 +416,7 @@ private fun FileItem(
                 )
             }
             if (skillFile.relativePath != "SKILL.md") {
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Lucide.Trash2,
                         contentDescription = stringResource(R.string.delete),

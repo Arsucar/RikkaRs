@@ -276,7 +276,7 @@ private fun ModelSettingItem(
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (onClear != null && state.currentModel != null) {
-                            IconButton(onClick = onClear, modifier = Modifier.size(20.dp)) {
+                            IconButton(onClick = onClear) {
                                 Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp))
                             }
                         } else {

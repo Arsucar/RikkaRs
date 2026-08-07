@@ -135,7 +135,6 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 ) {
                     FilledTonalIconButton(
                         onClick = { showDenyDialog = true },
-                        modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
                             imageVector = HugeIcons.Cancel01,
@@ -145,7 +144,6 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     }
                     FilledTonalIconButton(
                         onClick = { onToolApproval(tool.toolCallId, true, "") },
-                        modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
                             imageVector = HugeIcons.Tick01,
