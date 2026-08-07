@@ -67,43 +67,6 @@ interface ExportSerializer<T> {
     }
 }
 
-object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection> {
-    override val type = "mode_injection"
-
-    override fun getExportFileName(data: PromptInjection.ModeInjection): String {
-        return "${data.name.ifEmpty { type }}.json"
-    }
-
-    override fun export(data: PromptInjection.ModeInjection): ExportData {
-        return ExportData(
-            type = type,
-            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
-        )
-    }
-
-    override fun import(context: Context, uri: Uri): Result<PromptInjection.ModeInjection> {
-        return runCatching {
-            val json = readUri(context, uri)
-            // 首先尝试解析为自己的格式
-            tryImportNative(json)
-                ?: throw IllegalArgumentException("Unsupported format")
-        }
-    }
-
-    private fun tryImportNative(json: String): PromptInjection.ModeInjection? {
-        return runCatching {
-            val exportData = ExportSerializer.DefaultJson.decodeFromString(
-                ExportData.serializer(),
-                json
-            )
-            if (exportData.type != type) return null
-            ExportSerializer.DefaultJson
-                .decodeFromJsonElement<PromptInjection.ModeInjection>(exportData.data)
-                .copy(id = Uuid.random())
-        }.getOrNull()
-    }
-}
-
 object PresetSerializer : ExportSerializer<Preset> {
     override val type = "preset"
 
