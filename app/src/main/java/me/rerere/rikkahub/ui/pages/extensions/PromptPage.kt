@@ -431,7 +431,8 @@ internal fun PresetEditSheet(
 ) {
     var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
     var pendingModeInjections by remember { mutableStateOf<List<PromptInjection.ModeInjection>?>(null) }
-    val presetModeInjections = remember(modeInjections, preset) {
+    val effectiveModeInjections = pendingModeInjections ?: modeInjections
+    val presetModeInjections = remember(effectiveModeInjections, preset) {
         val ids = if (preset.hasEntries()) {
             preset.entries.filterIsInstance<PresetEntry.Reference>().mapTo(mutableSetOf()) {
                 it.modeInjectionId
@@ -439,7 +440,7 @@ internal fun PresetEditSheet(
         } else {
             preset.modeInjectionIds
         }
-        modeInjections.filter { it.id in ids }
+        effectiveModeInjections.filter { it.id in ids }
     }
 
     ModalBottomSheet(
@@ -610,13 +611,14 @@ internal fun PresetEditSheet(
             injection = injection,
             onDismiss = { editingInjection = null },
             onConfirm = {
-                val index = modeInjections.indexOfFirst { it.id == injection.id }
+                val base = pendingModeInjections ?: modeInjections
+                val index = base.indexOfFirst { it.id == injection.id }
                 val edited = editingInjection
                 if (edited != null) {
                     if (index >= 0) {
-                        pendingModeInjections = (pendingModeInjections ?: modeInjections).toMutableList().apply { set(index, edited) }
+                        pendingModeInjections = base.toMutableList().apply { set(index, edited) }
                     } else {
-                        pendingModeInjections = (pendingModeInjections ?: modeInjections) + edited
+                        pendingModeInjections = base + edited
                         onEditPreset(if (preset.hasEntries()) {
                             preset.copy(
                                 entries = preset.entries + PresetEntry.Reference(
