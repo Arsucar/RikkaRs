@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -95,6 +96,7 @@ fun Switch(
     Box(
         modifier = modifier
             .size(width = dimensions.trackWidth, height = dimensions.trackHeight)
+            .minimumInteractiveComponentSize()
             .clip(RoundedCornerShape(50))
             .background(currentTrackColor)
             .clickable(

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -65,6 +66,7 @@ fun TagsInput(
                     contentDescription = null,
                     modifier = Modifier
                         .size(16.dp)
+                        .minimumInteractiveComponentSize()
                         .clickable {
                             onValueChange(
                                 value.filter { it != tag.id }, tags
@@ -81,6 +83,7 @@ fun TagsInput(
             tonalElevation = 2.dp,
             modifier = Modifier
                 .clip(CircleShape)
+                .minimumInteractiveComponentSize()
                 .clickable { showAddDialog = true }) {
             Icon(
                 imageVector = HugeIcons.Add01,
