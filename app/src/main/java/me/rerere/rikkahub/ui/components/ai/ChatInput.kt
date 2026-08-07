@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -385,6 +386,7 @@ fun ChatInput(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .size(30.dp)
+                                    .minimumInteractiveComponentSize()
                                     .testTag("chat_send_button")
                                     .clip(CircleShape)
                                     .combinedClickable(
@@ -446,7 +448,7 @@ private fun ActionIconButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(30.dp),
+        modifier = Modifier.size(30.dp).minimumInteractiveComponentSize(),
         shape = CircleShape,
         tonalElevation = 0.dp,
         color = Color.Transparent,
