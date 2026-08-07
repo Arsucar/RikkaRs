@@ -791,7 +791,7 @@ private fun ChatSuggestionsRow(
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val exclusionLease = exclusionState.acquireIfScrollable(
                         pointerId = down.id.value,
-                        maxScrollValue = rowState.maxValue,
+                        maxScrollValue = if (rowState.canScrollForward || rowState.canScrollBackward) 1 else 0,
                     )
                     try {
                         while (true) {

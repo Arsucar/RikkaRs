@@ -967,7 +967,7 @@ private fun FolderBar(
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val exclusionLease = exclusionState.acquireIfScrollable(
                         pointerId = down.id.value,
-                        maxScrollValue = folderRowState.maxValue,
+                        maxScrollValue = if (folderRowState.canScrollForward || folderRowState.canScrollBackward) 1 else 0,
                     )
                     try {
                         while (true) {

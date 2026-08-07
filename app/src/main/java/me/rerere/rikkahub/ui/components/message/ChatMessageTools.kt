@@ -187,7 +187,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                         val exclusionLease = exclusionState.acquireIfScrollable(
                                             pointerId = down.id.value,
-                                            maxScrollValue = toolImagesRowState.maxValue,
+                                            maxScrollValue = if (toolImagesRowState.canScrollForward || toolImagesRowState.canScrollBackward) 1 else 0,
                                         )
                                         try {
                                             while (true) {
