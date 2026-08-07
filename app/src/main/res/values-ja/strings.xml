@@ -509,7 +509,6 @@
   <string name="prompt_page_position_before_system">システムプロンプトの前</string>
   <string name="prompt_page_position_bottom_of_chat">最新メッセージの前</string>
   <string name="prompt_page_position_top_of_chat">チャットの上部</string>
-  <string name="prompt_page_priority_format">優先度: %d</string>
   <string name="prompt_page_priority_label">優先度</string>
   <string name="prompt_page_role_assistant">アシスタント（プリフィル）</string>
   <string name="prompt_page_role_user">ユーザー</string>

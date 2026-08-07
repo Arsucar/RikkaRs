@@ -509,7 +509,6 @@
   <string name="prompt_page_position_before_system">시스템 프롬프트 전</string>
   <string name="prompt_page_position_bottom_of_chat">최신 메시지 앞</string>
   <string name="prompt_page_position_top_of_chat">채팅 상단</string>
-  <string name="prompt_page_priority_format">우선순위: %d</string>
   <string name="prompt_page_priority_label">우선순위</string>
   <string name="prompt_page_role_assistant">어시스턴트 (미리 채우기)</string>
   <string name="prompt_page_role_user">사용자</string>

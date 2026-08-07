@@ -70,7 +70,6 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,7 +92,6 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.LorebookSerializer
-import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.PresetSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
@@ -432,7 +430,9 @@ internal fun PresetEditSheet(
     onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
 ) {
     var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
-    val presetModeInjections = remember(modeInjections, preset) {
+    var pendingModeInjections by remember { mutableStateOf<List<PromptInjection.ModeInjection>?>(null) }
+    val effectiveModeInjections = pendingModeInjections ?: modeInjections
+    val presetModeInjections = remember(effectiveModeInjections, preset) {
         val ids = if (preset.hasEntries()) {
             preset.entries.filterIsInstance<PresetEntry.Reference>().mapTo(mutableSetOf()) {
                 it.modeInjectionId
@@ -440,7 +440,7 @@ internal fun PresetEditSheet(
         } else {
             preset.modeInjectionIds
         }
-        modeInjections.filter { it.id in ids }
+        effectiveModeInjections.filter { it.id in ids }
     }
 
     ModalBottomSheet(
@@ -472,10 +472,16 @@ internal fun PresetEditSheet(
                     style = MaterialTheme.typography.titleLarge
                 )
                 Row {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(onClick = {
+                        pendingModeInjections = null
+                        onDismiss()
+                    }) {
                         Text(stringResource(R.string.prompt_page_cancel))
                     }
-                    TextButton(onClick = onConfirm) {
+                    TextButton(onClick = {
+                        pendingModeInjections?.let { onUpdateModeInjections(it) }
+                        onConfirm()
+                    }) {
                         Text(stringResource(R.string.prompt_page_confirm))
                     }
                 }
@@ -605,13 +611,14 @@ internal fun PresetEditSheet(
             injection = injection,
             onDismiss = { editingInjection = null },
             onConfirm = {
-                val index = modeInjections.indexOfFirst { it.id == injection.id }
+                val base = pendingModeInjections ?: modeInjections
+                val index = base.indexOfFirst { it.id == injection.id }
                 val edited = editingInjection
                 if (edited != null) {
                     if (index >= 0) {
-                        onUpdateModeInjections(modeInjections.toMutableList().apply { set(index, edited) })
+                        pendingModeInjections = base.toMutableList().apply { set(index, edited) }
                     } else {
-                        onUpdateModeInjections(modeInjections + edited)
+                        pendingModeInjections = base + edited
                         onEditPreset(if (preset.hasEntries()) {
                             preset.copy(
                                 entries = preset.entries + PresetEntry.Reference(
@@ -635,244 +642,14 @@ internal fun PresetEditSheet(
 }
 
 @Composable
-private fun ModeInjectionTab(
-    modeInjections: List<PromptInjection.ModeInjection>,
-    onUpdate: (List<PromptInjection.ModeInjection>) -> Unit
-) {
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    val lazyListState = rememberLazyListState()
-    val toaster = LocalToaster.current
-    val currentModeInjections by rememberUpdatedState(modeInjections)
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val newList = modeInjections.toMutableList()
-        val item = newList.removeAt(from.index)
-        newList.add(to.index, item)
-        onUpdate(newList)
-    }
-    val editState = useEditState<PromptInjection.ModeInjection> { edited ->
-        val index = modeInjections.indexOfFirst { it.id == edited.id }
-        if (index >= 0) {
-            onUpdate(modeInjections.toMutableList().apply { set(index, edited) })
-        } else {
-            onUpdate(modeInjections + edited)
-        }
-    }
-    val importSuccessMsg = stringResource(R.string.export_import_success)
-    val importFailedMsg = stringResource(R.string.export_import_failed)
-    val importer = rememberImporter(ModeInjectionSerializer) { result ->
-        result.onSuccess { imported ->
-            onUpdate(currentModeInjections + imported)
-            toaster.show(importSuccessMsg)
-        }.onFailure { error ->
-            toaster.show(importFailedMsg.format(error.message))
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .floatingToolbarVerticalNestedScroll(
-                    expanded = expanded,
-                    onExpand = { expanded = true },
-                    onCollapse = { expanded = false }
-                ),
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 128.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            state = lazyListState
-        ) {
-            if (modeInjections.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillParentMaxHeight(0.8f)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.prompt_page_mode_injection_empty),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = stringResource(R.string.prompt_page_empty_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            } else {
-                items(modeInjections, key = { it.id }) { injection ->
-                    ReorderableItem(
-                        state = reorderableState,
-                        key = injection.id
-                    ) { isDragging ->
-                        ModeInjectionCard(
-                            injection = injection,
-                            modifier = Modifier
-                                .longPressDraggableHandle()
-                                .graphicsLayer {
-                                    if (isDragging) {
-                                        scaleX = 1.05f
-                                        scaleY = 1.05f
-                                    }
-                                },
-                            onEdit = { editState.open(injection) },
-                            onDelete = { onUpdate(modeInjections - injection) }
-                        )
-                    }
-                }
-            }
-        }
-
-        HorizontalFloatingToolbar(
-            expanded = expanded,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(y = -ScreenOffset),
-            leadingContent = {
-                IconButton(onClick = { importer.importFromFile() }) {
-                    Icon(HugeIcons.FileImport, null)
-                }
-            },
-        ) {
-            Button(onClick = { editState.open(PromptInjection.ModeInjection()) }) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(HugeIcons.Add01, null)
-                    AnimatedVisibility(expanded) {
-                        Row {
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(stringResource(R.string.prompt_page_add_mode_injection))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (editState.isEditing) {
-        editState.currentState?.let { state ->
-            ModeInjectionEditSheet(
-                injection = state,
-                onDismiss = { editState.dismiss() },
-                onConfirm = { editState.confirm() },
-                onEdit = { editState.currentState = it }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModeInjectionCard(
-    injection: PromptInjection.ModeInjection,
-    modifier: Modifier = Modifier,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val swipeState = rememberSwipeToDismissBoxState()
-    val scope = rememberCoroutineScope()
-    var showExportDialog by remember { mutableStateOf(false) }
-    val exporter = rememberExporter(injection, ModeInjectionSerializer)
-
-    SwipeToDismissBox(
-        state = swipeState,
-        backgroundContent = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { scope.launch { swipeState.reset() } }) {
-                    Icon(HugeIcons.Cancel01, null)
-                }
-                FilledIconButton(onClick = {
-                    scope.launch {
-                        onDelete()
-                        swipeState.reset()
-                    }
-                }) {
-                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
-                }
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        modifier = modifier
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = CustomColors.listItemColors.containerColor
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = injection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Tag(type = TagType.INFO) {
-                            Text(getPositionLabel(injection.position))
-                        }
-                        Tag(type = TagType.DEFAULT) {
-                            Text(stringResource(R.string.prompt_page_priority_format, injection.priority))
-                        }
-                        if (!injection.enabled) {
-                            Tag(type = TagType.WARNING) {
-                                Text(stringResource(R.string.prompt_page_disabled))
-                            }
-                        }
-                    }
-                }
-                IconButton(onClick = { showExportDialog = true }) {
-                    Icon(HugeIcons.Share03, stringResource(R.string.export_title))
-                }
-                IconButton(onClick = onEdit) {
-                    Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
-                }
-            }
-        }
-    }
-
-    if (showExportDialog) {
-        ExportDialog(
-            exporter = exporter,
-            onDismiss = { showExportDialog = false }
-        )
-    }
-}
-
-@Composable
 internal fun ModeInjectionEditSheet(
     injection: PromptInjection.ModeInjection,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.ModeInjection) -> Unit
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Expanded, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(sheetState) {
-        sheetState.show()
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

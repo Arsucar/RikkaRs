@@ -509,7 +509,6 @@
   <string name="prompt_page_position_before_system">Перед системным приглашением</string>
   <string name="prompt_page_position_bottom_of_chat">Перед последним сообщением</string>
   <string name="prompt_page_position_top_of_chat">Вверху чата</string>
-  <string name="prompt_page_priority_format">Приоритет: %d</string>
   <string name="prompt_page_priority_label">Приоритет</string>
   <string name="prompt_page_role_assistant">Ассистент (предварительное заполнение)</string>
   <string name="prompt_page_role_user">Пользователь</string>
