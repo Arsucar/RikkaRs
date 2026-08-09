@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +26,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +34,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,6 +45,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
@@ -85,12 +90,53 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
+private data class SettingSearchEntry(
+    val title: String,
+    val description: String,
+    val keywords: String,
+    val screen: Screen,
+)
+
+private fun SettingSearchEntry.matches(query: String): Boolean {
+    val normalizedQuery = query.trim().lowercase()
+    return normalizedQuery.isNotEmpty() &&
+        listOf(title, description, keywords).joinToString(" ").lowercase().contains(normalizedQuery)
+}
+
+@Composable
+private fun settingSearchEntries(): List<SettingSearchEntry> = listOf(
+    SettingSearchEntry(stringResource(R.string.setting_page_preferences), stringResource(R.string.setting_page_preferences_desc), "preferences settings 设置", Screen.SettingPreferences),
+    SettingSearchEntry(stringResource(R.string.setting_page_assistant), stringResource(R.string.setting_page_assistant_desc), "assistant agent 助手", Screen.Assistant),
+    SettingSearchEntry(stringResource(R.string.setting_page_extensions), stringResource(R.string.setting_page_extensions_desc), "extensions prompt skills 扩展", Screen.Extensions),
+    SettingSearchEntry(stringResource(R.string.setting_page_default_model), stringResource(R.string.setting_page_default_model_desc), "model prompt 模型 提示词", Screen.SettingModels),
+    SettingSearchEntry(stringResource(R.string.setting_page_providers), stringResource(R.string.setting_page_providers_desc), "provider api 服务商", Screen.SettingProvider),
+    SettingSearchEntry(stringResource(R.string.setting_page_search_service), stringResource(R.string.setting_page_search_service_desc), "search web 搜索", Screen.SettingSearch),
+    SettingSearchEntry(stringResource(R.string.setting_page_tts_service), stringResource(R.string.setting_page_tts_service_desc), "speech tts voice 语音", Screen.SettingSpeech),
+    SettingSearchEntry(stringResource(R.string.setting_page_semantic_memory), stringResource(R.string.setting_page_semantic_memory_desc), "semantic memory embedding 语义记忆", Screen.SemanticMemory),
+    SettingSearchEntry(stringResource(R.string.setting_page_experiments), stringResource(R.string.setting_page_experiments_desc), "experiments experimental 实验", Screen.Experiments),
+    SettingSearchEntry(stringResource(R.string.setting_page_mcp), stringResource(R.string.setting_page_mcp_desc), "mcp server", Screen.SettingMcp),
+    SettingSearchEntry(stringResource(R.string.setting_page_web_server), stringResource(R.string.setting_page_web_server_desc), "web server 网络", Screen.SettingWeb),
+    SettingSearchEntry(stringResource(R.string.setting_clash_page_title), stringResource(R.string.setting_clash_page_experimental_desc), "clash proxy network 代理", Screen.SettingClash),
+    SettingSearchEntry(stringResource(R.string.setting_page_conversation_tags), stringResource(R.string.setting_page_conversation_tags_desc), "conversation tags chat 标签", Screen.SettingConversationTags),
+    SettingSearchEntry(stringResource(R.string.setting_page_data_backup), stringResource(R.string.setting_page_data_backup_desc), "backup restore 备份", Screen.Backup),
+    SettingSearchEntry(stringResource(R.string.setting_page_chat_storage), stringResource(R.string.setting_page_data_settings), "files storage chat 文件 存储", Screen.SettingFiles),
+    SettingSearchEntry(stringResource(R.string.setting_page_about), stringResource(R.string.setting_page_about_desc), "about app 关于", Screen.SettingAbout),
+    SettingSearchEntry(stringResource(R.string.setting_page_request_logs), stringResource(R.string.setting_page_request_logs_desc), "logs http requests 日志", Screen.Log),
+    SettingSearchEntry(stringResource(R.string.setting_page_donate), stringResource(R.string.setting_page_donate_desc), "donate sponsor 赞助", Screen.SettingDonate),
+    SettingSearchEntry(stringResource(R.string.setting_page_preferences_theme), stringResource(R.string.setting_page_preferences_theme_desc), "theme color dark mode 主题", Screen.SettingPreferencesTheme),
+    SettingSearchEntry(stringResource(R.string.setting_page_preferences_notification), stringResource(R.string.setting_page_preferences_notification_desc), "notifications alerts 通知", Screen.SettingPreferencesNotification),
+    SettingSearchEntry(stringResource(R.string.setting_page_preferences_general), stringResource(R.string.setting_page_preferences_general_desc), "general interaction scrolling input 通用", Screen.SettingPreferencesGeneral),
+    SettingSearchEntry(stringResource(R.string.setting_page_preferences_ui), stringResource(R.string.setting_page_preferences_ui_desc), "ui display fonts code 界面", Screen.SettingPreferencesUI),
+)
+
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchEntries = settingSearchEntries()
 
     if (!settings.sponsorAlertDisabled &&
         settings.launchCount > 100 &&
@@ -149,11 +195,49 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             contentPadding = innerPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (settings.isNotConfigured()) {
-                item {
-                    ProviderConfigWarningCard(navController)
-                }
+            item("settingsSearch") {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.setting_page_search_hint)) },
+                    leadingIcon = { Icon(HugeIcons.GlobalSearch, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            TextButton(onClick = { searchQuery = "" }) {
+                                Text(stringResource(R.string.setting_page_search_clear))
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                )
             }
+            if (searchQuery.isNotBlank()) {
+                val matches = searchEntries.filter { it.matches(searchQuery) }
+                if (matches.isEmpty()) {
+                    item("settingsSearchEmpty") {
+                        Text(
+                            text = stringResource(R.string.setting_page_search_no_results),
+                            modifier = Modifier.padding(24.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    items(matches, key = { it.screen.toString() }) { entry ->
+                        ListItem(
+                            modifier = Modifier.clickable { navController.navigate(entry.screen) },
+                            headlineContent = { Text(entry.title) },
+                            supportingContent = { Text(entry.description) },
+                        )
+                    }
+                }
+            } else {
+                if (settings.isNotConfigured()) {
+                    item {
+                        ProviderConfigWarningCard(navController)
+                    }
+                }
 
             item("generalSettings") {
                 var colorMode by rememberColorMode()
@@ -409,6 +493,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_share)) },
                     )
                 }
+            }
             }
         }
     }

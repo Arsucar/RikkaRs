@@ -1172,6 +1172,9 @@
   <string name="setting_page_search_result_size">Result Size</string>
   <string name="setting_page_search_service">Search Service</string>
   <string name="setting_page_search_service_desc">Set up search service</string>
+  <string name="setting_page_search_hint">Search settings</string>
+  <string name="setting_page_search_clear">Clear</string>
+  <string name="setting_page_search_no_results">No settings found</string>
   <string name="setting_page_search_test">Test Search</string>
   <string name="setting_page_search_test_query_hint">Enter test query…</string>
   <string name="setting_page_search_test_run">Run Test</string>
