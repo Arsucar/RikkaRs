@@ -1124,6 +1124,9 @@
   <string name="setting_page_search_result_size">结果数量</string>
   <string name="setting_page_search_service">搜索服务</string>
   <string name="setting_page_search_service_desc">设置搜索服务</string>
+  <string name="setting_page_search_hint">搜索设置</string>
+  <string name="setting_page_search_clear">清除</string>
+  <string name="setting_page_search_no_results">未找到相关设置</string>
   <string name="setting_page_search_test">测试搜索</string>
   <string name="setting_page_search_test_query_hint">输入测试查询…</string>
   <string name="setting_page_search_test_run">运行测试</string>
