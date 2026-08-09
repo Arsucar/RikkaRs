@@ -292,6 +292,18 @@ private fun MainPage(vm: DebugVM) {
             }
         }
 
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("sponsorAlertDisabled (current: ${settings.sponsorAlertDisabled})", modifier = Modifier.weight(1f))
+            Button(onClick = {
+                vm.updateSettings(settings.copy(sponsorAlertDisabled = !settings.sponsorAlertDisabled))
+            }) {
+                Text(if (settings.sponsorAlertDisabled) "Enable" else "Disable")
+            }
+        }
+
         var markdown by remember { mutableStateOf("") }
         MarkdownBlock(markdown, modifier = Modifier.fillMaxWidth())
         MathBlock(markdown)

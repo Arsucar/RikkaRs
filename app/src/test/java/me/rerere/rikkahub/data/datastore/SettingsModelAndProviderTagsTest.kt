@@ -10,6 +10,12 @@ import kotlin.uuid.Uuid
 
 class SettingsModelAndProviderTagsTest {
     @Test
+    fun sponsorAlertDisabledDefaultsToFalseAndCanBePersistedInModel() {
+        assertFalse(Settings().sponsorAlertDisabled)
+        assertTrue(Settings().copy(sponsorAlertDisabled = true).sponsorAlertDisabled)
+    }
+
+    @Test
     fun recentChatModelMovesSelectedModelToFrontAndKeepsLimit() {
         val models = List(10) { Uuid.random() }
         val settings = Settings.dummy().copy(recentChatModels = models)

@@ -92,7 +92,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
 
-    if (settings.launchCount > 100 && (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50) {
+    if (!settings.sponsorAlertDisabled &&
+        settings.launchCount > 100 &&
+        (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50
+    ) {
         AlertDialog(
             onDismissRequest = {
                 vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
@@ -109,10 +112,17 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-                }) {
-                    Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
+                    }) {
+                        Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
+                    }
+                    TextButton(onClick = {
+                        vm.updateSettings(settings.copy(sponsorAlertDisabled = true))
+                    }) {
+                        Text(stringResource(R.string.setting_page_sponsor_alert_disable))
+                    }
                 }
             },
         )
