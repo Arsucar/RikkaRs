@@ -193,6 +193,7 @@ import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.workspace.WorkspaceBindMount
 import java.io.File
 import java.time.Instant
+import kotlin.time.Instant as KotlinInstant
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -3597,11 +3598,42 @@ internal fun Conversation.asFinalSnapshot(): Conversation =
 internal fun shouldSkipInitializeOnGenerating(session: ConversationSession): Boolean =
     session.isGenerating
 
+internal fun Conversation.closeCheckpointReasoning(): Conversation = copy(
+    messageNodes = messageNodes.map { node ->
+        node.copy(
+            messages = node.messages.map { message ->
+                message.copy(
+                    parts = message.parts.map { part ->
+                        if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
+                            // Preserve the duration captured by the checkpoint, but never let the
+                            // historical tail run until the current wall clock.
+                            part.copy(
+                                finishedAt = KotlinInstant.fromEpochMilliseconds(updateAt.toEpochMilli())
+                                    .coerceAtLeast(part.createdAt)
+                            )
+                        } else {
+                            part
+                        }
+                    }
+                )
+            }
+        )
+    }
+)
+
 internal fun hydrateConversationFromDb(
     loaded: Conversation,
     session: ConversationSession,
     json: Json,
 ): Conversation {
     if (session.isGenerating) return loaded
-    return loaded.cleanStaleSubagentStreaming(json)
+    val hydrated = loaded.cleanStaleSubagentStreaming(json)
+    return if (hydrated.isCheckpointSnapshot) {
+        // A checkpoint can contain a provider stream that ended between snapshots. Treat its
+        // unfinished reasoning as historical at restore time. The next reasoning delta will then
+        // start a new part (see UIMessage.appendChunk), so only the resumed generation tail runs.
+        hydrated.closeCheckpointReasoning()
+    } else {
+        hydrated
+    }
 }

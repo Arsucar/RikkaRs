@@ -76,8 +76,10 @@ data class UIMessage(
                             acc
                         } else {
                             val lastPart = acc.lastOrNull()
-                            if (lastPart is UIMessagePart.Reasoning) {
-                                // Append to the last Reasoning part
+                            if (lastPart is UIMessagePart.Reasoning && lastPart.finishedAt == null) {
+                                // Append only to the active reasoning tail. A closed reasoning part
+                                // may be followed by a new generation (for example after restoring
+                                // a checkpoint), so it must not inherit the old start time.
                                 acc.dropLast(1) + UIMessagePart.Reasoning(
                                     reasoning = lastPart.reasoning + deltaPart.reasoning,
                                     createdAt = lastPart.createdAt,
@@ -86,8 +88,8 @@ data class UIMessage(
                                     it.metadata = deltaPart.metadata ?: lastPart.metadata
                                 }
                             } else {
-                                // Create new Reasoning part
-                                acc + deltaPart
+                                // Create a fresh reasoning part for a new generation.
+                                acc + deltaPart.copy(finishedAt = null)
                             }
                         }
                     }

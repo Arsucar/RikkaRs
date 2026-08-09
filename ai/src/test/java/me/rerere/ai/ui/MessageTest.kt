@@ -1,6 +1,7 @@
 package me.rerere.ai.ui
 
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.time.Instant
 import me.rerere.ai.core.MessageRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -180,6 +181,88 @@ class MessageTest {
     }
 
     // ==================== isValidToUpload Tests ====================
+
+    @Test
+    fun `new reasoning delta starts a fresh part after a closed reasoning part`() {
+        val createdAt = Instant.parse("2024-01-01T00:00:00Z")
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(
+                    reasoning = "restored",
+                    createdAt = createdAt,
+                    finishedAt = createdAt,
+                )
+            )
+        )
+        val chunk = MessageChunk(
+            id = "chunk",
+            model = "model",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(UIMessagePart.Reasoning(reasoning = " resumed ", finishedAt = null)),
+                    ),
+                    message = null,
+                    finishReason = null,
+                )
+            )
+        )
+
+        val result = message + chunk
+        assertEquals(2, result.parts.size)
+        assertEquals(createdAt, (result.parts[0] as UIMessagePart.Reasoning).createdAt)
+        assertEquals(" resumed ", (result.parts[1] as UIMessagePart.Reasoning).reasoning)
+        assertTrue((result.parts[1] as UIMessagePart.Reasoning).finishedAt == null)
+    }
+
+    @Test
+    fun `active reasoning delta continues the current reasoning tail`() {
+        val createdAt = Instant.parse("2024-01-01T00:00:00Z")
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(UIMessagePart.Reasoning("old", createdAt = createdAt, finishedAt = null))
+        )
+        val chunk = MessageChunk(
+            id = "chunk",
+            model = "model",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Reasoning(" tail ", finishedAt = null))),
+                    message = null,
+                    finishReason = null,
+                )
+            )
+        )
+
+        val result = message + chunk
+        assertEquals(1, result.parts.size)
+        assertEquals("old tail ", (result.parts.single() as UIMessagePart.Reasoning).reasoning)
+        assertEquals(createdAt, (result.parts.single() as UIMessagePart.Reasoning).createdAt)
+        assertTrue((result.parts.single() as UIMessagePart.Reasoning).finishedAt == null)
+    }
+
+    @Test
+    fun `finishReasoning closes only active reasoning parts`() {
+        val finishedAt = Instant.parse("2024-01-01T00:01:00Z")
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(
+                    reasoning = "restored",
+                    createdAt = Instant.parse("2024-01-01T00:00:00Z"),
+                    finishedAt = finishedAt,
+                ),
+                UIMessagePart.Text("answer"),
+            )
+        )
+
+        val result = message.finishReasoning()
+        assertEquals(message, result)
+    }
 
     @Test
     fun `isValidToUpload should be true for non-empty reasoning with empty text`() {
