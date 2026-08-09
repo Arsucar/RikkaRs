@@ -5,9 +5,8 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
+import okio.Buffer
 import okio.BufferedSource
-import okio.buffer
-import okio.source
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,7 +70,10 @@ class ReplayResponseLifecycleTest {
         var closed = false
         override fun contentType(): MediaType? = null
         override fun contentLength(): Long = 0
-        override fun source(): BufferedSource = "".source().buffer()
-        override fun close() { closed = true }
+        override fun source(): BufferedSource = Buffer()
+        override fun close() {
+            closed = true
+            super.close()
+        }
     }
 }
