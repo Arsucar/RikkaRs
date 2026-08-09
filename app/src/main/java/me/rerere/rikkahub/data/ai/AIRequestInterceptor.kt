@@ -107,11 +107,15 @@ class AIRequestInterceptor(
             return response
         }
 
-        // 当前仍存活的 429 响应（未被 close），供上层读取/分类
-        var lastResponse: Response = response
+        // Only the response returned to OkHttp may remain open. Every response that is
+        // replaced by a replay is closed before the next chain.proceed call. This is
+        // important for OkHttp: proceeding while the previous response body is still
+        // open can fail with "previous response is still open".
+        val responseLifecycle = ReplayResponseLifecycle(response)
         val switches = mutableListOf<SwitchAttempt>()
         var finalCode: Int? = response.code
         var exhausted = false
+
         return try {
             runBlocking {
                 for (attempt in 1..clashConfig.maxRetries) {
@@ -132,36 +136,36 @@ class AIRequestInterceptor(
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         switches += SwitchAttempt(nodeName = null, success = false, error = e.message, replayedCode = null)
-                        return@runBlocking lastResponse
+                        return@runBlocking responseLifecycle.handOff()
                     }
                     delay(clashConfig.switchDelayMs) // 挂起式等待，不占 dispatcher 线程
 
+                    // Release the previous response before opening the replay response.
+                    // If proceed throws, the old response is already closed and must not be
+                    // returned to the caller; the exception is allowed to propagate.
+                    responseLifecycle.closeBeforeReplay()
                     val replayed = try {
                         chain.proceed(request) // 重放原请求（不持锁）
                     } catch (io: IOException) {
                         Log.i("ClashRetry", "attempt $attempt proceed IOException: ${io.message}")
                         switches += SwitchAttempt(nodeName = switchedTo, success = true, error = "proceed IOException: ${io.message}", replayedCode = null)
-                        return@runBlocking lastResponse
+                        throw io
                     }
+                    responseLifecycle.accept(replayed)
                     switches += SwitchAttempt(nodeName = switchedTo, success = true, error = null, replayedCode = replayed.code)
+                    finalCode = replayed.code
                     if (replayed.code != 429) {
-                        finalCode = replayed.code
-                        lastResponse.close() // 丢弃旧 429 body，避免连接泄漏
-                        return@runBlocking replayed // 重放成功（AC2）
+                        return@runBlocking responseLifecycle.handOff() // 重放成功（AC2）
                     }
-                    lastResponse.close()
-                    lastResponse = replayed
                     Log.i("ClashRetry", "attempt $attempt still 429, switched to $switchedTo")
                 }
                 exhausted = true // 重试耗尽 -> 最后一次 429 原样返回（AC4）
-                lastResponse
+                responseLifecycle.handOff()
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.i("ClashRetry", "429 retry skipped: ${e.message}")
-            switches += SwitchAttempt(nodeName = null, success = false, error = e.message, replayedCode = null)
-            lastResponse // 任一步失败 -> 原 429（AC3），保持未 close 可读
-        }.also {
+        } finally {
+            // Covers cancellation during the delay/replay and any unexpected exception.
+            // A response handed to OkHttp must remain open for its caller to consume.
+            responseLifecycle.closeIfNotHandedOff()
             runBlocking {
                 clashRetryTracer.record(
                     ClashRetryTrace(
@@ -200,5 +204,32 @@ class AIRequestInterceptor(
         private const val SKIP_MAX_RETRIES = "SKIP_MAX_RETRIES"
         private const val SKIP_NO_PROVIDER = "SKIP_NO_PROVIDER"
         private const val SKIP_ROTATION_DISABLED = "SKIP_ROTATION_DISABLED"
+    }
+}
+
+/** Owns the response currently held by the interceptor during replay. */
+internal class ReplayResponseLifecycle(initial: Response) {
+    private var current: Response? = initial
+    private var handedOff = false
+
+    /** Closes the response before [Interceptor.Chain.proceed] opens its replay response. */
+    fun closeBeforeReplay() {
+        current?.close()
+        current = null
+    }
+
+    fun accept(response: Response) {
+        check(current == null) { "previous response must be closed before accepting replay" }
+        current = response
+    }
+
+    fun handOff(): Response {
+        handedOff = true
+        return checkNotNull(current)
+    }
+
+    /** Closes an owned response on cancellation or an exception before hand-off. */
+    fun closeIfNotHandedOff() {
+        if (!handedOff) current?.close()
     }
 }
