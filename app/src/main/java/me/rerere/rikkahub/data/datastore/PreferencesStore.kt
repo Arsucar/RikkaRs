@@ -242,6 +242,7 @@ class SettingsStore(
 
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+        val SPONSOR_ALERT_DISABLED = booleanPreferencesKey("sponsor_alert_disabled")
 
         val WORKSPACE_FILES_STORAGE = stringPreferencesKey("workspace_files_storage")
 
@@ -401,6 +402,7 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                sponsorAlertDisabled = preferences[SPONSOR_ALERT_DISABLED] == true,
                 workspaceFilesStorage = preferences[WORKSPACE_FILES_STORAGE]
                     ?.let { runCatching { WorkspaceFilesStorage.valueOf(it) }.getOrNull() }
                     ?: WorkspaceFilesStorage.PRIVATE,
@@ -1186,6 +1188,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.LAUNCH_COUNT] = settings.launchCount
     this[SettingsStore.WORKSPACE_FILES_STORAGE] = settings.workspaceFilesStorage.name
     this[SettingsStore.SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+    this[SettingsStore.SPONSOR_ALERT_DISABLED] = settings.sponsorAlertDisabled
     // [SemanticMemory Plugin]
     this[SettingsStore.SEMANTIC_MEMORY_CONFIG] = JsonInstant.encodeToString(settings.semanticMemoryConfig)
     this[SettingsStore.CLASH_PROXY_CONFIG] = JsonInstant.encodeToString(settings.clashConfig)
@@ -1497,6 +1500,7 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    val sponsorAlertDisabled: Boolean = false,
     val workspaceFilesStorage: WorkspaceFilesStorage = WorkspaceFilesStorage.PRIVATE,
     // [SemanticMemory Plugin]
     val semanticMemoryConfig: me.rerere.rikkahub.data.memory.semantic.SemanticMemoryConfig =
