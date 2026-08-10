@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.pages.log
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +9,7 @@ import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.File01
 import me.rerere.hugeicons.stroke.Tick01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -71,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,11 +84,13 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import org.koin.compose.koinInject
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.EmptyState
 import me.rerere.rikkahub.ui.components.ui.JsonTreeState
 import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.rememberJsonTreeState
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
@@ -100,6 +103,7 @@ import kotlin.uuid.Uuid
 @Composable
 fun LogPage() {
     val context = LocalContext.current
+    val toaster = LocalToaster.current
     val settingsStore = koinInject<SettingsStore>()
     val appScope = koinInject<AppScope>()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
@@ -141,8 +145,11 @@ fun LogPage() {
                     } ?: error("openOutputStream failed")
                 }
             }
-            val message = if (result.isSuccess) exportSuccessText else exportFailedText
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            if (result.isSuccess) {
+                toaster.show(exportSuccessText, type = ToastType.Success)
+            } else {
+                toaster.show(exportFailedText, type = ToastType.Error)
+            }
             selecting = false
             selectedIds.clear()
         }
@@ -263,6 +270,16 @@ private fun UnifiedLogList(
                     enabled = requestLoggingEnabled,
                     onEnabledChange = onRequestLoggingChange,
                 )
+            }
+
+            if (sortedLogs.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = HugeIcons.File01,
+                        title = stringResource(R.string.log_page_empty_title),
+                        description = stringResource(R.string.log_page_empty_description),
+                    )
+                }
             }
 
             items(sortedLogs, key = { it.id }, contentType = { it.javaClass.simpleName }) { log ->

@@ -4,13 +4,8 @@ import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptDef
 import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.inPresetDisplayOrder
 import kotlin.uuid.Uuid
-
-internal fun PresetEntry.Reference.hasValidTarget(
-    modeInjections: List<PromptInjection.ModeInjection>,
-): Boolean = modeInjections.any { it.id == modeInjectionId }
 
 internal fun PresetEntry.Builtin.switchBuiltinKey(
     newKey: String,
@@ -26,45 +21,45 @@ internal fun PresetEntry.Builtin.switchBuiltinKey(
 internal fun BuiltinPromptDef.hasEditorVariables(): Boolean = supportedVariables.isNotEmpty()
 
 /**
- * entries-aware 条目计数（issue #182）。
- *
- * 新 [Preset.entries] 模型下统计已启用条目数；旧模型（无 entries）回退到
- * [Preset.effectiveInjectionIds] 的大小。避免对新模型恒显示 0。
+ * config-only Builtin：不进入通用对话注入路径（#245 / #182）。
+ * `enabled` 仍门控专用功能 override，但不得计入「启用注入条目」展示。
  */
-internal fun Preset.displayEntryCount(): Int =
-    if (hasEntries()) entries.count { it.enabled } else effectiveInjectionIds().size
+internal fun PresetEntry.isConfigOnlyBuiltin(): Boolean =
+    this is PresetEntry.Builtin && BuiltinPromptRegistry[builtinKey]?.injectable != true
+
+/** 是否计入启用条目展示（通用注入语义，排除 config-only Builtin）。 */
+internal fun PresetEntry.countsTowardDisplayEntries(): Boolean =
+    enabled && !isConfigOnlyBuiltin()
 
 /**
- * entries-aware 已启用条目展示名列表（issue #182）。
+ * entries-aware 条目计数（issue #182 / #245 / #259）。
+ *
+ * 新 [Preset.entries] 模型下统计已启用且会参与通用注入的条目数；
+ * config-only Builtin 不计入。旧模型回退到 [Preset.effectiveInjectionIds] 的大小。
+ */
+internal fun Preset.displayEntryCount(): Int =
+    if (hasEntries()) entries.count { it.countsTowardDisplayEntries() } else effectiveInjectionIds().size
+
+/**
+ * entries-aware 已启用条目展示名列表（issue #182 / #245 / #259）。
  *
  * - Custom：使用 name
- * - Builtin：使用 builtinKey
- * - Reference：解析全局 [modeInjections] 中对应注入的 name
+ * - Builtin：仅 injectable 的 builtinKey
  *
- * 空白名会被过滤。按 order 升序排列。旧模型回退到 [Preset.effectiveInjectionIds]
- * 对应的全局注入名。
+ * 空白名会被过滤。按 order 升序排列。
  */
-internal fun Preset.displayEntryNames(
-    modeInjections: List<PromptInjection.ModeInjection>,
-): List<String> = if (hasEntries()) {
+internal fun Preset.displayEntryNames(): List<String> = if (hasEntries()) {
     entries
-        .filter { it.enabled }
+        .filter { it.countsTowardDisplayEntries() }
         .inPresetDisplayOrder()
         .mapNotNull { entry ->
             when (entry) {
                 is PresetEntry.Custom -> entry.name.takeIf { it.isNotBlank() }
                 is PresetEntry.Builtin -> entry.builtinKey.takeIf { it.isNotBlank() }
-                is PresetEntry.Reference -> modeInjections
-                    .firstOrNull { it.id == entry.modeInjectionId }
-                    ?.name
-                    ?.takeIf { it.isNotBlank() }
             }
         }
 } else {
-    modeInjections
-        .filter { it.id in effectiveInjectionIds() }
-        .map { it.name }
-        .filter { it.isNotBlank() }
+    emptyList()
 }
 
 /** 同类型条目组内移动；用户显式重排 Custom 后由 order 接管，清除迁移期 legacyPriority。 */
@@ -88,7 +83,6 @@ internal fun movePresetEntryInGroup(
         when (entry) {
             is PresetEntry.Custom -> entry.copy(order = order, legacyPriority = null)
             is PresetEntry.Builtin -> entry.copy(order = order)
-            is PresetEntry.Reference -> entry.copy(order = order)
         }
     }.associateBy { it.id }
     return entries.map { entry -> remapped[entry.id] ?: entry }
@@ -96,10 +90,6 @@ internal fun movePresetEntryInGroup(
 
 /**
  * 当前预设尚未占用的内置模板 key（issue #182）。
- *
- * 返回 [BuiltinPromptRegistry.all] 中未被其他（启用或禁用）[PresetEntry.Builtin] 条目占用的 key，
- * 按注册表声明顺序返回。新增时排除全部已占用 key；编辑时通过 [editingEntryId] 保留当前 key，
- * 同时排除兄弟条目已占用的 key。
  */
 internal fun availableBuiltinKeys(
     entries: List<PresetEntry>,
@@ -121,10 +111,6 @@ internal fun availableBuiltinKeys(
 
 /**
  * 拖拽重排：将 [fromId] 条目移动到 [toId] 条目所在位置（issue #182）。
- *
- * 仅当两条目属于同一子类型（都 Custom 或都 Builtin/Reference）时才在该组内重排并
- * 重算 order（0..n）；跨组或找不到任一条目时原样返回。用户显式重排 Custom 后清除
- * 迁移期 legacyPriority（与 [movePresetEntryInGroup] 一致），其他组条目原位不动。
  */
 internal fun reorderPresetEntryByTarget(
     entries: List<PresetEntry>,
@@ -150,7 +136,6 @@ internal fun reorderPresetEntryByTarget(
         when (entry) {
             is PresetEntry.Custom -> entry.copy(order = order, legacyPriority = null)
             is PresetEntry.Builtin -> entry.copy(order = order)
-            is PresetEntry.Reference -> entry.copy(order = order)
         }
     }.associateBy { it.id }
     return entries.map { entry -> remapped[entry.id] ?: entry }

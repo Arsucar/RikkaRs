@@ -6,7 +6,6 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.inPresetDisplayOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,13 +18,13 @@ class PresetEntryUiTest {
     @Test
     fun `moving migrated custom entries clears legacy priority and preserves other groups`() {
         val first = PresetEntry.Custom(order = 0, content = "first", legacyPriority = 10)
-        val reference = PresetEntry.Reference(order = 0, modeInjectionId = Uuid.random())
+        val builtin = PresetEntry.Builtin(order = 0, builtinKey = BuiltinPromptRegistry.KEY_SUGGESTION)
         val second = PresetEntry.Custom(order = 1, content = "second", legacyPriority = 5)
-        val entries = listOf(first, reference, second)
+        val entries = listOf(first, builtin, second)
 
         val moved = movePresetEntryInGroup(entries, second.id, -1)
 
-        assertEquals(reference, moved[1])
+        assertEquals(builtin, moved[1])
         val customs = moved.inPresetDisplayOrder().filterIsInstance<PresetEntry.Custom>()
         assertEquals(listOf("second", "first"), customs.map { it.content })
         assertTrue(customs.map { it.order } == listOf(0, 1))
@@ -40,25 +39,43 @@ class PresetEntryUiTest {
         )
 
         assertEquals(0, preset.displayEntryCount())
-        assertTrue(preset.displayEntryNames(emptyList()).isEmpty())
+        assertTrue(preset.displayEntryNames().isEmpty())
     }
 
     @Test
-    fun `entry names follow detail page type sections`() {
-        val target = PromptInjection.ModeInjection(name = "Reference")
+    fun `entry names follow detail page type sections excluding config-only builtins`() {
         val preset = Preset(
             entries = listOf(
-                PresetEntry.Reference(order = 0, modeInjectionId = target.id),
                 PresetEntry.Custom(order = 0, name = "Custom"),
                 PresetEntry.Builtin(order = 0, builtinKey = "suggestion"),
             ),
         )
 
         assertEquals(
-            listOf("suggestion", "Custom", "Reference"),
-            preset.displayEntryNames(listOf(target)),
+            listOf("Custom"),
+            preset.displayEntryNames(),
         )
-        assertEquals(3, preset.displayEntryCount())
+        assertEquals(1, preset.displayEntryCount())
+        assertTrue(preset.entries.single { it is PresetEntry.Builtin }.isConfigOnlyBuiltin())
+        assertFalse(preset.entries.single { it is PresetEntry.Builtin }.countsTowardDisplayEntries())
+    }
+
+    @Test
+    fun `disabled custom is excluded from display count`() {
+        val preset = Preset(
+            entries = listOf(
+                PresetEntry.Custom(order = 0, name = "On", enabled = true),
+                PresetEntry.Custom(order = 1, name = "Off", enabled = false),
+                PresetEntry.Builtin(
+                    order = 0,
+                    builtinKey = BuiltinPromptRegistry.KEY_MEMORY_TABLE_GUIDE,
+                    enabled = true,
+                ),
+            ),
+        )
+
+        assertEquals(1, preset.displayEntryCount())
+        assertEquals(listOf("On"), preset.displayEntryNames())
     }
 
     @Test
@@ -117,16 +134,6 @@ class PresetEntryUiTest {
             listOf("{locale}", "{content}", "{user_instruction}"),
             replyDraft.supportedVariables,
         )
-    }
-
-    @Test
-    fun `reference validity requires the exact global target`() {
-        val target = PromptInjection.ModeInjection()
-        val reference = PresetEntry.Reference(modeInjectionId = target.id)
-
-        assertTrue(reference.hasValidTarget(listOf(target)))
-        assertFalse(reference.hasValidTarget(emptyList()))
-        assertFalse(reference.hasValidTarget(listOf(PromptInjection.ModeInjection())))
     }
 
     @Test
@@ -201,7 +208,6 @@ class PresetEntryUiTest {
 
         val reordered = reorderPresetEntryByTarget(entries, builtinB.id, builtinA.id)
 
-        // Custom untouched in place and keeps its legacyPriority.
         assertEquals(custom, reordered[1])
         val builtins = reordered.filterIsInstance<PresetEntry.Builtin>().sortedBy { it.order }
         assertEquals(

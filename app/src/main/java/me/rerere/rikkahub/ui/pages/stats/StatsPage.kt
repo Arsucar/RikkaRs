@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -64,6 +63,9 @@ import me.rerere.rikkahub.data.ai.ApiModelHealth
 import me.rerere.rikkahub.data.db.entity.ApiCallRecordEntity
 import me.rerere.rikkahub.data.db.entity.ApiCallStatus
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.EmptyState
+import me.rerere.rikkahub.ui.components.ui.ErrorState
+import me.rerere.rikkahub.ui.components.ui.ShimmerBone
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -127,14 +129,11 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { padding ->
         if (stats.isLoading) {
-            Box(
+            StatsLoadingSkeleton(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            )
         } else if (stats.loadError && stats.lastUpdatedAtMs == null) {
             Box(
                 modifier = Modifier
@@ -142,9 +141,10 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                StatsLoadErrorContent(
+                ErrorState(
+                    title = stringResource(R.string.stats_page_load_error),
+                    retryLabel = stringResource(R.string.stats_page_load_error_retry),
                     onRetry = { vm.refresh() },
-                    centered = true,
                 )
             }
         } else {
@@ -207,30 +207,30 @@ private fun formatLastUpdated(epochMs: Long): String {
 }
 
 @Composable
-private fun StatsLoadErrorContent(
-    onRetry: () -> Unit,
-    centered: Boolean,
-    modifier: Modifier = Modifier,
-) {
+private fun StatsLoadingSkeleton(modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.padding(24.dp),
-        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
+        modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(
-            imageVector = HugeIcons.Alert01,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(
-            text = stringResource(R.string.stats_page_load_error),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Button(onClick = onRetry) {
-            Text(stringResource(R.string.stats_page_load_error_retry))
+        // Heatmap card placeholder
+        ShimmerBone(height = 160.dp)
+        // Stats grid placeholders (2x2)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ShimmerBone(modifier = Modifier.weight(1f), height = 96.dp)
+            ShimmerBone(modifier = Modifier.weight(1f), height = 96.dp)
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ShimmerBone(modifier = Modifier.weight(1f), height = 96.dp)
+            ShimmerBone(modifier = Modifier.weight(1f), height = 96.dp)
+        }
+        // API health card placeholder
+        ShimmerBone(height = 180.dp)
     }
 }
 
@@ -590,10 +590,9 @@ private fun ApiHealthCard(
             }
 
             if (overview.totalCalls == 0) {
-                Text(
-                    text = stringResource(R.string.stats_page_api_health_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                EmptyState(
+                    icon = HugeIcons.ChartColumn,
+                    title = stringResource(R.string.stats_page_api_health_empty),
                 )
             } else {
                 Row(
@@ -810,10 +809,9 @@ private fun ApiModelDetailSheet(
                 style = MaterialTheme.typography.titleSmall,
             )
             if (records.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.stats_page_api_health_detail_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                EmptyState(
+                    icon = HugeIcons.ChartColumn,
+                    title = stringResource(R.string.stats_page_api_health_detail_empty),
                 )
             } else {
                 Column(

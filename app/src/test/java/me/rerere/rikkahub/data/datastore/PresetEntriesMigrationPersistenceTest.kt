@@ -1,21 +1,22 @@
 package me.rerere.rikkahub.data.datastore
 
 import androidx.datastore.preferences.core.mutablePreferencesOf
+import me.rerere.rikkahub.data.model.LegacyModeInjection
+import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
-import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
 class PresetEntriesMigrationPersistenceTest {
     @Test
-    fun `migration snapshots entries and preserves unrelated preferences`() {
-        val injection = PromptInjection.ModeInjection(
+    fun `migration snapshots legacy ids to custom and clears mode_injections key`() {
+        val injection = LegacyModeInjection(
             id = Uuid.random(),
             name = "Snapshot",
             content = "snapshot content",
@@ -39,12 +40,13 @@ class PresetEntriesMigrationPersistenceTest {
         assertTrue(migrated.modeInjectionIds.isEmpty())
         assertFalse(preferences[SettingsStore.DYNAMIC_COLOR]!!)
         assertTrue(preferences[SettingsStore.PRESET_ENTRIES_MIGRATED]!!)
+        assertNull(preferences[SettingsStore.MODE_INJECTIONS])
         assertFalse(preferences.migratePresetEntriesIfNeeded())
     }
 
     @Test
     fun `migration marker does not block a later imported legacy preset`() {
-        val injection = PromptInjection.ModeInjection(
+        val injection = LegacyModeInjection(
             id = Uuid.random(),
             content = "imported legacy content",
         )
@@ -62,31 +64,91 @@ class PresetEntriesMigrationPersistenceTest {
         assertEquals("imported legacy content", migrated.entries.single().let {
             (it as PresetEntry.Custom).content
         })
+        assertNull(preferences[SettingsStore.MODE_INJECTIONS])
     }
 
     @Test
-    fun `global injection deletion snapshots legacy presets first`() {
-        val injection = PromptInjection.ModeInjection(
-            id = Uuid.random(),
-            content = "must survive deletion",
+    fun `reference entries snapshot to custom with equivalent content`() {
+        val injectionId = Uuid.random()
+        val injection = LegacyModeInjection(
+            id = injectionId,
+            name = "Ref Target",
+            content = "referenced body",
+            priority = 3,
         )
-        val settings = Settings(
-            modeInjections = listOf(injection),
-            presets = listOf(Preset(modeInjectionIds = setOf(injection.id))),
+        val entryId = Uuid.random()
+        // Build raw JSON with reference discriminator so sealed decode fails and JSON migrator runs.
+        val rawPresets = """
+            [{
+              "id":"${Uuid.random()}",
+              "name":"with-ref",
+              "description":"",
+              "modeInjectionIds":[],
+              "disabledEntryIds":[],
+              "entries":[{
+                "type":"reference",
+                "id":"$entryId",
+                "enabled":true,
+                "order":0,
+                "position":"after_system_prompt",
+                "injectDepth":4,
+                "role":"user",
+                "modeInjectionId":"$injectionId"
+              }],
+              "entriesVersion":1
+            }]
+        """.trimIndent()
+        val preferences = mutablePreferencesOf(
+            SettingsStore.MODE_INJECTIONS to JsonInstant.encodeToString(listOf(injection)),
+            SettingsStore.PRESETS to rawPresets,
         )
 
-        val updated = settings.withModeInjectionsPreservingPresetSnapshots(emptyList())
+        assertTrue(preferences.migratePresetEntriesIfNeeded())
 
-        assertTrue(updated.modeInjections.isEmpty())
-        assertEquals(
-            "must survive deletion",
-            (updated.presets.single().entries.single() as PresetEntry.Custom).content,
+        val migrated = JsonInstant.decodeFromString<List<Preset>>(preferences[SettingsStore.PRESETS]!!).single()
+        val custom = migrated.entries.single() as PresetEntry.Custom
+        assertEquals("referenced body", custom.content)
+        assertEquals("Ref Target", custom.name)
+        assertEquals(entryId, custom.id)
+        assertNull(preferences[SettingsStore.MODE_INJECTIONS])
+    }
+
+    @Test
+    fun `invalid reference is dropped when target missing`() {
+        val rawPresets = """
+            [{
+              "id":"${Uuid.random()}",
+              "name":"orphan-ref",
+              "description":"",
+              "modeInjectionIds":[],
+              "disabledEntryIds":[],
+              "entries":[{
+                "type":"reference",
+                "id":"${Uuid.random()}",
+                "enabled":true,
+                "order":0,
+                "position":"after_system_prompt",
+                "injectDepth":4,
+                "role":"user",
+                "modeInjectionId":"${Uuid.random()}"
+              }],
+              "entriesVersion":1
+            }]
+        """.trimIndent()
+        val preferences = mutablePreferencesOf(
+            SettingsStore.MODE_INJECTIONS to JsonInstant.encodeToString(emptyList<LegacyModeInjection>()),
+            SettingsStore.PRESETS to rawPresets,
         )
+
+        assertTrue(preferences.migratePresetEntriesIfNeeded())
+
+        val migrated = JsonInstant.decodeFromString<List<Preset>>(preferences[SettingsStore.PRESETS]!!).single()
+        assertTrue(migrated.entries.isEmpty())
     }
 
     @Test
     fun `missing preset store persists the generated default snapshot`() {
-        val injection = PromptInjection.ModeInjection(
+        val injection = LegacyModeInjection(
             id = Uuid.random(),
             content = "default snapshot",
         )
@@ -102,6 +164,54 @@ class PresetEntriesMigrationPersistenceTest {
             "default snapshot",
             (migrated.entries.single() as PresetEntry.Custom).content,
         )
+        assertNull(preferences[SettingsStore.MODE_INJECTIONS])
+    }
+
+    @Test
+    fun `orphan mode injections not referenced by presets are absorbed into default preset`() {
+        val referenced = LegacyModeInjection(
+            id = Uuid.random(),
+            name = "In Preset",
+            content = "referenced body",
+            priority = 5,
+        )
+        val orphan = LegacyModeInjection(
+            id = Uuid.random(),
+            name = "Orphan Only",
+            content = "orphan body",
+            priority = 1,
+        )
+        val existingPreset = Preset(
+            id = Uuid.random(),
+            name = "Existing",
+            modeInjectionIds = setOf(referenced.id),
+        )
+        val preferences = mutablePreferencesOf(
+            SettingsStore.MODE_INJECTIONS to JsonInstant.encodeToString(listOf(referenced, orphan)),
+            SettingsStore.PRESETS to JsonInstant.encodeToString(listOf(existingPreset)),
+        )
+
+        assertTrue(preferences.migratePresetEntriesIfNeeded())
+
+        val migrated = JsonInstant.decodeFromString<List<Preset>>(preferences[SettingsStore.PRESETS]!!)
+        assertNull(preferences[SettingsStore.MODE_INJECTIONS])
+
+        val existing = migrated.first { it.id == existingPreset.id }
+        assertEquals("referenced body", (existing.entries.single() as PresetEntry.Custom).content)
+
+        val default = migrated.first { it.id == DEFAULT_PRESET_ID }
+        assertEquals("orphan body", (default.entries.single() as PresetEntry.Custom).content)
+        assertEquals(orphan.id, default.entries.single().id)
+    }
+
+    @Test
+    fun `invalid presets json does not wipe via migratePresetsJsonWithReferences emptyList`() {
+        try {
+            migratePresetsJsonWithReferences("not-json-at-all", emptyList())
+            org.junit.Assert.fail("expected error on invalid presets JSON")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message!!.contains("Failed to parse presets JSON"))
+        }
     }
 
     @Test
@@ -125,7 +235,6 @@ class PresetEntriesMigrationPersistenceTest {
             preferences.writePresetUpdate(
                 presetId = target.id,
                 fallbackPresets = listOf(staleFallback, untouched),
-                fallbackModeInjections = emptyList(),
             ) { latest ->
                 latest.copy(entries = latest.entries.filterNot { it.id == deleteTarget.id })
             }
@@ -151,7 +260,7 @@ class PresetEntriesMigrationPersistenceTest {
         )
 
         assertTrue(
-            preferences.writePresetUpdate(preset.id, listOf(preset), emptyList()) { latest ->
+            preferences.writePresetUpdate(preset.id, listOf(preset)) { latest ->
                 latest.copy(
                     entries = latest.entries.map {
                         if (it.id == edited.id) (it as PresetEntry.Custom).copy(content = "after") else it
@@ -160,7 +269,7 @@ class PresetEntriesMigrationPersistenceTest {
             }
         )
         assertTrue(
-            preferences.writePresetUpdate(preset.id, listOf(preset), emptyList()) { latest ->
+            preferences.writePresetUpdate(preset.id, listOf(preset)) { latest ->
                 latest.copy(entries = latest.entries.filterNot { it.id == deleteTarget.id })
             }
         )

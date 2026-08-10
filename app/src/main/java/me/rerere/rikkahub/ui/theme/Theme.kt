@@ -77,6 +77,23 @@ fun RikkahubTheme(
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
 
+    val display = settings.displaySetting
+    val appTypography = remember(
+        display.uiTypographyFamily,
+        display.uiTypographyWeightBias,
+        display.uiTypographyScale,
+        display.uiTypographyLineHeightScale,
+        display.uiTypographyLetterSpacingScale,
+    ) {
+        resolveAppTypography(
+            family = display.uiTypographyFamily,
+            weightBias = display.uiTypographyWeightBias,
+            scale = display.uiTypographyScale,
+            lineHeightScale = display.uiTypographyLineHeightScale,
+            letterSpacingScale = display.uiTypographyLetterSpacingScale,
+        )
+    }
+
     // 更新状态栏图标颜色
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -96,7 +113,7 @@ fun RikkahubTheme(
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
-            typography = Typography,
+            typography = appTypography,
             content = content,
             motionScheme = MotionScheme.expressive()
         )

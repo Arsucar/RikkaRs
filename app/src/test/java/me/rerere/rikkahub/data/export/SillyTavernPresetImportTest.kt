@@ -621,7 +621,6 @@ class SillyTavernPresetImportTest {
             entries = listOf(
                 PresetEntry.Custom(name = "custom", content = "body"),
                 PresetEntry.Builtin(builtinKey = "suggestion"),
-                PresetEntry.Reference(),
             ),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )

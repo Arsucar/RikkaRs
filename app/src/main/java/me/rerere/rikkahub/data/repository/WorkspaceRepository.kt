@@ -7,9 +7,13 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.ai.tools.normalizeTrustedWriteRoot
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.workspace.SkillsPrivateEntryAssistant
+import me.rerere.rikkahub.data.workspace.resolveSkillsPrivateEntryAssistant
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
@@ -29,6 +33,7 @@ class WorkspaceRepository(
     private val manager: WorkspaceManager,
     private val rootfsInstaller: RootfsInstaller,
     private val settingsStore: SettingsStore,
+    private val skillManager: SkillManager,
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
@@ -114,6 +119,43 @@ class WorkspaceRepository(
         return true
     }
 
+    /**
+     * Add a trusted write root prefix for this workspace (#258).
+     * Returns false if workspace missing or root invalid / already present after normalize.
+     */
+    suspend fun addTrustedWriteRoot(id: String, root: String): Boolean {
+        val workspace = dao.getById(id) ?: return false
+        val normalized = normalizeTrustedWriteRoot(root) ?: return false
+        val current = workspace.trustedWriteRootList()
+        if (current.any { it == normalized }) return true
+        val updated = current + normalized
+        dao.upsert(
+            workspace.copy(
+                trustedWriteRoots = JsonInstant.encodeToString(updated),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        return true
+    }
+
+    /** Remove a trusted write root prefix (#258). Matches by normalized equality. */
+    suspend fun removeTrustedWriteRoot(id: String, root: String): Boolean {
+        val workspace = dao.getById(id) ?: return false
+        val normalized = normalizeTrustedWriteRoot(root) ?: root.trimEnd('/')
+        val current = workspace.trustedWriteRootList()
+        val updated = current.filterNot {
+            normalizeTrustedWriteRoot(it) == normalized || it == root
+        }
+        if (updated.size == current.size) return false
+        dao.upsert(
+            workspace.copy(
+                trustedWriteRoots = JsonInstant.encodeToString(updated),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+        return true
+    }
+
     suspend fun installRootfs(
         id: String,
         url: String,
@@ -145,24 +187,47 @@ class WorkspaceRepository(
         }
     }
 
+    /**
+     * 解析 /skills_private 入口助手 (0/1/many 绑定策略).
+     * [selectedAssistantId] 仅在多绑时由 UI 传入; 不做过期缓存.
+     */
+    fun resolveSkillsPrivateEntry(
+        workspaceId: String,
+        selectedAssistantId: Uuid? = null,
+    ): SkillsPrivateEntryAssistant =
+        resolveSkillsPrivateEntryAssistant(
+            settings = settingsStore.settingsFlow.value,
+            workspaceId = workspaceId,
+            selectedAssistantId = selectedAssistantId,
+        )
+
     suspend fun listFiles(
         id: String,
         area: WorkspaceStorageArea,
         path: String,
+        skillsPrivateAssistantId: Uuid? = null,
     ): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: return@withContext emptyList()
         manager.ensureWorkspace(workspace.root)
-        manager.listFiles(workspace.root, path, area)
+        val extra = skillsPrivateExtraMounts(id, area, path, skillsPrivateAssistantId)
+        manager.listFiles(workspace.root, path, area, extraBindMounts = extra)
     }
 
     suspend fun readText(
         id: String,
         path: String,
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+        skillsPrivateAssistantId: Uuid? = null,
     ): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.readText(root = workspace.root, path = path, area = area)
+        val extra = skillsPrivateExtraMounts(id, area, path, skillsPrivateAssistantId)
+        manager.readText(
+            root = workspace.root,
+            path = path,
+            area = area,
+            extraBindMounts = extra,
+        )
     }
 
     suspend fun writeText(
@@ -187,18 +252,20 @@ class WorkspaceRepository(
         id: String,
         area: WorkspaceStorageArea,
         path: String,
+        skillsPrivateAssistantId: Uuid? = null,
     ): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
         when (area) {
             WorkspaceStorageArea.FILES -> manager.readText(workspace.root, path)
             WorkspaceStorageArea.LINUX -> {
-                val size = manager.fileSize(workspace.root, path, area)
+                val extra = skillsPrivateExtraMounts(id, area, path, skillsPrivateAssistantId)
+                val size = manager.fileSize(workspace.root, path, area, extraBindMounts = extra)
                 require(size <= MAX_PREVIEW_BYTES) {
                     "文件过大, 无法预览 (${size} bytes)"
                 }
                 ByteArrayOutputStream().use { out ->
-                    manager.exportFile(workspace.root, path, area, out)
+                    manager.exportFile(workspace.root, path, area, out, extraBindMounts = extra)
                     out.toString(Charsets.UTF_8.name())
                 }
             }
@@ -222,10 +289,12 @@ class WorkspaceRepository(
         id: String,
         area: WorkspaceStorageArea,
         path: String,
+        skillsPrivateAssistantId: Uuid? = null,
     ): Long = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.fileSize(workspace.root, path, area)
+        val extra = skillsPrivateExtraMounts(id, area, path, skillsPrivateAssistantId)
+        manager.fileSize(workspace.root, path, area, extraBindMounts = extra)
     }
 
     suspend fun exportFile(
@@ -233,9 +302,11 @@ class WorkspaceRepository(
         area: WorkspaceStorageArea,
         path: String,
         outputStream: OutputStream,
+        skillsPrivateAssistantId: Uuid? = null,
     ) = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
-        manager.exportFile(workspace.root, path, area, outputStream)
+        val extra = skillsPrivateExtraMounts(id, area, path, skillsPrivateAssistantId)
+        manager.exportFile(workspace.root, path, area, outputStream, extraBindMounts = extra)
     }
 
     /** 按 Rootfs 内绝对路径读取文件大小, 支持 /workspace、bind mount 与 Rootfs 内部路径 */
@@ -365,6 +436,39 @@ class WorkspaceRepository(
         }
     }
 
+    /**
+     * LINUX 路径落在 /skills_private 时注入会话级挂载; 其它路径不注入.
+     * [skillsPrivateAssistantId] 为 null 时按 0/1/many 策略自动解析入口助手.
+     */
+    private fun skillsPrivateExtraMounts(
+        workspaceId: String,
+        area: WorkspaceStorageArea,
+        path: String,
+        skillsPrivateAssistantId: Uuid?,
+    ): List<WorkspaceBindMount> {
+        if (area != WorkspaceStorageArea.LINUX) return emptyList()
+        if (!isSkillsPrivatePath(path)) return emptyList()
+        val entry = resolveSkillsPrivateEntry(workspaceId, skillsPrivateAssistantId)
+        // 浏览器只读浏览: 源目录缺失时不强制创建, 由 Manager 返回空列表
+        val source = skillManager.getAssistantSkillsDir(
+            assistantId = entry.selectedAssistant.id,
+            createIfMissing = false,
+        )
+        return listOf(
+            WorkspaceBindMount(
+                source = source,
+                target = SKILLS_PRIVATE_TARGET,
+            ),
+        )
+    }
+
+    private fun isSkillsPrivatePath(path: String): Boolean {
+        val absolute = path.replace('\\', '/').trim().trimStart('/').trimEnd('/')
+        return absolute == SKILLS_PRIVATE_NAME ||
+            absolute.startsWith("$SKILLS_PRIVATE_NAME/") ||
+            absolute.isEmpty() // 根列表也需合成 skills_private 占位
+    }
+
     private suspend fun restoreShellState(workspace: WorkspaceEntity) {
         updateShellState(workspace.id, workspace.shellStatus)
     }
@@ -388,6 +492,8 @@ class WorkspaceRepository(
     companion object {
         private const val TAG = "WorkspaceRepository"
         private const val MAX_PREVIEW_BYTES = 512L * 1024
+        private const val SKILLS_PRIVATE_NAME = "skills_private"
+        private const val SKILLS_PRIVATE_TARGET = "/skills_private"
     }
 }
 

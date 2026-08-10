@@ -33,10 +33,17 @@ data class WorkspaceEntity(
     // 工具审批的用户覆盖项 (toolName -> needsApproval)，未覆盖的工具沿用默认值
     @ColumnInfo("tool_approvals", defaultValue = "{}")
     val toolApprovals: String = "{}",
+    // #258: 受信写入目录前缀 JSON List<String>，write/edit 路径硬审批旁路
+    @ColumnInfo("trusted_write_roots", defaultValue = "[]")
+    val trustedWriteRoots: String = "[]",
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
     }.getOrDefault(emptyMap())
+
+    fun trustedWriteRootList(): List<String> = runCatching {
+        JsonInstant.decodeFromString<List<String>>(trustedWriteRoots)
+    }.getOrDefault(emptyList())
 
     fun toWorkspace(): Workspace = Workspace(
         id = id,

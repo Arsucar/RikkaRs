@@ -421,7 +421,6 @@ function useDraftInputController({
   isHomeRoute,
   homeDraftId,
   setHomeDraftId,
-  useConversationPromptInjection,
   navigate,
   refreshList,
 }: {
@@ -429,7 +428,6 @@ function useDraftInputController({
   isHomeRoute: boolean;
   homeDraftId: string;
   setHomeDraftId: React.Dispatch<React.SetStateAction<string>>;
-  useConversationPromptInjection: boolean;
   navigate: ReturnType<typeof useNavigate>;
   refreshList: () => void;
 }) {
@@ -490,11 +488,8 @@ function useDraftInputController({
 
     await api.post<{ status: string }>(`conversations/${conversationId}/messages`, {
       parts,
-      ...(useConversationPromptInjection
-        ? {
-            modeInjectionIds: promptInjectionIds.modeInjectionIds,
-            lorebookIds: promptInjectionIds.lorebookIds,
-          }
+      ...(promptInjectionIds.lorebookIds.length > 0
+        ? { lorebookIds: promptInjectionIds.lorebookIds }
         : {}),
     });
     clearDraft(draftKey);
@@ -510,7 +505,6 @@ function useDraftInputController({
     navigate,
     refreshList,
     setHomeDraftId,
-    useConversationPromptInjection,
   ]);
 
   const replaceDraft = React.useCallback(
@@ -769,7 +763,6 @@ function ConversationsPageInner() {
     isHomeRoute,
     homeDraftId,
     setHomeDraftId,
-    useConversationPromptInjection: currentAssistant?.allowConversationPromptInjection === true,
     navigate,
     refreshList,
   });

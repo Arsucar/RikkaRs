@@ -45,7 +45,6 @@ class ConversationRepositorySyncOpsTest {
         assertEquals(folderId, summary.folderId)
         assertTrue(summary.messageNodes.isEmpty())
         assertTrue(summary.chatSuggestions.isEmpty())
-        assertTrue(summary.modeInjectionIds.isEmpty())
         assertTrue(summary.lorebookIds.isEmpty())
         assertNull(summary.customSystemPrompt)
         assertNull(summary.workspaceCwd)

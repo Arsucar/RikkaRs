@@ -3,7 +3,6 @@ import type { Settings, UIMessagePart } from "~/types";
 export interface Draft {
   text: string;
   parts: UIMessagePart[];
-  modeInjectionIds?: string[];
   lorebookIds?: string[];
 }
 
@@ -19,10 +18,9 @@ export interface ChatInputSlice {
   removePartAt: (conversationId: string, index: number) => void;
   setPromptInjectionIds: (
     conversationId: string,
-    ids: { modeInjectionIds: string[]; lorebookIds: string[] },
+    ids: { lorebookIds: string[] },
   ) => void;
   getPromptInjectionIds: (conversationId: string) => {
-    modeInjectionIds: string[];
     lorebookIds: string[];
   };
   clearDraft: (conversationId: string) => void;

@@ -45,13 +45,6 @@ export interface QuickMessage {
   content: string;
 }
 
-export interface ModeInjectionProfile {
-  id: string;
-  name: string;
-  enabled?: boolean;
-  [key: string]: unknown;
-}
-
 export interface LorebookProfile {
   id: string;
   name: string;
@@ -66,9 +59,7 @@ export interface AssistantProfile {
   reasoningLevel?: string | null;
   enableWebSearch?: boolean;
   mcpServers?: string[];
-  modeInjectionIds?: string[];
   lorebookIds?: string[];
-  allowConversationPromptInjection?: boolean;
   allowConversationSystemPrompt?: boolean;
   name: string;
   avatar?: AssistantAvatar;
@@ -151,7 +142,6 @@ export interface Settings {
   providers: ProviderProfile[];
   assistants: AssistantProfile[];
   assistantTags: AssistantTag[];
-  modeInjections?: ModeInjectionProfile[];
   lorebooks?: LorebookProfile[];
   mcpServers: McpServerConfig[];
   searchServices: SearchServiceOption[];

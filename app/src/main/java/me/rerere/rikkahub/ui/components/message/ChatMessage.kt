@@ -129,6 +129,7 @@ fun ChatMessage(
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onTrustWriteRootAndApprove: ((toolCallId: String, rootPrefix: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     selectionCompact: Boolean = false,
 ) {
@@ -202,6 +203,7 @@ fun ChatMessage(
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
+                onTrustWriteRootAndApprove = onTrustWriteRootAndApprove,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
                 selectionCompact = selectionCompact,
@@ -309,6 +311,7 @@ private fun MessagePartsBlock(
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onTrustWriteRootAndApprove: ((toolCallId: String, rootPrefix: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
     selectionCompact: Boolean = false,
@@ -407,7 +410,9 @@ private fun MessagePartsBlock(
                 if (!selectionCompact && block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
                     ChainOfThought(
-                        modifier = Modifier.animateContentSize(),
+                        // Skip size animation while streaming to avoid layout thrash (#248 D-lite)
+                        modifier = if (loading) Modifier else Modifier.animateContentSize(),
+                        animateSize = !loading,
                         steps = block.steps,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
                         cardColors = CardDefaults.cardColors(
@@ -446,6 +451,7 @@ private fun MessagePartsBlock(
                                         tool = step.tool,
                                         loading = loading && (!step.tool.isExecuted || isSubagentStreaming) && !isSubagentCancelled,
                                         onToolApproval = onToolApproval,
+                                        onTrustWriteRootAndApprove = onTrustWriteRootAndApprove,
                                         onToolAnswer = onToolAnswer,
                                     )
                                 }
@@ -467,10 +473,13 @@ private fun MessagePartsBlock(
                             },
                             visual = true,
                         )
+                        // #248 D-lite: skip animateContentSize while streaming (loading)
+                        val sizeAnimModifier =
+                            if (loading) Modifier else Modifier.animateContentSize()
                         val textContent = @Composable {
                             if (role == MessageRole.USER) {
                                 Surface(
-                                    modifier = Modifier.animateContentSize(),
+                                    modifier = sizeAnimModifier,
                                     shape = RoundedCornerShape(16.dp),
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
                                     onClick = { onUserMessageClick?.invoke() },
@@ -493,7 +502,7 @@ private fun MessagePartsBlock(
                             } else {
                                 if (settings.displaySetting.showAssistantBubble) {
                                     Surface(
-                                        modifier = Modifier.animateContentSize(),
+                                        modifier = sizeAnimModifier,
                                         shape = RoundedCornerShape(16.dp),
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                                     ) {
@@ -518,14 +527,13 @@ private fun MessagePartsBlock(
                                             text = visualText,
                                             maxLines = 3,
                                             overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.animateContentSize(),
+                                            modifier = sizeAnimModifier,
                                         )
                                     } else {
                                         MarkdownBlock(
                                             content = visualText,
                                             onClickCitation = handleClickCitation,
-                                            modifier = Modifier
-                                                .animateContentSize()
+                                            modifier = sizeAnimModifier,
                                         )
                                     }
                                 }

@@ -106,6 +106,8 @@ import me.rerere.rikkahub.data.ai.tools.buildSkillManagementTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTableToolsIfEnabled
 import me.rerere.rikkahub.data.ai.tools.WorkspaceKnownMount
+import me.rerere.rikkahub.data.ai.tools.deriveTrustedWriteRoot
+import me.rerere.rikkahub.data.ai.tools.isTrustableWriteTool
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -723,6 +725,7 @@ class ChatService(
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
+        trustedWriteRoot: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -730,6 +733,35 @@ class ChatService(
         val job = appScope.launch {
             try {
                 val conversation = session.state.value
+                // #258: re-validate tool/path server-side; only persist server-derived root
+                // (client trustedWriteRoot is intent-only; forged values are ignored).
+                // Failed checks skip trust persist but still allow one-shot approve below.
+                if (approved && !trustedWriteRoot.isNullOrBlank()) {
+                    val pendingTool = conversation.messageNodes
+                        .asSequence()
+                        .flatMap { it.messages.asSequence() }
+                        .flatMap { it.parts.asSequence() }
+                        .filterIsInstance<UIMessagePart.Tool>()
+                        .firstOrNull { it.toolCallId == toolCallId }
+                    val derivedRoot = pendingTool
+                        ?.takeIf { isTrustableWriteTool(it.toolName) }
+                        ?.let { part ->
+                            runCatching {
+                                part.inputAsJson().jsonObject["path"]
+                                    ?.jsonPrimitive
+                                    ?.contentOrNull
+                            }.getOrNull()
+                        }
+                        ?.let { path -> deriveTrustedWriteRoot(path) }
+                    if (!derivedRoot.isNullOrBlank()) {
+                        val assistant = settingsStore.settingsFlow.value.assistants
+                            .firstOrNull { it.id == conversation.assistantId }
+                        val workspaceId = assistant?.workspaceId?.toString()
+                        if (!workspaceId.isNullOrBlank()) {
+                            workspaceRepository.addTrustedWriteRoot(workspaceId, derivedRoot)
+                        }
+                    }
+                }
                 val newApprovalState = when {
                     answer != null -> ToolApprovalState.Answered(answer)
                     approved -> ToolApprovalState.Approved
@@ -918,6 +950,30 @@ class ChatService(
 
             // start generating (user-initiated path already ran; start FGS only once stream begins)
             startKeepAliveIfNeeded()
+            // #248 B: UI publish coalesce state (handler still emits full-fidelity every chunk)
+            var lastUiPublishNanos = 0L
+            var pendingUiMessages: List<UIMessage>? = null
+            fun applyStreamingMessagesToUi(messages: List<UIMessage>) {
+                updateConversationState(
+                    conversationId = conversationId,
+                    checkDeletedFiles = false,
+                ) { prev ->
+                    var next = prev.updateCurrentMessages(messages)
+                    // Sync variables working copy (MVU may mutate during onGenerationFinish).
+                    if (generationVariables != null) {
+                        val sanitized = ConversationVariables.sanitize(generationVariables)
+                        if (sanitized != next.variables) {
+                            next = next.copy(variables = sanitized)
+                        }
+                    }
+                    next
+                }
+                lastUiPublishNanos = System.nanoTime()
+                pendingUiMessages = null
+            }
+            fun flushPendingStreamingUi() {
+                pendingUiMessages?.let { applyStreamingMessagesToUi(it) }
+            }
             generationHandler.generateText(
                 settings = prepared.settings,
                 model = prepared.model,
@@ -925,7 +981,6 @@ class ChatService(
                 messages = prepared.messages,
                 assistant = prepared.assistant,
                 conversationSystemPrompt = prepared.conversation.customSystemPrompt,
-                conversationModeInjectionIds = prepared.conversation.modeInjectionIds,
                 conversationLorebookIds = prepared.conversation.lorebookIds,
                 workspaceCwd = prepared.workspaceCwd,
                 workspaceToolAvailable = prepared.workspaceToolAvailable,
@@ -936,6 +991,9 @@ class ChatService(
                 firstPreparedInput = prepared.providerInput,
                 conversationVariables = generationVariables,
             ).onCompletion {
+                // Flush coalesced latest before finish/save so final tokens always paint (#248 AC5).
+                flushPendingStreamingUi()
+
                 // Invalidate in-flight checkpoint writers before Final save so they cannot clobber it.
                 sessions[conversationId]?.lastCheckpointStep = -1
 
@@ -975,16 +1033,16 @@ class ChatService(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
-                        updateConversationState(conversationId) { prev ->
-                            var next = prev.updateCurrentMessages(chunk.messages)
-                            // Sync variables working copy (MVU may mutate during onGenerationFinish).
-                            if (generationVariables != null) {
-                                val sanitized = ConversationVariables.sanitize(generationVariables)
-                                if (sanitized != next.variables) {
-                                    next = next.copy(variables = sanitized)
-                                }
-                            }
-                            next
+                        // #248 B: coalesce UI Conversation publishes (~50–100ms). Always keep latest;
+                        // flush immediately on tool/approval boundaries so approval UI stays timely.
+                        // Full-fidelity messages stay in GenerationHandler; only UI publish is throttled.
+                        val now = System.nanoTime()
+                        val forceFlush = chunk.messages.shouldFlushConversationUiPublish()
+                        val elapsedMs = (now - lastUiPublishNanos) / 1_000_000L
+                        if (forceFlush || lastUiPublishNanos == 0L || elapsedMs >= UI_CONVERSATION_PUBLISH_INTERVAL_MS) {
+                            applyStreamingMessagesToUi(chunk.messages)
+                        } else {
+                            pendingUiMessages = chunk.messages
                         }
 
                         // 通知等边缘副作用由 ChatNotificationManager 消费；
@@ -1874,7 +1932,6 @@ class ChatService(
                 memories = memories,
                 tools = tools,
                 conversationSystemPrompt = conversation.customSystemPrompt,
-                conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = effectiveWorkspaceCwd,
                 workspaceToolAvailable = workspaceToolAvailable,
@@ -2110,6 +2167,9 @@ class ChatService(
             ) + privateSkillMounts.knownMounts,
             extraBindMounts = privateSkillMounts.bindMounts,
             approvalOverrides = resolvedWorkspace.toolApprovalOverrides(),
+            // 每次组装 tools 时重读 entity 的受信目录，信任写入后同会话续写可立即生效
+            trustedWriteRoots = workspaceRepository.getById(workspaceId)?.trustedWriteRootList()
+                ?: resolvedWorkspace.trustedWriteRootList(),
         )
         return all.filter { it.name in capability.availableToolNames }
     }
@@ -2555,10 +2615,20 @@ class ChatService(
         checkFilesDelete(newState, previous)
     }
 
-    fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
+    /**
+     * @param checkDeletedFiles When false, skip orphan chat-file GC (safe for pure stream text/reasoning
+     * growth). Keep true for saves, attachment edits, and structural commits (#248).
+     */
+    fun updateConversationState(
+        conversationId: Uuid,
+        checkDeletedFiles: Boolean = true,
+        update: (Conversation) -> Conversation,
+    ) {
         val result = getOrCreateSession(conversationId).updateState(update) ?: return
         val (previous, updated) = result
-        checkFilesDelete(updated, previous)
+        if (checkDeletedFiles) {
+            checkFilesDelete(updated, previous)
+        }
     }
 
     private fun updateSubagentProgress(
@@ -3032,7 +3102,6 @@ class ChatService(
             chatModelId = currentConversation.chatModelId,
             messageNodes = copiedNodes,
             customSystemPrompt = currentConversation.customSystemPrompt,
-            modeInjectionIds = currentConversation.modeInjectionIds,
             lorebookIds = currentConversation.lorebookIds,
             variables = currentConversation.variables,
         )
@@ -3580,6 +3649,32 @@ class ChatService(
             )
         }
     }
+}
+
+/** #248: min interval between Conversation UI publishes during pure text/reasoning stream. */
+private const val UI_CONVERSATION_PUBLISH_INTERVAL_MS = 64L
+
+/**
+ * True when a Messages chunk must flush Conversation UI immediately (tool / approval boundary).
+ * Pure text/reasoning growth can be coalesced; pending tools and structural tool changes cannot.
+ */
+internal fun List<UIMessage>.shouldFlushConversationUiPublish(): Boolean {
+    for (message in this) {
+        for (part in message.parts) {
+            when (part) {
+                is UIMessagePart.Tool,
+                is UIMessagePart.ToolCall,
+                is UIMessagePart.ToolResult,
+                is UIMessagePart.Image,
+                is UIMessagePart.Document,
+                is UIMessagePart.Video,
+                is UIMessagePart.Audio,
+                -> return true
+                else -> Unit
+            }
+        }
+    }
+    return false
 }
 
 /** #220: UI payload after hydrating a mid-generation checkpoint. */

@@ -31,7 +31,6 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.pages.extensions.displayEntryCount
 import kotlin.uuid.Uuid
@@ -81,57 +80,6 @@ fun PresetsContent(
                     Switch(
                         checked = selectedIds.contains(preset.id),
                         onCheckedChange = { checked -> onToggle(preset.id, checked) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            )
-        }
-        if (onManage != null) {
-            item {
-                ManageButton(onClick = onManage)
-            }
-        }
-    }
-}
-
-@Composable
-fun ModeInjectionsContent(
-    modeInjections: List<PromptInjection.ModeInjection>,
-    selectedIds: Set<Uuid>,
-    onToggle: (Uuid, Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onManage: (() -> Unit)? = null,
-    onEdit: ((PromptInjection.ModeInjection) -> Unit)? = null,
-    /** When set, dual-bound / preset-managed ids show a supporting note (#205). */
-    presetManagedIds: Set<Uuid> = emptySet(),
-) {
-    val presetManagedNote = stringResource(R.string.extension_content_preset_managed_injection)
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(modeInjections) { injection ->
-            val isPresetManaged = injection.id in presetManagedIds
-            ListItem(
-                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
-                    if (onEdit != null) onEdit(injection) else onManage?.invoke()
-                },
-                headlineContent = {
-                    Text(injection.name.ifBlank { stringResource(R.string.extension_content_unnamed) })
-                },
-                supportingContent = if (isPresetManaged) {
-                    {
-                        Text(
-                            text = presetManagedNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                    }
-                } else null,
-                trailingContent = {
-                    Switch(
-                        checked = selectedIds.contains(injection.id),
-                        onCheckedChange = { checked -> onToggle(injection.id, checked) }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),

@@ -52,18 +52,39 @@ suspend fun createWorkspaceTools(
     knownMounts: List<WorkspaceKnownMount> = emptyList(),
     extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     approvalOverrides: Map<String, Boolean>? = null,
+    trustedWriteRoots: List<String>? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
+    val entity = if (approvalOverrides == null || trustedWriteRoots == null) {
+        workspaceRepository.getById(workspaceId)
+    } else {
+        null
+    }
     val resolvedApprovalOverrides = approvalOverrides
-        ?: workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+        ?: entity?.toolApprovalOverrides().orEmpty()
+    val resolvedTrustedRoots = trustedWriteRoots
+        ?: entity?.trustedWriteRootList().orEmpty()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, resolvedApprovalOverrides)
 
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 
     return listOf(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts),
-        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository, extraBindMounts),
-        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts, extraBindMounts),
+        createWriteFileTool(
+            workspaceId,
+            ::needsApproval,
+            workspaceRepository,
+            extraBindMounts,
+            resolvedTrustedRoots,
+        ),
+        createEditFileTool(
+            workspaceId,
+            ::needsApproval,
+            workspaceRepository,
+            knownMounts,
+            extraBindMounts,
+            resolvedTrustedRoots,
+        ),
         createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd, extraBindMounts),
     )
 }
@@ -120,6 +141,7 @@ private fun createWriteFileTool(
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     extraBindMounts: List<WorkspaceBindMount>,
+    trustedWriteRoots: List<String>,
 ) = Tool(
     name = "workspace_write_file",
     description = """
@@ -142,7 +164,9 @@ private fun createWriteFileTool(
             required = listOf("path", "text"),
         )
     },
-    needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = {
+        needsApproval("workspace_write_file") || it.needsPathHardApproval("path", trustedWriteRoots)
+    },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -159,6 +183,7 @@ private fun createEditFileTool(
     workspaceRepository: WorkspaceRepository,
     knownMounts: List<WorkspaceKnownMount>,
     extraBindMounts: List<WorkspaceBindMount>,
+    trustedWriteRoots: List<String>,
 ) = Tool(
     name = "workspace_edit_file",
     description = """
@@ -187,7 +212,9 @@ private fun createEditFileTool(
             required = listOf("path", "old_text", "new_text"),
         )
     },
-    needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWritableRoots("path") },
+    needsApproval = {
+        needsApproval("workspace_edit_file") || it.needsPathHardApproval("path", trustedWriteRoots)
+    },
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
@@ -366,15 +393,8 @@ internal fun resolveKnownMountFile(path: String, knownMounts: List<WorkspaceKnow
     return null
 }
 
-private fun normalizeRootfsAbsolutePath(path: String): String? {
-    val normalized = path.replace('\\', '/').trim()
-    if (normalized.isBlank()) return null
-    if (!normalized.startsWith("/")) return null
-    if (normalized.contains('\u0000')) return null
-    val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
-    if (parts.any { it == ".." }) return null
-    return "/" + parts.joinToString("/")
-}
+private fun normalizeRootfsAbsolutePath(path: String): String? =
+    normalizeRootfsToolPath(path)
 
 private fun File.isSameOrInside(root: File): Boolean {
     val rootPath = root.canonicalFile.path
@@ -516,26 +536,18 @@ private fun String.parseRootfsEntries(): List<WorkspaceFileEntry> {
 
 private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): String {
     val path = string(name)?.replace('\\', '/')?.trim() ?: error("$name is required")
-    require(path.isNotBlank()) { "$name is required" }
-    require(path.startsWith("/")) { "$name must be an absolute path inside Rootfs" }
-    require(!path.contains('\u0000')) { "$name contains invalid character" }
-    return path
+    return normalizeRootfsToolPath(path)
+        ?: error("$name must be an absolute Rootfs path without '..' segments")
 }
 
-// 免强制审批的可写安全区: 工作区文件目录, 以及临时目录 /tmp
-private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp")
-
-private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(name: String): Boolean =
+// 免强制审批的可写安全区: builtin `/workspace` `/tmp` + 工作区受信目录 (TrustedWriteRoots)
+private fun kotlinx.serialization.json.JsonElement.needsPathHardApproval(
+    name: String,
+    trustedWriteRoots: List<String>,
+): Boolean =
     runCatching {
-        jsonObject.absolutePath(name).isOutsideWritableRoots()
+        needsPathHardApproval(jsonObject.absolutePath(name), trustedWriteRoots)
     }.getOrDefault(true)
-
-private fun String.isOutsideWritableRoots(): Boolean {
-    val normalized = trimEnd('/').ifBlank { "/" }
-    return WRITABLE_ROOT_PREFIXES.none { prefix ->
-        normalized == prefix || normalized.startsWith("$prefix/")
-    }
-}
 
 private fun String.rootfsName(): String =
     trimEnd('/').substringAfterLast('/').ifBlank { "/" }

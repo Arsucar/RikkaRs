@@ -47,23 +47,32 @@ fun WorkspaceFileEditorPage(
     id: String,
     area: WorkspaceStorageArea,
     path: String,
+    skillsPrivateAssistantId: String? = null,
 ) {
     val repository = koinInject<WorkspaceRepository>()
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val editable = area == WorkspaceStorageArea.FILES
     val fileName = path.substringAfterLast('/').ifBlank { path }
+    val skillsPrivateUuid = remember(skillsPrivateAssistantId) {
+        skillsPrivateAssistantId?.let { runCatching { kotlin.uuid.Uuid.parse(it) }.getOrNull() }
+    }
 
     val textState = rememberTextFieldState()
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
-    LaunchedEffect(id, area, path) {
+    LaunchedEffect(id, area, path, skillsPrivateUuid) {
         loading = true
         loadError = null
         runCatching {
-            repository.readTextForPreview(id, area, path)
+            repository.readTextForPreview(
+                id = id,
+                area = area,
+                path = path,
+                skillsPrivateAssistantId = skillsPrivateUuid,
+            )
         }.onSuccess { content ->
             textState.setTextAndPlaceCursorAtEnd(content)
             loading = false

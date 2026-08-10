@@ -54,13 +54,11 @@ data class Assistant(
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景
-    val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val presetIds: Set<Uuid> = emptySet(),             // 关联的预设 ID (见 issue #65)
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
-    val allowConversationPromptInjection: Boolean = false, // 允许对话级别绑定提示词注入
     val enableSubagents: Boolean = false,
     val subagentMaxDepth: Int = 2,
     val subagentMaxConcurrent: Int = 3,
@@ -198,8 +196,10 @@ enum class InjectionPosition {
 /**
  * 提示词注入
  *
- * - ModeInjection: 基于模式开关的注入（如学习模式）
- * - RegexInjection: 基于正则匹配的注入（Lorebook）
+ * - [ResolvedInjection]: 运行时解析结果（预设 Custom/Builtin 展开后的注入载体；不持久化）
+ * - [RegexInjection]: 基于正则匹配的注入（Lorebook）
+ *
+ * #259: 独立 ModeInjection 全局表与直连绑定已删除；预设条目是唯一产品路径。
  */
 @Serializable
 sealed class PromptInjection {
@@ -213,11 +213,13 @@ sealed class PromptInjection {
     abstract val role: MessageRole  // 注入角色：USER 或 ASSISTANT
 
     /**
-     * 模式注入 - 基于开关状态触发
+     * 运行时解析注入（由预设条目展开生成，不写入 DataStore）。
+     *
+     * 保留 @SerialName("mode") 以便旧备份中的 mode 条目在迁移期可被识别后丢弃/快照。
      */
     @Serializable
     @SerialName("mode")
-    data class ModeInjection(
+    data class ResolvedInjection(
         override val id: Uuid = Uuid.random(),
         override val name: String = "",
         override val enabled: Boolean = true,
@@ -251,6 +253,23 @@ sealed class PromptInjection {
 }
 
 /**
+ * 旧全局 ModeInjection 迁移用类型（#259）。
+ * 仅用于从 DataStore `mode_injections` key / 备份 JSON 解码后做 Reference→Custom 快照。
+ */
+@Serializable
+@SerialName("mode")
+data class LegacyModeInjection(
+    val id: Uuid = Uuid.random(),
+    val name: String = "",
+    val enabled: Boolean = true,
+    val priority: Int = 0,
+    val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
+    val content: String = "",
+    val injectDepth: Int = 4,
+    val role: MessageRole = MessageRole.USER,
+)
+
+/**
  * Lorebook - 组织管理多个 RegexInjection
  */
 @Serializable
@@ -263,19 +282,17 @@ data class Lorebook(
 )
 
 /**
- * Preset - 多个 ModeInjection 的聚合容器 (见 issue #65)
+ * Preset - 可编辑提示词条目容器 (见 issue #65 / #182 / #259)
  *
- * 启用预设 = 一次性启用其绑定的全部 ModeInjection; 预设内的条目可通过
- * [disabledEntryIds] 单独禁用 (对应"预设内 enabledInPreset=false")。
- * 某条目在预设内生效 <=> id ∈ [modeInjectionIds] 且 id ∉ [disabledEntryIds]。
+ * 启用预设 = 展开 [entries] 注入。旧字段 [modeInjectionIds]/[disabledEntryIds] 仅迁移期使用。
  */
 @Serializable
 data class Preset(
     val id: Uuid = Uuid.random(),
     val name: String = "",
     val description: String = "",
-    val modeInjectionIds: Set<Uuid> = emptySet(),   // 引用全局 Settings.modeInjections（旧字段，迁移后弃用）
-    val disabledEntryIds: Set<Uuid> = emptySet(),   // 预设内被单独禁用的条目（旧字段，迁移后弃用）
+    val modeInjectionIds: Set<Uuid> = emptySet(),   // 旧字段：引用全局 mode_injections（迁移后清空）
+    val disabledEntryIds: Set<Uuid> = emptySet(),   // 旧字段：预设内禁用的全局 id（迁移后清空）
     val entries: List<PresetEntry> = emptyList(),   // 可编辑/开关/排序的预设条目 (见 issue #182)
     val entriesVersion: Int = 0,                    // 0=旧 ID 模型；1=entries 模型（空列表也有效）
     /**
@@ -284,7 +301,7 @@ data class Preset(
      */
     val draftContext: DraftContextConfig? = null,
 ) {
-    /** 该预设启用时实际生效的注入 ID 集合（旧路径，仅当 [entries] 为空时使用） */
+    /** 该预设启用时实际生效的旧全局注入 ID 集合（仅当 [entries] 为空时使用） */
     fun effectiveInjectionIds(): Set<Uuid> = modeInjectionIds - disabledEntryIds
 
     /** 是否已迁移到新 [entries] 模型 */
@@ -294,51 +311,99 @@ data class Preset(
 const val PRESET_ENTRIES_VERSION = 1
 
 /**
- * 懒迁移：把旧 [Preset.modeInjectionIds] / [Preset.disabledEntryIds] 展开为 [PresetEntry.Custom] 快照。
+ * 懒迁移：把旧 [Preset.modeInjectionIds] / [Preset.disabledEntryIds] 展开为 [PresetEntry.Custom] 快照，
+ * 并将任何遗留 Reference 形态条目（由迁移 JSON 预解析）转为内容等效 Custom。
  *
- * - 幂等：已含 [Preset.entries] 的预设原样返回。
+ * - 幂等：已无旧字段且无 Reference 的预设原样返回。
  * - 快照语义：内容从全局 [modeInjections] 复制，脱钩全局后续修改。
- * - `enabled = (id !in disabledEntryIds) && injection.enabled`（继承全局 enabled，锁定旧 filter{it.enabled} 语义）。
- * - priority DESC 映射为稳定 order（0..n）；同时把原 priority 存入 legacyPriority 供混排防排序回归。
- * - 命中不到全局条目的 ID 跳过（无内容可快照）。
+ * - `enabled = (id !in disabledEntryIds) && injection.enabled`（继承全局 enabled）。
+ * - priority DESC 映射为稳定 order（0..n）；同时把原 priority 存入 legacyPriority。
+ * - 命中不到全局条目的 ID / 无效 Reference **丢弃**（#259 固定策略）并可由调用方 log。
  */
 fun Preset.migratedWithEntries(
-    modeInjections: List<PromptInjection.ModeInjection>,
+    modeInjections: List<LegacyModeInjection>,
 ): Preset {
-    if (entriesVersion >= PRESET_ENTRIES_VERSION) return this
-    if (entries.isNotEmpty()) {
-        return copy(
+    // 先处理旧 ID 容器 → entries
+    val base = when {
+        entriesVersion >= PRESET_ENTRIES_VERSION || entries.isNotEmpty() -> {
+            if (modeInjectionIds.isEmpty() && disabledEntryIds.isEmpty() &&
+                entriesVersion >= PRESET_ENTRIES_VERSION
+            ) {
+                this
+            } else {
+                copy(
+                    modeInjectionIds = emptySet(),
+                    disabledEntryIds = emptySet(),
+                    entriesVersion = PRESET_ENTRIES_VERSION,
+                )
+            }
+        }
+        else -> {
+            val migrated = modeInjections
+                .filter { it.id in modeInjectionIds }
+                .sortedByDescending { it.priority }
+                .mapIndexed { index, injection ->
+                    PresetEntry.Custom(
+                        id = injection.id,
+                        enabled = (injection.id !in disabledEntryIds) && injection.enabled,
+                        order = index,
+                        position = injection.position,
+                        injectDepth = injection.injectDepth,
+                        role = injection.role,
+                        name = injection.name,
+                        content = injection.content,
+                        legacyPriority = injection.priority,
+                    )
+                }
+            copy(
+                modeInjectionIds = emptySet(),
+                disabledEntryIds = emptySet(),
+                entries = migrated,
+                entriesVersion = PRESET_ENTRIES_VERSION,
+            )
+        }
+    }
+    // entries 现仅 Builtin|Custom。确保 version / 旧字段清洁。
+    return if (base.entriesVersion >= PRESET_ENTRIES_VERSION &&
+        base.modeInjectionIds.isEmpty() &&
+        base.disabledEntryIds.isEmpty()
+    ) {
+        base
+    } else {
+        base.copy(
             modeInjectionIds = emptySet(),
             disabledEntryIds = emptySet(),
             entriesVersion = PRESET_ENTRIES_VERSION,
         )
     }
-    val migrated = modeInjections
-        .filter { it.id in modeInjectionIds }
-        // priority 降序（与旧 transformMessages 的 sortedByDescending{priority} 一致），
-        // 相同 priority 保持全局 modeInjections 列表顺序
-        .sortedByDescending { it.priority }
-        .mapIndexed { index, injection ->
-            PresetEntry.Custom(
-                id = injection.id,
-                // 继承全局 enabled：锁定旧路径 filter{it.enabled} 语义——全局禁用的注入迁移后仍不注入。
-                enabled = (injection.id !in disabledEntryIds) && injection.enabled,
-                order = index,
-                position = injection.position,
-                injectDepth = injection.injectDepth,
-                role = injection.role,
-                name = injection.name,
-                content = injection.content,
-                // 保留原 priority 供 resolvePresetEntry 混排时使用（防排序回归），
-                // 用户新建条目 legacyPriority=null 时才回退 -order。
-                legacyPriority = injection.priority,
-            )
-        }
-    return copy(
-        modeInjectionIds = emptySet(),
-        disabledEntryIds = emptySet(),
-        entries = migrated,
-        entriesVersion = PRESET_ENTRIES_VERSION,
+}
+
+/**
+ * #259: 将旧 Reference 条目（解码为中间结构）快照为 Custom。
+ * 目标缺失则丢弃该 entry。
+ */
+fun snapshotReferenceAsCustom(
+    entryId: Uuid,
+    enabled: Boolean,
+    order: Int,
+    @Suppress("UNUSED_PARAMETER") position: InjectionPosition,
+    @Suppress("UNUSED_PARAMETER") injectDepth: Int,
+    @Suppress("UNUSED_PARAMETER") role: MessageRole,
+    modeInjectionId: Uuid,
+    modeInjections: List<LegacyModeInjection>,
+): PresetEntry.Custom? {
+    val target = modeInjections.firstOrNull { it.id == modeInjectionId } ?: return null
+    // Prefer target's content fields for content-equivalent snapshot (#259 AC2).
+    return PresetEntry.Custom(
+        id = entryId,
+        enabled = enabled,
+        order = order,
+        position = target.position,
+        injectDepth = target.injectDepth,
+        role = target.role,
+        name = target.name,
+        content = target.content,
+        legacyPriority = target.priority,
     )
 }
 

@@ -98,13 +98,6 @@ fun Route.settingsRoutes(
                 throw NotFoundException("Assistant not found")
             }
 
-            val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
-            val requestedModeInjectionIds =
-                request.modeInjectionIds.map { it.toUuid("modeInjectionIds") }.toSet()
-            if (!validModeInjectionIds.containsAll(requestedModeInjectionIds)) {
-                throw BadRequestException("modeInjectionIds contains unknown injection id")
-            }
-
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val requestedLorebookIds = request.lorebookIds.map { it.toUuid("lorebookIds") }.toSet()
             if (!validLorebookIds.containsAll(requestedLorebookIds)) {
@@ -120,7 +113,6 @@ fun Route.settingsRoutes(
 
             settingsStore.updateAssistantInjections(
                 assistantId = assistantId,
-                modeInjectionIds = requestedModeInjectionIds,
                 lorebookIds = requestedLorebookIds,
                 quickMessageIds = requestedQuickMessageIds,
             )

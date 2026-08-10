@@ -48,7 +48,6 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
@@ -61,15 +60,25 @@ import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_CHARS
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_DOCUMENTS
 import me.rerere.rikkahub.data.model.DEFAULT_MEMORY_TABLE_MAX_INJECT_TOKENS
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.LegacyModeInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
+import me.rerere.rikkahub.data.model.PresetEntry
+import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.migratedWithEntries
-import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.snapshotReferenceAsCustom
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.ToolPermissionPreset
 import me.rerere.rikkahub.data.model.isValidForPersistence
 import me.rerere.rikkahub.data.model.WorkspaceFilesStorage
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -366,12 +375,37 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
-                modeInjections = preferences[MODE_INJECTIONS]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
+                // #259: mode_injections no longer loaded into Settings; migration reads raw key.
+                // Flag pending migration when residual mode_injections key still exists.
+                presetEntriesMigrationPending = preferences[MODE_INJECTIONS] != null,
                 presetsStoreExists = preferences[PRESETS] != null,
-                presets = preferences[PRESETS]?.let {
-                    JsonInstant.decodeFromString(it)
+                    presets = preferences[PRESETS]?.let { rawPresets ->
+                    // Prefer JSON-level Reference→Custom so sealed decode does not fail.
+                    val rawMode = preferences[MODE_INJECTIONS]?.let { raw ->
+                        runCatching {
+                            JsonInstant.decodeFromString<List<LegacyModeInjection>>(raw)
+                        }.getOrDefault(emptyList())
+                    }.orEmpty()
+                    // HIGH-3: never treat non-empty corrupt presets as [] for emission only;
+                    // emptyList is temporary until migratePresetEntriesIfNeeded succeeds on raw keys.
+                    // migratePresetsJsonWithReferences throws on unparseable root (does not return []).
+                    runCatching {
+                        val referencedIds = mutableSetOf<Uuid>()
+                        absorbOrphanModeInjections(
+                            migratePresetsJsonWithReferences(rawPresets, rawMode, referencedIds),
+                            rawMode,
+                            extraCoveredIds = referencedIds,
+                        )
+                    }.recoverCatching {
+                        JsonInstant.decodeFromString<List<Preset>>(rawPresets)
+                    }.onFailure { err ->
+                        Log.e(
+                            "SettingsStore",
+                            "Failed to decode presets (raw length=${rawPresets.length}); " +
+                                "emitting empty until migration retry (raw keys preserved)",
+                            err,
+                        )
+                    }.getOrDefault(emptyList())
                 } ?: emptyList(),
                 toolPermissionPresets = decodeToolPermissionPresets(preferences[TOOL_PERMISSION_PRESETS]),
                 lorebooks = preferences[LOREBOOKS]?.let {
@@ -464,34 +498,34 @@ class SettingsStore(
             )
         }
         .map { settings ->
-            // 去重并清理无效引用
+            // 去重并清理无效引用（#259: 无 modeInjections）
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
-            val modeInjections = settings.modeInjections.distinctBy { it.id }
-            val validModeInjectionIds = modeInjections.map { it.id }.toSet()
-            val presets = settings.presets.withDefaultPreset(
-                modeInjections = modeInjections,
-                shouldCreateDefault = !settings.presetsStoreExists,
-            )
+            val presets = settings.presets.distinctBy { it.id }
             val validPresetIds = presets.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
             val asrProviders = settings.asrProviders.distinctBy { it.id }
-            // #182: 先迁移快照（用未过滤的 modeInjectionIds 命中全局内容），再过滤残留旧字段。
-            // migratedWithEntries 对 hasEntries()=true 幂等，故顺序调整安全。
-            var anyPresetMigrated = false
-            val migratedPresets = presets.map { preset ->
-                val migrated = preset.migratedWithEntries(modeInjections)
-                if (migrated != preset) {
-                    anyPresetMigrated = true
+            // #182/#259: 迁移标记由 schedulePresetEntriesMigrationPersist 持久化路径完成
+            // （含 Reference→Custom 与 mode_injections 清除）。此处仅清洗旧字段。
+            val cleanedPresets = presets.map { preset ->
+                if (preset.modeInjectionIds.isEmpty() &&
+                    preset.disabledEntryIds.isEmpty() &&
+                    preset.entriesVersion >= PRESET_ENTRIES_VERSION
+                ) {
+                    preset
+                } else {
+                    preset.copy(
+                        modeInjectionIds = emptySet(),
+                        disabledEntryIds = emptySet(),
+                        entriesVersion = maxOf(preset.entriesVersion, PRESET_ENTRIES_VERSION),
+                    )
                 }
-                // 迁移后 entries 已脱钩全局；旧字段对已迁移 preset 弃用，仅保持清洁地过滤无效引用。
-                migrated.copy(
-                    modeInjectionIds = migrated.modeInjectionIds.filter { it in validModeInjectionIds }.toSet(),
-                    disabledEntryIds = migrated.disabledEntryIds.filter { it in validModeInjectionIds }.toSet(),
-                )
-            }.distinctBy { it.id }
+            }
+            val anyPresetNeedsPersist = cleanedPresets != presets ||
+                // 仍有 mode_injections key 时也要触发迁移持久化
+                settings.presetEntriesMigrationPending
             settings.copy(
-                presetEntriesMigrationPending = anyPresetMigrated,
+                presetEntriesMigrationPending = anyPresetNeedsPersist || settings.presetEntriesMigrationPending,
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
                         is ProviderSetting.OpenAI -> provider.copy(
@@ -508,27 +542,16 @@ class SettingsStore(
                     }
                 },
                 assistants = settings.assistants.distinctBy { it.id }.map { assistant ->
-                    // #205: 只做无效引用过滤；不再像 #201 那样在加载期删除与已绑定 preset entries
-                    // 重复的直连绑定（改为 PromptInjectionTransformer 组装期只读过滤，直连数据保留在
-                    // DataStore 不销毁，用户可随时在「独立注入」中管理）。
                     assistant.copy(
-                        // 过滤掉不存在的 MCP 服务器 ID
                         mcpServers = assistant.mcpServers.filter { serverId ->
                             serverId in validMcpServerIds
                         }.toSet(),
-                        // 过滤掉不存在的模式注入 ID
-                        modeInjectionIds = assistant.modeInjectionIds.filter { id ->
-                            id in validModeInjectionIds
-                        }.toSet(),
-                        // 过滤掉不存在的 Lorebook ID
                         lorebookIds = assistant.lorebookIds.filter { id ->
                             id in validLorebookIds
                         }.toSet(),
-                        // 过滤掉不存在的快捷消息 ID
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
                         }.toSet(),
-                        // 过滤掉不存在的预设 ID
                         presetIds = assistant.presetIds.filter { id ->
                             id in validPresetIds
                         }.toSet()
@@ -553,8 +576,7 @@ class SettingsStore(
                 hiddenProviderTags = settings.hiddenProviderTags.map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct(),
-                modeInjections = modeInjections,
-                presets = migratedPresets, // #182: 先迁移快照再过滤旧字段，见上方 migratedPresets
+                presets = cleanedPresets,
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
                 imageQuickMessages = settings.imageQuickMessages.distinctBy { it.id },
@@ -744,7 +766,6 @@ class SettingsStore(
                 updated = preferences.writePresetUpdate(
                     presetId = presetId,
                     fallbackPresets = fallbackSettings.presets,
-                    fallbackModeInjections = fallbackSettings.modeInjections,
                     transform = transform,
                 )
             }
@@ -1031,7 +1052,6 @@ class SettingsStore(
 
     suspend fun updateAssistantInjections(
         assistantId: Uuid,
-        modeInjectionIds: Set<Uuid>,
         lorebookIds: Set<Uuid>,
         quickMessageIds: Set<Uuid> = emptySet(),
     ) {
@@ -1040,7 +1060,6 @@ class SettingsStore(
                 assistants = settings.assistants.map { assistant ->
                     if (assistant.id == assistantId) {
                         assistant.copy(
-                            modeInjectionIds = modeInjectionIds,
                             lorebookIds = lorebookIds,
                             quickMessageIds = quickMessageIds,
                         )
@@ -1056,45 +1075,219 @@ class SettingsStore(
 /**
  * 在单次 DataStore edit 中从最新持久化值迁移 preset entries。
  *
- * 只写 PRESETS 和迁移标记，避免用 flow 中的旧 Settings 快照覆盖并发用户设置。
- * 标记不作为跳过条件：之后导入 legacy preset 时仍可再次迁移并持久化。
+ * #259:
+ * 1. 解码 `mode_injections`（LegacyModeInjection）
+ * 2. 旧 modeInjectionIds → Custom 快照
+ * 3. Reference 条目 → Custom 内容快照（目标缺失则丢弃）
+ * 4. 写回 PRESETS，删除 MODE_INJECTIONS key
+ *
+ * 只写 PRESETS / 迁移标记 / 删除 mode_injections，避免用 flow 中的旧 Settings 快照覆盖并发用户设置。
  */
 internal fun MutablePreferences.migratePresetEntriesIfNeeded(): Boolean {
-    val storedModeInjections = this[SettingsStore.MODE_INJECTIONS]?.let {
-        JsonInstant.decodeFromString<List<PromptInjection.ModeInjection>>(it)
+    val rawModeInjections = this[SettingsStore.MODE_INJECTIONS]
+    val storedModeInjections = rawModeInjections?.let {
+        runCatching { JsonInstant.decodeFromString<List<LegacyModeInjection>>(it) }.getOrDefault(emptyList())
     }.orEmpty()
-    val storedPresets = this[SettingsStore.PRESETS]?.let {
-        JsonInstant.decodeFromString<List<Preset>>(it)
-    } ?: if (storedModeInjections.isNotEmpty()) {
-        listOf(
+    val rawPresets = this[SettingsStore.PRESETS]
+    val referencedInjectionIds = mutableSetOf<Uuid>()
+    val storedPresets = when {
+        rawPresets != null -> migratePresetsJsonWithReferences(
+            rawPresets,
+            storedModeInjections,
+            referencedInjectionIds,
+        )
+        storedModeInjections.isNotEmpty() -> listOf(
             Preset(
                 id = DEFAULT_PRESET_ID,
                 name = "Default Preset",
                 description = "Contains existing quick injections.",
                 modeInjectionIds = storedModeInjections.mapTo(mutableSetOf()) { it.id },
-            )
+            ).migratedWithEntries(storedModeInjections)
         )
-    } else {
-        return false
+        else -> {
+            // 无 mode_injections 也无 presets：仅标记已迁移
+            if (this[SettingsStore.PRESET_ENTRIES_MIGRATED] == true) return false
+            this[SettingsStore.PRESET_ENTRIES_MIGRATED] = true
+            return false
+        }
     }
-    val migratedPresets = storedPresets.map { preset ->
-        preset.migratedWithEntries(storedModeInjections)
+    val migratedPresets = absorbOrphanModeInjections(
+        storedPresets.map { it.migratedWithEntries(storedModeInjections) },
+        storedModeInjections,
+        extraCoveredIds = referencedInjectionIds,
+    )
+    val originalPresets = rawPresets?.let {
+        runCatching { JsonInstant.decodeFromString<List<Preset>>(it) }.getOrNull()
     }
-    val changed = migratedPresets != storedPresets
-    if (changed) {
+    val changed = migratedPresets != originalPresets || rawModeInjections != null
+    if (changed || originalPresets == null) {
         this[SettingsStore.PRESETS] = JsonInstant.encodeToString(migratedPresets)
     }
+    // #259: 清除全局 mode_injections key（迁移完成后不再保留）
+    this.remove(SettingsStore.MODE_INJECTIONS)
     this[SettingsStore.PRESET_ENTRIES_MIGRATED] = true
-    return changed
+    return changed || rawModeInjections != null
 }
 
-/** 在替换全局注入列表前先快照所有 legacy preset，防止删除目标后无法迁移。 */
-internal fun Settings.withModeInjectionsPreservingPresetSnapshots(
-    updatedModeInjections: List<PromptInjection.ModeInjection>,
-): Settings = copy(
-    modeInjections = updatedModeInjections,
-    presets = presets.map { preset -> preset.migratedWithEntries(modeInjections) },
-)
+/**
+ * 解码 presets JSON，把仍带 `@SerialName("reference")` 的条目快照为 Custom。
+ * 目标 modeInjection 缺失时丢弃该 entry（#259 固定策略）。
+ *
+ * Parse failure throws so callers do not treat corrupt JSON as an empty preset list
+ * and wipe DataStore (HIGH-3).
+ */
+internal fun migratePresetsJsonWithReferences(
+    rawPresetsJson: String,
+    modeInjections: List<LegacyModeInjection>,
+    referencedInjectionIds: MutableSet<Uuid>? = null,
+): List<Preset> {
+    // 先尝试正常解码（无 Reference 类后，reference discriminator 会失败）
+    runCatching { JsonInstant.decodeFromString<List<Preset>>(rawPresetsJson) }
+        .getOrNull()
+        ?.let { return it.map { p -> p.migratedWithEntries(modeInjections) } }
+
+    // 失败：用 JsonElement 手工展开 reference 条目
+    val root = runCatching {
+        JsonInstant.parseToJsonElement(rawPresetsJson).jsonArray
+    }.getOrNull()
+        ?: error("Failed to parse presets JSON for Reference migration")
+
+    return root.mapNotNull { element ->
+        val obj = element as? JsonObject ?: return@mapNotNull null
+        val entriesElement = obj["entries"] as? JsonArray
+        val migratedEntries = entriesElement?.mapNotNull { entryEl ->
+            val entryObj = entryEl as? JsonObject ?: return@mapNotNull null
+            val type = (entryObj["type"] as? JsonPrimitive)?.contentOrNull
+                ?: (entryObj["type"] as? JsonPrimitive)?.content
+            when (type) {
+                "reference" -> {
+                    val modeInjectionId = (entryObj["modeInjectionId"] as? JsonPrimitive)
+                        ?.contentOrNull
+                        ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                        ?: return@mapNotNull null
+                    val snapped = snapshotReferenceAsCustom(
+                        entryId = (entryObj["id"] as? JsonPrimitive)?.contentOrNull
+                            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                            ?: Uuid.random(),
+                        enabled = (entryObj["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true,
+                        order = (entryObj["order"] as? JsonPrimitive)?.intOrNull ?: 0,
+                        position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                        injectDepth = (entryObj["injectDepth"] as? JsonPrimitive)?.intOrNull ?: 4,
+                        role = MessageRole.USER,
+                        modeInjectionId = modeInjectionId,
+                        modeInjections = modeInjections,
+                    )
+                    if (snapped != null) {
+                        referencedInjectionIds?.add(modeInjectionId)
+                    }
+                    snapped
+                }
+                "custom", "builtin", null -> {
+                    // 让正常解码路径处理：临时单条目 encode 再 decode
+                    runCatching {
+                        JsonInstant.decodeFromString<PresetEntry>(JsonInstant.encodeToString(entryEl))
+                    }.getOrNull()
+                }
+                else -> null
+            }
+        }.orEmpty()
+
+        // 用去掉 entries 后的对象解码 Preset 外壳，再塞回迁移后的 entries
+        val withoutEntries = obj.toMutableMap().apply {
+            remove("entries")
+            // 清除旧绑定字段，由 migratedWithEntries 处理
+        }
+        val shellJson = JsonInstant.encodeToString(JsonObject(withoutEntries))
+        val shell = runCatching {
+            JsonInstant.decodeFromString<Preset>(shellJson)
+        }.getOrNull() ?: return@mapNotNull null
+
+        val withEntries = if (migratedEntries.isNotEmpty() || entriesElement != null) {
+            shell.copy(
+                entries = migratedEntries,
+                entriesVersion = PRESET_ENTRIES_VERSION,
+                modeInjectionIds = emptySet(),
+                disabledEntryIds = emptySet(),
+            )
+        } else {
+            shell
+        }
+        withEntries.migratedWithEntries(modeInjections)
+    }
+}
+
+/**
+ * #259 HIGH-2: modeInjections not already snapshotted into any preset (by entry id
+ * matching injection id, or via modeInjectionIds before migration) are absorbed into
+ * Default Preset so assistant-only / orphan content is not lost when the global key is removed.
+ */
+internal fun absorbOrphanModeInjections(
+    presets: List<Preset>,
+    modeInjections: List<LegacyModeInjection>,
+    extraCoveredIds: Set<Uuid> = emptySet(),
+): List<Preset> {
+    if (modeInjections.isEmpty()) return presets
+
+    val coveredIds = buildSet {
+        addAll(extraCoveredIds)
+        for (preset in presets) {
+            addAll(preset.modeInjectionIds)
+            for (entry in preset.entries) {
+                add(entry.id)
+            }
+        }
+    }
+    val orphans = modeInjections.filter { it.id !in coveredIds }
+    if (orphans.isEmpty()) return presets
+
+    val orphanEntries = orphans
+        .sortedByDescending { it.priority }
+        .mapIndexed { index, injection ->
+            PresetEntry.Custom(
+                id = injection.id,
+                enabled = injection.enabled,
+                order = index,
+                position = injection.position,
+                injectDepth = injection.injectDepth,
+                role = injection.role,
+                name = injection.name,
+                content = injection.content,
+                legacyPriority = injection.priority,
+            )
+        }
+
+    val defaultIndex = presets.indexOfFirst { it.id == DEFAULT_PRESET_ID }
+    if (defaultIndex >= 0) {
+        val existing = presets[defaultIndex]
+        val existingIds = existing.entries.mapTo(mutableSetOf()) { it.id }
+        val toAppend = orphanEntries.filter { it.id !in existingIds }
+        if (toAppend.isEmpty()) return presets
+        val baseOrder = (existing.entries.maxOfOrNull { it.order } ?: -1) + 1
+        val mergedEntries = existing.entries + toAppend.mapIndexed { i, e ->
+            e.copy(order = baseOrder + i)
+        }
+        return presets.toMutableList().apply {
+            set(
+                defaultIndex,
+                existing.copy(
+                    entries = mergedEntries,
+                    entriesVersion = PRESET_ENTRIES_VERSION,
+                    modeInjectionIds = emptySet(),
+                    disabledEntryIds = emptySet(),
+                ),
+            )
+        }
+    }
+
+    val defaultPreset = Preset(
+        id = DEFAULT_PRESET_ID,
+        name = "Default Preset",
+        description = "Contains existing quick injections.",
+        entries = orphanEntries,
+        entriesVersion = PRESET_ENTRIES_VERSION,
+    )
+    return listOf(defaultPreset) + presets
+}
 
 /** Full settings rewrite used by [SettingsStore.update]; kept private to the store call path. */
 private fun MutablePreferences.writeFullSettings(settings: Settings) {
@@ -1168,8 +1361,22 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     settings.selectedASRProviderId?.let {
         this[SettingsStore.SELECTED_ASR_PROVIDER] = it.toString()
     } ?: this.remove(SettingsStore.SELECTED_ASR_PROVIDER)
-    this[SettingsStore.MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-    this[SettingsStore.PRESETS] = JsonInstant.encodeToString(settings.presets)
+    // #259 / HIGH-3: never wipe non-empty PRESETS or residual MODE_INJECTIONS with empty
+    // settings.presets while migration is still pending (load decode may have failed transiently).
+    val existingRawPresets = this[SettingsStore.PRESETS]
+    val migrationPending = this[SettingsStore.MODE_INJECTIONS] != null
+    val wouldWipeNonEmptyPresets = settings.presets.isEmpty() &&
+        !existingRawPresets.isNullOrBlank() &&
+        existingRawPresets.trim() != "[]"
+    if (wouldWipeNonEmptyPresets && migrationPending) {
+        Log.w(
+            "SettingsStore",
+            "writeFullSettings: skip overwriting PRESETS/MODE_INJECTIONS with empty while migration pending",
+        )
+    } else {
+        this.remove(SettingsStore.MODE_INJECTIONS)
+        this[SettingsStore.PRESETS] = JsonInstant.encodeToString(settings.presets)
+    }
     this[SettingsStore.TOOL_PERMISSION_PRESETS] = JsonInstant.encodeToString(
         settings.toolPermissionPresets.take(TOOL_PERMISSION_PRESET_MAX_COUNT).filter { it.isValidForPersistence() }
     )
@@ -1202,7 +1409,6 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
 internal fun MutablePreferences.writePresetUpdate(
     presetId: Uuid,
     fallbackPresets: List<Preset>,
-    fallbackModeInjections: List<PromptInjection.ModeInjection>,
     transform: (Preset) -> Preset,
 ): Boolean {
     val presets = this[SettingsStore.PRESETS]?.let {
@@ -1212,8 +1418,8 @@ internal fun MutablePreferences.writePresetUpdate(
     if (index < 0) return false
 
     val modeInjections = this[SettingsStore.MODE_INJECTIONS]?.let {
-        JsonInstant.decodeFromString<List<PromptInjection.ModeInjection>>(it)
-    } ?: fallbackModeInjections
+        runCatching { JsonInstant.decodeFromString<List<LegacyModeInjection>>(it) }.getOrDefault(emptyList())
+    }.orEmpty()
     val current = presets[index].migratedWithEntries(modeInjections)
     val transformed = transform(current).copy(id = current.id)
     this[SettingsStore.PRESETS] = JsonInstant.encodeToString(
@@ -1481,7 +1687,6 @@ data class Settings(
     val defaultTTSPlaybackSpeed: Float = 1.0f,
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
-    val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     @Transient
     val presetsStoreExists: Boolean = false,
     val presets: List<Preset> = emptyList(),
@@ -1663,6 +1868,36 @@ enum class ChatFontFamily {
 }
 
 @Serializable
+enum class UiTypographyFamily {
+    @SerialName("system")
+    SYSTEM,
+
+    @SerialName("brand")
+    BRAND,
+}
+
+@Serializable
+enum class UiTypographyWeightBias {
+    @SerialName("light")
+    LIGHT,
+
+    @SerialName("default")
+    DEFAULT,
+
+    @SerialName("medium")
+    MEDIUM,
+
+    @SerialName("bold")
+    BOLD,
+}
+
+fun Float.coerceUiTypographyScale(): Float = coerceIn(0.85f, 1.25f)
+
+fun Float.coerceUiTypographyLineHeightScale(): Float = coerceIn(0.9f, 1.3f)
+
+fun Float.coerceUiTypographyLetterSpacingScale(): Float = coerceIn(0f, 1.5f)
+
+@Serializable
 enum class UploadInjectMode {
     @SerialName("path_only")
     PATH_ONLY,
@@ -1710,6 +1945,11 @@ data class DisplaySetting(
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
     val documentUploadInjectMode: UploadInjectMode = UploadInjectMode.PATH_ONLY,
+    val uiTypographyFamily: UiTypographyFamily = UiTypographyFamily.SYSTEM,
+    val uiTypographyWeightBias: UiTypographyWeightBias = UiTypographyWeightBias.DEFAULT,
+    val uiTypographyScale: Float = 1.0f,
+    val uiTypographyLineHeightScale: Float = 1.0f,
+    val uiTypographyLetterSpacingScale: Float = 1.0f,
 )
 
 @Serializable
@@ -1858,28 +2098,4 @@ private val DEFAULT_TTS_PROVIDERS = listOf(
 
 internal val DEFAULT_ASSISTANTS_IDS = DEFAULT_ASSISTANTS.map { it.id }
 
-val DEFAULT_MODE_INJECTIONS = listOf(
-    PromptInjection.ModeInjection(
-        id = Uuid.parse("b87eaf16-f5cd-4ac1-9e4f-b11ae3a61d74"),
-        content = LEARNING_MODE_PROMPT,
-        position = InjectionPosition.AFTER_SYSTEM_PROMPT,
-        name = "Learning Mode"
-    )
-)
-
 internal val DEFAULT_PRESET_ID = Uuid.parse("a9433f62-d8e9-4a38-8fb8-9c3f63f7f1b0")
-
-private fun List<Preset>.withDefaultPreset(
-    modeInjections: List<PromptInjection.ModeInjection>,
-    shouldCreateDefault: Boolean,
-): List<Preset> {
-    if (!shouldCreateDefault || modeInjections.isEmpty() || any { it.id == DEFAULT_PRESET_ID }) return this
-    return listOf(
-        Preset(
-            id = DEFAULT_PRESET_ID,
-            name = "Default Preset",
-            description = "Contains existing quick injections.",
-            modeInjectionIds = modeInjections.map { it.id }.toSet(),
-        )
-    ) + this
-}

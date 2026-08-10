@@ -628,6 +628,7 @@ class RouteActivity : ComponentActivity() {
                                     id = key.id,
                                     area = WorkspaceStorageArea.valueOf(key.area),
                                     path = key.path,
+                                    skillsPrivateAssistantId = key.skillsPrivateAssistantId,
                                 )
                             }
 
@@ -910,7 +911,12 @@ sealed interface Screen : NavKey {
     data class WorkspaceTerminal(val id: String) : Screen
 
     @Serializable
-    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
+    data class WorkspaceFileEditor(
+        val id: String,
+        val area: String,
+        val path: String,
+        val skillsPrivateAssistantId: String? = null,
+    ) : Screen
 
     @Serializable
     data class SkillDetail(val skillName: String, val assistantId: String? = null) : Screen

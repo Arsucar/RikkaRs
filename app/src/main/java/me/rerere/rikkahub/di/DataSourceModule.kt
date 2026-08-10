@@ -55,6 +55,8 @@ import me.rerere.rikkahub.data.db.migrations.Migration_46_47
 import me.rerere.rikkahub.data.db.migrations.Migration_47_48
 import me.rerere.rikkahub.data.db.migrations.Migration_48_49
 import me.rerere.rikkahub.data.db.migrations.Migration_49_50
+import me.rerere.rikkahub.data.db.migrations.Migration_50_51
+import me.rerere.rikkahub.data.db.migrations.Migration_51_52
 import me.rerere.rikkahub.data.ai.ApiCallRecorder
 import me.rerere.rikkahub.data.ai.transformers.SemanticMemoryTransformer
 import me.rerere.rikkahub.data.memory.semantic.EmbeddingService
@@ -115,6 +117,8 @@ val dataSourceModule = module {
                 Migration_47_48,
                 Migration_48_49,
                 Migration_49_50,
+                Migration_50_51,
+                Migration_51_52,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

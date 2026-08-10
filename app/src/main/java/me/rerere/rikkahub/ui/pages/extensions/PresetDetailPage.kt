@@ -77,7 +77,6 @@ import me.rerere.rikkahub.data.model.DraftContextConfig
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.PresetEntry
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.effectivePosition
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -147,7 +146,6 @@ fun PresetDetailPage(
                     .padding(innerPadding)
                     .fillMaxSize(),
                 preset = preset,
-                modeInjections = settings.modeInjections,
                 onMutatePreset = ::updatePreset,
             )
         }
@@ -158,7 +156,6 @@ fun PresetDetailPage(
 private fun PresetDetailContent(
     modifier: Modifier,
     preset: Preset,
-    modeInjections: List<PromptInjection.ModeInjection>,
     onMutatePreset: ((Preset) -> Preset) -> Unit,
 ) {
     var editingEntry by remember { mutableStateOf<PresetEntry?>(null) }
@@ -325,7 +322,6 @@ private fun PresetDetailContent(
                     PresetEntryCard(
                         modifier = Modifier.scale(if (isDragging) 0.95f else 1f),
                         entry = entry,
-                        modeInjections = modeInjections,
                         reorderScope = this,
                         onEdit = { editingEntry = entry },
                         onDelete = { deleteTarget = entry },
@@ -367,7 +363,6 @@ private fun PresetDetailContent(
                     PresetEntryCard(
                         modifier = Modifier.scale(if (isDragging) 0.95f else 1f),
                         entry = entry,
-                        modeInjections = modeInjections,
                         reorderScope = this,
                         onEdit = { editingEntry = entry },
                         onDelete = { deleteTarget = entry },
@@ -386,7 +381,6 @@ private fun PresetDetailContent(
         PresetEntryEditSheet(
             entry = entry,
             builtinKeys = availableBuiltinKeys(preset.entries, entry.id),
-            modeInjections = modeInjections,
             onDismiss = { editingEntry = null },
             onConfirm = { edited ->
                 onMutatePreset { current ->
@@ -397,7 +391,7 @@ private fun PresetDetailContent(
         )
     }
 
-    val deleteTargetTitle = deleteTarget?.let { presetEntryTitle(it, modeInjections) }.orEmpty()
+    val deleteTargetTitle = deleteTarget?.let { presetEntryTitle(it) }.orEmpty()
     RikkaConfirmDialog(
         show = deleteTarget != null,
         title = stringResource(R.string.preset_detail_delete_title),
@@ -586,7 +580,6 @@ private fun DraftContextSection(
 private fun PresetEntryCard(
     modifier: Modifier = Modifier,
     entry: PresetEntry,
-    modeInjections: List<PromptInjection.ModeInjection>,
     reorderScope: ReorderableCollectionItemScope,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -596,12 +589,9 @@ private fun PresetEntryCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
 ) {
-    val title = presetEntryTitle(entry, modeInjections)
-    val invalidReference = entry is PresetEntry.Reference &&
-        modeInjections.none { it.id == entry.modeInjectionId }
+    val title = presetEntryTitle(entry)
     // Builtin 条目当前一律 config-only（injectable=false）：可见可编辑但不注入当前对话。
-    val configOnly = entry is PresetEntry.Builtin &&
-        BuiltinPromptRegistry[entry.builtinKey]?.injectable != true
+    val configOnly = entry.isConfigOnlyBuiltin()
     var menuExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val dragHandleDescription = stringResource(R.string.preset_detail_drag_handle)
@@ -663,11 +653,6 @@ private fun PresetEntryCard(
                     if (configOnly) {
                         Tag(type = TagType.WARNING) {
                             Text(stringResource(R.string.preset_detail_config_only_tag))
-                        }
-                    }
-                    if (invalidReference) {
-                        Tag(type = TagType.WARNING) {
-                            Text(stringResource(R.string.preset_detail_invalid_reference))
                         }
                     }
                 }
@@ -740,17 +725,11 @@ private fun PresetEntryCard(
 private fun PresetEntryEditSheet(
     entry: PresetEntry,
     builtinKeys: List<String>,
-    modeInjections: List<PromptInjection.ModeInjection>,
     onDismiss: () -> Unit,
     onConfirm: (PresetEntry) -> Unit,
 ) {
     var draft by remember { mutableStateOf(entry) }
-
-    // Reference 条目必须指向一个仍存在的全局注入才允许保存，避免静默保留死 id。
-    val draftValid = when (val current = draft) {
-        is PresetEntry.Reference -> current.hasValidTarget(modeInjections)
-        else -> true
-    }
+    val draftValid = true
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -900,50 +879,6 @@ private fun PresetEntryEditSheet(
                             )
                         }
                     }
-
-                    is PresetEntry.Reference -> {
-                        Text(
-                            stringResource(R.string.preset_detail_reference_target),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        if (modeInjections.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.prompt_page_mode_injection_empty),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            // 当前引用是否命中有效全局注入；失效时不伪装选中首项，
-                            // 而是提示重选并禁用确认，避免静默保留死 id。
-                            val selected = modeInjections.firstOrNull { it.id == current.modeInjectionId }
-                            Select<PromptInjection.ModeInjection?>(
-                                options = modeInjections,
-                                selectedOption = selected,
-                                onOptionSelected = { option ->
-                                    option?.let { draft = current.copy(modeInjectionId = it.id) }
-                                },
-                                optionToString = { option ->
-                                    option?.name?.ifBlank { stringResource(R.string.prompt_page_unnamed) }
-                                        ?: stringResource(R.string.preset_detail_reference_reselect)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            if (selected == null) {
-                                Text(
-                                    text = stringResource(R.string.preset_detail_reference_reselect),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        }
-                        PositionAndDepthFields(
-                            position = current.position,
-                            injectDepth = current.injectDepth,
-                            role = current.role,
-                            onPositionChange = { draft = current.copy(position = it) },
-                            onDepthChange = { draft = current.copy(injectDepth = it) },
-                            onRoleChange = { draft = current.copy(role = it) },
-                        )
-                    }
                 }
             }
         }
@@ -1010,19 +945,14 @@ private fun List<PresetEntry>.replaceEntry(edited: PresetEntry): List<PresetEntr
 private fun PresetEntry.withEnabled(enabled: Boolean): PresetEntry = when (this) {
     is PresetEntry.Custom -> copy(enabled = enabled)
     is PresetEntry.Builtin -> copy(enabled = enabled)
-    is PresetEntry.Reference -> copy(enabled = enabled)
 }
 
 @Composable
 private fun presetEntryTitle(
     entry: PresetEntry,
-    modeInjections: List<PromptInjection.ModeInjection>,
 ): String = when (entry) {
     is PresetEntry.Custom -> entry.name.ifBlank { stringResource(R.string.prompt_page_unnamed) }
     is PresetEntry.Builtin -> entry.builtinKey.ifBlank { stringResource(R.string.prompt_page_unnamed) }
-    is PresetEntry.Reference -> modeInjections.firstOrNull { it.id == entry.modeInjectionId }
-        ?.name?.ifBlank { stringResource(R.string.prompt_page_unnamed) }
-        ?: stringResource(R.string.prompt_page_unnamed)
 }
 
 private fun InjectionPosition.usesStandaloneMessage(): Boolean = when (this) {

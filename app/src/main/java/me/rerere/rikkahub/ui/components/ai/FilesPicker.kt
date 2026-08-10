@@ -170,17 +170,16 @@ internal fun FilesPicker(
             )
         }
 
-        // Extensions (Quick Messages + Prompt Injections + Skills)
-        val modeAndLorebookCount =
-            if (assistant.allowConversationPromptInjection) {
-                conversation.modeInjectionIds.size + conversation.lorebookIds.size
-            } else {
-                assistant.modeInjectionIds.size + assistant.lorebookIds.size
-            }
+        // Extensions (Quick Messages + Presets + Lorebooks + Skills); #259 no mode injections
+        val lorebookCount = if (conversation.lorebookIds.isNotEmpty()) {
+            conversation.lorebookIds.size
+        } else {
+            assistant.lorebookIds.size
+        }
         val activeCount =
             assistant.quickMessageIds.size +
                 assistant.presetIds.size +
-                modeAndLorebookCount +
+                lorebookCount +
                 assistant.enabledSkills.size
         ListItem(
             leadingContent = {

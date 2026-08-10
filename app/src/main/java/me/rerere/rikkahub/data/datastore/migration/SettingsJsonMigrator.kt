@@ -6,6 +6,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
+import me.rerere.rikkahub.data.datastore.absorbOrphanModeInjections
+import me.rerere.rikkahub.data.datastore.migratePresetsJsonWithReferences
+import me.rerere.rikkahub.data.model.LegacyModeInjection
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val TAG = "SettingsJsonMigrator"
@@ -72,6 +75,59 @@ object SettingsJsonMigrator {
                     root["quickMessages"] = merged
                 }
             }
+
+            // V5 (#259): BEFORE stripping modeInjections — Reference→Custom + orphan absorb.
+            // Assistant-only and unreferenced modeInjections are snapshotted into Default Preset
+            // so content is not lost when root modeInjections is removed.
+            val modeInjections = root["modeInjections"]?.let { element ->
+                runCatching {
+                    JsonInstant.decodeFromString<List<LegacyModeInjection>>(
+                        JsonInstant.encodeToString(element),
+                    )
+                }.getOrDefault(emptyList())
+            }.orEmpty()
+
+            root["presets"]?.let { presetsElement ->
+                val presetsJson = JsonInstant.encodeToString(presetsElement)
+                val referencedIds = mutableSetOf<kotlin.uuid.Uuid>()
+                val migrated = runCatching {
+                    absorbOrphanModeInjections(
+                        migratePresetsJsonWithReferences(presetsJson, modeInjections, referencedIds),
+                        modeInjections,
+                        extraCoveredIds = referencedIds,
+                    )
+                }.getOrNull()
+                if (migrated != null) {
+                    root["presets"] = JsonInstant.parseToJsonElement(
+                        JsonInstant.encodeToString(migrated),
+                    )
+                }
+            } ?: run {
+                if (modeInjections.isNotEmpty()) {
+                    val migrated = absorbOrphanModeInjections(emptyList(), modeInjections)
+                    root["presets"] = JsonInstant.parseToJsonElement(
+                        JsonInstant.encodeToString(migrated),
+                    )
+                }
+            }
+
+            // Strip assistant direct modeInjectionIds / allowConversationPromptInjection.
+            root["assistants"]?.let { element ->
+                val arr = element as? JsonArray ?: return@let
+                val cleaned = JsonArray(
+                    arr.map { item ->
+                        val obj = item as? JsonObject ?: return@map item
+                        JsonObject(
+                            obj.toMutableMap().apply {
+                                remove("modeInjectionIds")
+                                remove("allowConversationPromptInjection")
+                            },
+                        )
+                    },
+                )
+                root["assistants"] = cleaned
+            }
+            root.remove("modeInjections")
 
             JsonInstant.encodeToString(JsonObject(root))
         }.onFailure {

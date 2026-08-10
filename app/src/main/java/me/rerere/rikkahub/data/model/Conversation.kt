@@ -26,7 +26,6 @@ data class Conversation(
     @Serializable(with = InstantSerializer::class)
     val updateAt: Instant = Instant.now(),
     val customSystemPrompt: String? = null,
-    val modeInjectionIds: Set<Uuid> = emptySet(),
     val lorebookIds: Set<Uuid> = emptySet(),
     // Absolute path inside the workspace rootfs
     val workspaceCwd: String? = null,

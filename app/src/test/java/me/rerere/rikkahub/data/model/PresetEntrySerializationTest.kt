@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.model
 
-import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,7 +16,6 @@ class PresetEntrySerializationTest {
             entries = listOf(
                 PresetEntry.Builtin(builtinKey = "suggestion", overrideContent = "custom"),
                 PresetEntry.Custom(name = "custom", content = "body", legacyPriority = 8),
-                PresetEntry.Reference(modeInjectionId = Uuid.random(), role = MessageRole.ASSISTANT),
             ),
         )
 
@@ -67,6 +65,17 @@ class PresetEntrySerializationTest {
         assertEquals(PRESET_ENTRIES_VERSION, normalized.entriesVersion)
         assertTrue(normalized.modeInjectionIds.isEmpty())
         assertEquals("existing snapshot", (normalized.entries.single() as PresetEntry.Custom).content)
+    }
+
+    @Test
+    fun `reference discriminator is rejected after type removal`() {
+        val json = """
+            {"type":"reference","id":"${Uuid.random()}","enabled":true,"order":0,
+             "position":"after_system_prompt","injectDepth":4,"role":"user",
+             "modeInjectionId":"${Uuid.random()}"}
+        """.trimIndent()
+        val result = runCatching { JsonInstant.decodeFromString<PresetEntry>(json) }
+        assertTrue(result.isFailure)
     }
 
     @Test

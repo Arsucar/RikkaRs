@@ -519,9 +519,24 @@ class ChatVM(
     fun handleToolApproval(
         toolCallId: String,
         approved: Boolean,
-        reason: String = ""
+        reason: String = "",
+        trustedWriteRoot: String? = null,
     ) {
-        chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
+        chatService.handleToolApproval(
+            conversationId = _conversationId,
+            toolCallId = toolCallId,
+            approved = approved,
+            reason = reason,
+            trustedWriteRoot = trustedWriteRoot,
+        )
+    }
+
+    fun trustWriteRootAndApprove(toolCallId: String, rootPrefix: String) {
+        handleToolApproval(
+            toolCallId = toolCallId,
+            approved = true,
+            trustedWriteRoot = rootPrefix,
+        )
     }
 
     fun handleToolAnswer(

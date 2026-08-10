@@ -88,7 +88,6 @@ export interface ConversationDto {
   chatSuggestions: string[];
   isPinned: boolean;
   customSystemPrompt?: string | null;
-  modeInjectionIds?: string[];
   lorebookIds?: string[];
   workspaceCwd?: string | null;
   folderId?: string | null;

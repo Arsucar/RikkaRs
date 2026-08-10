@@ -29,6 +29,9 @@ class WorkspaceManager(
         baseDir.mkdirs()
     }
 
+    /** 构造器全局挂载表 (不含会话级 extra, 如 /skills_private) */
+    fun bindMounts(): List<WorkspaceBindMount> = bindMounts
+
     fun ensureWorkspace(root: String): File {
         val dir = workspaceDir(root)
         filesDir(root).mkdirs()
@@ -71,15 +74,39 @@ class WorkspaceManager(
         root: String,
         path: String = "",
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
-    ): List<WorkspaceFileEntry> =
-        fileSystem.list(areaDir(root, area), path)
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    ): List<WorkspaceFileEntry> {
+        if (area != WorkspaceStorageArea.LINUX) {
+            return fileSystem.list(areaDir(root, area), path)
+        }
+        val absolute = toRootfsAbsolute(path)
+        // 内核伪文件系统保持 LINUX 区占位目录行为, 不走挂载重定向
+        if (isKernelFilesystemPath(absolute)) {
+            return listLinuxArea(root, path)
+        }
+        val mountLocation = matchBindMountOrWorkspace(root, absolute, extraBindMounts)
+        if (mountLocation != null) {
+            return listMountLocation(mountLocation, absolute = absolute)
+        }
+        if (path.isBlank()) {
+            return listLinuxRootWithMountPlaceholders(root, extraBindMounts)
+        }
+        return listLinuxArea(root, path)
+    }
 
     fun readText(
         root: String,
         path: String,
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
         charset: Charset = StandardCharsets.UTF_8,
-    ): String = fileSystem.readText(areaDir(root, area), path, charset)
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    ): String {
+        if (area != WorkspaceStorageArea.LINUX) {
+            return fileSystem.readText(areaDir(root, area), path, charset)
+        }
+        val host = resolveLinuxHostFile(root, path, extraBindMounts)
+        return fileSystem.readText(host.rootDir, host.relativePath, charset)
+    }
 
     fun writeText(
         root: String,
@@ -106,8 +133,16 @@ class WorkspaceManager(
         root: String,
         path: String,
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     ): Long {
-        val file = fileSystem.resolve(areaDir(root, area), path)
+        if (area != WorkspaceStorageArea.LINUX) {
+            val file = fileSystem.resolve(areaDir(root, area), path)
+            require(file.exists()) { "File does not exist: $path" }
+            require(file.isFile) { "Path is not a file: $path" }
+            return file.length()
+        }
+        val host = resolveLinuxHostFile(root, path, extraBindMounts)
+        val file = fileSystem.resolve(host.rootDir, host.relativePath)
         require(file.exists()) { "File does not exist: $path" }
         require(file.isFile) { "Path is not a file: $path" }
         return file.length()
@@ -118,8 +153,17 @@ class WorkspaceManager(
         path: String,
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
         outputStream: OutputStream,
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     ) {
-        val file = fileSystem.resolve(areaDir(root, area), path)
+        if (area != WorkspaceStorageArea.LINUX) {
+            val file = fileSystem.resolve(areaDir(root, area), path)
+            require(file.exists()) { "File does not exist: $path" }
+            require(file.isFile) { "Path is not a file: $path" }
+            outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
+            return
+        }
+        val host = resolveLinuxHostFile(root, path, extraBindMounts)
+        val file = fileSystem.resolve(host.rootDir, host.relativePath)
         require(file.exists()) { "File does not exist: $path" }
         require(file.isFile) { "Path is not a file: $path" }
         outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
@@ -131,25 +175,18 @@ class WorkspaceManager(
      * bind mount 的 source 本身就是 Android 侧的普通目录, 因此 /skills 这类挂载路径
      * 可以直接用文件 IO 访问, 无需经过 PRoot; 只是 Rootfs 目录里对应位置是个空挂载点,
      * 按 [WorkspaceStorageArea.LINUX] 解析必然落空。
+     *
+     * @param extraBindMounts 会话/浏览器级临时挂载 (如 /skills_private), 与构造器表合并后按最长 target 匹配
      */
-    fun resolveRootfsPath(root: String, path: String): RootfsLocation {
+    fun resolveRootfsPath(
+        root: String,
+        path: String,
+        extraBindMounts: List<WorkspaceBindMount> = emptyList(),
+    ): RootfsLocation {
         val trimmed = path.trim().trimEnd('/').ifBlank { "/" }
         require(trimmed.startsWith("/")) { "Rootfs path must be absolute: $path" }
 
-        sortedBindMounts.forEach { mount ->
-            val target = mount.target.trimEnd('/')
-            if (trimmed == target) return RootfsLocation(mount.source, "")
-            if (trimmed.startsWith("$target/")) {
-                return RootfsLocation(mount.source, trimmed.removePrefix("$target/"))
-            }
-        }
-
-        if (trimmed == ROOTFS_WORKSPACE_DIR || trimmed.startsWith("$ROOTFS_WORKSPACE_DIR/")) {
-            return RootfsLocation(
-                rootDir = filesDir(root),
-                relativePath = trimmed.removePrefix(ROOTFS_WORKSPACE_DIR).trimStart('/'),
-            )
-        }
+        matchBindMountOrWorkspace(root, trimmed, extraBindMounts)?.let { return it }
 
         // 内核伪文件系统: 显式拒绝, 而不是回落到一个必然读不到的物理路径
         KERNEL_FS_MOUNTS.firstOrNull { trimmed == it || trimmed.startsWith("$it/") }?.let {
@@ -355,6 +392,123 @@ class WorkspaceManager(
     private fun areaDir(root: String, area: WorkspaceStorageArea): File = when (area) {
         WorkspaceStorageArea.FILES -> filesDir(root)
         WorkspaceStorageArea.LINUX -> linuxDir(root)
+    }
+
+    private fun toRootfsAbsolute(path: String): String {
+        val trimmed = path.replace('\\', '/').trim().trimStart('/').trimEnd('/')
+        return if (trimmed.isBlank()) "/" else "/$trimmed"
+    }
+
+    private fun isKernelFilesystemPath(absolute: String): Boolean =
+        KERNEL_FS_MOUNTS.any { absolute == it || absolute.startsWith("$it/") }
+
+    /**
+     * 合并构造器挂载与 extra, 按 target 最长优先匹配; 再匹配 /workspace 特例.
+     * 不匹配时返回 null (调用方回落 linuxDir 或 kernel 拒绝).
+     */
+    private fun matchBindMountOrWorkspace(
+        root: String,
+        absolute: String,
+        extraBindMounts: List<WorkspaceBindMount>,
+    ): RootfsLocation? {
+        val mounts = if (extraBindMounts.isEmpty()) {
+            sortedBindMounts
+        } else {
+            (bindMounts + extraBindMounts).sortedByDescending { it.target.trimEnd('/').length }
+        }
+        mounts.forEach { mount ->
+            val target = mount.target.trimEnd('/')
+            if (absolute == target) return RootfsLocation(mount.source, "")
+            if (absolute.startsWith("$target/")) {
+                return RootfsLocation(mount.source, absolute.removePrefix("$target/"))
+            }
+        }
+        if (absolute == ROOTFS_WORKSPACE_DIR || absolute.startsWith("$ROOTFS_WORKSPACE_DIR/")) {
+            return RootfsLocation(
+                rootDir = filesDir(root),
+                relativePath = absolute.removePrefix(ROOTFS_WORKSPACE_DIR).trimStart('/'),
+            )
+        }
+        return null
+    }
+
+    private fun listLinuxArea(root: String, path: String): List<WorkspaceFileEntry> {
+        val dir = fileSystem.resolve(linuxDir(root), path)
+        if (!dir.exists() || !dir.isDirectory) return emptyList()
+        return fileSystem.list(linuxDir(root), path)
+    }
+
+    /**
+     * 挂载源缺失/非目录时返回空列表 (AC7), 不崩溃.
+     * 条目 path 以 Rootfs 区相对路径返回 (挂载 target 前缀 + 源内相对路径), 便于浏览器导航.
+     */
+    private fun listMountLocation(
+        location: RootfsLocation,
+        absolute: String,
+    ): List<WorkspaceFileEntry> {
+        val sourceRoot = location.rootDir
+        if (!sourceRoot.exists() || !sourceRoot.isDirectory) return emptyList()
+        val relative = location.relativePath
+        val target = if (relative.isBlank()) sourceRoot else File(sourceRoot, relative)
+        if (!target.exists() || !target.isDirectory) return emptyList()
+        val listed = fileSystem.list(sourceRoot, relative)
+        // entry.path 相对挂载源根 (含 relative 前缀); 拼回 Rootfs 区路径 skills/foo
+        val mountRootAbsolute = if (relative.isBlank()) {
+            absolute
+        } else {
+            absolute.removeSuffix("/$relative").ifBlank { absolute.removeSuffix(relative) }
+        }
+        val mountTargetPrefix = mountRootAbsolute.trimStart('/').trimEnd('/')
+        if (mountTargetPrefix.isBlank()) return listed
+        return listed.map { entry ->
+            entry.copy(path = "$mountTargetPrefix/${entry.path}".trim('/').replace("//", "/"))
+        }
+    }
+
+    /**
+     * Rootfs 根目录: 真实 linux 内容 + 缺失的挂载占位目录合成, 保证 AC1 可见挂载名.
+     */
+    private fun listLinuxRootWithMountPlaceholders(
+        root: String,
+        extraBindMounts: List<WorkspaceBindMount>,
+    ): List<WorkspaceFileEntry> {
+        val existing = listLinuxArea(root, "")
+        val byName = existing.associateBy { it.name }.toMutableMap()
+        val now = System.currentTimeMillis()
+        val mountNames = linkedSetOf<String>()
+        (bindMounts + extraBindMounts).forEach { mount ->
+            val name = mount.target.trim('/').substringBefore('/')
+            if (name.isNotBlank()) mountNames += name
+        }
+        mountNames += ROOTFS_WORKSPACE_DIR.trimStart('/')
+        mountNames.forEach { name ->
+            if (!byName.containsKey(name)) {
+                byName[name] = WorkspaceFileEntry(
+                    path = name,
+                    name = name,
+                    isDirectory = true,
+                    sizeBytes = 0L,
+                    updatedAt = now,
+                )
+            }
+        }
+        return byName.values
+            .sortedWith(compareBy<WorkspaceFileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+            .take(config.maxListEntries)
+    }
+
+    private fun resolveLinuxHostFile(
+        root: String,
+        path: String,
+        extraBindMounts: List<WorkspaceBindMount>,
+    ): RootfsLocation {
+        val absolute = toRootfsAbsolute(path)
+        if (isKernelFilesystemPath(absolute)) {
+            // 与 resolveRootfsPath 一致: kernel 不可当普通文件读
+            error("$absolute is a kernel filesystem and cannot be read as a file, use workspace_shell instead")
+        }
+        return matchBindMountOrWorkspace(root, absolute, extraBindMounts)
+            ?: RootfsLocation(linuxDir(root), absolute.trimStart('/'))
     }
 
     fun cleanupAllTempDirs() {

@@ -49,12 +49,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
+import me.rerere.hugeicons.stroke.Message01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ConversationTag
 import me.rerere.rikkahub.ui.components.ui.ConversationTagLabel
+import me.rerere.rikkahub.ui.components.ui.EmptyState
+import me.rerere.rikkahub.ui.components.ui.ShimmerListSkeleton
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -107,27 +111,28 @@ fun ColumnScope.ConversationList(
         }
     }
 
+    val isInitialLoading = conversations.loadState.refresh is LoadState.Loading &&
+        conversations.itemCount == 0
+
     LazyColumn(
         state = listState,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (conversations.itemCount == 0) {
+        if (isInitialLoading) {
             item {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.chat_page_no_conversations),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
+                ShimmerListSkeleton(
+                    itemCount = 8,
+                    itemHeight = 40.dp,
+                    spacing = 8.dp,
+                )
+            }
+        } else if (conversations.itemCount == 0) {
+            item {
+                EmptyState(
+                    icon = HugeIcons.Message01,
+                    title = stringResource(id = R.string.chat_page_no_conversations),
+                )
             }
         }
 

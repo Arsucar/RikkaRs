@@ -815,6 +815,9 @@ private fun ChatPageContent(
                 onToolApproval = { toolCallId, approved, reason ->
                     vm.handleToolApproval(toolCallId, approved, reason)
                 },
+                onTrustWriteRootAndApprove = { toolCallId, rootPrefix ->
+                    vm.trustWriteRootAndApprove(toolCallId, rootPrefix)
+                },
                 onToolAnswer = { toolCallId, answer ->
                     vm.handleToolAnswer(toolCallId, answer)
                 },

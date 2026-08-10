@@ -453,6 +453,13 @@ fun AssistantToolsPage(id: String) {
                 Text(stringResource(R.string.assistant_tools_permission_source_default, sourceDefault))
                 Text(stringResource(R.string.assistant_tools_permission_effective, effectivePermission))
                 Text(stringResource(R.string.assistant_tools_permission_next_generation))
+                if (capability.id == "skill:management" || capability.runtimeName == "skill_tool") {
+                    Text(
+                        text = stringResource(R.string.assistant_tools_skill_tool_trusted_roots_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 ToolPermission.entries.forEach { permission ->
                     Row(
                         Modifier.fillMaxWidth().clickable {

@@ -13,11 +13,13 @@ import java.io.InputStream
 import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.workspace.SkillsPrivateEntryAssistant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceStorageArea
+import kotlin.uuid.Uuid
 
 class WorkspaceDetailVM(
     private val id: String,
@@ -34,6 +36,9 @@ class WorkspaceDetailVM(
 
     private val _installError = MutableStateFlow<String?>(null)
     val installError = _installError.asStateFlow()
+
+    /** 多绑时用户显式选择的 skills_private 助手; 每次进入按最新绑定重解析 */
+    private var skillsPrivateSelectionOverride: Uuid? = null
 
     init {
         loadWorkspace()
@@ -71,27 +76,43 @@ class WorkspaceDetailVM(
         refresh()
     }
 
+    fun selectSkillsPrivateAssistant(assistantId: Uuid) {
+        skillsPrivateSelectionOverride = assistantId
+        _state.update { it.copy(entries = emptyList(), error = null) }
+        refresh()
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
+            val skillsPrivateEntry = resolveSkillsPrivateEntryForBrowser()
             runCatching {
                 repository.listFiles(
                     id = id,
                     area = state.value.area,
                     path = state.value.path,
+                    skillsPrivateAssistantId = skillsPrivateEntry?.selectedAssistant?.id,
                 )
             }.onSuccess { entries ->
                 val workspace = state.value.workspace
                 val filesPath = workspace?.let { w ->
                     File(File(repository.managerFilesBaseDir(), w.root), "files").absolutePath
                 }
-                _state.update { it.copy(entries = entries, loading = false, filesPath = filesPath) }
+                _state.update {
+                    it.copy(
+                        entries = entries,
+                        loading = false,
+                        filesPath = filesPath,
+                        skillsPrivateEntry = skillsPrivateEntry,
+                    )
+                }
             }.onFailure { error ->
                 _state.update {
                     it.copy(
                         entries = emptyList(),
                         loading = false,
                         error = error.message ?: "加载工作区文件失败",
+                        skillsPrivateEntry = skillsPrivateEntry,
                     )
                 }
             }
@@ -142,6 +163,7 @@ class WorkspaceDetailVM(
 
     fun exportFile(entry: WorkspaceFileEntry, outputStream: OutputStream) {
         val area = state.value.area
+        val skillsPrivateId = skillsPrivateAssistantIdForPath(entry.path)
         viewModelScope.launch {
             runCatching {
                 repository.exportFile(
@@ -149,6 +171,7 @@ class WorkspaceDetailVM(
                     area = area,
                     path = entry.path,
                     outputStream = outputStream,
+                    skillsPrivateAssistantId = skillsPrivateId,
                 )
             }.onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "导出文件失败") }
@@ -180,6 +203,7 @@ class WorkspaceDetailVM(
         onResult: ((Result<File>) -> Unit)? = null,
     ) {
         val area = state.value.area
+        val skillsPrivateId = skillsPrivateAssistantIdForPath(entry.path)
         viewModelScope.launch {
             val result = runCatching {
                 val dir = File(cacheDir, directoryName).apply { mkdirs() }
@@ -190,6 +214,7 @@ class WorkspaceDetailVM(
                         area = area,
                         path = entry.path,
                         outputStream = output,
+                        skillsPrivateAssistantId = skillsPrivateId,
                     )
                 }
                 file
@@ -206,6 +231,20 @@ class WorkspaceDetailVM(
             val workspace = state.value.workspace ?: return@launch
             repository.setToolApproval(workspace.id, toolName, needsApproval)
             loadWorkspace()
+        }
+    }
+
+    /** #258: 从工作区详情撤销受信写入前缀，立即恢复路径硬审批 */
+    fun removeTrustedWriteRoot(root: String) {
+        viewModelScope.launch {
+            val workspace = state.value.workspace ?: return@launch
+            runCatching {
+                repository.removeTrustedWriteRoot(workspace.id, root)
+            }.onSuccess {
+                loadWorkspace()
+            }.onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "删除受信目录失败") }
+            }
         }
     }
 
@@ -288,6 +327,26 @@ class WorkspaceDetailVM(
             _state.update { it.copy(workspace = workspace, filesPath = filesPath) }
         }
     }
+
+    private fun resolveSkillsPrivateEntryForBrowser(): SkillsPrivateEntryAssistant? {
+        if (state.value.area != WorkspaceStorageArea.LINUX) return null
+        if (!isUnderSkillsPrivate(state.value.path)) return null
+        return repository.resolveSkillsPrivateEntry(id, skillsPrivateSelectionOverride)
+    }
+
+    private fun skillsPrivateAssistantIdForPath(path: String): Uuid? {
+        if (state.value.area != WorkspaceStorageArea.LINUX) return null
+        if (!isUnderSkillsPrivate(path) && !isUnderSkillsPrivate(state.value.path)) return null
+        return state.value.skillsPrivateEntry?.selectedAssistant?.id
+            ?: skillsPrivateSelectionOverride
+            ?: repository.resolveSkillsPrivateEntry(id, skillsPrivateSelectionOverride)
+                .selectedAssistant.id
+    }
+
+    private fun isUnderSkillsPrivate(path: String): Boolean {
+        val normalized = path.replace('\\', '/').trim().trimStart('/').trimEnd('/')
+        return normalized == "skills_private" || normalized.startsWith("skills_private/")
+    }
 }
 
 data class WorkspaceDetailState(
@@ -298,6 +357,8 @@ data class WorkspaceDetailState(
     val entries: List<WorkspaceFileEntry> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
+    /** 当前路径在 /skills_private 下时的入口助手解析; 其它路径为 null */
+    val skillsPrivateEntry: SkillsPrivateEntryAssistant? = null,
 )
 
 data class WorkspaceTerminalState(

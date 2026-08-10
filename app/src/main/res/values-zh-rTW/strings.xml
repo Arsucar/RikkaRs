@@ -18,13 +18,11 @@
   <string name="assistant_detail_prompt_desc">設定系統提示、訊息範本與正規表示式規則</string>
   <string name="assistant_detail_request_desc">設定自訂請求標頭與主體參數</string>
   <string name="assistant_extensions_page_empty_lorebooks">尚無可用的 lorebook，請在 Prompts 中建立</string>
-  <string name="assistant_extensions_page_empty_mode_injections">尚無可用的模式注入，請在 Prompts 中建立一個</string>
   <string name="assistant_extensions_page_empty_quick_messages">目前沒有可用的快速訊息，請在擴充功能中建立</string>
   <string name="assistant_extensions_page_empty_skills">沒有可用的技能，請在 Extensions 中安裝一個</string>
   <string name="assistant_extensions_page_goto_extensions">前往擴充功能</string>
   <string name="assistant_extensions_page_goto_prompts">前往提示</string>
   <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
-  <string name="assistant_extensions_page_tab_mode_injections">模式注入</string>
   <string name="assistant_extensions_page_tab_quick_messages">快速訊息</string>
   <string name="assistant_extensions_page_tab_skills">技能</string>
   <string name="assistant_extensions_page_title">擴充功能</string>
@@ -352,11 +350,9 @@
   <string name="extension_selector_go_to_extensions">管理擴充功能</string>
   <string name="extension_selector_go_to_skills">前往管理技能</string>
   <string name="extension_selector_lorebooks_empty">沒有可用的 lorebooks</string>
-  <string name="extension_selector_mode_injections_empty">無可用的獨立注入</string>
   <string name="extension_selector_quick_messages_empty">目前沒有可用的快速訊息</string>
   <string name="extension_selector_skills_empty">無可用技能</string>
   <string name="extension_selector_tab_lorebooks">Lorebooks</string>
-  <string name="extension_selector_tab_mode_injections">獨立注入</string>
   <string name="extension_selector_tab_quick_messages">快速訊息</string>
   <string name="extension_selector_tab_skills">技能</string>
   <string name="extensions_page_agent_skills">代理人技能</string>
@@ -475,7 +471,6 @@
   <string name="prompt_page_add">新增</string>
   <string name="prompt_page_add_entry">新增項目</string>
   <string name="prompt_page_add_lorebook">新增Lorebook</string>
-  <string name="prompt_page_add_mode_injection">新增模式注入</string>
   <string name="prompt_page_cancel">取消</string>
   <string name="prompt_page_case_sensitive">區分大小寫</string>
   <string name="prompt_page_confirm">確認</string>
@@ -487,7 +482,6 @@
   <string name="prompt_page_edit">編輯</string>
   <string name="prompt_page_edit_entry">編輯項目</string>
   <string name="prompt_page_edit_lorebook">編輯 Lorebook</string>
-  <string name="prompt_page_edit_mode_injection">編輯模式注入</string>
   <string name="prompt_page_empty_hint">點擊下方按鈕以新增</string>
   <string name="prompt_page_enabled">已啟用</string>
   <string name="prompt_page_entries_count_format">%d 個項目</string>
@@ -500,8 +494,6 @@
   <string name="prompt_page_keywords_label">關鍵字</string>
   <string name="prompt_page_lorebook_empty">沒有 Lorebooks</string>
   <string name="prompt_page_lorebook_tab">Lorebook</string>
-  <string name="prompt_page_mode_injection_empty">無模式注入</string>
-  <string name="prompt_page_mode_injection_tab">模式注入</string>
   <string name="prompt_page_name">名稱</string>
   <string name="prompt_page_new_keyword">新關鍵字</string>
   <string name="prompt_page_position_after_system">系統提示之後</string>

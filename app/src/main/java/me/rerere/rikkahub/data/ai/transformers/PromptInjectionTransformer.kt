@@ -4,7 +4,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
-import me.rerere.rikkahub.data.datastore.boundPresetInjectionIds
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PresetEntry
@@ -20,7 +19,7 @@ import kotlin.uuid.Uuid
 /**
  * 提示词注入转换器
  *
- * 根据 Assistant 关联的 ModeInjection 和 Lorebook 进行提示词注入
+ * #259: 仅展开助手绑定预设的 entries + Lorebook；无独立 ModeInjection 直连路径。
  */
 object PromptInjectionTransformer : InputMessageTransformer {
     override val previewPolicy: PreviewTransformPolicy = PreviewTransformPolicy.SideEffectFree
@@ -31,9 +30,7 @@ object PromptInjectionTransformer : InputMessageTransformer {
         return transformMessages(
             messages = messages,
             assistant = ctx.assistant,
-            modeInjections = ctx.settings.modeInjections,
             lorebooks = ctx.settings.lorebooks,
-            conversationModeInjectionIds = ctx.conversationModeInjectionIds,
             conversationLorebookIds = ctx.conversationLorebookIds,
             presets = ctx.settings.presets,
         )
@@ -46,19 +43,14 @@ object PromptInjectionTransformer : InputMessageTransformer {
 internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
-    modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
-    conversationModeInjectionIds: Set<Uuid> = emptySet(),
     conversationLorebookIds: Set<Uuid> = emptySet(),
     presets: List<Preset> = emptyList(),
 ): List<UIMessage> {
-    // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
-        modeInjections = modeInjections,
         lorebooks = lorebooks,
-        conversationModeInjectionIds = conversationModeInjectionIds,
         conversationLorebookIds = conversationLorebookIds,
         presets = presets,
     )
@@ -67,73 +59,32 @@ internal fun transformMessages(
         return messages
     }
 
-    // 按位置和优先级分组
-    val modeInjectionOrder = modeInjections.withIndex().associate { (index, injection) -> injection.id to index }
     val byPosition = injections
-        .sortedWith(
-            compareByDescending<PromptInjection> { it.priority }
-                .thenBy { modeInjectionOrder[it.id] ?: Int.MAX_VALUE }
-        )
+        .sortedWith(compareByDescending { it.priority })
         .groupBy { it.position }
 
-    // 应用注入
     return applyInjections(messages, byPosition)
 }
 
 /**
- * 收集需要注入的内容
+ * 收集需要注入的内容（#259: 仅 entries + lorebook）
  */
 internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
-    modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
-    conversationModeInjectionIds: Set<Uuid> = emptySet(),
     conversationLorebookIds: Set<Uuid> = emptySet(),
     presets: List<Preset> = emptyList(),
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
-    val effectiveModeInjectionIds = if (assistant.allowConversationPromptInjection) {
-        conversationModeInjectionIds
-    } else {
-        // #205: 组装期只读去重（替代 #201 的加载期持久化删除）。
-        // 跳过与已绑定预设条目（启用条目 + Reference 引用的全局 id，语义与 #201 的
-        // boundPresetInjectionIds 一致）重复的直连 id；直连绑定数据保留在 DataStore 不销毁，
-        // 关闭预设后直连恢复生效、system 消息不残留旧注入。
-        assistant.modeInjectionIds
-            .filterNot { it in boundPresetInjectionIds(assistant.presetIds, presets) }
-            .toSet()
-    }
-    val effectiveLorebookIds = if (assistant.allowConversationPromptInjection) {
-        conversationLorebookIds
-    } else {
-        assistant.lorebookIds
-    }
-    // 助手关联的预设 (见 issue #65 / #182)
+    // 对话级 lorebook 仍可覆盖（助手开启 conversation system prompt 等场景外，
+    // 对话级注入开关已删除；此处保留 conversationLorebookIds 透传兼容 ChatService）。
+    val effectiveLorebookIds = conversationLorebookIds.ifEmpty { assistant.lorebookIds }
     val effectivePresetIds = assistant.presetIds
     val activePresets = presets.filter { it.id in effectivePresetIds }
 
-    // 展开旧模型预设内生效的注入 ID (未迁移到 entries 的预设走此路径, 见 issue #65)
-    // 预设内被单独禁用的条目会被排除
-    val presetInjectionIds = activePresets
-        .filter { !it.hasEntries() }
-        .flatMap { it.effectiveInjectionIds() }
-        .toSet()
-    val allModeInjectionIds = effectiveModeInjectionIds + presetInjectionIds
-
-    // 1. 获取关联的 ModeInjection (含直接绑定与旧模型预设展开的条目)
-    // 记录已注入 id，供 step1b 去重（同一 id 只注入一次，避免直连+entries 双注入）。
     val injectedIds = mutableSetOf<Uuid>()
-    modeInjections
-        .filter { it.enabled && allModeInjectionIds.contains(it.id) }
-        .forEach {
-            injections.add(it)
-            injectedIds.add(it.id)
-        }
-
-    // 1b. 展开新模型预设 (entries)：每个启用条目就地解析为 ModeInjection (见 issue #182)
-    // priority = -order（或迁移条目的 legacyPriority），使下游 sortedByDescending{priority} 生效。
-    // 若解析出的 injection.id 已在 step1 注入过则跳过（按 id 去重，lorebook 不参与）。
+    // 展开预设 entries：每个启用条目就地解析为 ResolvedInjection
     activePresets
         .filter { it.hasEntries() }
         .forEach { preset ->
@@ -143,7 +94,6 @@ internal fun collectInjections(
                     if (!entry.enabled) return@forEachIndexed
                     resolvePresetEntry(
                         entry = entry,
-                        modeInjections = modeInjections,
                         fallbackPriority = -displayIndex,
                     )?.let { resolved ->
                         if (injectedIds.add(resolved.deduplicationId)) {
@@ -153,12 +103,11 @@ internal fun collectInjections(
                 }
         }
 
-    // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
+    // Lorebook 中被触发的 RegexInjection
     val enabledLorebooks = lorebooks.filter {
         it.enabled && effectiveLorebookIds.contains(it.id)
     }
     if (enabledLorebooks.isNotEmpty()) {
-        // 提取上下文用于匹配（只取非 SYSTEM 消息）
         val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
 
         enabledLorebooks.forEach { lorebook ->
@@ -175,32 +124,26 @@ internal fun collectInjections(
 }
 
 /**
- * 将一个启用的 [PresetEntry] 解析为可注入的 [PromptInjection.ModeInjection]。
+ * 将一个启用的 [PresetEntry] 解析为可注入的 [PromptInjection.ResolvedInjection]。
  *
  * - [PresetEntry.Custom]：直接用内嵌内容。
- * - [PresetEntry.Builtin]：查 [BuiltinPromptRegistry]，用 override 或默认模板，DYNAMIC 时替换宏；
- *   未知 key 或解析后内容为空则跳过（返回 null，AC6：不注入、不报错）。
- * - [PresetEntry.Reference]：查全局 [modeInjections] 命中 [PresetEntry.Reference.modeInjectionId]；
- *   被删或全局禁用则跳过。
+ * - [PresetEntry.Builtin]：查 [BuiltinPromptRegistry]；未知 key / 非 injectable / 空内容则跳过。
  *
- * order → priority 采用 `-order` 映射：下游 `sortedByDescending { priority }` 即为组内 order 升序拼接。
- * position 对 Builtin 取 [effectivePosition]（overridePosition 优先）。
+ * order → priority 采用 `-order` 映射；迁移条目的 legacyPriority 优先。
  */
 private data class ResolvedPresetEntry(
-    val injection: PromptInjection.ModeInjection,
+    val injection: PromptInjection.ResolvedInjection,
     val deduplicationId: Uuid,
 )
 
 private fun resolvePresetEntry(
     entry: PresetEntry,
-    modeInjections: List<PromptInjection.ModeInjection>,
     fallbackPriority: Int,
 ): ResolvedPresetEntry? {
     val content: String
     val role: MessageRole
-    var deduplicationId = entry.id
+    val deduplicationId = entry.id
     val position: InjectionPosition = entry.effectivePosition()
-    // 迁移快照条目保留原 priority 参与全局混排（防排序回归）；用户新建条目 legacyPriority=null 时回退 -order。
     var priority = fallbackPriority
     when (entry) {
         is PresetEntry.Custom -> {
@@ -211,25 +154,15 @@ private fun resolvePresetEntry(
 
         is PresetEntry.Builtin -> {
             val def = BuiltinPromptRegistry[entry.builtinKey] ?: return null
-            // config-only：内置模板的真实注入由各自专用 transformer / 特性流程完成。
-            // 预设路径对 injectable=false 的条目一律跳过，避免双注入或泄漏未解析字面宏（见 #182）。
             if (!def.injectable) return null
             val override = entry.overrideContent?.takeIf { def.overridable }
             content = override ?: def.defaultContent
             role = entry.role
         }
-
-        is PresetEntry.Reference -> {
-            val target = modeInjections.firstOrNull { it.id == entry.modeInjectionId }
-                ?.takeIf { it.enabled } ?: return null
-            content = target.content
-            role = entry.role
-            deduplicationId = target.id
-        }
     }
     if (content.isBlank()) return null
     return ResolvedPresetEntry(
-        injection = PromptInjection.ModeInjection(
+        injection = PromptInjection.ResolvedInjection(
             id = entry.id,
             enabled = true,
             priority = priority,

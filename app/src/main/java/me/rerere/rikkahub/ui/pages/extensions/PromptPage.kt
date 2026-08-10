@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -53,7 +52,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Surface
@@ -66,8 +64,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -95,12 +91,10 @@ import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.PresetSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
-import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PRESET_ENTRIES_VERSION
 import me.rerere.rikkahub.data.model.Preset
-import me.rerere.rikkahub.data.model.PresetEntry
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -166,13 +160,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
             when (page) {
                 0 -> PresetTab(
                     presets = settings.presets,
-                    modeInjections = settings.modeInjections,
                     onUpdatePresets = { vm.updateSettings(settings.copy(presets = it)) },
-                    onUpdateModeInjections = { updatedModeInjections ->
-                        vm.updateSettings(
-                            settings.withModeInjectionsPreservingPresetSnapshots(updatedModeInjections)
-                        )
-                    }
                 )
 
                 1 -> LorebookTab(
@@ -187,23 +175,13 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
 @Composable
 private fun PresetTab(
     presets: List<Preset>,
-    modeInjections: List<PromptInjection.ModeInjection>,
     onUpdatePresets: (List<Preset>) -> Unit,
-    onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
     val toaster = LocalToaster.current
     val navController = LocalNavController.current
     val currentPresets by rememberUpdatedState(presets)
-    val editState = useEditState<Preset> { edited ->
-        val index = presets.indexOfFirst { it.id == edited.id }
-        if (index >= 0) {
-            onUpdatePresets(presets.toMutableList().apply { set(index, edited) })
-        } else {
-            onUpdatePresets(presets + edited)
-        }
-    }
     val importSuccessMsg = stringResource(R.string.export_import_success)
     val importFailedMsg = stringResource(R.string.export_import_failed)
     val importer = rememberImporter(PresetSerializer) { result ->
@@ -253,7 +231,6 @@ private fun PresetTab(
                 items(presets, key = { it.id }) { preset ->
                     PresetCard(
                         preset = preset,
-                        modeInjections = modeInjections,
                         onEdit = { navController.navigate(Screen.PresetDetail(preset.id.toString())) },
                         onDelete = { onUpdatePresets(presets - preset) }
                     )
@@ -272,8 +249,12 @@ private fun PresetTab(
                 }
             },
         ) {
+            // #259: 新建与打开已有预设共用 PresetDetailPage（Builtin/Custom 条目编辑），
+            // 不再走已删 ModeInjection 路径的残缺 bottom sheet。
             Button(onClick = {
-                editState.open(Preset(entriesVersion = PRESET_ENTRIES_VERSION))
+                val created = Preset(entriesVersion = PRESET_ENTRIES_VERSION)
+                onUpdatePresets(currentPresets + created)
+                navController.navigate(Screen.PresetDetail(created.id.toString()))
             }) {
                 Row(
                     horizontalArrangement = Arrangement.Center,
@@ -290,25 +271,11 @@ private fun PresetTab(
             }
         }
     }
-
-    if (editState.isEditing) {
-        editState.currentState?.let { state ->
-            PresetEditSheet(
-                preset = state,
-                modeInjections = modeInjections,
-                onDismiss = { editState.dismiss() },
-                onConfirm = { editState.confirm() },
-                onEditPreset = { editState.currentState = it },
-                onUpdateModeInjections = onUpdateModeInjections,
-            )
-        }
-    }
 }
 
 @Composable
 private fun PresetCard(
     preset: Preset,
-    modeInjections: List<PromptInjection.ModeInjection>,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -316,8 +283,8 @@ private fun PresetCard(
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
     val exporter = rememberExporter(preset, PresetSerializer)
-    val includedNames = remember(preset, modeInjections) {
-        preset.displayEntryNames(modeInjections)
+    val includedNames = remember(preset) {
+        preset.displayEntryNames()
     }
     val entryCount = remember(preset) { preset.displayEntryCount() }
 
@@ -418,411 +385,6 @@ private fun PresetCard(
             onDismiss = { showExportDialog = false }
         )
     }
-}
-
-@Composable
-internal fun PresetEditSheet(
-    preset: Preset,
-    modeInjections: List<PromptInjection.ModeInjection>,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    onEditPreset: (Preset) -> Unit,
-    onUpdateModeInjections: (List<PromptInjection.ModeInjection>) -> Unit,
-) {
-    var editingInjection by remember { mutableStateOf<PromptInjection.ModeInjection?>(null) }
-    var pendingModeInjections by remember { mutableStateOf<List<PromptInjection.ModeInjection>?>(null) }
-    val effectiveModeInjections = pendingModeInjections ?: modeInjections
-    val presetModeInjections = remember(effectiveModeInjections, preset) {
-        val ids = if (preset.hasEntries()) {
-            preset.entries.filterIsInstance<PresetEntry.Reference>().mapTo(mutableSetOf()) {
-                it.modeInjectionId
-            }
-        } else {
-            preset.modeInjectionIds
-        }
-        effectiveModeInjections.filter { it.id in ids }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberBottomSheetState(
-            initialValue = SheetValue.Expanded,
-            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-        ),
-        contentWindowInsets = { WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) },
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxSize()
-                .padding(16.dp)
-                .imePadding()
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (preset.name.isBlank()) {
-                        stringResource(R.string.prompt_page_add_preset)
-                    } else {
-                        stringResource(R.string.prompt_page_edit_preset)
-                    },
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Row {
-                    TextButton(onClick = {
-                        pendingModeInjections = null
-                        onDismiss()
-                    }) {
-                        Text(stringResource(R.string.prompt_page_cancel))
-                    }
-                    TextButton(onClick = {
-                        pendingModeInjections?.let { onUpdateModeInjections(it) }
-                        onConfirm()
-                    }) {
-                        Text(stringResource(R.string.prompt_page_confirm))
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                OutlinedTextField(
-                    value = preset.name,
-                    onValueChange = { onEditPreset(preset.copy(name = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = preset.description,
-                    onValueChange = { onEditPreset(preset.copy(description = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_description)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.prompt_page_preset_entries),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    IconButton(onClick = { editingInjection = PromptInjection.ModeInjection() }) {
-                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_mode_injection))
-                    }
-                }
-
-                if (presetModeInjections.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.prompt_page_mode_injection_empty),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    presetModeInjections.forEach { injection ->
-                        val referenceEntry = preset.entries
-                            .filterIsInstance<PresetEntry.Reference>()
-                            .firstOrNull { it.modeInjectionId == injection.id }
-                        val enabledInPreset = if (preset.hasEntries()) {
-                            referenceEntry?.enabled == true
-                        } else {
-                            injection.id in preset.effectiveInjectionIds()
-                        }
-                        ListItem(
-                            headlineContent = {
-                                Text(injection.name.ifBlank { stringResource(R.string.prompt_page_unnamed) })
-                            },
-                            supportingContent = if (injection.content.isNotBlank()) {
-                                {
-                                    Text(
-                                        text = injection.content,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            } else null,
-                            trailingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { editingInjection = injection }) {
-                                        Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
-                                    }
-                                    Switch(
-                                        checked = enabledInPreset,
-                                        onCheckedChange = { checked ->
-                                            onEditPreset(
-                                                if (preset.hasEntries()) {
-                                                    val updatedEntries = if (referenceEntry != null) {
-                                                        preset.entries.map { entry ->
-                                                            if (entry.id == referenceEntry.id) {
-                                                                referenceEntry.copy(enabled = checked)
-                                                            } else {
-                                                                entry
-                                                            }
-                                                        }
-                                                    } else {
-                                                        preset.entries + PresetEntry.Reference(
-                                                            enabled = checked,
-                                                            order = preset.entries
-                                                                .filterIsInstance<PresetEntry.Reference>()
-                                                                .size,
-                                                            modeInjectionId = injection.id,
-                                                        )
-                                                    }
-                                                    preset.copy(entries = updatedEntries)
-                                                } else if (checked) {
-                                                    preset.copy(
-                                                        modeInjectionIds = preset.modeInjectionIds + injection.id,
-                                                        disabledEntryIds = preset.disabledEntryIds - injection.id,
-                                                    )
-                                                } else {
-                                                    preset.copy(
-                                                        modeInjectionIds = preset.modeInjectionIds + injection.id,
-                                                        disabledEntryIds = preset.disabledEntryIds + injection.id,
-                                                    )
-                                                }
-                                            )
-                                        }
-                                    )
-                                }
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    editingInjection?.let { injection ->
-        ModeInjectionEditSheet(
-            injection = injection,
-            onDismiss = { editingInjection = null },
-            onConfirm = {
-                val base = pendingModeInjections ?: modeInjections
-                val index = base.indexOfFirst { it.id == injection.id }
-                val edited = editingInjection
-                if (edited != null) {
-                    if (index >= 0) {
-                        pendingModeInjections = base.toMutableList().apply { set(index, edited) }
-                    } else {
-                        pendingModeInjections = base + edited
-                        onEditPreset(if (preset.hasEntries()) {
-                            preset.copy(
-                                entries = preset.entries + PresetEntry.Reference(
-                                    order = preset.entries.filterIsInstance<PresetEntry.Reference>().size,
-                                    modeInjectionId = edited.id,
-                                )
-                            )
-                        } else {
-                            preset.copy(
-                                modeInjectionIds = preset.modeInjectionIds + edited.id,
-                                disabledEntryIds = preset.disabledEntryIds - edited.id,
-                            )
-                        })
-                    }
-                }
-                editingInjection = null
-            },
-            onEdit = { editingInjection = it }
-        )
-    }
-}
-
-@Composable
-internal fun ModeInjectionEditSheet(
-    injection: PromptInjection.ModeInjection,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    onEdit: (PromptInjection.ModeInjection) -> Unit
-) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Expanded, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-    val scope = rememberCoroutineScope()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetGesturesEnabled = false,
-        dragHandle = {
-            IconButton(onClick = {
-                scope.launch {
-                    sheetState.hide()
-                    onDismiss()
-                }
-            }) {
-                Icon(HugeIcons.ArrowDown01, null)
-            }
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_mode_injection),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = injection.name,
-                    onValueChange = { onEdit(injection.copy(name = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
-                    tail = {
-                        Switch(
-                            checked = injection.enabled,
-                            onCheckedChange = { onEdit(injection.copy(enabled = it)) }
-                        )
-                    }
-                )
-
-                OutlinedTextField(
-                    value = injection.priority.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_position),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionPositionSelector(
-                    position = injection.position,
-                    onSelect = { onEdit(injection.copy(position = it)) }
-                )
-
-                AnimatedVisibility(visible = injection.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = injection.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-
-                AnimatedVisibility(visible = injection.position.usesStandaloneMessage()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text(
-                            stringResource(R.string.prompt_page_injection_role),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        InjectionRoleSelector(
-                            role = injection.role,
-                            onSelect = { onEdit(injection.copy(role = it)) }
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = injection.content,
-                    onValueChange = { onEdit(injection.copy(content = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    minLines = 5
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.prompt_page_cancel))
-                }
-                TextButton(onClick = onConfirm) {
-                    Text(stringResource(R.string.prompt_page_confirm))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InjectionPositionSelector(
-    position: InjectionPosition,
-    onSelect: (InjectionPosition) -> Unit
-) {
-    Select(
-        options = InjectionPosition.entries,
-        selectedOption = position,
-        onOptionSelected = onSelect,
-        optionToString = { getPositionLabel(it) },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-private fun InjectionPosition.usesStandaloneMessage(): Boolean = when (this) {
-    InjectionPosition.BEFORE_SYSTEM_PROMPT,
-    InjectionPosition.AFTER_SYSTEM_PROMPT -> false
-
-    InjectionPosition.TOP_OF_CHAT,
-    InjectionPosition.BOTTOM_OF_CHAT,
-    InjectionPosition.AT_DEPTH -> true
-}
-
-@Composable
-private fun getPositionLabel(position: InjectionPosition): String = when (position) {
-    InjectionPosition.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
-    InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
-    InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
-    InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
-    InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
-}
-
-@Composable
-private fun InjectionRoleSelector(
-    role: MessageRole,
-    onSelect: (MessageRole) -> Unit
-) {
-    Select(
-        options = listOf(MessageRole.USER, MessageRole.ASSISTANT),
-        selectedOption = role,
-        onOptionSelected = onSelect,
-        optionToString = { getRoleLabel(it) },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-@Composable
-private fun getRoleLabel(role: MessageRole): String = when (role) {
-    MessageRole.USER -> stringResource(R.string.prompt_page_role_user)
-    MessageRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
-    else -> role.name
 }
 
 // ==================== Lorebook Tab ====================
@@ -1474,4 +1036,57 @@ private fun RegexInjectionEditFullscreen(
             }
         }
     }
+}
+
+@Composable
+private fun InjectionPositionSelector(
+    position: InjectionPosition,
+    onSelect: (InjectionPosition) -> Unit,
+) {
+    Select(
+        options = InjectionPosition.entries,
+        selectedOption = position,
+        onOptionSelected = onSelect,
+        optionToString = { getPositionLabel(it) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun InjectionPosition.usesStandaloneMessage(): Boolean = when (this) {
+    InjectionPosition.BEFORE_SYSTEM_PROMPT,
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> false
+
+    InjectionPosition.TOP_OF_CHAT,
+    InjectionPosition.BOTTOM_OF_CHAT,
+    InjectionPosition.AT_DEPTH -> true
+}
+
+@Composable
+private fun getPositionLabel(position: InjectionPosition): String = when (position) {
+    InjectionPosition.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
+    InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
+    InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
+    InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
+}
+
+@Composable
+private fun InjectionRoleSelector(
+    role: MessageRole,
+    onSelect: (MessageRole) -> Unit,
+) {
+    Select(
+        options = listOf(MessageRole.USER, MessageRole.ASSISTANT),
+        selectedOption = role,
+        onOptionSelected = onSelect,
+        optionToString = { getRoleLabel(it) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun getRoleLabel(role: MessageRole): String = when (role) {
+    MessageRole.USER -> stringResource(R.string.prompt_page_role_user)
+    MessageRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
+    else -> role.name
 }

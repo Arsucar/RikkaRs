@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.model.Assistant
 const val FEATURE_CHAT_KEEPALIVE = "chat_keepalive"
 const val FEATURE_CHECKPOINT_CACHE = "checkpoint_cache"
 const val FEATURE_VARIABLE_SYSTEM = "variable_system"
+const val FEATURE_UI_TYPOGRAPHY = "ui_typography"
 
 enum class ExperimentalFeatureScope {
     Global,
@@ -41,6 +42,13 @@ object ExperimentalFeatureRegistry {
             titleRes = R.string.setting_display_page_checkpoint_cache,
             descriptionRes = R.string.setting_display_page_checkpoint_cache_desc,
             scope = ExperimentalFeatureScope.Global,
+        ),
+        FeatureSpec(
+            id = FEATURE_UI_TYPOGRAPHY,
+            titleRes = R.string.experiments_ui_typography_title,
+            descriptionRes = R.string.experiments_ui_typography_desc,
+            scope = ExperimentalFeatureScope.Global,
+            defaultEnabled = false,
         ),
         FeatureSpec(
             id = FEATURE_VARIABLE_SYSTEM,

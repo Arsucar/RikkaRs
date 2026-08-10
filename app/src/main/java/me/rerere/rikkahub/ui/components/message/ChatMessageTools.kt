@@ -55,6 +55,9 @@ import me.rerere.hugeicons.stroke.BubbleChatQuestion
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.tools.deriveTrustedWriteRoot
+import me.rerere.rikkahub.data.ai.tools.isOutsideBuiltinWritableRoots
+import me.rerere.rikkahub.data.ai.tools.isTrustableWriteTool
 import me.rerere.rikkahub.ui.components.message.tools.ToolUIContext
 import me.rerere.rikkahub.ui.components.message.tools.ToolUIRegistry
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -71,6 +74,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onTrustWriteRootAndApprove: ((toolCallId: String, rootPrefix: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     // ask_user 是交互式问答流程, 不走注册式渲染框架
@@ -99,12 +103,29 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 
     var showResult by remember { mutableStateOf(false) }
     var showDenyDialog by remember { mutableStateOf(false) }
+    var showTrustRootDialog by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(true) }
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
     val toolImagesRowState = rememberLazyListState()
     val horizontalGestureExclusionState = LocalHorizontalGestureExclusionState.current
+
+    // #258: 仅 write/edit 且路径在 builtin 安全区外时显示「始终允许此目录」
+    val writePath = remember(tool.toolCallId, tool.input) {
+        runCatching {
+            tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+    }
+    val trustedRootCandidate = remember(writePath) {
+        writePath?.let { deriveTrustedWriteRoot(it) }
+    }
+    val canAlwaysAllowDirectory = isPending &&
+        onTrustWriteRootAndApprove != null &&
+        isTrustableWriteTool(tool.toolName) &&
+        !writePath.isNullOrBlank() &&
+        isOutsideBuiltinWritableRoots(writePath) &&
+        !trustedRootCandidate.isNullOrBlank()
 
     // 摘要由注册的渲染器决定; 图片输出与拒绝原因为所有工具通用
     val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
@@ -140,7 +161,20 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (canAlwaysAllowDirectory) {
+                        TextButton(
+                            onClick = { showTrustRootDialog = true },
+                        ) {
+                            Text(
+                                text = stringResource(R.string.chat_message_tool_always_allow_directory),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                     FilledTonalIconButton(
                         onClick = { showDenyDialog = true },
                         modifier = Modifier.size(28.dp),
@@ -234,6 +268,36 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 showDenyDialog = false
                 onToolApproval(tool.toolCallId, false, reason)
             }
+        )
+    }
+
+    if (showTrustRootDialog && onTrustWriteRootAndApprove != null && !trustedRootCandidate.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = { showTrustRootDialog = false },
+            title = { Text(stringResource(R.string.chat_message_tool_always_allow_directory_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.chat_message_tool_always_allow_directory_confirm,
+                        trustedRootCandidate,
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showTrustRootDialog = false
+                        onTrustWriteRootAndApprove(tool.toolCallId, trustedRootCandidate)
+                    }
+                ) {
+                    Text(stringResource(R.string.chat_message_tool_always_allow_directory))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTrustRootDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 

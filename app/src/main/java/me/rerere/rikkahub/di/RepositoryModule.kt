@@ -106,7 +106,13 @@ val repositoryModule = module {
     }
 
     single {
-        WorkspaceRepository(get(), get(), get(), get())
+        WorkspaceRepository(
+            dao = get(),
+            manager = get(),
+            rootfsInstaller = get(),
+            settingsStore = get(),
+            skillManager = get(),
+        )
     }
 
     single { WorkspaceGitRepository(get()) }

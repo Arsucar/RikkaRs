@@ -23,7 +23,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +48,9 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.UiTypographyFamily
+import me.rerere.rikkahub.data.datastore.UiTypographyWeightBias
+import me.rerere.rikkahub.data.datastore.coerceUiTypographyScale
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -58,6 +63,9 @@ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import java.io.File
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
@@ -122,6 +130,122 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.setting_display_page_ui_typography_title)) },
+                ) {
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.experiments_ui_typography_family))
+                        },
+                        supportingContent = {
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.setting_display_page_ui_typography_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                FlowRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    FilterChip(
+                                        selected = displaySetting.uiTypographyFamily == UiTypographyFamily.SYSTEM,
+                                        onClick = {
+                                            updateDisplaySetting(
+                                                displaySetting.copy(uiTypographyFamily = UiTypographyFamily.SYSTEM),
+                                            )
+                                        },
+                                        label = {
+                                            Text(stringResource(R.string.experiments_ui_typography_family_system))
+                                        },
+                                    )
+                                    FilterChip(
+                                        selected = displaySetting.uiTypographyFamily == UiTypographyFamily.BRAND,
+                                        onClick = {
+                                            updateDisplaySetting(
+                                                displaySetting.copy(uiTypographyFamily = UiTypographyFamily.BRAND),
+                                            )
+                                        },
+                                        label = {
+                                            Text(stringResource(R.string.experiments_ui_typography_family_brand))
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.experiments_ui_typography_weight))
+                        },
+                        supportingContent = {
+                            FlowRow(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                UiTypographyWeightBias.entries.forEach { bias ->
+                                    FilterChip(
+                                        selected = displaySetting.uiTypographyWeightBias == bias,
+                                        onClick = {
+                                            updateDisplaySetting(
+                                                displaySetting.copy(uiTypographyWeightBias = bias),
+                                            )
+                                        },
+                                        label = { Text(bias.labelUI()) },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.experiments_ui_typography_scale))
+                        },
+                        supportingContent = {
+                            // Local draft while dragging; commit on release to avoid
+                            // every-tick DataStore write + global theme recompose.
+                            val scale = displaySetting.uiTypographyScale.coerceUiTypographyScale()
+                            var scaleDraft by remember { mutableFloatStateOf(scale) }
+                            var scaleDragging by remember { mutableStateOf(false) }
+                            LaunchedEffect(scale) {
+                                if (!scaleDragging) scaleDraft = scale
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Slider(
+                                    value = scaleDraft,
+                                    onValueChange = {
+                                        scaleDragging = true
+                                        scaleDraft = it.coerceUiTypographyScale()
+                                    },
+                                    onValueChangeFinished = {
+                                        scaleDragging = false
+                                        val committed = scaleDraft.coerceUiTypographyScale()
+                                        scaleDraft = committed
+                                        updateDisplaySetting(
+                                            displaySetting.copy(uiTypographyScale = committed),
+                                        )
+                                    },
+                                    valueRange = 0.85f..1.25f,
+                                    steps = 7,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(text = "${(scaleDraft * 100).toInt()}%")
+                            }
+                        },
+                    )
+                }
+            }
+
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
@@ -432,6 +556,14 @@ private fun ChatFontFamily.labelUI(): String = when (this) {
     ChatFontFamily.SERIF -> stringResource(R.string.setting_display_page_chat_font_family_serif)
     ChatFontFamily.MONOSPACE -> stringResource(R.string.setting_display_page_chat_font_family_monospace)
     ChatFontFamily.CUSTOM -> stringResource(R.string.setting_display_page_chat_font_family_custom)
+}
+
+@Composable
+private fun UiTypographyWeightBias.labelUI(): String = when (this) {
+    UiTypographyWeightBias.LIGHT -> stringResource(R.string.experiments_ui_typography_weight_light)
+    UiTypographyWeightBias.DEFAULT -> stringResource(R.string.experiments_ui_typography_weight_default)
+    UiTypographyWeightBias.MEDIUM -> stringResource(R.string.experiments_ui_typography_weight_medium)
+    UiTypographyWeightBias.BOLD -> stringResource(R.string.experiments_ui_typography_weight_bold)
 }
 
 private fun ChatFontFamily.toFontFamilyUI(customFontFamily: FontFamily): FontFamily = when (this) {

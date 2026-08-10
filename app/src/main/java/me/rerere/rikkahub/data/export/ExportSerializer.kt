@@ -111,7 +111,6 @@ object PresetSerializer : ExportSerializer<Preset> {
                     when (entry) {
                         is PresetEntry.Custom -> entry.copy(id = Uuid.random())
                         is PresetEntry.Builtin -> entry.copy(id = Uuid.random())
-                        is PresetEntry.Reference -> entry.copy(id = Uuid.random())
                     }
                 }
             )

@@ -18,13 +18,11 @@
   <string name="assistant_detail_prompt_desc">Задайте системные подсказки, шаблоны сообщений и правила regex</string>
   <string name="assistant_detail_request_desc">Настройте пользовательские заголовки и параметры тела запроса</string>
   <string name="assistant_extensions_page_empty_lorebooks">Нет доступных lorebooks, создайте один в Prompts</string>
-  <string name="assistant_extensions_page_empty_mode_injections">Нет доступных внедрений режима, создайте их в Prompts</string>
   <string name="assistant_extensions_page_empty_quick_messages">Нет доступных быстрых сообщений, создайте одно в Расширениях</string>
   <string name="assistant_extensions_page_empty_skills">Навыки отсутствуют, установите один в Extensions</string>
   <string name="assistant_extensions_page_goto_extensions">Перейти к расширениям</string>
   <string name="assistant_extensions_page_goto_prompts">Перейти к подсказкам</string>
   <string name="assistant_extensions_page_tab_lorebooks">Лорбуки</string>
-  <string name="assistant_extensions_page_tab_mode_injections">Внедрения режима</string>
   <string name="assistant_extensions_page_tab_quick_messages">Быстрые сообщения</string>
   <string name="assistant_extensions_page_tab_skills">Навыки</string>
   <string name="assistant_extensions_page_title">Расширения</string>
@@ -352,11 +350,9 @@
   <string name="extension_selector_go_to_extensions">Управление расширениями</string>
   <string name="extension_selector_go_to_skills">Перейти к управлению навыками</string>
   <string name="extension_selector_lorebooks_empty">Нет доступных lorebooks</string>
-  <string name="extension_selector_mode_injections_empty">Нет доступных независимых внедрений</string>
   <string name="extension_selector_quick_messages_empty">Быстрые сообщения отсутствуют</string>
   <string name="extension_selector_skills_empty">Навыки отсутствуют</string>
   <string name="extension_selector_tab_lorebooks">Лорбуки</string>
-  <string name="extension_selector_tab_mode_injections">Независимые внедрения</string>
   <string name="extension_selector_tab_quick_messages">Быстрые сообщения</string>
   <string name="extension_selector_tab_skills">Навыки</string>
   <string name="extensions_page_agent_skills">Навыки агента</string>
@@ -475,7 +471,6 @@
   <string name="prompt_page_add">Добавить</string>
   <string name="prompt_page_add_entry">Добавить запись</string>
   <string name="prompt_page_add_lorebook">Добавить Lorebook</string>
-  <string name="prompt_page_add_mode_injection">Добавить режим инъекции</string>
   <string name="prompt_page_cancel">Отмена</string>
   <string name="prompt_page_case_sensitive">С учетом регистра</string>
   <string name="prompt_page_confirm">Подтвердить</string>
@@ -487,7 +482,6 @@
   <string name="prompt_page_edit">Редактировать</string>
   <string name="prompt_page_edit_entry">Редактировать запись</string>
   <string name="prompt_page_edit_lorebook">Редактировать Lorebook</string>
-  <string name="prompt_page_edit_mode_injection">Внедрение режима редактирования</string>
   <string name="prompt_page_empty_hint">Нажмите кнопку ниже, чтобы добавить</string>
   <string name="prompt_page_enabled">Включено</string>
   <string name="prompt_page_entries_count_format">%d записей</string>
@@ -500,8 +494,6 @@
   <string name="prompt_page_keywords_label">Ключевые слова</string>
   <string name="prompt_page_lorebook_empty">Нет Lorebooks</string>
   <string name="prompt_page_lorebook_tab">Лорбук</string>
-  <string name="prompt_page_mode_injection_empty">Нет внедрений режима</string>
-  <string name="prompt_page_mode_injection_tab">Внедрение режима</string>
   <string name="prompt_page_name">Имя</string>
   <string name="prompt_page_new_keyword">Новое ключевое слово</string>
   <string name="prompt_page_position_after_system">После системного приглашения</string>

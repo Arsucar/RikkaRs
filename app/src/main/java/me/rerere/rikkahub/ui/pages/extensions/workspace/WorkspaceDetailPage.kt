@@ -96,6 +96,7 @@ import me.rerere.rikkahub.utils.isTextLikeFileName
 import me.rerere.rikkahub.utils.plus
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
+import me.rerere.rikkahub.data.workspace.SkillsPrivateEntryAssistant
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
@@ -103,6 +104,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import java.util.Locale
+import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,7 +169,12 @@ fun WorkspaceDetailPage(id: String) {
                 return@launch
             }
             runCatching {
-                workspaceRepository.readText(id = id, path = entry.path, area = area)
+                workspaceRepository.readText(
+                    id = id,
+                    path = entry.path,
+                    area = area,
+                    skillsPrivateAssistantId = state.skillsPrivateEntry?.selectedAssistant?.id,
+                )
             }.onSuccess { text ->
                 textDialogState = textDialogState?.copy(text = text, busy = false, error = null)
             }.onFailure { error ->
@@ -322,6 +329,7 @@ fun WorkspaceDetailPage(id: String) {
                     installProgress = installProgress,
                     onInstallRootfs = { showInstallDialog = true },
                     onToolApprovalChange = vm::setToolApproval,
+                    onRemoveTrustedWriteRoot = vm::removeTrustedWriteRoot,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -353,6 +361,7 @@ fun WorkspaceDetailPage(id: String) {
                             context.startActivity(Intent.createChooser(intent, null))
                         }
                     },
+                    onSelectSkillsPrivateAssistant = vm::selectSkillsPrivateAssistant,
                 )
             }
         }
@@ -438,6 +447,7 @@ private fun WorkspaceBasicPage(
     installProgress: RootfsInstallProgress?,
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
+    onRemoveTrustedWriteRoot: (String) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -524,6 +534,95 @@ private fun WorkspaceBasicPage(
                 workspace = workspace,
                 onToolApprovalChange = onToolApprovalChange,
             )
+        }
+
+        item {
+            WorkspaceTrustedWriteRootsCard(
+                workspace = workspace,
+                onRemoveTrustedWriteRoot = onRemoveTrustedWriteRoot,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceTrustedWriteRootsCard(
+    workspace: WorkspaceEntity?,
+    onRemoveTrustedWriteRoot: (String) -> Unit,
+) {
+    val roots = workspace?.trustedWriteRootList().orEmpty()
+    var removeTarget by remember { mutableStateOf<String?>(null) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_trusted_write_roots),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.workspace_detail_trusted_write_roots_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (roots.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_trusted_write_roots_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                roots.forEach { root ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = root,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        IconButton(
+                            onClick = { removeTarget = root },
+                            enabled = workspace != null,
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Delete01,
+                                contentDescription = stringResource(R.string.common_delete),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    removeTarget?.let { root ->
+        RikkaConfirmDialog(
+            show = true,
+            title = stringResource(R.string.workspace_detail_trusted_write_root_remove_title),
+            confirmText = stringResource(R.string.common_delete),
+            dismissText = stringResource(R.string.common_cancel),
+            onConfirm = {
+                onRemoveTrustedWriteRoot(root)
+                removeTarget = null
+            },
+            onDismiss = { removeTarget = null },
+        ) {
+            Text(stringResource(R.string.workspace_detail_trusted_write_root_remove_confirm, root))
         }
     }
 }
@@ -722,6 +821,7 @@ private fun WorkspaceFilesPage(
     onViewText: (WorkspaceFileEntry) -> Unit,
     onEditText: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
+    onSelectSkillsPrivateAssistant: (Uuid) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -738,9 +838,19 @@ private fun WorkspaceFilesPage(
         item {
             WorkspacePathBar(
                 path = state.path,
+                area = state.area,
                 canGoUp = state.path.isNotBlank(),
                 onGoUp = onGoUp,
             )
+        }
+
+        state.skillsPrivateEntry?.let { entry ->
+            item {
+                SkillsPrivateAssistantBar(
+                    entry = entry,
+                    onSelect = onSelectSkillsPrivateAssistant,
+                )
+            }
         }
 
         state.error?.let { error ->
@@ -761,6 +871,8 @@ private fun WorkspaceFilesPage(
                 onOpen = { onOpen(entry) },
                 onOpenFile = { onOpenFile(entry) },
                 readOnlyArea = state.area == WorkspaceStorageArea.LINUX,
+                showMountBadge = state.area == WorkspaceStorageArea.LINUX &&
+                    isBindMountRootEntry(state.path, entry),
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onViewText = { onViewText(entry) },
@@ -770,6 +882,20 @@ private fun WorkspaceFilesPage(
         }
     }
 }
+
+private fun isBindMountRootEntry(currentPath: String, entry: WorkspaceFileEntry): Boolean {
+    if (currentPath.isNotBlank()) return false
+    if (!entry.isDirectory) return false
+    return entry.name in BIND_MOUNT_ROOT_NAMES
+}
+
+private val BIND_MOUNT_ROOT_NAMES = setOf(
+    "skills",
+    "upload",
+    "tool_outputs",
+    "workspace",
+    "skills_private",
+)
 
 @Composable
 private fun WorkspaceAreaSelector(
@@ -796,9 +922,16 @@ private fun WorkspaceAreaSelector(
 @Composable
 private fun WorkspacePathBar(
     path: String,
+    area: WorkspaceStorageArea,
     canGoUp: Boolean,
     onGoUp: () -> Unit,
 ) {
+    val displayPath = when {
+        area == WorkspaceStorageArea.LINUX && path.isBlank() -> "/"
+        area == WorkspaceStorageArea.LINUX -> "/${path.trimStart('/')}"
+        path.isBlank() -> "/"
+        else -> path
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -811,7 +944,7 @@ private fun WorkspacePathBar(
             Icon(HugeIcons.ArrowTurnBackward, contentDescription = null)
         }
         Text(
-            text = path.ifBlank { "/" },
+            text = displayPath,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -822,11 +955,86 @@ private fun WorkspacePathBar(
 }
 
 @Composable
+private fun SkillsPrivateAssistantBar(
+    entry: SkillsPrivateEntryAssistant,
+    onSelect: (Uuid) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val selectedName = entry.selectedAssistant.name.ifBlank {
+        entry.selectedAssistant.id.toString().take(8)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.workspace_detail_skills_private_assistant),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when {
+                entry.requiresSelection -> {
+                    Box {
+                        TextButton(onClick = { menuExpanded = true }) {
+                            Text(
+                                text = stringResource(
+                                    R.string.workspace_detail_skills_private_select,
+                                    selectedName,
+                                ),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            entry.boundAssistants.forEach { assistant ->
+                                val name = assistant.name.ifBlank {
+                                    assistant.id.toString().take(8)
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(name) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSelect(assistant.id)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                entry.isCurrentAssistantFallback -> {
+                    Text(
+                        text = stringResource(
+                            R.string.workspace_detail_skills_private_current_assistant,
+                            selectedName,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                else -> {
+                    Text(
+                        text = selectedName,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
     onOpenFile: () -> Unit,
     readOnlyArea: Boolean,
+    showMountBadge: Boolean = false,
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onViewText: () -> Unit,
@@ -864,12 +1072,25 @@ private fun WorkspaceFileCard(
                     .padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = entry.name,
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = entry.name,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (showMountBadge) {
+                        Text(
+                            text = stringResource(R.string.workspace_detail_mount_badge),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Text(
                     text = if (entry.isDirectory) entry.path else "${entry.path} · ${entry.sizeBytes.fileSizeToString()}",
                     style = MaterialTheme.typography.bodySmall,

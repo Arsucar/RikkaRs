@@ -20,6 +20,45 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.48
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.47 之后）
+
+- **删除独立注入双路径（#259 覆盖 #242）** — 移除全局 `modeInjections` / Reference 条目；升级与备份恢复时 Reference→Custom 内容快照，未入预设的孤儿注入并入 Default Preset；聊天扩展 5→4 tab；Web DTO/端点同步清理。
+  **Remove standalone mode-injection dual path (#259 supersedes #242)** — Drops global `modeInjections` / Reference entries; upgrade and backup restore snapshot Reference→Custom and absorb orphans into Default Preset; chat extension tabs 5→4; Web DTO/routes cleaned.
+- **工作区受信写入目录（#258）** — write/edit 在安全区外可「始终允许此目录」；前缀边界匹配；路径规范化拒绝 `..`；审批侧仅持久化服务端由 tool path 推导的根。
+  **Trusted write roots for workspace (#258)** — Optional always-allow directory for write/edit outside free zones; boundary-safe prefixes; path normalize rejects `..`; approval persists only server-derived roots from the tool path.
+- **Bind mount 真实浏览（#247）** — 文件浏览器列出/读取 `/skills`、`/upload`、`/tool_outputs`、`/skills_private` 等挂载内容；多助手私有技能入口选择；LINUX 区只读。
+  **Bind-mount real browser (#247)** — Lists/reads mounted `/skills`, `/upload`, `/tool_outputs`, `/skills_private`; multi-assistant private-skills entry picker; LINUX area read-only.
+- **预设 config-only 开关展示（#245）** — 内置 config-only 条目不再计入展示条数/名称，避免「可切换却不注入」误导。
+  **Config-only preset switch display (#245)** — Builtin config-only entries no longer count toward display names/counts.
+- **长思考流式卡顿缓解（#248）** — 推理展开不再 key 全文；流式跳过部分 `animateContentSize`；会话 UI 发布约 64ms 合并；流式路径跳过删文件 GC。
+  **Streaming jank mitigation (#248)** — Reasoning expand no longer keys full text; skip some `animateContentSize` while loading; ~64ms UI publish coalesce; skip deleted-file GC on stream path.
+- **统一空态/骨架/Toast（#237）** — `EmptyState`/`ErrorState`/`Shimmer`；会话列表与统计页接入；日志导出改 Sonner。
+  **Unified empty/skeleton/toast (#237)** — `EmptyState`/`ErrorState`/`Shimmer`; conversation list and stats; log export uses Sonner.
+- **Typography 品牌层级（#233）** — 完整 Material3 字阶；系统/品牌字体与字重、缩放偏好；实验开关保留高级项。
+  **Typography hierarchy (#233)** — Full Material3 type scale; system/brand family, weight, scale prefs; experiment gate for advanced options.
+- **赞助弹窗可永久关闭（#232）** — 设置项允许永久禁用 Sponsor 提示。
+  **Permanently dismiss sponsor alerts (#232)**.
+- **设置页可搜索直达（#234）** — 设置目的地搜索过滤，子页可直达。
+  **Searchable settings destinations (#234)**.
+- **检查点思考计时不串场（#238）** — 恢复检查点后不再让未闭合思考秒数继续墙钟累加。
+  **Checkpoint reasoning timer isolation (#238)**.
+- **429 重放关闭旧响应（#239）** — Clash 429 重放前关闭 previous response，避免 still-open 失败。
+  **Close 429 responses before replay (#239)**.
+- **PromptPage 死代码与 Sheet 竞态（#241,#243,#244）** — 移除零调用 ModeInjection UI；编辑取消不残留；Sheet Expanded 初始态。
+  **PromptPage dead code and sheet races (#241,#243,#244)**.
+- **聊天横滑手势排除（#240）** — 可横滑行注册 exclusion，减少误开抽屉。
+  **Horizontal gesture exclusion on chat rows (#240)**.
+- **预设名/描述失焦提交（#246）** — 缓冲编辑，失焦再落盘，避免快速返回丢字。
+  **Preset name/description commit on focus loss (#246)**.
+- **use_skill 返回技能目录清单（#230）** — 加载技能时附带目录文件列表。
+  **use_skill returns skill directory listing (#230)**.
+- **推理 OFF 不发非法 none** — 兼容路径省略无效 `reasoning_effort` 取值。
+  **Reasoning OFF omits invalid effort values**.
+
+---
+
 ## v2.3.47
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.46 之后）

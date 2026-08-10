@@ -109,9 +109,19 @@ suspend fun createSubagentWorkspaceTools(
     extraBindMounts: List<WorkspaceBindMount> = emptyList(),
 ): List<Tool> {
     if (access == WorkspaceAccess.NONE || workspaceId.isBlank()) return emptyList()
-    val workspaceOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    val workspaceEntity = workspaceRepository.getById(workspaceId)
+    val workspaceOverrides = workspaceEntity?.toolApprovalOverrides().orEmpty()
+    val trustedRoots = workspaceEntity?.trustedWriteRootList().orEmpty()
     return filterWorkspaceToolsByAccess(
-        createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd, knownMounts, extraBindMounts),
+        createWorkspaceTools(
+            workspaceId = workspaceId,
+            workspaceRepository = workspaceRepository,
+            cwd = workspaceCwd,
+            knownMounts = knownMounts,
+            extraBindMounts = extraBindMounts,
+            approvalOverrides = workspaceOverrides,
+            trustedWriteRoots = trustedRoots,
+        ),
         access,
     )
         .map { applySubagentWorkspaceApproval(it, profile, workspaceOverrides) }

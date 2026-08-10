@@ -50,15 +50,11 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.datastore.boundPresetInjectionIds
-import me.rerere.rikkahub.data.datastore.withModeInjectionsPreservingPresetSnapshots
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
-import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -67,7 +63,6 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
-import me.rerere.rikkahub.ui.pages.extensions.ModeInjectionEditSheet
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.skills.AddSkillDialog
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -92,14 +87,6 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
     var deletePrivateSkillTarget by remember { mutableStateOf<SkillMetadata?>(null) }
 
     // 点击单个扩展条目 -> 直接打开对应编辑弹窗（复用扩展管理页的编辑组件）
-    val modeInjectionEditState = useEditState<PromptInjection.ModeInjection> { edited ->
-        val newInjections = if (settings.modeInjections.any { it.id == edited.id }) {
-            settings.modeInjections.map { if (it.id == edited.id) edited else it }
-        } else {
-            settings.modeInjections + edited
-        }
-        vm.updateSettings(settings.withModeInjectionsPreservingPresetSnapshots(newInjections))
-    }
     val lorebookEditState = useEditState<Lorebook> { edited ->
         val newLorebooks = if (settings.lorebooks.any { it.id == edited.id }) {
             settings.lorebooks.map { if (it.id == edited.id) edited else it }
@@ -204,7 +191,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                     }
 
                     1 -> {
-                        if (settings.presets.isEmpty() && settings.modeInjections.isEmpty()) {
+                        if (settings.presets.isEmpty()) {
                             ExtensionEmptyState(
                                 message = stringResource(R.string.assistant_extensions_page_empty_presets),
                                 buttonText = stringResource(R.string.assistant_extensions_page_goto_prompts),
@@ -212,43 +199,18 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                             )
                         } else {
                             Column {
-                                if (settings.presets.isNotEmpty()) {
-                                    PresetsContent(
-                                        modifier = Modifier.weight(1f),
-                                        presets = settings.presets,
-                                        selectedIds = assistant.presetIds,
-                                        onToggle = { presetId, checked ->
-                                            // #218: partial ASSISTANTS write via store
-                                            vm.toggleAssistantPreset(presetId, checked)
-                                        },
-                                        onEdit = {
-                                            navController.navigate(Screen.PresetDetail(it.id.toString()))
-                                        },
-                                    )
-                                }
-                                if (settings.modeInjections.isNotEmpty()) {
-                                    Text(
-                                        text = stringResource(R.string.assistant_extensions_page_independent_injections),
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    ModeInjectionsContent(
-                                        modifier = Modifier.weight(1f),
-                                        modeInjections = settings.modeInjections,
-                                        selectedIds = assistant.modeInjectionIds,
-                                        onToggle = { injId, checked ->
-                                            val newIds = if (checked) assistant.modeInjectionIds + injId
-                                            else assistant.modeInjectionIds - injId
-                                            vm.update(assistant.copy(modeInjectionIds = newIds))
-                                        },
-                                        onEdit = { modeInjectionEditState.open(it) },
-                                        presetManagedIds = boundPresetInjectionIds(
-                                            assistant.presetIds,
-                                            settings.presets,
-                                        ),
-                                    )
-                                }
+                                PresetsContent(
+                                    modifier = Modifier.weight(1f),
+                                    presets = settings.presets,
+                                    selectedIds = assistant.presetIds,
+                                    onToggle = { presetId, checked ->
+                                        // #218: partial ASSISTANTS write via store
+                                        vm.toggleAssistantPreset(presetId, checked)
+                                    },
+                                    onEdit = {
+                                        navController.navigate(Screen.PresetDetail(it.id.toString()))
+                                    },
+                                )
                                 TextButton(
                                     onClick = { navController.navigate(Screen.Prompts) },
                                     modifier = Modifier.fillMaxWidth(),
@@ -354,17 +316,6 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
         onDismiss = { deletePrivateSkillTarget = null },
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deletePrivateSkillTarget?.name ?: ""))
-    }
-
-    if (modeInjectionEditState.isEditing) {
-        modeInjectionEditState.currentState?.let { state ->
-            ModeInjectionEditSheet(
-                injection = state,
-                onDismiss = { modeInjectionEditState.dismiss() },
-                onConfirm = { modeInjectionEditState.confirm() },
-                onEdit = { modeInjectionEditState.currentState = it },
-            )
-        }
     }
 
     if (lorebookEditState.isEditing) {

@@ -18,7 +18,6 @@ internal fun Conversation.singleNodeDiffOrNull(current: Conversation): NodeDiff?
         chatSuggestions != current.chatSuggestions ||
         isPinned != current.isPinned ||
         customSystemPrompt != current.customSystemPrompt ||
-        modeInjectionIds != current.modeInjectionIds ||
         lorebookIds != current.lorebookIds ||
         workspaceCwd != current.workspaceCwd ||
         folderId != current.folderId

@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import me.rerere.ai.provider.Model
@@ -93,19 +95,33 @@ private fun rememberReasoningState(reasoning: UIMessagePart.Reasoning): Pair<Rea
         )
     }
 
-    LaunchedEffect(reasoning.reasoning, loading) {
+    // Expand / auto-close only on loading edge — never key on full reasoning text (#248).
+    LaunchedEffect(reasoning.createdAt, loading) {
         if (loading) {
-            if (!state.expandState.expanded && settings.displaySetting.showThinkingContent)
+            if (!state.expandState.expanded && settings.displaySetting.showThinkingContent) {
                 state.expandState = ReasoningCardState.Preview
-            scrollState.animateScrollTo(scrollState.maxValue)
+            }
         } else {
             if (state.expandState.expanded) {
-                state.expandState = if (settings.displaySetting.autoCloseThinking)
+                state.expandState = if (settings.displaySetting.autoCloseThinking) {
                     ReasoningCardState.Collapsed
-                else
+                } else {
                     ReasoningCardState.Expanded
+                }
             }
         }
+    }
+
+    // Scroll-follow while loading without restarting expand logic on each token.
+    LaunchedEffect(reasoning.createdAt, loading, state.expandState) {
+        if (!loading || !state.expandState.expanded) return@LaunchedEffect
+        snapshotFlow { scrollState.maxValue }
+            .distinctUntilChanged()
+            .collect { maxValue ->
+                if (maxValue > 0) {
+                    scrollState.animateScrollTo(maxValue)
+                }
+            }
     }
 
     LaunchedEffect(loading) {
