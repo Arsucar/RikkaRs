@@ -159,51 +159,6 @@ fun LorebooksContent(
 }
 
 @Composable
-fun SkillsContent(
-    skills: List<SkillMetadata>,
-    enabledSkills: Set<String>,
-    onToggle: (String, Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onManage: (() -> Unit)? = null,
-    onEdit: ((SkillMetadata) -> Unit)? = null,
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(skills, key = { it.skillDir.absolutePath }) { skill ->
-            ListItem(
-                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
-                    if (onEdit != null) onEdit(skill) else onManage?.invoke()
-                },
-                headlineContent = { Text(skill.name) },
-                supportingContent = if (skill.description.isNotBlank()) {
-                    {
-                        Text(
-                            text = skill.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                } else null,
-                trailingContent = {
-                    Switch(
-                        checked = enabledSkills.contains(skill.name),
-                        onCheckedChange = { checked -> onToggle(skill.name, checked) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            )
-        }
-        if (onManage != null) {
-            item {
-                ManageButton(onClick = onManage)
-            }
-        }
-    }
-}
-
-@Composable
 fun QuickMessagesContent(
     quickMessages: List<QuickMessage>,
     selectedIds: Set<Uuid>,
