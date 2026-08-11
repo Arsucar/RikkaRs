@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import android.util.Log
+
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -20,6 +22,7 @@ import me.rerere.rikkahub.data.model.MemoryTableDocument
 import me.rerere.rikkahub.data.model.MemoryTableTemplate
 
 private const val MEMORY_TABLE_CHARS_PER_TOKEN = 4
+private const val TAG = "MemoryTableInjectionTransformer"
 
 // Manual injection placeholder (#99). When present in any message text, the
 // rendered memory-table block replaces the placeholder instead of being appended
@@ -210,7 +213,8 @@ internal fun slimSchemaForInjection(schemaJson: String?): String {
             )
         }
         JsonObject(mapOf("tables" to JsonArray(slimTables))).toString()
-    }.getOrDefault(raw)
+    }.onFailure { Log.w(TAG, "Failed to slim schema for injection", it) }
+        .getOrDefault(raw)
 }
 
 internal fun minNullableLimit(first: Int?, second: Int?): Int? = when {
@@ -234,10 +238,8 @@ private fun extractMaxInjectTokens(schemaJson: String): Int? {
             ?.jsonPrimitive
             ?.intOrNull
             ?.takeIf { it > 0 }
-    }.getOrNull()
-}
-
-// Names of tables whose schema sets injectPolicy.enabled == false; their payload
+    }.onFailure { Log.w(TAG, "Failed to extract maxInjectTokens from schema", it) }
+        .getOrNull(); their payload
 // data is excluded from the injected prompt (#93 per-table injection gate).
 private fun disabledInjectionTables(schemaJson: String): Set<String> {
     return runCatching {
@@ -256,16 +258,15 @@ private fun disabledInjectionTables(schemaJson: String): Set<String> {
             }
             .mapNotNull { (it["name"] as? JsonPrimitive)?.contentOrNull }
             .toSet()
-    }.getOrNull().orEmpty()
-}
-
-// Drops the top-level payload entries for disabled tables. Returns the payload
+    }.onFailure { Log.w(TAG, "Failed to extract disabled injection tables from schema", it) }
+        .getOrNull().orEmpty() Returns the payload
 // unchanged when nothing is disabled or the payload cannot be parsed as an object.
 private fun filterInjectablePayload(payloadJson: String, disabledTables: Set<String>): String {
     if (disabledTables.isEmpty()) return payloadJson
     val payload = runCatching {
         memoryTableSchemaJson.parseToJsonElement(payloadJson).jsonObject
-    }.getOrNull() ?: return payloadJson
+    }.onFailure { Log.w(TAG, "Failed to parse payload for injectable filter", it) }
+        .getOrNull() ?: return payloadJson
     if (disabledTables.none { it in payload }) return payloadJson
     val filtered = JsonObject(payload.filterKeys { it !in disabledTables })
     return filtered.toString()
@@ -296,7 +297,8 @@ private fun triggerSendTables(schemaJson: String): Set<String> {
             }
             .mapNotNull { (it["name"] as? JsonPrimitive)?.contentOrNull }
             .toSet()
-    }.getOrNull().orEmpty()
+    }.onFailure { Log.w(TAG, "Failed to extract trigger-send tables from schema", it) }
+        .getOrNull().orEmpty()
 }
 
 // For each trigger-send table, keeps only rows that have at least one cell value
@@ -312,7 +314,8 @@ private fun filterRowsByRecentText(
     val corpus = recentConversationText.lowercase().takeIf { it.isNotBlank() } ?: return payloadJson
     val payload = runCatching {
         memoryTableSchemaJson.parseToJsonElement(payloadJson).jsonObject
-    }.getOrNull() ?: return payloadJson
+    }.onFailure { Log.w(TAG, "Failed to parse payload for trigger-send filter", it) }
+        .getOrNull() ?: return payloadJson
     if (triggerSendTables.none { it in payload }) return payloadJson
 
     val updated = payload.toMutableMap()

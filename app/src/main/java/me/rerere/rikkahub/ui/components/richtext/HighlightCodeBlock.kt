@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.util.Log
+
 import android.content.ClipData
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
@@ -125,7 +127,7 @@ fun HighlightCodeBlock(
                         outputStream.write(code.toByteArray())
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.w("HighlightCodeBlock", "Failed to export code block", e)
                 }
             }
         }

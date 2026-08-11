@@ -373,12 +373,13 @@ class WebDavClient(
                 XmlPullParser.END_TAG -> {
                     val tagName = parser.name.substringAfter(":")
                     if (tagName == "response" && currentHref != null) {
+                        val href = currentHref
                         val displayName = currentDisplayName
-                            ?: currentHref!!.trimEnd('/').substringAfterLast("/")
+                            ?: href.trimEnd('/').substringAfterLast("/")
 
                         resources.add(
                             WebDavResourceInfo(
-                                href = currentHref!!,
+                                href = href,
                                 displayName = displayName,
                                 contentLength = currentContentLength,
                                 contentType = currentContentType ?: "application/octet-stream",
