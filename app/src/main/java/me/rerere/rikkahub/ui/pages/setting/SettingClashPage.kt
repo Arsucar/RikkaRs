@@ -23,7 +23,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,7 +57,7 @@ fun SettingClashPage() {
     val settings = LocalSettings.current
     val clashConfig = settings.clashConfig
     val clashRetryTracer: ClashRetryTracer = koinInject()
-    val traces by clashRetryTracer.traces.collectAsState()
+    val traces by clashRetryTracer.traces.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()

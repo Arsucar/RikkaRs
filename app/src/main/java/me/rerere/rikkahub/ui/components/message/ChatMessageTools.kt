@@ -234,7 +234,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                     }
                                 },
                         ) {
-                            items(images) { image ->
+                            items(images, key = { it.url }) { image ->
                                 ZoomableAsyncImage(
                                     model = image.url,
                                     contentDescription = null,

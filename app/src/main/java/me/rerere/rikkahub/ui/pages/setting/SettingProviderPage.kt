@@ -223,7 +223,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 label = { Text(stringResource(R.string.filter_all)) }
                             )
                         }
-                        items(allTags) { tag ->
+                        items(allTags, key = { it }) { tag ->
                             FilterChip(
                                 selected = selectedFilterTag == tag,
                                 onClick = { selectedFilterTag = if (selectedFilterTag == tag) null else tag },

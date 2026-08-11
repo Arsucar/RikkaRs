@@ -199,7 +199,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
-                            items(vm.results) { result ->
+                            items(vm.results, key = { it.hashCode() }) { result ->
                                 SearchResultItem(
                                     result = result,
                                     onClick = {
