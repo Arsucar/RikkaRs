@@ -39,6 +39,30 @@ val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
     overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
 
+/**
+ * Workspace detail switch is an explicit full override for that tool name.
+ * When the user sets approval to false, skip path hard-approval entirely (8e1405d9).
+ * ToolPermission.ALLOW still never clears hard approval (separate layer).
+ */
+fun isWorkspaceToolApprovalExplicitlyDisabled(
+    name: String,
+    overrides: Map<String, Boolean>,
+): Boolean = overrides[name] == false
+
+/**
+ * Combined write/edit approval: tool switch first, then path hard approval + trusted roots.
+ */
+fun workspaceWriteEditNeedsApproval(
+    toolName: String,
+    path: String,
+    approvalOverrides: Map<String, Boolean>,
+    trustedWriteRoots: List<String>,
+): Boolean {
+    if (isWorkspaceToolApprovalExplicitlyDisabled(toolName, approvalOverrides)) return false
+    if (resolveWorkspaceToolApproval(toolName, approvalOverrides)) return true
+    return needsPathHardApproval(path, trustedWriteRoots)
+}
+
 data class WorkspaceKnownMount(
     val target: String,
     val source: File,
@@ -72,14 +96,14 @@ suspend fun createWorkspaceTools(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository, knownMounts),
         createWriteFileTool(
             workspaceId,
-            ::needsApproval,
+            resolvedApprovalOverrides,
             workspaceRepository,
             extraBindMounts,
             resolvedTrustedRoots,
         ),
         createEditFileTool(
             workspaceId,
-            ::needsApproval,
+            resolvedApprovalOverrides,
             workspaceRepository,
             knownMounts,
             extraBindMounts,
@@ -138,7 +162,7 @@ private fun createReadFileTool(
 
 private fun createWriteFileTool(
     workspaceId: String,
-    needsApproval: (String) -> Boolean,
+    approvalOverrides: Map<String, Boolean>,
     workspaceRepository: WorkspaceRepository,
     extraBindMounts: List<WorkspaceBindMount>,
     trustedWriteRoots: List<String>,
@@ -165,7 +189,11 @@ private fun createWriteFileTool(
         )
     },
     needsApproval = {
-        needsApproval("workspace_write_file") || it.needsPathHardApproval("path", trustedWriteRoots)
+        it.workspaceWriteEditNeedsApproval(
+            toolName = "workspace_write_file",
+            approvalOverrides = approvalOverrides,
+            trustedWriteRoots = trustedWriteRoots,
+        )
     },
     execute = {
         val params = it.jsonObject
@@ -179,7 +207,7 @@ private fun createWriteFileTool(
 
 private fun createEditFileTool(
     workspaceId: String,
-    needsApproval: (String) -> Boolean,
+    approvalOverrides: Map<String, Boolean>,
     workspaceRepository: WorkspaceRepository,
     knownMounts: List<WorkspaceKnownMount>,
     extraBindMounts: List<WorkspaceBindMount>,
@@ -213,7 +241,11 @@ private fun createEditFileTool(
         )
     },
     needsApproval = {
-        needsApproval("workspace_edit_file") || it.needsPathHardApproval("path", trustedWriteRoots)
+        it.workspaceWriteEditNeedsApproval(
+            toolName = "workspace_edit_file",
+            approvalOverrides = approvalOverrides,
+            trustedWriteRoots = trustedWriteRoots,
+        )
     },
     execute = {
         val params = it.jsonObject
@@ -541,13 +573,18 @@ private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): St
 }
 
 // 免强制审批的可写安全区: builtin `/workspace` `/tmp` + 工作区受信目录 (TrustedWriteRoots)
-private fun kotlinx.serialization.json.JsonElement.needsPathHardApproval(
-    name: String,
+// 工作区详情开关显式关闭时完全跳过（含 path hard approval）
+private fun kotlinx.serialization.json.JsonElement.workspaceWriteEditNeedsApproval(
+    toolName: String,
+    approvalOverrides: Map<String, Boolean>,
     trustedWriteRoots: List<String>,
-): Boolean =
-    runCatching {
-        needsPathHardApproval(jsonObject.absolutePath(name), trustedWriteRoots)
+): Boolean {
+    if (isWorkspaceToolApprovalExplicitlyDisabled(toolName, approvalOverrides)) return false
+    if (resolveWorkspaceToolApproval(toolName, approvalOverrides)) return true
+    return runCatching {
+        needsPathHardApproval(jsonObject.absolutePath("path"), trustedWriteRoots)
     }.getOrDefault(true)
+}
 
 private fun String.rootfsName(): String =
     trimEnd('/').substringAfterLast('/').ifBlank { "/" }

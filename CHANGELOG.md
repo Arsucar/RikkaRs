@@ -20,6 +20,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.49
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.48 之后）
+
+- **工作区写入审批开关恢复生效** — 修复 `#258` 引入路径硬审批后，工作区详情「工具审批」关闭写入/编辑仍对任意路径弹审批的问题；开关显式关闭时完全跳过 path hard approval（含 `/skills` 等安全区外路径），默认关闭时 `/workspace`/`/tmp` 仍免审，受信目录与开关打开行为保持不变。
+  **Workspace write approval switch works again** — After `#258` path hard-approval, turning off write/edit in workspace tool-approval no longer still prompts for every path; explicit OFF fully skips path hard approval (including outside free zones). Default OFF still free under `/workspace`/`/tmp`; trusted roots and switch ON unchanged.
+
+---
+
 ## v2.3.48
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.47 之后）

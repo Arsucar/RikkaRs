@@ -118,4 +118,116 @@ class TrustedWriteRootsTest {
             ),
         )
     }
+
+    @Test
+    fun workspaceWriteEditNeedsApproval_switchOffSkipsPathHardApproval() {
+        val off = mapOf("workspace_write_file" to false)
+        // Explicit OFF must fully disable approval, including outside builtin roots.
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/skills/x/SKILL.md",
+                off,
+                emptyList(),
+            ),
+        )
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/etc/hosts",
+                off,
+                emptyList(),
+            ),
+        )
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/workspace/a.txt",
+                off,
+                emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun workspaceWriteEditNeedsApproval_defaultStillFreeUnderBuiltinRoots() {
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/workspace/a.txt",
+                emptyMap(),
+                emptyList(),
+            ),
+        )
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_edit_file",
+                "/tmp/scratch.txt",
+                emptyMap(),
+                emptyList(),
+            ),
+        )
+        // Outside builtin without trust still needs approval when switch is not OFF.
+        assertTrue(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/skills/x/SKILL.md",
+                emptyMap(),
+                emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun workspaceWriteEditNeedsApproval_switchOnAlwaysApproves() {
+        val on = mapOf("workspace_write_file" to true)
+        assertTrue(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/workspace/a.txt",
+                on,
+                emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun workspaceWriteEditNeedsApproval_trustedRootBypassesWhenSwitchDefault() {
+        assertFalse(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/skills/x/SKILL.md",
+                emptyMap(),
+                listOf("/skills/x"),
+            ),
+        )
+        // Switch ON still forces approval even under trusted root.
+        assertTrue(
+            workspaceWriteEditNeedsApproval(
+                "workspace_write_file",
+                "/skills/x/SKILL.md",
+                mapOf("workspace_write_file" to true),
+                listOf("/skills/x"),
+            ),
+        )
+    }
+
+    @Test
+    fun isWorkspaceToolApprovalExplicitlyDisabled_onlyFalseOverride() {
+        assertTrue(
+            isWorkspaceToolApprovalExplicitlyDisabled(
+                "workspace_write_file",
+                mapOf("workspace_write_file" to false),
+            ),
+        )
+        assertFalse(
+            isWorkspaceToolApprovalExplicitlyDisabled(
+                "workspace_write_file",
+                mapOf("workspace_write_file" to true),
+            ),
+        )
+        assertFalse(
+            isWorkspaceToolApprovalExplicitlyDisabled("workspace_write_file", emptyMap()),
+        )
+    }
 }
