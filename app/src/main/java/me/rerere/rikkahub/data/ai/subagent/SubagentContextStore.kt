@@ -58,6 +58,7 @@ private fun SubagentContext.toEntity() = SubagentContextEntity(
     updatedAtMillis = lastAccessAtMillis,
     expiresAtMillis = expiresAtMillis,
     revision = revision,
+    contextCompleteness = contextCompleteness.name,
 )
 
 private fun SubagentContextEntity.toModel() = SubagentContext(
@@ -71,4 +72,7 @@ private fun SubagentContextEntity.toModel() = SubagentContext(
     usage = usageJson?.let { JsonInstant.decodeFromString<TokenUsage>(it) },
     lastError = lastError,
     revision = revision,
+    contextCompleteness = runCatching {
+        SubagentContextCompleteness.valueOf(contextCompleteness)
+    }.getOrDefault(SubagentContextCompleteness.FULL),
 )
