@@ -43,7 +43,7 @@ object EmojiUtils {
                         name = categoryName,
                         subCategories = subCategories
                     )
-                }
+                } ?: emptyList()
 
                 EmojiData(version, categories)
             }

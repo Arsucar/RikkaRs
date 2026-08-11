@@ -239,7 +239,10 @@ private fun extractMaxInjectTokens(schemaJson: String): Int? {
             ?.intOrNull
             ?.takeIf { it > 0 }
     }.onFailure { Log.w(TAG, "Failed to extract maxInjectTokens from schema", it) }
-        .getOrNull(); their payload
+        .getOrNull()
+}
+
+// Names of tables whose schema sets injectPolicy.enabled == false; their payload
 // data is excluded from the injected prompt (#93 per-table injection gate).
 private fun disabledInjectionTables(schemaJson: String): Set<String> {
     return runCatching {
@@ -259,7 +262,10 @@ private fun disabledInjectionTables(schemaJson: String): Set<String> {
             .mapNotNull { (it["name"] as? JsonPrimitive)?.contentOrNull }
             .toSet()
     }.onFailure { Log.w(TAG, "Failed to extract disabled injection tables from schema", it) }
-        .getOrNull().orEmpty() Returns the payload
+        .getOrNull().orEmpty()
+}
+
+// Drops the top-level payload entries for disabled tables. Returns the payload
 // unchanged when nothing is disabled or the payload cannot be parsed as an object.
 private fun filterInjectablePayload(payloadJson: String, disabledTables: Set<String>): String {
     if (disabledTables.isEmpty()) return payloadJson
