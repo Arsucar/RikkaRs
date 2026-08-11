@@ -88,6 +88,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.hugeicons.HugeIcons
@@ -885,12 +886,14 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
     ) { uri ->
         uri?.let {
             scope.launch {
-                try {
-                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                        outputStream.write(tableCsv.toByteArray())
+                withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                            outputStream.write(tableCsv.toByteArray())
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
             }
         }
