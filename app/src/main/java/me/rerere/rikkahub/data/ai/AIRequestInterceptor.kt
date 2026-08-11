@@ -2,7 +2,11 @@ package me.rerere.rikkahub.data.ai
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,6 +33,13 @@ import java.io.IOException
  * time (AC6). The wait ([delay]) and the request replay run OUTSIDE the lock so a slow
  * retry of one request does not stall unrelated AI traffic.
  *
+ * The blocking retry/replay loop (which needs the replay's response code) runs on
+ * [Dispatchers.IO] via [runBlocking] so the OkHttp dispatcher thread is released while
+ * the coroutine is suspended on [delay] and the Clash network calls. Trace writes are
+ * pure in-memory side effects ([ClashRetryTracer.record] only mutates an ArrayDeque
+ * guarded by a Mutex and pushes a StateFlow snapshot), so they are dispatched as
+ * fire-and-forget on [interceptorScope] instead of blocking the calling thread.
+ *
  * Tracing note: every 429 decision (pre-check skip, exhausted, success, pass-through)
  * is recorded to [ClashRetryTracer] for the debug panel. Trace writes are also bridged
  * with [runBlocking]; they are guarded internally by a Mutex and expose a consistent
@@ -43,6 +54,12 @@ class AIRequestInterceptor(
     // 并发 429 互斥（AC6）：只保护"选节点 + 切换"这个快动作
     private val switchMutex = Mutex()
 
+    /**
+     * 专用协程作用域，用于 fire-and-forget 的 trace 记录写入，避免在 OkHttp 网络线程上
+     * 阻塞等待 [ClashRetryTracer] 的 Mutex。trace 写入仅为内存副作用，丢弃返回值无影响。
+     */
+    private val interceptorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val response = chain.proceed(request)
@@ -56,52 +73,47 @@ class AIRequestInterceptor(
 
         // 前置检查失败路径：记录 trace 后静默透传（这是调试面板的核心价值，原来完全静默）
         if (clashConfig.maxRetries <= 0) {
-            runBlocking {
-                clashRetryTracer.record(
-                    ClashRetryTrace(
-                        timestamp = System.currentTimeMillis(),
-                        requestHost = requestHost,
-                        responseCode = response.code,
-                        matchedProvider = null,
-                        rotationEnabled = false,
-                        maxRetries = clashConfig.maxRetries,
-                        finalCode = response.code,
-                        skippedReason = SKIP_MAX_RETRIES,
-                    )
+            // trace 写入仅为内存副作用，fire-and-forget 避免阻塞 OkHttp 线程
+            recordTrace {
+                ClashRetryTrace(
+                    timestamp = System.currentTimeMillis(),
+                    requestHost = requestHost,
+                    responseCode = response.code,
+                    matchedProvider = null,
+                    rotationEnabled = false,
+                    maxRetries = clashConfig.maxRetries,
+                    finalCode = response.code,
+                    skippedReason = SKIP_MAX_RETRIES,
                 )
             }
             return response
         }
         if (provider == null) {
-            runBlocking {
-                clashRetryTracer.record(
-                    ClashRetryTrace(
-                        timestamp = System.currentTimeMillis(),
-                        requestHost = requestHost,
-                        responseCode = response.code,
-                        matchedProvider = null,
-                        rotationEnabled = false,
-                        maxRetries = clashConfig.maxRetries,
-                        finalCode = response.code,
-                        skippedReason = SKIP_NO_PROVIDER,
-                    )
+            recordTrace {
+                ClashRetryTrace(
+                    timestamp = System.currentTimeMillis(),
+                    requestHost = requestHost,
+                    responseCode = response.code,
+                    matchedProvider = null,
+                    rotationEnabled = false,
+                    maxRetries = clashConfig.maxRetries,
+                    finalCode = response.code,
+                    skippedReason = SKIP_NO_PROVIDER,
                 )
             }
             return response
         }
         if (!provider.enable429IpRotation) {
-            runBlocking {
-                clashRetryTracer.record(
-                    ClashRetryTrace(
-                        timestamp = System.currentTimeMillis(),
-                        requestHost = requestHost,
-                        responseCode = response.code,
-                        matchedProvider = provider.name,
-                        rotationEnabled = false,
-                        maxRetries = clashConfig.maxRetries,
-                        finalCode = response.code,
-                        skippedReason = SKIP_ROTATION_DISABLED,
-                    )
+            recordTrace {
+                ClashRetryTrace(
+                    timestamp = System.currentTimeMillis(),
+                    requestHost = requestHost,
+                    responseCode = response.code,
+                    matchedProvider = provider.name,
+                    rotationEnabled = false,
+                    maxRetries = clashConfig.maxRetries,
+                    finalCode = response.code,
+                    skippedReason = SKIP_ROTATION_DISABLED,
                 )
             }
             return response
@@ -117,7 +129,9 @@ class AIRequestInterceptor(
         var exhausted = false
 
         return try {
-            runBlocking {
+            // 重试循环需要重放响应码作为返回值，无法 fire-and-forget；改用 Dispatchers.IO
+            // 让 delay/Clash 网络调用挂起时释放 OkHttp dispatcher 线程，而非占用它阻塞等待
+            runBlocking(Dispatchers.IO) {
                 for (attempt in 1..clashConfig.maxRetries) {
                     // 互斥：查询 + 选不同节点 + 切换（快动作）；失败在循环内捕获并记录，不抛到外层
                     val switchedTo = try {
@@ -166,22 +180,30 @@ class AIRequestInterceptor(
             // Covers cancellation during the delay/replay and any unexpected exception.
             // A response handed to OkHttp must remain open for its caller to consume.
             responseLifecycle.closeIfNotHandedOff()
-            runBlocking {
-                clashRetryTracer.record(
-                    ClashRetryTrace(
-                        timestamp = System.currentTimeMillis(),
-                        requestHost = requestHost,
-                        responseCode = response.code,
-                        matchedProvider = provider.name,
-                        rotationEnabled = provider.enable429IpRotation,
-                        maxRetries = clashConfig.maxRetries,
-                        switches = switches.toList(),
-                        finalCode = finalCode,
-                        exhausted = exhausted,
-                    )
+            // trace 写入仅为内存副作用，fire-and-forget 避免阻塞 OkHttp 线程
+            recordTrace {
+                ClashRetryTrace(
+                    timestamp = System.currentTimeMillis(),
+                    requestHost = requestHost,
+                    responseCode = response.code,
+                    matchedProvider = provider.name,
+                    rotationEnabled = provider.enable429IpRotation,
+                    maxRetries = clashConfig.maxRetries,
+                    switches = switches.toList(),
+                    finalCode = finalCode,
+                    exhausted = exhausted,
                 )
             }
         }
+    }
+
+    /**
+     * 以 fire-and-forget 方式记录一条 trace。trace 写入仅修改内存中的 ArrayDeque（受
+     * [ClashRetryTracer] 内部 Mutex 保护）并推送 StateFlow 快照，无返回值需求，因此不阻塞
+     * 调用线程，直接派发到 [interceptorScope]。
+     */
+    private fun recordTrace(build: () -> ClashRetryTrace) {
+        interceptorScope.launch { clashRetryTracer.record(build()) }
     }
 
     /**

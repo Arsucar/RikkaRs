@@ -9,6 +9,12 @@ import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
@@ -38,12 +44,36 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
 
     private fun dao(): WorkspaceDAO = GlobalContext.get().get()
 
-    private fun allWorkspaces(): List<WorkspaceEntity> = runBlocking { dao().getAll() }
+    /**
+     * workspace 列表的内存缓存。
+     *
+     * [DocumentsProvider] 的回调（[queryChildDocuments] 等）运行在 binder 线程，无法改为
+     * suspend。原实现每次回调都用 [runBlocking] 同步查询数据库，阻塞 binder 线程。
+     *
+     * 现改为：[onCreate] 中预加载一次（此时仅在 provider 进程启动时阻塞一次），随后由
+     * [cacheScope] 在后台收集 [WorkspaceDAO.listFlow] 的更新，保持缓存与数据库一致。
+     * 这样所有 binder 回调都只读取 [Volatile] 缓存，不再每次都阻塞。
+     */
+    @Volatile
+    private var cachedWorkspaces: List<WorkspaceEntity> = emptyList()
+
+    private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var cacheJob: Job? = null
+
+    private fun allWorkspaces(): List<WorkspaceEntity> = cachedWorkspaces
 
     private fun workspaceName(root: String): String =
         allWorkspaces().firstOrNull { it.root == root }?.name ?: root
 
-    override fun onCreate(): Boolean = true
+    override fun onCreate(): Boolean {
+        // 预加载一次，保证首次查询即可用；后续由 listFlow 推送更新
+        runBlocking { cachedWorkspaces = dao().getAll() }
+        cacheJob = cacheScope.launch {
+            dao().listFlow().collectLatest { cachedWorkspaces = it }
+        }
+        return true
+    }
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
