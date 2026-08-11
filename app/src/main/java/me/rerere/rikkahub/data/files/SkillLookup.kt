@@ -23,9 +23,7 @@ fun SkillManager.resolveSkillDirectory(identifier: String): File? {
 
 fun SkillManager.readSkillBodyByIdentifier(identifier: String, assistantId: Uuid? = null): String? {
     val meta = findSkillMetadata(identifier, assistantId) ?: return null
-    val skillFile = resolveSkillFile(meta, "SKILL.md") ?: return null
-    if (!skillFile.exists()) return null
-    return SkillFrontmatterParser.extractBody(skillFile.readText())
+    return readSkillFile(resolveSkillFile(meta, "SKILL.md"), stripFrontmatter = true)
 }
 
 fun SkillManager.skillsAvailableForSlash(enabledSkills: Set<String>, assistantId: Uuid? = null): List<SkillMetadata> {
