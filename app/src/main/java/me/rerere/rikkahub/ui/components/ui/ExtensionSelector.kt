@@ -27,7 +27,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileUtils
-import me.rerere.rikkahub.data.files.SkillFileImportReader
+import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
@@ -44,7 +44,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
 import me.rerere.rikkahub.ui.pages.extensions.skills.AddSkillDialog
-import me.rerere.rikkahub.ui.pages.extensions.skills.SkillFrontmatterParser
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillFileImportReader
 import org.koin.compose.koinInject
 
 @Composable
