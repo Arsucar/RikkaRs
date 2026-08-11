@@ -32,6 +32,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.components.ai.AssistantSkillsContent
 import me.rerere.rikkahub.ui.components.ai.SkillCard
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -66,10 +68,13 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun SkillsPage() {
+fun SkillsPage(
+    assistantId: String? = null,
+) {
     val navController = LocalNavController.current
     val vm = koinViewModel<SkillsVM>()
     val skills by vm.skills.collectAsStateWithLifecycle()
+    val assistantPrivateSkills by vm.assistantPrivateSkills.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -77,15 +82,36 @@ fun SkillsPage() {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+    var showAddPrivateSkillDialog by rememberSaveable { mutableStateOf(false) }
+    var deletePrivateSkillTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+
+    val parsedAssistantId = remember(assistantId) {
+        assistantId?.let { runCatching { kotlin.uuid.Uuid.parse(it) }.getOrNull() }
+    }
+
+    LaunchedEffect(parsedAssistantId) {
+        vm.setAssistantId(parsedAssistantId)
+    }
+
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        vm.importSkillFromFile(context, uri) { success, message ->
-            if (success) {
-                toaster.show(context.getString(R.string.skills_page_import_success, message))
-            } else {
-                toaster.show(context.getString(R.string.skills_page_import_failed, message))
+        if (parsedAssistantId != null) {
+            vm.importAssistantSkillFromFile(context, uri) { success, message ->
+                if (success) {
+                    toaster.show(context.getString(R.string.skills_page_import_success, message))
+                } else {
+                    toaster.show(context.getString(R.string.skills_page_import_failed, message))
+                }
+            }
+        } else {
+            vm.importSkillFromFile(context, uri) { success, message ->
+                if (success) {
+                    toaster.show(context.getString(R.string.skills_page_import_success, message))
+                } else {
+                    toaster.show(context.getString(R.string.skills_page_import_failed, message))
+                }
             }
         }
     }
@@ -107,62 +133,95 @@ fun SkillsPage() {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = innerPadding + PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 12.dp,
-                bottom = 16.dp + 72.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (skills.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CustomColors.cardColorsOnSurfaceContainer,
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+        if (parsedAssistantId != null) {
+            // 助手视角：全局 + 私有 skill 分区（与助手扩展页/半弹窗统一）
+            AssistantSkillsContent(
+                skills = skills,
+                assistantPrivateSkills = assistantPrivateSkills,
+                enabledSkills = emptySet(), // 全局管理页不显示 Switch
+                onToggle = { _, _ -> },
+                onCreatePrivateSkill = { showAddPrivateSkillDialog = true },
+                onImportPrivateSkill = {
+                    fileImportLauncher.launch(
+                        arrayOf(
+                            "text/*",
+                            "application/zip",
+                            "application/x-zip-compressed",
+                            "application/octet-stream",
+                        )
+                    )
+                },
+                onOpenSkill = { skill ->
+                    navController.navigate(Screen.SkillDetail(skill.name))
+                },
+                onOpenPrivateSkill = { skill ->
+                    navController.navigate(Screen.SkillDetail(skill.name, assistantId))
+                },
+                onDeletePrivateSkill = { skill -> deletePrivateSkillTarget = skill },
+                onOpenGlobalSkills = {},
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            )
+        } else {
+            // 纯全局管理视角
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = innerPadding + PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 12.dp,
+                    bottom = 16.dp + 72.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (skills.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CustomColors.cardColorsOnSurfaceContainer,
                         ) {
-                            Surface(
-                                shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Icon(
-                                    imageVector = HugeIcons.Puzzle,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .padding(12.dp)
-                                        .size(28.dp),
+                                Surface(
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.Puzzle,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .padding(12.dp)
+                                            .size(28.dp),
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(R.string.skills_page_empty_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.skills_page_empty_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Text(
-                                text = stringResource(R.string.skills_page_empty_title),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.skills_page_empty_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }
-            }
 
-            items(skills, key = { it.skillDir.absolutePath }) { skill ->
-                SkillCard(
-                    skill = skill,
-                    onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
-                    onDelete = { deleteTarget = skill },
-                )
+                items(skills, key = { it.skillDir.absolutePath }) { skill ->
+                    SkillCard(
+                        skill = skill,
+                        onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
+                        onDelete = { deleteTarget = skill },
+                    )
+                }
             }
         }
     }
@@ -234,6 +293,37 @@ fun SkillsPage() {
         onDismiss = { deleteTarget = null },
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deleteTarget?.name ?: ""))
+    }
+
+    if (showAddPrivateSkillDialog) {
+        AddSkillDialog(
+            onDismiss = { showAddPrivateSkillDialog = false },
+            onConfirm = { _, content ->
+                val name = SkillFrontmatterParser.parse(content)["name"]?.trim().orEmpty()
+                if (name.isNotBlank()) {
+                    vm.saveAssistantSkill(name, content) { success ->
+                        if (!success) {
+                            toaster.show(context.getString(R.string.skills_page_save_failed))
+                        }
+                    }
+                }
+                showAddPrivateSkillDialog = false
+            },
+        )
+    }
+
+    RikkaConfirmDialog(
+        show = deletePrivateSkillTarget != null,
+        title = stringResource(R.string.assistant_private_skills_delete_title),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            deletePrivateSkillTarget?.let { vm.deleteAssistantSkill(it.name) }
+            deletePrivateSkillTarget = null
+        },
+        onDismiss = { deletePrivateSkillTarget = null },
+    ) {
+        Text(stringResource(R.string.skills_page_delete_message, deletePrivateSkillTarget?.name ?: ""))
     }
 }
 

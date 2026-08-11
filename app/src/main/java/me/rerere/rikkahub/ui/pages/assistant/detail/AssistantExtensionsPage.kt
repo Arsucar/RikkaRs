@@ -277,7 +277,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                 navController.navigate(Screen.SkillDetail(skill.name, id))
                             },
                             onDeletePrivateSkill = { skill -> deletePrivateSkillTarget = skill },
-                            onOpenGlobalSkills = { navController.navigate(Screen.Skills) },
+                            onOpenGlobalSkills = { navController.navigate(Screen.Skills()) },
                         )
                     }
                 }

@@ -27,6 +27,19 @@ class SkillsVM(
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
 
+    private val _assistantPrivateSkills = MutableStateFlow<List<SkillMetadata>>(emptyList())
+    val assistantPrivateSkills = _assistantPrivateSkills.asStateFlow()
+
+    var assistantId: kotlin.uuid.Uuid? = null
+        private set
+
+    fun setAssistantId(id: kotlin.uuid.Uuid?) {
+        if (assistantId != id) {
+            assistantId = id
+            loadAssistantPrivateSkills()
+        }
+    }
+
     init {
         loadSkills()
     }
@@ -35,6 +48,17 @@ class SkillsVM(
         viewModelScope.launch(Dispatchers.IO) {
             _skills.value = skillManager.listSkills()
         }
+    }
+
+    private fun loadAssistantPrivateSkills() {
+        val id = assistantId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _assistantPrivateSkills.value = skillManager.listAssistantSkills(id)
+        }
+    }
+
+    fun reloadAssistantPrivateSkills() {
+        loadAssistantPrivateSkills()
     }
 
     fun saveSkill(name: String, content: String, onResult: (Boolean) -> Unit) {
@@ -51,6 +75,59 @@ class SkillsVM(
         viewModelScope.launch(Dispatchers.IO) {
             skillManager.deleteSkill(name)
             _skills.value = skillManager.listSkills()
+        }
+    }
+
+    fun saveAssistantSkill(name: String, content: String, onResult: (Boolean) -> Unit) {
+        val id = assistantId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = skillManager.saveAssistantSkill(id, name, content)
+            _assistantPrivateSkills.value = skillManager.listAssistantSkills(id)
+            withContext(Dispatchers.Main) {
+                onResult(result != null)
+            }
+        }
+    }
+
+    fun deleteAssistantSkill(name: String) {
+        val id = assistantId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            skillManager.deleteAssistantSkill(id, name)
+            _assistantPrivateSkills.value = skillManager.listAssistantSkills(id)
+        }
+    }
+
+    fun importAssistantSkillFromFile(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        val id = assistantId ?: return
+        val appContext = context.applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val fileName = FileUtils.getFileNameFromUri(appContext, uri).orEmpty()
+                val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: run {
+                        withContext(Dispatchers.Main) { onResult(false, "无法读取文件") }
+                        return@launch
+                    }
+
+                val importedNames = SkillFileImportReader.read(fileName, bytes).map { bundle ->
+                    val saved = skillManager.saveAssistantSkillFileBytesAtomically(
+                        assistantId = id,
+                        skillName = bundle.name,
+                        files = bundle.files,
+                    )
+                    if (!saved) {
+                        error("保存失败：${bundle.name}")
+                    }
+                    bundle.name
+                }.distinct()
+
+                _assistantPrivateSkills.value = skillManager.listAssistantSkills(id)
+                withContext(Dispatchers.Main) {
+                    onResult(true, importedNames.joinToString())
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
+            }
         }
     }
 
