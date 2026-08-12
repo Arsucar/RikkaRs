@@ -578,7 +578,7 @@ private fun ScreenTimePreview(content: JsonElement, apps: List<JsonElement>) {
                 }
             }
         }
-        items(apps) { app ->
+        items(apps, key = { it.hashCode() }) { app ->
             val name = app.getStringContent("app_name")
                 ?: app.getStringContent("package") ?: return@items
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -702,7 +702,7 @@ private fun SearchWebPreview(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(images) { imageUrl ->
+                    items(images, key = { it.hashCode() }) { imageUrl ->
                         AsyncImage(
                             model = imageUrl,
                             contentDescription = null,
@@ -719,7 +719,7 @@ private fun SearchWebPreview(
         }
 
         if (items.isNotEmpty()) {
-            items(items) { item ->
+            items(items, key = { it.hashCode() }) { item ->
                 val url = item.getStringContent("url") ?: return@items
                 val title = item.getStringContent("title") ?: return@items
                 val text = item.getStringContent("text") ?: return@items
@@ -790,7 +790,7 @@ private fun ScrapeWebPreview(content: JsonElement) {
             )
         }
 
-        items(urls) { url ->
+        items(urls, key = { it.hashCode() }) { url ->
             val urlObject = url.jsonObject
             Column(
                 modifier = Modifier.fillMaxWidth(),

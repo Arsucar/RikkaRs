@@ -106,7 +106,7 @@ fun LorebooksContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(lorebooks) { lorebook ->
+        items(lorebooks, key = { it.id }) { lorebook ->
             ListItem(
                 modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
                     if (onEdit != null) onEdit(lorebook) else onManage?.invoke()

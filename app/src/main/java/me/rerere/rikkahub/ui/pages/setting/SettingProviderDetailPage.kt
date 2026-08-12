@@ -1042,7 +1042,7 @@ private fun ModelPicker(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(8.dp),
                 ) {
-                    items(filteredModels) {
+                    items(filteredModels, key = { it.modelId }) {
                         Card {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,

@@ -54,7 +54,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -185,7 +185,7 @@ fun ChatInput(
     }
 
     val asr = LocalASRState.current
-    val asrState by asr.state.collectAsState()
+    val asrState by asr.state.collectAsStateWithLifecycle()
     val hapticFeedback = LocalHapticFeedback.current
     val soundEffectPlayer: SoundEffectPlayer = koinInject()
     LaunchedEffect(Unit) {
