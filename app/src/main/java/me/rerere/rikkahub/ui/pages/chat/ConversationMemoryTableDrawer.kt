@@ -93,6 +93,7 @@ import java.time.ZoneId
 import kotlin.uuid.Uuid
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.WorkHistory
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // #89: 对话级记忆表右侧抽屉。
 // - 查看当前对话生效的记忆表（CONVERSATION 及继承的 ASSISTANT/GLOBAL）
@@ -217,9 +218,8 @@ private enum class ConversationDrawerScreen {
  */
 @Composable
 fun ConversationDrawerContent(
+    vm: ChatVM,
     drawerOpen: Boolean,
-    documents: List<MemoryTableDocument>,
-    templates: List<MemoryTableTemplate>,
     conversationId: String,
     assistantId: String,
     assistantWorkspaceId: String?,
@@ -235,28 +235,32 @@ fun ConversationDrawerContent(
     conversationVariables: Map<String, String> = emptyMap(),
     onUpsertVariable: (name: String, value: String) -> Unit = { _, _ -> },
     onDeleteVariable: (name: String) -> Unit = {},
-    contextPreviewState: UiState<ContextPreview>,
     onLoadContextPreview: () -> Unit,
     onClearContextPreview: () -> Unit,
-    hookHistoryState: UiState<List<HookRunHistory>>,
-    hookPreviewState: UiState<MemoryTableHookPreview>,
-    hookManualRunState: UiState<HookExecutionRecord>,
     hooks: List<ConversationHook>,
-    conversationTags: List<ConversationTag>,
     modelNames: Map<Uuid, String>,
     onPreviewHook: (Uuid) -> Unit,
     onApplyPreview: (MemoryTableHookPreview) -> Unit,
     onRunHook: (Uuid) -> Unit,
     onRetryExecution: (Uuid) -> Unit,
-    gitStatusState: GitStatusUiState,
-    gitStatusWorkspaceId: String?,
-    gitDiffState: GitDiffUiState,
     onLoadGitStatus: () -> Unit,
     onRefreshGitStatus: () -> Unit,
     onLoadGitDiff: (String, GitChangeSection) -> Unit,
     onClearGitDiff: () -> Unit,
     onNavigateWorkspaceBinding: () -> Unit,
 ) {
+    // #268: 右抽屉专用 state 在此收集而非 ChatPage 顶层，避免抽屉关闭时仍触发 ChatPage 重组。
+    val documents by vm.memoryTableDocuments.collectAsStateWithLifecycle()
+    val templates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
+    val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
+    val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
+    val hookPreviewState by vm.hookPreviewState.collectAsStateWithLifecycle()
+    val hookManualRunState by vm.hookManualRunState.collectAsStateWithLifecycle()
+    val gitStatusState by vm.gitStatusState.collectAsStateWithLifecycle()
+    val gitDiffState by vm.gitDiffState.collectAsStateWithLifecycle()
+    val gitStatusWorkspaceId by vm.gitStatusWorkspaceId.collectAsStateWithLifecycle()
+    val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
+
     // onDismiss 已由中转菜单移除（不再有关闭按钮），关闭统一走遮罩点击/返回键。
     var screen by remember { mutableStateOf(ConversationDrawerScreen.Menu) }
 

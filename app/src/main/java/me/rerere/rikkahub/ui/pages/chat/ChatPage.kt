@@ -169,16 +169,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     // drawerContent 与主内容都翻回 LTR 防止整页镜像。
     val rightDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val horizontalGestureExclusionState = remember { HorizontalGestureExclusionState() }
-    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
-    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
-    val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
-    val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
-    val hookPreviewState by vm.hookPreviewState.collectAsStateWithLifecycle()
-    val hookManualRunState by vm.hookManualRunState.collectAsStateWithLifecycle()
-    val gitStatusState by vm.gitStatusState.collectAsStateWithLifecycle()
-    val gitDiffState by vm.gitDiffState.collectAsStateWithLifecycle()
-    val gitStatusWorkspaceId by vm.gitStatusWorkspaceId.collectAsStateWithLifecycle()
-    val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
     val currentAssistant = remember(setting.assistants, conversation.assistantId) {
         setting.assistants.firstOrNull { it.id == conversation.assistantId }
     }
@@ -336,9 +326,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     // 内容翻回 LTR，避免整块镜像
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                         ConversationDrawerContent(
+                            vm = vm,
                             drawerOpen = rightDrawerState.isOpen,
-                            documents = memoryTableDocuments,
-                            templates = memoryTableTemplates,
                             conversationId = conversation.id.toString(),
                             assistantId = conversation.assistantId.toString(),
                             assistantWorkspaceId = currentAssistant?.workspaceId?.toString(),
@@ -409,22 +398,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             onDeleteVariable = { name ->
                                 vm.deleteConversationVariable(name)
                             },
-                            contextPreviewState = contextPreviewState,
                             onLoadContextPreview = vm::loadContextPreview,
                             onClearContextPreview = vm::clearContextPreview,
-                            hookHistoryState = hookHistoryState,
-                            hookPreviewState = hookPreviewState,
-                            hookManualRunState = hookManualRunState,
                             hooks = configuredHooks,
-                            conversationTags = conversationTags,
                             modelNames = modelNames,
                             onPreviewHook = vm::previewMemoryTableHook,
                             onApplyPreview = vm::applyMemoryTableHookPreview,
                             onRunHook = vm::runMemoryTableHookNow,
                             onRetryExecution = vm::retryMemoryTableHookExecution,
-                            gitStatusState = gitStatusState,
-                            gitStatusWorkspaceId = gitStatusWorkspaceId,
-                            gitDiffState = gitDiffState,
                             onLoadGitStatus = {
                                 vm.loadGitStatus(
                                     workspaceId = currentAssistant?.workspaceId?.toString(),
