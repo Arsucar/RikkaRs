@@ -26,4 +26,5 @@ data class SubagentContextEntity(
     @ColumnInfo(name = "updated_at") val updatedAtMillis: Long,
     @ColumnInfo(name = "expires_at") val expiresAtMillis: Long,
     @ColumnInfo(name = "revision") val revision: Long,
+    @ColumnInfo(name = "context_completeness", defaultValue = "FULL") val contextCompleteness: String = "FULL",
 )
