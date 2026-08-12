@@ -236,7 +236,7 @@ fun Context.exportImageFile(
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
             uri?.let {
                 outputStream = contentResolver.openOutputStream(it)
-                file.inputStream().copyTo(outputStream!!)
+                file.inputStream().use { it.copyTo(outputStream!!) }
             }
         } else {
             // Android 9及以下直接写入文件

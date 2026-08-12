@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
+import android.util.Log
+
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -895,7 +897,7 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
                             outputStream.write(tableCsv.toByteArray())
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.w("Markdown", "Failed to export table CSV", e)
                     }
                 }
             }

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import android.util.Log
+
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -28,6 +30,7 @@ import me.rerere.rikkahub.data.repository.MemoryTableRevisionConflictException
 import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
 
 private const val DEFAULT_ROW_BUSINESS_KEY = "key"
+private const val TAG = "MemoryTableTools"
 
 fun buildMemoryTableToolsIfEnabled(
     enabled: Boolean,
@@ -350,7 +353,9 @@ fun buildMemoryTableTools(
                         ensureWritableMemoryTableScope(old.scopeType)
                         val opsJson = params.jsonOrStringParameter(json, "ops")
                             ?: error("ops is required for apply_ops")
-                        val ops = runCatching { json.parseToJsonElement(opsJson) as? JsonArray }.getOrNull()
+                        val ops = runCatching { json.parseToJsonElement(opsJson) as? JsonArray }
+                        .onFailure { Log.w(TAG, "Failed to parse ops JSON", it) }
+                        .getOrNull()
                             ?: error("ops must be a JSON array")
                         val explicitRowKey = params.stringParameter("row_key")
                         val expectedRevision = params.expectedRevisionParameter()
@@ -649,7 +654,9 @@ private fun readOnlyUpdateTables(
 ): Set<String> = buildSet {
     for (template in templates) {
         if (template.id !in templateIds) continue
-        val schema = runCatching { json.parseToJsonElement(template.schemaJson) as? JsonObject }.getOrNull()
+        val schema = runCatching { json.parseToJsonElement(template.schemaJson) as? JsonObject }
+        .onFailure { Log.w(TAG, "Failed to parse template schema JSON", it) }
+        .getOrNull()
             ?: continue
         val tables = schema["tables"] as? JsonArray ?: continue
         for (tableElement in tables) {
@@ -685,9 +692,13 @@ private fun ensureReadOnlyTablesUnchanged(
     readOnlyTables: Set<String>,
 ) {
     if (readOnlyTables.isEmpty()) return
-    val oldPayload = runCatching { json.parseToJsonElement(oldPayloadJson) as? JsonObject }.getOrNull()
+    val oldPayload = runCatching { json.parseToJsonElement(oldPayloadJson) as? JsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse old payload JSON", it) }
+    .getOrNull()
         ?: error("existing payload_json must be a JSON object")
-    val newPayload = runCatching { json.parseToJsonElement(newPayloadJson) as? JsonObject }.getOrNull()
+    val newPayload = runCatching { json.parseToJsonElement(newPayloadJson) as? JsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse new payload JSON", it) }
+    .getOrNull()
         ?: error("payload_json must be a JSON object")
     readOnlyTables.firstOrNull { table -> oldPayload[table] != newPayload[table] }?.let { table ->
         ensureWritableMemoryTableTable(
@@ -748,8 +759,12 @@ private fun mergeTopLevelJsonObject(
     original: String,
     patch: String,
 ): String {
-    val originalObject = runCatching { json.parseToJsonElement(original).jsonObject }.getOrNull()
-    val patchObject = runCatching { json.parseToJsonElement(patch).jsonObject }.getOrNull()
+    val originalObject = runCatching { json.parseToJsonElement(original).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse original JSON", it) }
+    .getOrNull()
+    val patchObject = runCatching { json.parseToJsonElement(patch).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse patch JSON", it) }
+    .getOrNull()
     if (originalObject == null || patchObject == null) {
         return patch
     }
@@ -840,7 +855,9 @@ private fun queryMemoryTableRows(
     value: String?,
     contains: Boolean,
 ): JsonObject {
-    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }.getOrNull()
+    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse payload JSON", it) }
+    .getOrNull()
         ?: error("payload_json for memory table document $documentId must be a JSON object")
     val rows = payload[table] as? JsonArray
         ?: error("table '$table' not found in memory table document: $documentId")
@@ -871,7 +888,9 @@ private fun schemaTableNames(
     templates: List<MemoryTableTemplate>,
 ): List<String> {
     val template = templates.firstOrNull { it.id == templateId } ?: return emptyList()
-    val schema = runCatching { json.parseToJsonElement(template.schemaJson).jsonObject }.getOrNull()
+    val schema = runCatching { json.parseToJsonElement(template.schemaJson).jsonObject }
+        .onFailure { Log.w(TAG, "Failed to parse template schema JSON", it) }
+        .getOrNull()
         ?: return emptyList()
     val tables = schema["tables"] as? JsonArray ?: return emptyList()
     return tables.mapNotNull { (it as? JsonObject)?.stringValue("name") }
@@ -936,7 +955,9 @@ private fun deleteMemoryTableRow(
     rowKey: String,
     rowKeyValue: String,
 ): String {
-    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }.getOrNull()
+    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse payload JSON", it) }
+    .getOrNull()
         ?: error("payload_json for memory table document $documentId must be a JSON object")
     val rows = payload[table] as? JsonArray
         ?: error("table '$table' not found in memory table document: $documentId")
@@ -960,7 +981,9 @@ private fun resolveMemoryTableRowKey(
 ): String? {
     explicitRowKey?.takeIf { it.isNotBlank() }?.let { return it }
     val template = templates.firstOrNull { it.id == templateId } ?: return null
-    val schema = runCatching { json.parseToJsonElement(template.schemaJson).jsonObject }.getOrNull() ?: return null
+    val schema = runCatching { json.parseToJsonElement(template.schemaJson).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse template schema JSON", it) }
+    .getOrNull() ?: return null
     val schemaTables = schema["tables"] as? JsonArray ?: return null
     val schemaTable = schemaTables
         .mapNotNull { it as? JsonObject }
@@ -988,7 +1011,9 @@ private fun applyMemoryTableOps(
     ops: JsonArray,
 ): String {
     if (ops.isEmpty()) error("ops must not be empty for apply_ops")
-    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }.getOrNull()
+    val payload = runCatching { json.parseToJsonElement(payloadJson).jsonObject }
+    .onFailure { Log.w(TAG, "Failed to parse payload JSON", it) }
+    .getOrNull()
         ?.toMutableMap()
         ?: error("payload_json for memory table document $documentId must be a JSON object")
     val rowKeyByTable = mutableMapOf<String, String>()

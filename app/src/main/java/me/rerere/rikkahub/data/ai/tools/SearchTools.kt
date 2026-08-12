@@ -65,8 +65,10 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                     val results =
                         JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject.let { json ->
                             val map = json.toMutableMap()
+                            // 安全获取 items 数组；缺失时不注入 id/index，原样保留其余字段
+                            val items = map["items"]?.jsonArray ?: emptyList()
                             map["items"] =
-                                JsonArray(map["items"]!!.jsonArray.mapIndexed { index, item ->
+                                JsonArray(items.mapIndexed { index, item ->
                                     JsonObject(item.jsonObject.toMutableMap().apply {
                                         put("id", JsonPrimitive(Uuid.random().toString().take(6)))
                                         put("index", JsonPrimitive(index + 1))

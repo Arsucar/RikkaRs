@@ -251,7 +251,15 @@ private fun AddProviderDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val instance = selectedType.primaryConstructor!!.callBy(mapOf())
+                    val constructor = selectedType.primaryConstructor
+                    if (constructor == null) {
+                        android.util.Log.w(
+                            "SettingSearchPage",
+                            "No primary constructor for ${selectedType.simpleName}",
+                        )
+                        return@TextButton
+                    }
+                    val instance = constructor.callBy(mapOf())
                     onConfirm(instance)
                 }
             ) {
