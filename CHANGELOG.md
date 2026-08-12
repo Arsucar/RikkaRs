@@ -20,6 +20,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.52
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.51 之后）
+
+- **修复标题/模型名不更新** — `TopBar` 中 `remember { derivedStateOf { conversation.title } }` 的 `conversation` 是普通函数参数而非 Compose State，`derivedStateOf` 无法追踪参数变化，导致标题、模型名、助手名冻结在首帧值；移除 `derivedStateOf` 改为直接读取。
+  **Fix title/model name not updating** — `remember { derivedStateOf { conversation.title } }` in `TopBar` used `conversation` as a plain parameter, not Compose State; `derivedStateOf` cannot track parameter changes, freezing title/model/assistant name at first-frame values; removed `derivedStateOf`, read directly.
+
+---
+
 ## v2.3.51
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.50 之后）

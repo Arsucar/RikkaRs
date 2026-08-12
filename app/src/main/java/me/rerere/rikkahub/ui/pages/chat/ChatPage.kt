@@ -39,7 +39,6 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1102,25 +1101,14 @@ private fun TopBar(
         },
         title = {
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
-            // #268: 流式输出时 conversation 每 ~64ms 产生新实例, 但 title / hasMessages 在多数
-            // 帧内不变. 用 derivedStateOf 只在这些窄字段真正变化时才让后续 Text/分支重组.
-            val conversationTitle by remember {
-                derivedStateOf { conversation.title }
-            }
-            val hasMessages by remember {
-                derivedStateOf { conversation.messageNodes.isNotEmpty() }
-            }
-            // 助手 / 模型 / provider 只依赖 assistantId 与 chatModelId, 流式帧内基本不变,
-            // 用 derivedStateOf 避免 messageNodes 变更导致这部分内容无效重组.
-            val assistant by remember {
-                derivedStateOf { settings.resolveAssistant(conversation) }
-            }
-            val model by remember {
-                derivedStateOf { settings.getCurrentChatModel(conversation) }
-            }
-            val provider by remember {
-                derivedStateOf { model?.findProvider(providers = settings.providers, checkOverwrite = false) }
-            }
+            // conversation / settings 是普通 Composable 参数，不是 Snapshot State。
+            // remember { derivedStateOf { conversation.title } } 不会订阅参数变化，
+            // 会把首帧（空 title / dummy settings）冻住，导致标题与模型永不更新（#268 回退）。
+            val conversationTitle = conversation.title
+            val hasMessages = conversation.messageNodes.isNotEmpty()
+            val assistant = settings.resolveAssistant(conversation)
+            val model = settings.getCurrentChatModel(conversation)
+            val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
             Surface(
                 onClick = {
                     if (hasMessages) {
@@ -1138,11 +1126,9 @@ private fun TopBar(
                         style = MaterialTheme.typography.bodyMedium,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val currentModel = model
-                    val currentProvider = provider
-                    if (currentModel != null && currentProvider != null) {
+                    if (model != null && provider != null) {
                         Text(
-                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${currentModel.displayName} (${currentProvider.name})",
+                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${model.displayName} (${provider.name})",
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),
