@@ -40,6 +40,7 @@ import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.extensions.EditQuickMessageDialog
 import me.rerere.rikkahub.ui.pages.extensions.LorebookEditFullscreen
@@ -63,6 +64,7 @@ fun ExtensionSelector(
     val settingsStore: SettingsStore = koinInject()
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
     var assistantPrivateSkills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
@@ -90,11 +92,11 @@ fun ExtensionSelector(
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val fileName = FileUtils.getFileNameFromUri(context, uri).orEmpty()
                     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: return@withContext
+                        ?: return@withContext null
                     SkillFileImportReader.read(fileName, bytes).forEach { bundle ->
                         skillManager.saveAssistantSkillFileBytesAtomically(
                             assistantId = assistant.id,
@@ -102,11 +104,15 @@ fun ExtensionSelector(
                             files = bundle.files,
                         )
                     }
-                    skills = skillManager.listSkillsForAssistant(assistant.id)
-                    assistantPrivateSkills = skillManager.listAssistantSkills(assistant.id)
+                    skillManager.listSkillsForAssistant(assistant.id) to skillManager.listAssistantSkills(assistant.id)
                 } catch (e: Exception) {
-                    // ignore import errors in half-sheet context
+                    toaster.show(context.getString(R.string.skills_page_import_failed, e.message ?: ""))
+                    null
                 }
+            }
+            if (result != null) {
+                skills = result.first
+                assistantPrivateSkills = result.second
             }
         }
     }
@@ -303,11 +309,12 @@ fun ExtensionSelector(
                 val name = SkillFrontmatterParser.parse(content)["name"]?.trim().orEmpty()
                 if (name.isNotBlank()) {
                     scope.launch {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             skillManager.saveAssistantSkill(assistant.id, name, content)
-                            skills = skillManager.listSkillsForAssistant(assistant.id)
-                            assistantPrivateSkills = skillManager.listAssistantSkills(assistant.id)
+                            skillManager.listSkillsForAssistant(assistant.id) to skillManager.listAssistantSkills(assistant.id)
                         }
+                        skills = result.first
+                        assistantPrivateSkills = result.second
                     }
                 }
                 showAddPrivateSkillDialog = false
@@ -323,11 +330,12 @@ fun ExtensionSelector(
         onConfirm = {
             deletePrivateSkillTarget?.let { target ->
                 scope.launch {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         skillManager.deleteAssistantSkill(assistant.id, target.name)
-                        skills = skillManager.listSkillsForAssistant(assistant.id)
-                        assistantPrivateSkills = skillManager.listAssistantSkills(assistant.id)
+                        skillManager.listSkillsForAssistant(assistant.id) to skillManager.listAssistantSkills(assistant.id)
                     }
+                    skills = result.first
+                    assistantPrivateSkills = result.second
                 }
             }
             deletePrivateSkillTarget = null

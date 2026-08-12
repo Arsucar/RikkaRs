@@ -392,6 +392,8 @@ fun AssistantSkillsContent(
     onDeletePrivateSkill: (SkillMetadata) -> Unit,
     onOpenGlobalSkills: () -> Unit,
     modifier: Modifier = Modifier,
+    showEnableToggle: Boolean = true,
+    showManageGlobalButton: Boolean = true,
 ) {
     val privateBadgeText = stringResource(R.string.assistant_private_skills_badge)
     val globalBadgeText = stringResource(R.string.assistant_global_skills_badge)
@@ -420,8 +422,8 @@ fun AssistantSkillsContent(
                 SkillCard(
                     skill = skill,
                     onClick = { onOpenSkill(skill) },
-                    enabled = enabledSkills.contains(skill.name),
-                    onToggle = { checked -> onToggle(skill.name, checked) },
+                    enabled = if (showEnableToggle) enabledSkills.contains(skill.name) else null,
+                    onToggle = if (showEnableToggle) ({ checked -> onToggle(skill.name, checked) }) else null,
                     onDelete = null,
                     badgeText = if (skill.isAssistantPrivate) privateBadgeText else globalBadgeText,
                 )
@@ -486,12 +488,14 @@ fun AssistantSkillsContent(
             }
         }
 
-        item {
-            TextButton(
-                onClick = onOpenGlobalSkills,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.assistant_private_skills_manage_global))
+        if (showManageGlobalButton) {
+            item {
+                TextButton(
+                    onClick = onOpenGlobalSkills,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.assistant_private_skills_manage_global))
+                }
             }
         }
     }

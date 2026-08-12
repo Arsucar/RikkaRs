@@ -126,8 +126,10 @@ fun SkillsPage(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showImportSheet = true }) {
-                Icon(HugeIcons.Add01, contentDescription = null)
+            if (parsedAssistantId == null) {
+                FloatingActionButton(onClick = { showImportSheet = true }) {
+                    Icon(HugeIcons.Add01, contentDescription = null)
+                }
             }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -138,7 +140,7 @@ fun SkillsPage(
             AssistantSkillsContent(
                 skills = skills,
                 assistantPrivateSkills = assistantPrivateSkills,
-                enabledSkills = emptySet(), // 全局管理页不显示 Switch
+                enabledSkills = emptySet(),
                 onToggle = { _, _ -> },
                 onCreatePrivateSkill = { showAddPrivateSkillDialog = true },
                 onImportPrivateSkill = {
@@ -158,10 +160,14 @@ fun SkillsPage(
                     navController.navigate(Screen.SkillDetail(skill.name, assistantId))
                 },
                 onDeletePrivateSkill = { skill -> deletePrivateSkillTarget = skill },
-                onOpenGlobalSkills = {},
+                onOpenGlobalSkills = {
+                    navController.navigate(Screen.Skills())
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
+                showEnableToggle = false,
+                showManageGlobalButton = false,
             )
         } else {
             // 纯全局管理视角
