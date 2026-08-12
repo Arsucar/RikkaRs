@@ -1574,8 +1574,8 @@ private fun MemoryTableTemplatePicker(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.large)
-                .clickable(enabled = !isSaving, onClick = onManageTemplates)
                 .padding(horizontal = 12.dp, vertical = 14.dp)
+                .clickable(enabled = !isSaving, onClick = onManageTemplates)
                 .alpha(if (isSaving) 0.38f else 1f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1627,8 +1627,8 @@ private fun MemoryTableTemplateRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.38f),
         verticalAlignment = Alignment.Top,
     ) {
