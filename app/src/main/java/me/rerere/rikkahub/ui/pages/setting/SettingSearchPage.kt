@@ -210,7 +210,7 @@ private fun AddProviderDialog(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(SearchServiceOptions.TYPES.keys.toList()) { type ->
+                items(SearchServiceOptions.TYPES.keys.toList(), key = { it }) { type ->
                     val name = SearchServiceOptions.TYPES[type] ?: "Unknown"
                     val isSelected = selectedType == type
                     Card(

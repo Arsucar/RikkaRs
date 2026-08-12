@@ -176,7 +176,7 @@ class ChatVM(
     val conversationJob: StateFlow<Job?> =
         chatService
             .getGenerationJobStateFlow(_conversationId)
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val processingStatus: StateFlow<String?> =
         chatService
@@ -184,7 +184,7 @@ class ChatVM(
 
     val conversationJobs = chatService
         .getConversationJobs()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         // 添加对话引用
@@ -322,7 +322,7 @@ class ChatVM(
 
     // 用户设置
     val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings.dummy())
 
     private val assistantSwitchCoordinator = AssistantSwitchCoordinator(
         currentAssistantId = { settingsStore.settingsFlow.value.assistantId },
@@ -334,7 +334,7 @@ class ChatVM(
     // 网络搜索：绑定当前会话助手，而非全局 selected assistant（fork + assistant-web-search 契约）
     val enableWebSearch = combine(settings, conversation) { settings, conversation ->
         settings.assistants.firstOrNull { it.id == conversation.assistantId }?.enableWebSearch ?: false
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun toggleWebSearch() {
         val assistantId = conversation.value.assistantId
@@ -436,7 +436,7 @@ class ChatVM(
 
     // Update checker
     val updateState =
-        updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
+        updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
 
     /**
      * 处理消息发送

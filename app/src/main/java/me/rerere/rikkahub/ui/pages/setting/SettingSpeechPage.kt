@@ -706,8 +706,8 @@ private fun TTSProviderItem(
 ) {
     var showDropdownMenu by remember { mutableStateOf(false) }
     val tts = LocalTTSState.current
-    val isSpeaking by tts.isSpeaking.collectAsState()
-    val isAvailable by tts.isAvailable.collectAsState()
+    val isSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+    val isAvailable by tts.isAvailable.collectAsStateWithLifecycle()
 
     Card(
         modifier = modifier,

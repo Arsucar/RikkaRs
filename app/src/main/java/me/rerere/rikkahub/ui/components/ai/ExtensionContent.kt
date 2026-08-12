@@ -2,7 +2,9 @@ package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,29 +12,45 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.FileImport
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ExternalLink
 import com.composables.icons.lucide.Lucide
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Link01
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Preset
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.pages.extensions.displayEntryCount
+import me.rerere.rikkahub.ui.theme.CustomColors
 import kotlin.uuid.Uuid
 
 @Composable
@@ -106,7 +124,7 @@ fun LorebooksContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(lorebooks) { lorebook ->
+        items(lorebooks, key = { it.id }) { lorebook ->
             ListItem(
                 modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
                     if (onEdit != null) onEdit(lorebook) else onManage?.invoke()
@@ -127,51 +145,6 @@ fun LorebooksContent(
                     Switch(
                         checked = selectedIds.contains(lorebook.id),
                         onCheckedChange = { checked -> onToggle(lorebook.id, checked) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            )
-        }
-        if (onManage != null) {
-            item {
-                ManageButton(onClick = onManage)
-            }
-        }
-    }
-}
-
-@Composable
-fun SkillsContent(
-    skills: List<SkillMetadata>,
-    enabledSkills: Set<String>,
-    onToggle: (String, Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onManage: (() -> Unit)? = null,
-    onEdit: ((SkillMetadata) -> Unit)? = null,
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(skills, key = { it.skillDir.absolutePath }) { skill ->
-            ListItem(
-                modifier = Modifier.clickable(enabled = onEdit != null || onManage != null) {
-                    if (onEdit != null) onEdit(skill) else onManage?.invoke()
-                },
-                headlineContent = { Text(skill.name) },
-                supportingContent = if (skill.description.isNotBlank()) {
-                    {
-                        Text(
-                            text = skill.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                } else null,
-                trailingContent = {
-                    Switch(
-                        checked = enabledSkills.contains(skill.name),
-                        onCheckedChange = { checked -> onToggle(skill.name, checked) }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -276,5 +249,288 @@ fun ExtensionEmptyState(
                 Text(buttonText)
             }
         }
+    }
+}
+
+@Composable
+fun SkillCard(
+    skill: SkillMetadata,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean? = null,
+    onToggle: ((Boolean) -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    badgeText: String? = null,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val showTrailing = onDelete != null || enabled != null
+
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(top = 2.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Puzzle,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(18.dp),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = skill.name,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    maxLines = 1,
+                )
+                if (badgeText != null) {
+                    Text(
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1,
+                    )
+                }
+                if (skill.description.isNotBlank()) {
+                    Text(
+                        text = skill.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                    )
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    SkillMetaPill(text = "SKILL.md")
+                    skill.compatibility?.takeIf { it.isNotBlank() }?.let {
+                        SkillMetaPill(text = it)
+                    }
+                }
+            }
+            if (showTrailing) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    if (onDelete != null) {
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = HugeIcons.MoreVertical,
+                                    contentDescription = stringResource(R.string.skills_page_more_actions),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(R.string.delete),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = HugeIcons.Delete01,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onDelete()
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (enabled != null && onToggle != null) {
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = onToggle,
+                            modifier = Modifier.scale(0.8f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AssistantSkillsContent(
+    skills: List<SkillMetadata>,
+    assistantPrivateSkills: List<SkillMetadata>,
+    enabledSkills: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onCreatePrivateSkill: () -> Unit,
+    onImportPrivateSkill: () -> Unit,
+    onOpenSkill: (SkillMetadata) -> Unit,
+    onOpenPrivateSkill: (SkillMetadata) -> Unit,
+    onDeletePrivateSkill: (SkillMetadata) -> Unit,
+    onOpenGlobalSkills: () -> Unit,
+    modifier: Modifier = Modifier,
+    showEnableToggle: Boolean = true,
+    showManageGlobalButton: Boolean = true,
+) {
+    val privateBadgeText = stringResource(R.string.assistant_private_skills_badge)
+    val globalBadgeText = stringResource(R.string.assistant_global_skills_badge)
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        item {
+            SkillSectionHeader(
+                title = stringResource(R.string.assistant_skills_available_section),
+                description = stringResource(R.string.assistant_skills_available_section_desc),
+            )
+        }
+
+        if (skills.isEmpty()) {
+            item {
+                ExtensionEmptyState(
+                    message = stringResource(R.string.assistant_extensions_page_empty_skills),
+                    buttonText = stringResource(R.string.assistant_private_skills_create),
+                    onAction = onCreatePrivateSkill,
+                )
+            }
+        } else {
+            items(skills, key = { "${it.ownerAssistantId ?: "global"}:${it.name}" }) { skill ->
+                SkillCard(
+                    skill = skill,
+                    onClick = { onOpenSkill(skill) },
+                    enabled = if (showEnableToggle) enabledSkills.contains(skill.name) else null,
+                    onToggle = if (showEnableToggle) ({ checked -> onToggle(skill.name, checked) }) else null,
+                    onDelete = null,
+                    badgeText = if (skill.isAssistantPrivate) privateBadgeText else globalBadgeText,
+                )
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.assistant_private_skills_section),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.assistant_private_skills_section_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onImportPrivateSkill) {
+                    Icon(
+                        imageVector = HugeIcons.FileImport,
+                        contentDescription = stringResource(R.string.skills_page_import_from_file),
+                    )
+                }
+                IconButton(onClick = onCreatePrivateSkill) {
+                    Icon(
+                        imageVector = HugeIcons.Add01,
+                        contentDescription = stringResource(R.string.assistant_private_skills_create),
+                    )
+                }
+            }
+        }
+
+        if (assistantPrivateSkills.isEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.assistant_private_skills_empty),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            items(assistantPrivateSkills, key = { it.name }) { skill ->
+                SkillCard(
+                    skill = skill,
+                    onClick = { onOpenPrivateSkill(skill) },
+                    enabled = null,
+                    onToggle = null,
+                    onDelete = { onDeletePrivateSkill(skill) },
+                    badgeText = privateBadgeText,
+                )
+            }
+        }
+
+        if (showManageGlobalButton) {
+            item {
+                TextButton(
+                    onClick = onOpenGlobalSkills,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.assistant_private_skills_manage_global))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SkillSectionHeader(
+    title: String,
+    description: String,
+) {
+    Column(
+        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+fun SkillMetaPill(text: String) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+        )
     }
 }

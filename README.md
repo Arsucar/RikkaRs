@@ -1,3 +1,5 @@
+
+
 <div align="center">
   <img src="docs/icon.png" alt="RikkaRs 应用图标" width="100" />
 </div>
@@ -115,7 +117,7 @@ RikkaRs 是非官方发行版，与 RikkaHub 项目及其维护者不存在隶�
 
 ## 构建与贡献
 
-使用 [Android Studio](https://developer.android.com/studio) 和 JDK 17 打开项目。Android 应用采用 Kotlin、Jetpack Compose、Koin、DataStore、Room、Coil、Material You、Navigation 3、OkHttp 和 kotlinx.serialization。项目不使用 Firebase，因此无需 `google-services.json`。包名、CI、发版和上游同步细节见[工程指南](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)。
+使用 [Android Studio](https://developer.android.com/studio) 和 JDK 17 打开项目。Android 应用采用 Kotlin、Jetpack Compose、Koin、DataStore、Room、Coil、Material You、Navigation 3、OkHttp 和 kotlinx.serialization。项目不使用 Firebase，因此无需 `google-services.json`。由于 `web` 模块会在 `preBuild` 阶段构建 `web-ui/` 并复制静态资源，请确保本地已安装 `pnpm`。包名、CI、发版和上游同步细节见[工程指南](docs/RIKKA_ARSUCAR_FORK_AND_CI.md)。
 
 适合提交的贡献包括聚焦的缺陷修复、文档修正和可维护性改进；开始较大工作前请先创建 Issue。项目不接受仅涉及翻译的改动、未经讨论的功能实现，以及大规模或由 AI 生成的重构。
 

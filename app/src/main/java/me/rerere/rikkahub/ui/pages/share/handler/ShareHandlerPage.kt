@@ -81,7 +81,7 @@ fun ShareHandlerPage(text: String, image: String?) {
                 }
             }
 
-            items(settings.activeAssistants()) { assistant ->
+            items(settings.activeAssistants(), key = { it.id }) { assistant ->
                 Surface(
                     onClick = {
                         scope.launch {

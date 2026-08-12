@@ -97,13 +97,13 @@ class AssistantDetailVM(
     }
 
     val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings.dummy())
 
     val mcpServerConfigs = settingsStore
         .settingsFlow.map { settings ->
             settings.mcpServers
         }.stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     val assistant: StateFlow<Assistant> = settingsStore
@@ -111,7 +111,7 @@ class AssistantDetailVM(
         .map { settings ->
             settings.assistants.find { it.id == assistantId } ?: Assistant()
         }.stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = Assistant()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = Assistant()
         )
 
     val memories = assistant
@@ -119,19 +119,19 @@ class AssistantDetailVM(
             memoryRepository.getEffectiveMemoriesFlow(assistantId.toString())
         }
         .stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     val memoryTableTemplates = memoryTableRepository
         .getEffectiveTemplatesFlow(assistantId.toString())
         .stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     val memoryTableDocuments = memoryTableRepository
         .getAssistantMemoryDocumentsFlow(assistantId.toString())
         .stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     init {
@@ -195,7 +195,7 @@ class AssistantDetailVM(
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = MemoryTableTrashUiState.Loading,
         )
 
@@ -214,7 +214,7 @@ class AssistantDetailVM(
         .map { settings ->
             settings.providers
         }.stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     val tags = settingsStore
@@ -222,7 +222,7 @@ class AssistantDetailVM(
         .map { settings ->
             settings.assistantTags
         }.stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+            scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList()
         )
 
     private val conversationTagsReloadRequest = MutableStateFlow(0)
@@ -233,7 +233,7 @@ class AssistantDetailVM(
                 .map<List<ConversationTag>, ConversationTagsUiState>(ConversationTagsUiState::Success)
                 .catch { emit(ConversationTagsUiState.Error) }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ConversationTagsUiState.Loading)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConversationTagsUiState.Loading)
 
     fun reloadConversationTags() {
         conversationTagsReloadRequest.value++
@@ -243,7 +243,7 @@ class AssistantDetailVM(
         .listFlow()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList(),
         )
 

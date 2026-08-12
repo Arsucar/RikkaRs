@@ -58,7 +58,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
-private const val REASONING_TIMER_INTERVAL_MS = 50L
+private const val REASONING_TIMER_INTERVAL_MS = 200L
 
 enum class ReasoningCardState(val expanded: Boolean) {
     Collapsed(false),
