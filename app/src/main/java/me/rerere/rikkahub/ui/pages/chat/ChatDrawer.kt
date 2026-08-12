@@ -771,8 +771,8 @@ private fun TagFilterControl(
                     contentDescription = stringResource(R.string.conversation_tag_filter_clear),
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable(onClick = onClear)
                         .padding(6.dp)
+                        .clickable(onClick = onClear)
                         .size(16.dp),
                 )
             }
