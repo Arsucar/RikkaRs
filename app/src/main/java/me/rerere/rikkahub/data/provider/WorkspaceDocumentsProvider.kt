@@ -16,6 +16,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -50,9 +52,13 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
      * [DocumentsProvider] 的回调（[queryChildDocuments] 等）运行在 binder 线程，无法改为
      * suspend。原实现每次回调都用 [runBlocking] 同步查询数据库，阻塞 binder 线程。
      *
-     * 现改为：[onCreate] 中预加载一次（此时仅在 provider 进程启动时阻塞一次），随后由
-     * [cacheScope] 在后台收集 [WorkspaceDAO.listFlow] 的更新，保持缓存与数据库一致。
-     * 这样所有 binder 回调都只读取 [Volatile] 缓存，不再每次都阻塞。
+     * 现改为：首次回调时延迟初始化（[ensureInitialized]），随后由 [cacheScope] 在后台
+     * 收集 [WorkspaceDAO.listFlow] 的更新，保持缓存与数据库一致。这样所有 binder 回调都
+     * 只读取 [Volatile] 缓存，不再每次都阻塞。
+     *
+     * 注意：[ContentProvider.onCreate] 早于 [Application.onCreate] 执行，而 Koin 在
+     * [RikkaHubApp.onCreate] 中才启动，因此不能在 [onCreate] 中访问 [dao]；改为首次 binder
+     * 回调时初始化（此时 Koin 已就绪）。
      */
     @Volatile
     private var cachedWorkspaces: List<WorkspaceEntity> = emptyList()
@@ -61,19 +67,37 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
 
     private var cacheJob: Job? = null
 
+    private val initLock = Mutex()
+
+    @Volatile
+    private var initialized = false
+
     private fun allWorkspaces(): List<WorkspaceEntity> = cachedWorkspaces
 
     private fun workspaceName(root: String): String =
         allWorkspaces().firstOrNull { it.root == root }?.name ?: root
 
-    override fun onCreate(): Boolean {
-        // 预加载一次，保证首次查询即可用；后续由 listFlow 推送更新
-        runBlocking { cachedWorkspaces = dao().getAll() }
-        cacheJob = cacheScope.launch {
-            dao().listFlow().collectLatest { cachedWorkspaces = it }
+    /**
+     * 首次 binder 回调时延迟初始化缓存。此时 Koin 已就绪（[RikkaHubApp.onCreate] 已执行）。
+     * 双重检查 + [initLock] 保证并发回调只初始化一次。
+     */
+    private suspend fun ensureInitialized() {
+        if (initialized) return
+        initLock.withLock {
+            if (initialized) return@withLock
+            cachedWorkspaces = dao().getAll()
+            cacheJob = cacheScope.launch {
+                dao().listFlow().collectLatest { cachedWorkspaces = it }
+            }
+            initialized = true
         }
-        return true
     }
+
+    /**
+     * [ContentProvider.onCreate] 早于 [Application.onCreate] 执行，此时 Koin 尚未启动，
+     * 不能访问 [dao]。直接返回 true，真正的初始化推迟到首次 binder 回调（[ensureInitialized]）。
+     */
+    override fun onCreate(): Boolean = true
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
@@ -93,6 +117,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     }
 
     override fun queryDocument(documentId: String, projection: Array<String>?): Cursor {
+        runBlocking { ensureInitialized() }
         val cursor = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         val target = parseDocId(documentId)
         if (target.isRoot) {
@@ -115,6 +140,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         projection: Array<String>?,
         sortOrder: String?,
     ): Cursor {
+        runBlocking { ensureInitialized() }
         val cursor = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         val parent = parseDocId(parentDocumentId)
         if (parent.isRoot) {
@@ -141,6 +167,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         mode: String,
         signal: CancellationSignal?,
     ): ParcelFileDescriptor {
+        runBlocking { ensureInitialized() }
         val target = parseDocId(documentId)
         require(!target.isRoot) { "Cannot open root as a document" }
         val file = resolveFile(target.root, target.relPath)
@@ -152,6 +179,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         mimeType: String,
         displayName: String,
     ): String {
+        runBlocking { ensureInitialized() }
         val parent = parseDocId(parentDocumentId)
         require(!parent.isRoot) { "Cannot create document at root" }
         manager().ensureWorkspace(parent.root)
@@ -168,6 +196,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     }
 
     override fun deleteDocument(documentId: String) {
+        runBlocking { ensureInitialized() }
         val target = parseDocId(documentId)
         require(!target.isRoot && target.relPath.isNotEmpty()) { "Cannot delete this document" }
         val file = resolveFile(target.root, target.relPath)
@@ -177,6 +206,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     }
 
     override fun renameDocument(documentId: String, displayName: String): String {
+        runBlocking { ensureInitialized() }
         val target = parseDocId(documentId)
         require(!target.isRoot && target.relPath.isNotEmpty()) { "Cannot rename this document" }
         val file = resolveFile(target.root, target.relPath)
@@ -188,6 +218,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     }
 
     override fun copyDocument(sourceDocumentId: String, targetParentDocumentId: String): String {
+        runBlocking { ensureInitialized() }
         val source = parseDocId(sourceDocumentId)
         val targetParent = parseDocId(targetParentDocumentId)
         require(!source.isRoot && source.relPath.isNotEmpty()) { "Cannot copy this document" }
@@ -210,6 +241,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         sourceParentDocumentId: String?,
         targetParentDocumentId: String,
     ): String {
+        runBlocking { ensureInitialized() }
         val source = parseDocId(sourceDocumentId)
         val targetParent = parseDocId(targetParentDocumentId)
         require(!source.isRoot && source.relPath.isNotEmpty()) { "Cannot move this document" }
@@ -235,6 +267,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     }
 
     override fun getDocumentType(documentId: String): String {
+        runBlocking { ensureInitialized() }
         val target = parseDocId(documentId)
         if (target.isRoot) return Document.MIME_TYPE_DIR
         return mimeOf(resolveFile(target.root, target.relPath))

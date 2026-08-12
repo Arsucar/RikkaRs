@@ -41,9 +41,10 @@ import java.io.IOException
  * fire-and-forget on [interceptorScope] instead of blocking the calling thread.
  *
  * Tracing note: every 429 decision (pre-check skip, exhausted, success, pass-through)
- * is recorded to [ClashRetryTracer] for the debug panel. Trace writes are also bridged
- * with [runBlocking]; they are guarded internally by a Mutex and expose a consistent
- * snapshot via StateFlow so the UI thread can read them safely.
+ * is recorded to [ClashRetryTracer] for the debug panel. Trace writes are dispatched
+ * as fire-and-forget on [interceptorScope] (no [runBlocking]); they are guarded
+ * internally by a Mutex and expose a consistent snapshot via StateFlow so the UI
+ * thread can read them safely.
  */
 class AIRequestInterceptor(
     private val settingsStore: SettingsStore,
@@ -129,8 +130,11 @@ class AIRequestInterceptor(
         var exhausted = false
 
         return try {
-            // 重试循环需要重放响应码作为返回值，无法 fire-and-forget；改用 Dispatchers.IO
-            // 让 delay/Clash 网络调用挂起时释放 OkHttp dispatcher 线程，而非占用它阻塞等待
+            // OkHttp's Interceptor.intercept() is synchronous by API contract.
+            // runBlocking is unavoidable here; the calling OkHttp thread is already
+            // dedicated to this request. Dispatchers.IO lets the thread be released
+            // while the coroutine is suspended on [delay] and Clash network calls.
+            // This is acceptable per #271 scope.
             runBlocking(Dispatchers.IO) {
                 for (attempt in 1..clashConfig.maxRetries) {
                     // 互斥：查询 + 选不同节点 + 切换（快动作）；失败在循环内捕获并记录，不抛到外层
@@ -200,10 +204,12 @@ class AIRequestInterceptor(
     /**
      * 以 fire-and-forget 方式记录一条 trace。trace 写入仅修改内存中的 ArrayDeque（受
      * [ClashRetryTracer] 内部 Mutex 保护）并推送 StateFlow 快照，无返回值需求，因此不阻塞
-     * 调用线程，直接派发到 [interceptorScope]。
+     * 调用线程，直接派发到 [interceptorScope]。trace 对象在派发前构建，避免协程内捕获
+     * 调用栈的可变状态（如 response.code）。
      */
     private fun recordTrace(build: () -> ClashRetryTrace) {
-        interceptorScope.launch { clashRetryTracer.record(build()) }
+        val trace = build()
+        interceptorScope.launch { clashRetryTracer.record(trace) }
     }
 
     /**
