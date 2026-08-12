@@ -59,7 +59,7 @@ class ChatDrawerVM(
     private val selectedTagIdStrings = savedStateHandle.getStateFlow(SELECTED_TAG_IDS, emptyList<String>())
     val selectedTagIds: StateFlow<Set<Uuid>> = selectedTagIdStrings
         .map { ids -> ids.mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }.toSet() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     private val _tagsLoaded = MutableStateFlow(false)
     val tagsLoaded: StateFlow<Boolean> = _tagsLoaded.asStateFlow()
