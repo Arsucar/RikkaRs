@@ -31,6 +31,7 @@ interface SubagentContextDAO {
             created_at = :createdAtMillis,
             updated_at = :updatedAtMillis,
             expires_at = :expiresAtMillis,
+            context_completeness = :contextCompleteness,
             revision = :revision
         WHERE context_id = :contextId AND revision < :revision
         """
@@ -47,6 +48,7 @@ interface SubagentContextDAO {
         createdAtMillis: Long,
         updatedAtMillis: Long,
         expiresAtMillis: Long,
+        contextCompleteness: String,
         revision: Long,
     ): Int
 
@@ -64,6 +66,7 @@ interface SubagentContextDAO {
             createdAtMillis = entity.createdAtMillis,
             updatedAtMillis = entity.updatedAtMillis,
             expiresAtMillis = entity.expiresAtMillis,
+            contextCompleteness = entity.contextCompleteness,
             revision = entity.revision,
         )
         if (updated == 0) insertIgnore(entity)

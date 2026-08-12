@@ -173,6 +173,7 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val IMAGE_THUMBNAIL_ACTIONS_MAX_COLUMNS = 4
+private const val IMGGEN_PROGRESS_DELAY_MS = 80L
 
 @Composable
 private fun ImageSearchTitleField(
@@ -261,7 +262,7 @@ fun ImageGenPage(
     LaunchedEffect(isImageSearchActive) {
         if (isImageSearchActive) {
             imageSearchFocusRequester.requestFocus()
-            delay(80)
+            delay(IMGGEN_PROGRESS_DELAY_MS)
             keyboardController?.show()
         }
     }

@@ -43,7 +43,7 @@ class FavoriteVM(
                 )
             }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun removeFavorite(refKey: String) {
         viewModelScope.launch {

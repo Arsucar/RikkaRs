@@ -303,8 +303,8 @@ private fun TerminalExtraKey(
                 },
                 shape = RoundedCornerShape(6.dp),
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
         style = MaterialTheme.typography.labelMedium,
         color = if (selected) {
             MaterialTheme.colorScheme.onPrimary

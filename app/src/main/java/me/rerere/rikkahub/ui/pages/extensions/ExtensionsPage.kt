@@ -70,7 +70,7 @@ fun ExtensionsPage() {
                         supportingContent = { Text(stringResource(R.string.extensions_page_prompts_desc)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Skills) },
+                        onClick = { navController.navigate(Screen.Skills()) },
                         leadingContent = { Icon(HugeIcons.Puzzle, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },

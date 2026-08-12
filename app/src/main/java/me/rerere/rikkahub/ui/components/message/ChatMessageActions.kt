@@ -25,7 +25,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +70,8 @@ import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.rikkahub.utils.toMessageTimeString
 import java.util.Locale
 
+private const val ACTION_SHEET_AUTO_DISMISS_MS = 3000L
+
 @Composable
 fun ColumnScope.ChatMessageActionButtons(
     message: UIMessage,
@@ -88,7 +90,7 @@ fun ColumnScope.ChatMessageActionButtons(
 
     LaunchedEffect(isPendingDelete) {
         if (isPendingDelete) {
-            delay(3000) // 3秒后自动取消
+            delay(ACTION_SHEET_AUTO_DISMISS_MS) // 3秒后自动取消
             isPendingDelete = false
         }
     }
@@ -129,8 +131,8 @@ fun ColumnScope.ChatMessageActionButtons(
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
-            val isSpeaking by tts.isSpeaking.collectAsState()
-            val isAvailable by tts.isAvailable.collectAsState()
+            val isSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+            val isAvailable by tts.isAvailable.collectAsStateWithLifecycle()
             Icon(
                 imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
                 contentDescription = stringResource(R.string.tts),

@@ -26,7 +26,7 @@ class HistoryVM(
 ) : ViewModel() {
     val assistant = settingsStore.settingsFlow
         .map { it.getCurrentAssistant() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val conversations: Flow<PagingData<Conversation>> = assistant

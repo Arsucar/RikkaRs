@@ -142,6 +142,11 @@ internal suspend fun persistSubagentFailure(
         messages = cached?.messages ?: fallbackMessages,
         usage = cached?.usage ?: fallbackUsage,
         error = error,
+        contextCompleteness = if (fallbackMessages.isEmpty() && cached?.messages.isNullOrEmpty()) {
+            SubagentContextCompleteness.UNAVAILABLE
+        } else {
+            SubagentContextCompleteness.PARTIAL
+        },
     )
 }
 
@@ -534,6 +539,11 @@ class SubagentHost(
                 status = SubagentStatus.COMPLETED,
                 messages = messages,
                 usage = totalUsage,
+                contextCompleteness = if (truncated || generationLimitReached) {
+                    SubagentContextCompleteness.BOUNDED_FULL
+                } else {
+                    SubagentContextCompleteness.FULL
+                },
             )
             logResult(result)
             result
@@ -688,6 +698,9 @@ class SubagentHost(
         var finalMessages = initialMessages
         var truncated = false
         val maxToolCalls = effectiveMaxToolCalls(profile)
+        // #285: 复用 context 时，旧 messages 中的 tool calls 不应计入新任务预算。
+        // 记录基线，budget 检查和 countdown 都减去基线，使新任务获得完整预算。
+        val baselineExecutedToolCalls = countExecutedToolCalls(initialMessages)
         try {
             generationHandler.generateText(
                 settings = settings,
@@ -701,7 +714,7 @@ class SubagentHost(
                 } else {
                     null
                 },
-                stepsCountdownTotal = effectiveMaxToolCalls(profile),
+                stepsCountdownTotal = effectiveMaxToolCalls(profile) + baselineExecutedToolCalls,
                 stepsCountdownLabel = "Tool calls",
                 memories = emptyList(),
                 workspaceCwd = workspaceCwd,
@@ -723,7 +736,7 @@ class SubagentHost(
                     }
                     if (enforceToolBudget &&
                         !profile.disableToolBudgetStop &&
-                        countExecutedToolCalls(finalMessages) >= maxToolCalls
+                        countExecutedToolCalls(finalMessages) - baselineExecutedToolCalls >= maxToolCalls
                     ) {
                         truncated = true
                         throw ToolCallBudgetStop

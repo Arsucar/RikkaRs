@@ -52,7 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.highlight.HighlightTextColorPalette
@@ -122,12 +124,14 @@ fun HighlightCodeBlock(
     ) { uri: Uri? ->
         uri?.let {
             scope.launch {
-                try {
-                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                        outputStream.write(code.toByteArray())
+                withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                            outputStream.write(code.toByteArray())
+                        }
+                    } catch (e: Exception) {
+                        Log.w("HighlightCodeBlock", "Failed to export code block", e)
                     }
-                } catch (e: Exception) {
-                    Log.w("HighlightCodeBlock", "Failed to export code block", e)
                 }
             }
         }

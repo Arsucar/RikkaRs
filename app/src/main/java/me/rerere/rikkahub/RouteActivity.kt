@@ -607,8 +607,8 @@ class RouteActivity : ComponentActivity() {
                                 PresetDetailPage(presetId = key.id)
                             }
 
-                            entry<Screen.Skills> {
-                                SkillsPage()
+                            entry<Screen.Skills> { key ->
+                                SkillsPage(assistantId = key.assistantId)
                             }
 
                             entry<Screen.Workspaces> {
@@ -899,7 +899,7 @@ sealed interface Screen : NavKey {
     data class PresetDetail(val id: String) : Screen
 
     @Serializable
-    data object Skills : Screen
+    data class Skills(val assistantId: String? = null) : Screen
 
     @Serializable
     data object Workspaces : Screen

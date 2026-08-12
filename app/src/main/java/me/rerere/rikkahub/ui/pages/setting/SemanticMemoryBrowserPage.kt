@@ -56,6 +56,7 @@ import java.util.Date
 import java.util.Locale
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+private const val MEMORY_MESSAGE_CLEAR_DELAY_MS = 5000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -318,7 +319,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
 
     if (message != null) {
         LaunchedEffect(message) {
-            kotlinx.coroutines.delay(5000)
+            kotlinx.coroutines.delay(MEMORY_MESSAGE_CLEAR_DELAY_MS)
             vm.clearMessage()
         }
     }

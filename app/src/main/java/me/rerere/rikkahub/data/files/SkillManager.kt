@@ -111,16 +111,22 @@ class SkillManager(
             ?: emptyList()
     }
 
-    fun readSkillBody(skillName: String, assistantId: Uuid? = null): String? {
-        val skillFile = resolveSkillFile(skillName, "SKILL.md", assistantId) ?: return null
-        if (!skillFile.exists()) return null
-        return SkillFrontmatterParser.extractBody(skillFile.readText())
-    }
+    fun readSkillBody(skillName: String, assistantId: Uuid? = null): String? =
+        readSkillFile(resolveSkillFile(skillName, "SKILL.md", assistantId), stripFrontmatter = true)
 
-    fun readSkillContent(skillName: String, assistantId: Uuid? = null): String? {
-        val skillFile = resolveSkillFile(skillName, "SKILL.md", assistantId) ?: return null
-        if (!skillFile.exists()) return null
-        return skillFile.readText()
+    fun readSkillContent(skillName: String, assistantId: Uuid? = null): String? =
+        readSkillFile(resolveSkillFile(skillName, "SKILL.md", assistantId), stripFrontmatter = false)
+
+    /**
+     * 读取技能文件的统一实现：解析文件存在后读取文本，按 [stripFrontmatter]
+     * 决定是否剥离 YAML frontmatter。[readSkillBody]、[readSkillContent]
+     * 以及 SkillLookup 中的 `readSkillBodyByIdentifier` 均委托至此，避免重复的
+     * resolve → exists → readText → extractBody 逻辑。
+     */
+    internal fun readSkillFile(skillFile: File?, stripFrontmatter: Boolean): String? {
+        if (skillFile == null || !skillFile.exists()) return null
+        val content = skillFile.readText()
+        return if (stripFrontmatter) SkillFrontmatterParser.extractBody(content) else content
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
@@ -210,10 +216,14 @@ class SkillManager(
     suspend fun pruneOrphanedEnabledSkills(): List<SkillMetadata> = withContext(Dispatchers.IO) {
         val skills = listSkills()
         val globalExisting = skills.mapTo(HashSet()) { it.name }
+        // #273: 预计算每个助手可见的技能名集合，避免在 settingsStore.update 的
+        // transform lambda（持有 updateMutex）内执行 listAssistantSkills 磁盘扫描。
+        val assistantSkillNames = settingsStore.settingsFlow.value.assistants
+            .associate { it.id to listAssistantSkills(it.id).mapTo(HashSet()) { meta -> meta.name } }
         settingsStore.update { settings ->
             var changed = false
             val newAssistants = settings.assistants.map { assistant ->
-                val visible = (globalExisting + listAssistantSkills(assistant.id).map { it.name }).toHashSet()
+                val visible = (globalExisting + (assistantSkillNames[assistant.id] ?: emptySet())).toHashSet()
                 val pruned = assistant.enabledSkills.filterTo(LinkedHashSet()) { it in visible }
                 if (pruned.size != assistant.enabledSkills.size) {
                     changed = true

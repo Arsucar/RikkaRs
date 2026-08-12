@@ -670,8 +670,8 @@ private fun ApiModelHealthRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(

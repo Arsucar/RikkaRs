@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_39_40
+import me.rerere.rikkahub.data.db.migrations.Migration_52_53
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 
@@ -81,7 +82,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryTableSnapshotEntity::class,
         SubagentContextEntity::class,
     ],
-    version = 52,
+    version = 53,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -104,6 +105,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 39, to = 40, spec = Migration_39_40::class),
         AutoMigration(from = 40, to = 41),
         AutoMigration(from = 41, to = 42),
+        AutoMigration(from = 52, to = 53),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)

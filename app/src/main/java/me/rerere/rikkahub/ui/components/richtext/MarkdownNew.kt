@@ -67,6 +67,7 @@ import androidx.compose.ui.util.fastForEach
 import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
@@ -83,6 +84,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import kotlin.time.Duration.Companion.milliseconds
 
 // ---- Preprocessing (mirrors Markdown.kt logic) ----
 
@@ -137,6 +139,7 @@ fun MarkdownNew(
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }
             .distinctUntilChanged()
+            .debounce(50.milliseconds)
             .mapLatest { generateMarkdownHtml(it) }
             .catch { it.printStackTrace() }
             .flowOn(Dispatchers.Default)

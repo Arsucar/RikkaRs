@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,20 +39,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowRight01
-import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.ui.components.ai.AssistantSkillsContent
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.PresetsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
+import me.rerere.rikkahub.ui.components.ai.SkillCard
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -282,7 +277,7 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
                                 navController.navigate(Screen.SkillDetail(skill.name, id))
                             },
                             onDeletePrivateSkill = { skill -> deletePrivateSkillTarget = skill },
-                            onOpenGlobalSkills = { navController.navigate(Screen.Skills) },
+                            onOpenGlobalSkills = { navController.navigate(Screen.Skills()) },
                         )
                     }
                 }
@@ -349,204 +344,3 @@ fun AssistantExtensionsPage(id: String, initialPage: Int = 0) {
     }
 }
 
-@Composable
-private fun AssistantSkillsContent(
-    skills: List<SkillMetadata>,
-    assistantPrivateSkills: List<SkillMetadata>,
-    enabledSkills: Set<String>,
-    onToggle: (String, Boolean) -> Unit,
-    onCreatePrivateSkill: () -> Unit,
-    onImportPrivateSkill: () -> Unit,
-    onOpenSkill: (SkillMetadata) -> Unit,
-    onOpenPrivateSkill: (SkillMetadata) -> Unit,
-    onDeletePrivateSkill: (SkillMetadata) -> Unit,
-    onOpenGlobalSkills: () -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        item {
-            SkillSectionHeader(
-                title = stringResource(R.string.assistant_skills_available_section),
-                description = stringResource(R.string.assistant_skills_available_section_desc),
-            )
-        }
-
-        if (skills.isEmpty()) {
-            item {
-                ExtensionEmptyState(
-                    message = stringResource(R.string.assistant_extensions_page_empty_skills),
-                    buttonText = stringResource(R.string.assistant_private_skills_create),
-                    onAction = onCreatePrivateSkill,
-                )
-            }
-        } else {
-            items(skills, key = { "${it.ownerAssistantId ?: "global"}:${it.name}" }) { skill ->
-                SkillToggleItem(
-                    skill = skill,
-                    enabled = enabledSkills.contains(skill.name),
-                    onToggle = { checked -> onToggle(skill.name, checked) },
-                    onOpen = { onOpenSkill(skill) },
-                )
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.assistant_private_skills_section),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.assistant_private_skills_section_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onImportPrivateSkill) {
-                    Icon(
-                        imageVector = HugeIcons.FileImport,
-                        contentDescription = stringResource(R.string.skills_page_import_from_file),
-                    )
-                }
-                IconButton(onClick = onCreatePrivateSkill) {
-                    Icon(
-                        imageVector = HugeIcons.Add01,
-                        contentDescription = stringResource(R.string.assistant_private_skills_create),
-                    )
-                }
-            }
-        }
-
-        if (assistantPrivateSkills.isEmpty()) {
-            item {
-                Text(
-                    text = stringResource(R.string.assistant_private_skills_empty),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            items(assistantPrivateSkills, key = { it.name }) { skill ->
-                PrivateSkillItem(
-                    skill = skill,
-                    onOpen = { onOpenPrivateSkill(skill) },
-                    onDelete = { onDeletePrivateSkill(skill) },
-                )
-            }
-        }
-
-        item {
-            TextButton(
-                onClick = onOpenGlobalSkills,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.assistant_private_skills_manage_global))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SkillSectionHeader(
-    title: String,
-    description: String,
-) {
-    Column(
-        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun SkillToggleItem(
-    skill: SkillMetadata,
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    onOpen: () -> Unit,
-) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onOpen),
-        leadingContent = { Icon(HugeIcons.Puzzle, contentDescription = null) },
-        headlineContent = { Text(skill.name) },
-        supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = skill.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = if (skill.isAssistantPrivate) {
-                        stringResource(R.string.assistant_private_skills_badge)
-                    } else {
-                        stringResource(R.string.assistant_global_skills_badge)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-        },
-        trailingContent = {
-            Switch(
-                checked = enabled,
-                onCheckedChange = onToggle,
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
-}
-
-@Composable
-private fun PrivateSkillItem(
-    skill: SkillMetadata,
-    onOpen: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onOpen),
-        leadingContent = { Icon(HugeIcons.Puzzle, contentDescription = null) },
-        headlineContent = { Text(skill.name) },
-        supportingContent = {
-            Text(
-                text = skill.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-        trailingContent = {
-            Row {
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = HugeIcons.Delete01,
-                        contentDescription = stringResource(R.string.delete),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Icon(
-                    imageVector = HugeIcons.ArrowRight01,
-                    contentDescription = null,
-                )
-            }
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
-}

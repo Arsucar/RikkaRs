@@ -50,6 +50,7 @@ data class SubagentContext(
     val usage: TokenUsage? = null,
     val lastError: String? = null,
     val revision: Long = 0,
+    val contextCompleteness: SubagentContextCompleteness = SubagentContextCompleteness.FULL,
 )
 
 enum class SubagentContextErrorCode {
@@ -177,7 +178,9 @@ class SubagentContextCache(
             .asReversed()
             .asSequence()
             .filter { context ->
-                context.status == SubagentStatus.COMPLETED && context.scope == scope
+                context.status == SubagentStatus.COMPLETED &&
+                    context.scope == scope &&
+                    context.contextCompleteness != SubagentContextCompleteness.BOUNDED_FULL
             }
             .maxWithOrNull(
                 compareBy<SubagentContext>(
@@ -218,6 +221,7 @@ class SubagentContextCache(
         messages: List<UIMessage>? = null,
         usage: TokenUsage? = null,
         error: String? = null,
+        contextCompleteness: SubagentContextCompleteness? = null,
     ): SubagentContext? {
         ensureRestored()
         val finished = mutex.withLock {
@@ -230,6 +234,7 @@ class SubagentContextCache(
             usage = usage ?: existing.usage,
             lastError = error,
             revision = existing.revision + 1,
+            contextCompleteness = contextCompleteness ?: existing.contextCompleteness,
         )
         contexts[contextId] = finished
         pruneExpiredLocked(now)

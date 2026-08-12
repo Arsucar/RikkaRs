@@ -118,6 +118,7 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
+private const val SCROLL_TO_BOTTOM_DELAY_MS = 1500L
 
 @Composable
 fun ChatList(
@@ -310,10 +311,10 @@ private fun ChatListNormal(
         LaunchedEffect(state.isScrollInProgress) {
             if (state.isScrollInProgress) {
                 isRecentScroll = true
-                delay(1500)
+                delay(SCROLL_TO_BOTTOM_DELAY_MS)
                 isRecentScroll = false
             } else {
-                delay(1500)
+                delay(SCROLL_TO_BOTTOM_DELAY_MS)
                 isRecentScroll = false
             }
         }
@@ -810,7 +811,7 @@ private fun ChatSuggestionsRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(conversation.chatSuggestions) { suggestion ->
+        items(conversation.chatSuggestions, key = { it }) { suggestion ->
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))

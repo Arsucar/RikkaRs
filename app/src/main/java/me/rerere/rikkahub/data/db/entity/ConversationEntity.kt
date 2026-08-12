@@ -2,9 +2,26 @@ package me.rerere.rikkahub.data.db.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity
+/**
+ * #288: composite indexes covering the ConversationDAO queries that ORDER BY
+ * is_pinned DESC, update_at DESC with various WHERE clauses, plus create_at
+ * range scans. Eliminates full table scans as conversation count grows.
+ *
+ * Note: the table name is the class name (mixed-case "ConversationEntity"),
+ * so Room generates index names with that mixed-case prefix; the migration
+ * SQL must use the identical names or Room's schema validation will fail.
+ */
+@Entity(
+    indices = [
+        Index(value = ["assistant_id", "is_pinned", "update_at"]),
+        Index(value = ["folder_id", "is_pinned", "update_at"]),
+        Index(value = ["is_pinned", "update_at"]),
+        Index(value = ["create_at"]),
+    ],
+)
 data class ConversationEntity(
     @PrimaryKey
     val id: String,
