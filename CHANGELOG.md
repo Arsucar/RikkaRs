@@ -20,6 +20,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.51
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.50 之后）
+
+- **修复启动闪退（#301）** — `Migration_52_53` 缺少 `subagent_contexts.context_completeness` 列的 `ALTER TABLE`，导致从 v52 升级的用户启动时 Room schema 校验失败闪退；同时移除 `AppDatabase` 中与手动 migration 冲突的 `AutoMigration(52→53)`。
+  **Fix startup crash (#301)** — `Migration_52_53` was missing `ALTER TABLE` for `subagent_contexts.context_completeness`, causing Room schema validation failure on launch for users upgrading from v52; also removed conflicting `AutoMigration(52→53)` from `AppDatabase`.
+
+---
+
 ## v2.3.50
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.49 之后）
