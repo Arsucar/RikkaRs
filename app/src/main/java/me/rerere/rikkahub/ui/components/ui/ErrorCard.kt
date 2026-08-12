@@ -47,6 +47,8 @@ import me.rerere.rikkahub.service.ChatErrorSolution
 import me.rerere.rikkahub.ui.context.LocalNavController
 import kotlin.uuid.Uuid
 
+private const val ERROR_DISPLAY_DURATION_MS = 5000L
+
 @Composable
 fun ErrorCardsDisplay(
     errors: List<ChatError>,
@@ -116,7 +118,7 @@ fun ErrorCard(
 
     // 5 秒后自动消失
     LaunchedEffect(error.id) {
-        delay(5000)
+        delay(ERROR_DISPLAY_DURATION_MS)
         onDismiss()
     }
 

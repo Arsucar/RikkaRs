@@ -70,6 +70,8 @@ import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.rikkahub.utils.toMessageTimeString
 import java.util.Locale
 
+private const val ACTION_SHEET_AUTO_DISMISS_MS = 3000L
+
 @Composable
 fun ColumnScope.ChatMessageActionButtons(
     message: UIMessage,
@@ -88,7 +90,7 @@ fun ColumnScope.ChatMessageActionButtons(
 
     LaunchedEffect(isPendingDelete) {
         if (isPendingDelete) {
-            delay(3000) // 3秒后自动取消
+            delay(ACTION_SHEET_AUTO_DISMISS_MS) // 3秒后自动取消
             isPendingDelete = false
         }
     }

@@ -17,6 +17,7 @@ import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 
 private const val SORT_ORDER_PREF_KEY = "search_page_sort_order"
+private const val SEARCH_DEBOUNCE_MS = 300L
 
 class SearchVM(
     private val context: Application,
@@ -46,7 +47,7 @@ class SearchVM(
     init {
         viewModelScope.launch {
             _searchQuery
-                .debounce(300L)
+                .debounce(SEARCH_DEBOUNCE_MS)
                 .collectLatest { query -> performSearch(query) }
         }
     }

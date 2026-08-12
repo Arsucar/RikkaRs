@@ -109,6 +109,8 @@ import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val MESSAGE_UPDATE_DEBOUNCE_MS = 50L
+
 @Composable
 fun ChatMessage(
     node: MessageNode,
@@ -394,7 +396,7 @@ private fun MessagePartsBlock(
     }
     LaunchedEffect(settings.displaySetting) {
         snapshotFlow { partsState }
-            .debounce(50.milliseconds)
+            .debounce(MESSAGE_UPDATE_DEBOUNCE_MS.milliseconds)
             .collect { parts ->
                 if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)

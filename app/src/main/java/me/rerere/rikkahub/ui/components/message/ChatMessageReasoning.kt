@@ -58,6 +58,8 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 
+private const val REASONING_TIMER_INTERVAL_MS = 200L
+
 enum class ReasoningCardState(val expanded: Boolean) {
     Collapsed(false),
     Preview(true),
@@ -128,7 +130,7 @@ private fun rememberReasoningState(reasoning: UIMessagePart.Reasoning): Pair<Rea
         if (loading) {
             while (isActive) {
                 state.duration = (reasoning.finishedAt ?: Clock.System.now()) - reasoning.createdAt
-                delay(200)
+                delay(REASONING_TIMER_INTERVAL_MS)
             }
         }
     }
