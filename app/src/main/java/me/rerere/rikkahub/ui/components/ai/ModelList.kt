@@ -114,6 +114,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
+private const val MODEL_SEARCH_DEBOUNCE_MS = 100L
+
 @Stable
 class ModelListState internal constructor(
     modelId: Uuid?,
@@ -951,7 +953,7 @@ private fun ColumnScope.ModelList(
     LaunchedEffect(lazyListState, providerPositions, visibleProviders) {
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
-            .debounce(100)
+            .debounce(MODEL_SEARCH_DEBOUNCE_MS)
             .collect { index ->
                 if (index > 0) {
                     val currentProvider = providerPositions.entries.findLast {

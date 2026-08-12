@@ -666,7 +666,7 @@ class ImgGenSession(
                 }
             }
             if (acquired) break
-            delay(50)
+            delay(IMGGEN_POLL_INTERVAL_MS)
         }
         return try {
             block()
@@ -711,5 +711,6 @@ class ImgGenSession(
         private const val TAG = "ImgGenSession"
         private const val GPT_IMAGE_2 = "gpt-image-2"
         private const val MAX_REFERENCE_IMAGES = 16
+        private const val IMGGEN_POLL_INTERVAL_MS = 50L
     }
 }

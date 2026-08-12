@@ -54,6 +54,7 @@ import java.util.Date
 import java.util.Locale
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+private const val SETTING_MESSAGE_CLEAR_DELAY_MS = 3000L
 
 @Composable
 fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
@@ -667,7 +668,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
     // 自动清除消息 (仅作用于提示文案, 与导出任务解耦)
     if (message != null) {
         androidx.compose.runtime.LaunchedEffect(message) {
-            kotlinx.coroutines.delay(3000)
+            kotlinx.coroutines.delay(SETTING_MESSAGE_CLEAR_DELAY_MS)
             vm.clearMessage()
         }
     }

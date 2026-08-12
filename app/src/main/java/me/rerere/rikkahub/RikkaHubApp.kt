@@ -44,6 +44,7 @@ import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
 private const val TAG = "RikkaHubApp"
+private const val WEB_SERVER_START_DELAY_MS = 500L
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
@@ -175,7 +176,7 @@ class RikkaHubApp : Application() {
     private fun startWebServerIfEnabled() {
         get<AppScope>().launch {
             runCatching {
-                delay(500)
+                delay(WEB_SERVER_START_DELAY_MS)
                 val settings = get<SettingsStore>().settingsFlowRaw.first()
                 if (settings.webServerEnabled) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
