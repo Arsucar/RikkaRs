@@ -18,6 +18,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 object Migration_52_53 : Migration(52, 53) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
+            "ALTER TABLE `subagent_contexts` ADD COLUMN `context_completeness` TEXT NOT NULL DEFAULT 'FULL'",
+        )
+        db.execSQL(
             "CREATE INDEX IF NOT EXISTS `index_ConversationEntity_assistant_id_is_pinned_update_at` ON `ConversationEntity` (`assistant_id`, `is_pinned`, `update_at`)",
         )
         db.execSQL(
