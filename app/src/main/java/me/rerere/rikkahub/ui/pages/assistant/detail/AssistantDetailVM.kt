@@ -83,6 +83,9 @@ class AssistantDetailVM(
     val skills = _skills.asStateFlow()
     // syncingStatus is already a StateFlow; do not call asStateFlow() on it.
     val mcpStatuses: StateFlow<Map<Uuid, McpStatus>> = mcpManager.syncingStatus
+    // VM-scoped business object (DI Rule 5, see .trellis/spec/app/dependency-injection.md):
+    // holds per-assistant connection revisions; one store per assistant detail screen.
+    // Not registered in Koin on purpose — instances must not be shared across assistants.
     private val connectionStatusStore = ToolConnectionStatusStore()
     private val connectionJobs = mutableMapOf<Uuid, Job>()
     private val connectionFingerprints = mutableMapOf<Uuid, Long>()
@@ -592,11 +595,17 @@ class AssistantDetailVM(
         }
     }
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(transform)
         }
     }
+
+    @Deprecated(
+        message = "使用 transform 重载避免读快照-全量写竞态 (#267)",
+        replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
+    )
+    fun updateSettings(settings: Settings) = updateSettings { settings }
 
     fun upsertHook(hook: ConversationHook) {
         mutateHooks { hooks ->

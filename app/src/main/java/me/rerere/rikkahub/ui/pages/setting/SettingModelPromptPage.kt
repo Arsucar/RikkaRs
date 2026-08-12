@@ -5,10 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -151,12 +154,19 @@ private fun PromptSettingItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
-                    value = promptValue,
-                    onValueChange = onPromptChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 15,
-                )
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = promptValue,
+                        onValueChange = onPromptChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 15,
+                    )
+                }
                 TextButton(onClick = onResetPrompt) {
                     Text(stringResource(R.string.setting_model_page_reset_to_default))
                 }

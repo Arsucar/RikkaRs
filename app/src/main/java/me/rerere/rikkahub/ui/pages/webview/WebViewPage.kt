@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -170,7 +171,9 @@ fun WebViewPage(url: String, contentId: String) {
                 )
 
                 SelectionContainer {
-                    LazyColumn {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
                         items(state.consoleMessages, key = { it.hashCode() }) { message ->
                             Text(
                                 text = "${message.messageLevel().name}: ${message.message()}\n" +

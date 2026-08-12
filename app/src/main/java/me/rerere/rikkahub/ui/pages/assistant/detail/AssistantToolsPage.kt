@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -448,7 +449,12 @@ fun AssistantToolsPage(id: String) {
             else -> toolPermissionLabel(currentPermission)
         }
         ModalBottomSheet(onDismissRequest = { selectedCapability = null }) {
-            Column(Modifier.padding(16.dp)) {
+            Column(
+                Modifier
+                    .padding(16.dp)
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(capability.displayName, style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.assistant_tools_permission_source_default, sourceDefault))
                 Text(stringResource(R.string.assistant_tools_permission_effective, effectivePermission))
@@ -505,7 +511,12 @@ fun AssistantToolsPage(id: String) {
 
     if (showPresetSheet) {
         ModalBottomSheet(onDismissRequest = { showPresetSheet = false }) {
-            Column(Modifier.padding(16.dp)) {
+            Column(
+                Modifier
+                    .padding(16.dp)
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(stringResource(R.string.assistant_tools_presets_title), style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = {
                     editingPreset = null
@@ -548,7 +559,12 @@ fun AssistantToolsPage(id: String) {
             editingPreset = null
             presetName = ""
         }) {
-            Column(Modifier.padding(16.dp)) {
+            Column(
+                Modifier
+                    .padding(16.dp)
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = presetName,
                     onValueChange = { presetName = it.take(128) },
@@ -588,11 +604,17 @@ fun AssistantToolsPage(id: String) {
         val rejectedMessage = stringResource(R.string.assistant_tools_preset_rejected)
         ModalBottomSheet(onDismissRequest = { presetToPreview = null }) {
             Column(Modifier.padding(16.dp)) {
-                Text(toolPermissionPresetDisplayName(preset), style = MaterialTheme.typography.titleMedium)
-                Text(toolPermissionPresetDisplayDescription(preset), style = MaterialTheme.typography.bodySmall)
-                Text(stringResource(R.string.assistant_tools_preset_preview, diff.changed.size, diff.unknownKeys.size))
-                if (diff.widensAccess) {
-                    Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                Column(
+                    Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(toolPermissionPresetDisplayName(preset), style = MaterialTheme.typography.titleMedium)
+                    Text(toolPermissionPresetDisplayDescription(preset), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.assistant_tools_preset_preview, diff.changed.size, diff.unknownKeys.size))
+                    if (diff.widensAccess) {
+                        Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { presetToPreview = null }) { Text(stringResource(R.string.cancel)) }
@@ -626,7 +648,12 @@ fun AssistantToolsPage(id: String) {
 
     if (showBatchPermissionSheet) {
         ModalBottomSheet(onDismissRequest = { showBatchPermissionSheet = false }) {
-            Column(Modifier.padding(16.dp)) {
+            Column(
+                Modifier
+                    .padding(16.dp)
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(stringResource(R.string.assistant_tools_preset_batch), style = MaterialTheme.typography.titleMedium)
                 ToolPermission.entries.forEach { permission ->
                     TextButton(onClick = {
@@ -665,19 +692,25 @@ fun AssistantToolsPage(id: String) {
                         capabilitySnapshot.capabilities.map { it.id }.toSet(),
                     ).widensAccess
                 }
-                vmSettings.assistants.filter { it.id != assistant.id }.forEach { target ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable {
-                            selectedTargetIds = if (target.id in selectedTargetIds) selectedTargetIds - target.id else selectedTargetIds + target.id
-                        },
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Checkbox(target.id in selectedTargetIds, null)
-                        Text(target.name, Modifier.padding(start = 8.dp))
+                Column(
+                    Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    vmSettings.assistants.filter { it.id != assistant.id }.forEach { target ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                selectedTargetIds = if (target.id in selectedTargetIds) selectedTargetIds - target.id else selectedTargetIds + target.id
+                            },
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Checkbox(target.id in selectedTargetIds, null)
+                            Text(target.name, Modifier.padding(start = 8.dp))
+                        }
                     }
-                }
-                if (copyWidensAccess) {
-                    Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                    if (copyWidensAccess) {
+                        Text(stringResource(R.string.assistant_tools_preset_relaxation), color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 Button(onClick = {
                     scope.launch {

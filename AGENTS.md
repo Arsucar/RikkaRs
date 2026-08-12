@@ -82,6 +82,17 @@ Rikka-arsucar fork **不需要** `google-services.json`（已移除 Firebase）�
 
 命名习惯：模块名为小写目录（如 `ai/`、`speech/`），Kotlin 类遵循 PascalCase，测试类以 `*Test` 结尾。
 
+### 依赖注入约定
+
+项目使用 4 种 DI 模式，新代码必须遵守 [.trellis/spec/app/dependency-injection.md](.trellis/spec/app/dependency-injection.md) 的完整规则。速查：
+
+- **业务依赖**（Repository / Manager / Store / Coordinator / UseCase）→ 在 Koin module 注册，通过 VM 构造函数注入，UI 只从 VM 读 StateFlow。
+- **Composable 内 `koinInject<T>()`** → 仅用于无所属 VM 的 UI 级叶子依赖（如 `SoundEffectPlayer`、`EmojiData`、hooks 内的 `SettingsStore`）。页面级 Composable 不要用 `koinInject` 获取已有 VM 暴露的业务依赖。
+- **Activity/Service 内 `by inject<T>()`** → 仅用于进程级单例（如 `OkHttpClient`、`SettingsStore`）。
+- **VM 内手动 `new`** → 仅限并发原语（`Mutex()`、`AtomicLong`）和 UI 状态持有者（`ChatInputState()`）。VM 作用域业务对象（`AssistantSwitchCoordinator`、`ToolConnectionStatusStore`）可保留，但必须在注释说明原因。
+
+历史代码中的 `koinInject`（约 51 处）和手动 `new`（约 32 处）暂不强制迁移；新代码必须按上述约定选择模式。
+
 ## Testing Guidelines
 
 测试框架以 JUnit/AndroidX Test 为主。未设定强制覆盖率门槛，但新逻辑应配套新增/更新测试。测试文件命名建议：

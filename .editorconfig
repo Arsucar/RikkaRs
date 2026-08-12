@@ -13,6 +13,33 @@ trim_trailing_whitespace = true
 indent_size = 4
 max_line_length = 120
 
+# ktlint configuration (consumed by the org.jlleitschuh.gradle.ktlint plugin in app/build.gradle.kts).
+# ktlint reads these rules directly from .editorconfig, so they apply to every Kotlin file
+# when ktlint runs locally or in CI. Existing violations are reported but do not fail the build
+# (ignoreFailures = true in app/build.gradle.kts) until the codebase is cleaned up.
+ktlint_standard_no-multi-spaces = enabled
+ktlint_standard_indent = enabled
+ktlint_standard_no-blank-line-before-rbrace = enabled
+ktlint_standard_no-consecutive-blank-lines = enabled
+ktlint_standard_no-trailing-whitespace = enabled
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_standard_import-ordering = disabled
+ktlint_standard_filename = enabled
+ktlint_standard_no-empty-class = enabled
+ktlint_standard_no-empty-first-line = enabled
+ktlint_standard_no-semi = enabled
+ktlint_standard_no-empty-file = enabled
+ktlint_standard_chain-wrapping = enabled
+ktlint_standard_string-template = enabled
+ktlint_standard_range-wrapping = enabled
+# Allow trailing commas (idiomatic Kotlin / git-diff friendly).
+ktlint_standard_trailing-comma-on-call-site = disabled
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+# Function signature max length aligns with max_line_length above.
+ktlint_standard_function-signature = enabled
+# Experimental rules are opt-in; keep disabled for now.
+ktlint_experimental = disabled
+
 [*.{xml,json}]
 indent_size = 2
 

@@ -108,6 +108,7 @@ import kotlin.uuid.Uuid
 fun ChatDrawerContent(
     navController: Navigator,
     vm: ChatVM,
+    draftVm: ChatDraftVM,
     settings: Settings,
     current: Conversation,
 ) {
@@ -148,13 +149,13 @@ fun ChatDrawerContent(
 
     // 昵称编辑状态
     val nicknameEditState = useEditState<String> { newNickname ->
-        vm.updateSettings(
-            settings.copy(
-                displaySetting = settings.displaySetting.copy(
+        vm.updateSettings { current ->
+            current.copy(
+                displaySetting = current.displaySetting.copy(
                     userNickname = newNickname
                 )
             )
-        )
+        }
     }
 
     // 移动对话状态
@@ -212,13 +213,13 @@ fun ChatDrawerContent(
                     name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
                     value = settings.displaySetting.userAvatar,
                     onUpdate = { newAvatar ->
-                        vm.updateSettings(
-                            settings.copy(
-                                displaySetting = settings.displaySetting.copy(
+                        vm.updateSettings { current ->
+                            current.copy(
+                                displaySetting = current.displaySetting.copy(
                                     userAvatar = newAvatar
                                 )
                             )
-                        )
+                        }
                     },
                     modifier = Modifier.size(50.dp),
                 )
@@ -287,7 +288,7 @@ fun ChatDrawerContent(
                     navigateToChatPage(navController, it.id)
                 },
                 onRegenerateTitle = {
-                    vm.generateTitle(it, true)
+                    draftVm.generateTitle(it, true)
                 },
                 onDelete = {
                     scope.launch {

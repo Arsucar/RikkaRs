@@ -323,6 +323,8 @@ private fun ProviderTagManagerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 400.dp)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -459,6 +461,8 @@ private fun RecommendProviderButton(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -575,6 +579,7 @@ private fun ImportProviderButton(
             },
             text = {
                 Column(
+                    modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     Text(

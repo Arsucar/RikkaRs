@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -108,7 +111,9 @@ fun TagsInput(
         }, title = {
             Text(stringResource(R.string.tag_input_dialog_title))
         }, text = {
-            Column {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())
+            ) {
                 // 显示现有标签列表（如果有未选择的标签）
                 if (unselectedTags.isNotEmpty()) {
                     Text(

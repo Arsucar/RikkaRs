@@ -39,6 +39,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,11 +124,17 @@ import kotlin.uuid.Uuid
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
-    val vm: ChatVM = koinViewModel(
-        parameters = {
-            parametersOf(id.toString())
-        }
-    )
+    // #296: core + satellite VMs share NavBackStackEntry + parametersOf(conversationId).
+    val chatVmParams = {
+        parametersOf(id.toString())
+    }
+    val vm: ChatVM = koinViewModel(parameters = chatVmParams)
+    val messageVm: ChatMessageVM = koinViewModel(parameters = chatVmParams)
+    val draftVm: ChatDraftVM = koinViewModel(parameters = chatVmParams)
+    val memoryTableVm: ChatMemoryTableVM = koinViewModel(parameters = chatVmParams)
+    val hookVm: ChatHookVM = koinViewModel(parameters = chatVmParams)
+    val gitVm: ChatGitVM = koinViewModel(parameters = chatVmParams)
+    val contextVm: ChatContextVM = koinViewModel(parameters = chatVmParams)
     val filesManager: FilesManager = koinInject()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
@@ -139,13 +146,11 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
-    val inputDraftLoading by vm.inputDraftLoading.collectAsStateWithLifecycle()
+    val inputDraftLoading by draftVm.inputDraftLoading.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val toaster = LocalToaster.current
-    val moveToTrashSuccess = stringResource(R.string.assistant_page_memory_table_move_to_trash_success)
-    val moveToTrashError = stringResource(R.string.assistant_page_memory_table_move_to_trash_error)
     val checkpointRecoveryGeneric = stringResource(R.string.chat_page_checkpoint_recovered)
     val resources = LocalResources.current
     val checkpointRecoveryHint by vm.checkpointRecoveryHint.collectAsStateWithLifecycle()
@@ -169,30 +174,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     // drawerContent 与主内容都翻回 LTR 防止整页镜像。
     val rightDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val horizontalGestureExclusionState = remember { HorizontalGestureExclusionState() }
-    val memoryTableDocuments by vm.memoryTableDocuments.collectAsStateWithLifecycle()
-    val memoryTableTemplates by vm.memoryTableTemplates.collectAsStateWithLifecycle()
-    val contextPreviewState by vm.contextPreviewState.collectAsStateWithLifecycle()
-    val hookHistoryState by vm.hookHistoryState.collectAsStateWithLifecycle()
-    val hookPreviewState by vm.hookPreviewState.collectAsStateWithLifecycle()
-    val hookManualRunState by vm.hookManualRunState.collectAsStateWithLifecycle()
-    val gitStatusState by vm.gitStatusState.collectAsStateWithLifecycle()
-    val gitDiffState by vm.gitDiffState.collectAsStateWithLifecycle()
-    val gitStatusWorkspaceId by vm.gitStatusWorkspaceId.collectAsStateWithLifecycle()
-    val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
-    val currentAssistant = remember(setting.assistants, conversation.assistantId) {
-        setting.assistants.firstOrNull { it.id == conversation.assistantId }
-    }
-    val currentAssistantWorkspaceCwd = currentAssistant?.let { assistant ->
-        resolveEffectiveWorkspaceCwd(conversation, assistant)
-    }
-    val configuredHooks = remember(setting.assistants, conversation.assistantId) {
-        setting.assistants.firstOrNull { it.id == conversation.assistantId }?.hooks.orEmpty()
-    }
-    val modelNames = remember(setting.providers) {
-        setting.providers.flatMap { it.models }.associate { model ->
-            model.id to (model.displayName.ifBlank { model.modelId })
-        }
-    }
+    // #268: 仅在右抽屉 drawerContent 中使用的状态（记忆表 / Hook / Git / 标签）下推到
+    // drawerContent 内部收集，避免流式输出时 conversation 每 ~64ms 产生新实例触发
+    // 整页重组并连带刷新这些子状态。drawerContent 关闭态也会预组合，但状态变更只触发
+    // drawerContent 重组，不再冒泡到 ChatPage 顶层。
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
@@ -227,7 +212,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    val inputState = vm.inputState
+    val inputState = draftVm.inputState
 
     // 初始化输入状态（处理传入的 files 和 text 参数）
     LaunchedEffect(files, text) {
@@ -335,6 +320,35 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 ) {
                     // 内容翻回 LTR，避免整块镜像
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        // #268: 仅右抽屉使用的状态下推到此处收集，避免在顶层收集导致流式输出时
+                        // 整页重组连带刷新这些子状态。
+                        // #296: satellite VMs own drawer-only state.
+                        val memoryTableDocuments by memoryTableVm.memoryTableDocuments.collectAsStateWithLifecycle()
+                        val memoryTableTemplates by memoryTableVm.memoryTableTemplates.collectAsStateWithLifecycle()
+                        val contextPreviewState by contextVm.contextPreviewState.collectAsStateWithLifecycle()
+                        val hookHistoryState by hookVm.hookHistoryState.collectAsStateWithLifecycle()
+                        val hookPreviewState by hookVm.hookPreviewState.collectAsStateWithLifecycle()
+                        val hookManualRunState by hookVm.hookManualRunState.collectAsStateWithLifecycle()
+                        val gitStatusState by gitVm.gitStatusState.collectAsStateWithLifecycle()
+                        val gitDiffState by gitVm.gitDiffState.collectAsStateWithLifecycle()
+                        val gitStatusWorkspaceId by gitVm.gitStatusWorkspaceId.collectAsStateWithLifecycle()
+                        val conversationTags by vm.conversationTags.collectAsStateWithLifecycle()
+                        val currentAssistant = remember(setting.assistants, conversation.assistantId) {
+                            setting.assistants.firstOrNull { it.id == conversation.assistantId }
+                        }
+                        val currentAssistantWorkspaceCwd = currentAssistant?.let { assistant ->
+                            resolveEffectiveWorkspaceCwd(conversation, assistant)
+                        }
+                        val configuredHooks = remember(setting.assistants, conversation.assistantId) {
+                            setting.assistants.firstOrNull { it.id == conversation.assistantId }?.hooks.orEmpty()
+                        }
+                        val modelNames = remember(setting.providers) {
+                            setting.providers.flatMap { it.models }.associate { model ->
+                                model.id to (model.displayName.ifBlank { model.modelId })
+                            }
+                        }
+                        val moveToTrashSuccess = stringResource(R.string.assistant_page_memory_table_move_to_trash_success)
+                        val moveToTrashError = stringResource(R.string.assistant_page_memory_table_move_to_trash_error)
                         ConversationDrawerContent(
                             drawerOpen = rightDrawerState.isOpen,
                             documents = memoryTableDocuments,
@@ -345,10 +359,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             assistantWorkspaceCwd = currentAssistantWorkspaceCwd,
                             isolationEnabled = conversation.memoryTableIsolation,
                             onIsolationChange = { enabled ->
-                                vm.setMemoryTableIsolation(enabled)
+                                memoryTableVm.setMemoryTableIsolation(enabled)
                             },
                             onSyncToConversation = { document ->
-                                vm.syncMemoryTableDocumentToConversation(document) { result ->
+                                memoryTableVm.syncMemoryTableDocumentToConversation(document) { result ->
                                     result.onSuccess {
                                         toaster.show("已同步到对话级", type = ToastType.Success)
                                     }.onFailure {
@@ -357,7 +371,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 }
                             },
                             onSaveConversationDocument = { document ->
-                                vm.upsertConversationMemoryTableDocument(document) { result ->
+                                memoryTableVm.upsertConversationMemoryTableDocument(document) { result ->
                                     result.onSuccess {
                                         toaster.show("已保存", type = ToastType.Success)
                                     }.onFailure {
@@ -366,7 +380,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 }
                             },
                             onCreateConversationDocument = { templateId ->
-                                vm.upsertConversationMemoryTableDocument(
+                                memoryTableVm.upsertConversationMemoryTableDocument(
                                     me.rerere.rikkahub.data.model.MemoryTableDocument(
                                         templateId = templateId,
                                         scopeType = me.rerere.rikkahub.data.model.MemoryTableScopeType.CONVERSATION,
@@ -381,7 +395,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 }
                             },
                             onDeleteDocument = { documentId ->
-                                vm.deleteMemoryTableDocument(documentId) { result ->
+                                memoryTableVm.deleteMemoryTableDocument(documentId) { result ->
                                     result.onSuccess {
                                         toaster.show(moveToTrashSuccess, type = ToastType.Success)
                                     }.onFailure {
@@ -390,7 +404,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 }
                             },
                             onSetFollow = { documentId, follow ->
-                                vm.setMemoryTableDocumentFollow(documentId, follow) { result ->
+                                memoryTableVm.setMemoryTableDocumentFollow(documentId, follow) { result ->
                                     result.onSuccess {
                                         toaster.show(
                                             if (follow) "已恢复跟随助手级" else "已断开跟随，可独立编辑",
@@ -404,36 +418,36 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             variableSystemEnabled = currentAssistant?.isVariableSystemEnabled() == true,
                             conversationVariables = conversation.variables,
                             onUpsertVariable = { name, value ->
-                                vm.upsertConversationVariable(name, value)
+                                memoryTableVm.upsertConversationVariable(name, value)
                             },
                             onDeleteVariable = { name ->
-                                vm.deleteConversationVariable(name)
+                                memoryTableVm.deleteConversationVariable(name)
                             },
                             contextPreviewState = contextPreviewState,
-                            onLoadContextPreview = vm::loadContextPreview,
-                            onClearContextPreview = vm::clearContextPreview,
+                            onLoadContextPreview = contextVm::loadContextPreview,
+                            onClearContextPreview = contextVm::clearContextPreview,
                             hookHistoryState = hookHistoryState,
                             hookPreviewState = hookPreviewState,
                             hookManualRunState = hookManualRunState,
                             hooks = configuredHooks,
                             conversationTags = conversationTags,
                             modelNames = modelNames,
-                            onPreviewHook = vm::previewMemoryTableHook,
-                            onApplyPreview = vm::applyMemoryTableHookPreview,
-                            onRunHook = vm::runMemoryTableHookNow,
-                            onRetryExecution = vm::retryMemoryTableHookExecution,
+                            onPreviewHook = hookVm::previewMemoryTableHook,
+                            onApplyPreview = hookVm::applyMemoryTableHookPreview,
+                            onRunHook = hookVm::runMemoryTableHookNow,
+                            onRetryExecution = hookVm::retryMemoryTableHookExecution,
                             gitStatusState = gitStatusState,
                             gitStatusWorkspaceId = gitStatusWorkspaceId,
                             gitDiffState = gitDiffState,
                             onLoadGitStatus = {
-                                vm.loadGitStatus(
+                                gitVm.loadGitStatus(
                                     workspaceId = currentAssistant?.workspaceId?.toString(),
                                     workspaceCwd = currentAssistantWorkspaceCwd,
                                 )
                             },
                             // #180: Git 详情页手动刷新强制全量重载，忽略缓存
                             onRefreshGitStatus = {
-                                vm.loadGitStatus(
+                                gitVm.loadGitStatus(
                                     workspaceId = currentAssistant?.workspaceId?.toString(),
                                     workspaceCwd = currentAssistantWorkspaceCwd,
                                     forceRefresh = true,
@@ -441,7 +455,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             },
                             onLoadGitDiff = { path, section ->
                                 currentAssistant?.workspaceId?.toString()?.let { workspaceId ->
-                                    vm.loadGitDiff(
+                                    gitVm.loadGitDiff(
                                         workspaceId = workspaceId,
                                         path = path,
                                         section = section,
@@ -449,7 +463,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                     )
                                 }
                             },
-                            onClearGitDiff = vm::clearGitDiff,
+                            onClearGitDiff = gitVm::clearGitDiff,
                             onNavigateWorkspaceBinding = {
                                 scope.launch { rightDrawerState.close() }
                                 navController.navigate(Screen.AssistantDetail(conversation.assistantId.toString()))
@@ -469,6 +483,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                     navController = navController,
                                     current = conversation,
                                     vm = vm,
+                                    draftVm = draftVm,
                                     settings = setting
                                 )
                             }
@@ -482,6 +497,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 drawerState = drawerState,
                                 navController = navController,
                                 vm = vm,
+                                messageVm = messageVm,
+                                draftVm = draftVm,
                                 chatListState = chatListState,
                                 enableWebSearch = enableWebSearch,
                                 currentChatModel = currentChatModel,
@@ -502,6 +519,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                     navController = navController,
                                     current = conversation,
                                     vm = vm,
+                                    draftVm = draftVm,
                                     settings = setting
                                 )
                             }
@@ -515,6 +533,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 drawerState = drawerState,
                                 navController = navController,
                                 vm = vm,
+                                messageVm = messageVm,
+                                draftVm = draftVm,
                                 chatListState = chatListState,
                                 enableWebSearch = enableWebSearch,
                                 currentChatModel = currentChatModel,
@@ -552,6 +572,8 @@ private fun ChatPageContent(
     drawerState: DrawerState,
     navController: Navigator,
     vm: ChatVM,
+    messageVm: ChatMessageVM,
+    draftVm: ChatDraftVM,
     chatListState: LazyListState,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
@@ -627,7 +649,7 @@ private fun ChatPageContent(
     // #181: 编辑态草稿生成成功后，用现有 Toaster 提示可基于原内容继续修改
     val inputDraftEditSuccessMsg = stringResource(R.string.input_draft_edit_success)
     LaunchedEffect(Unit) {
-        vm.inputDraftSuccessFlow.collect {
+        draftVm.inputDraftSuccessFlow.collect {
             toaster.show(message = inputDraftEditSuccessMsg, type = ToastType.Success)
         }
     }
@@ -666,7 +688,7 @@ private fun ChatPageContent(
                     completionProviders = completionProviders,
                     chatModelId = setting.resolveChatModelId(conversation),
                     onCancelClick = {
-                        vm.stopGeneration()
+                        messageVm.stopGeneration()
                     },
                     enableSearch = enableWebSearch,
                     inputDraftLoading = inputDraftLoading,
@@ -675,12 +697,12 @@ private fun ChatPageContent(
                         mainGenerationActive = loadingJob != null,
                     ),
                     onGenerateInputDraft = {
-                        vm.generateInputDraft(
+                        draftVm.generateInputDraft(
                             conversation = conversation,
                             userInstruction = inputState.textContent.text.toString().trim(),
                         )
                     },
-                    onCancelInputDraft = vm::cancelInputDraft,
+                    onCancelInputDraft = draftVm::cancelInputDraft,
                     onToggleSearch = {
                         vm.toggleWebSearch()
                     },
@@ -689,14 +711,14 @@ private fun ChatPageContent(
                             toaster.show("请先选择模型", type = ToastType.Error)
                             return@ChatInput
                         }
-                        vm.finishInputDraft()
+                        draftVm.finishInputDraft()
                         if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
+                            messageVm.handleMessageEdit(
                                 parts = inputState.getContents(),
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
-                            vm.handleMessageSend(content = inputState.getContents())
+                            messageVm.handleMessageSend(content = inputState.getContents())
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                             }
@@ -704,14 +726,14 @@ private fun ChatPageContent(
                         inputState.clearInput()
                     },
                     onLongSendClick = {
-                        vm.finishInputDraft()
+                        draftVm.finishInputDraft()
                         if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
+                            messageVm.handleMessageEdit(
                                 parts = inputState.getContents(),
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                            messageVm.handleMessageSend(content = inputState.getContents(), answer = false)
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                             }
@@ -721,25 +743,17 @@ private fun ChatPageContent(
                     onUpdateChatModel = {
                         vm.setChatModel(model = it)
                     },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
-                                    } else {
-                                        assistant
-                                    }
+                    onUpdateAssistant = { updated ->
+                        vm.updateSettings { current ->
+                            current.copy(
+                                assistants = current.assistants.map { assistant ->
+                                    if (assistant.id == updated.id) updated else assistant
                                 }
                             )
-                        )
+                        }
                     },
                     onUpdateSearchService = { index ->
-                        vm.updateSettings(
-                            setting.copy(
-                                searchServiceSelected = index
-                            )
-                        )
+                        vm.updateSettings { it.copy(searchServiceSelected = index) }
                     },
                     onMoreClick = {
                         showFilesSheet = true
@@ -761,7 +775,7 @@ private fun ChatPageContent(
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = {
-                    vm.regenerateAtMessage(it)
+                    messageVm.regenerateAtMessage(it)
                 },
                 onEdit = {
                     inputState.editingMessage = it.id
@@ -769,19 +783,19 @@ private fun ChatPageContent(
                 },
                 onForkMessage = {
                     scope.launch {
-                        val fork = vm.forkMessage(message = it)
+                        val fork = messageVm.forkMessage(message = it)
                         navigateToChatPage(navController, chatId = fork.id)
                     }
                 },
                 onDelete = {
                     if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
+                        messageVm.showDeleteBlockedWhileGeneratingError()
                     } else {
-                        vm.deleteMessage(it)
+                        messageVm.deleteMessage(it)
                     }
                 },
                 onToggleHidden = {
-                    vm.toggleMessageHidden(it.id)
+                    messageVm.toggleMessageHidden(it.id)
                 },
                 onUpdateMessage = { newNode ->
                     vm.updateConversation(
@@ -801,10 +815,10 @@ private fun ChatPageContent(
                     inputState.setMessageText(suggestion)
                 },
                 onTranslate = { message, locale ->
-                    vm.translateMessage(message, locale)
+                    draftVm.translateMessage(message, locale)
                 },
                 onClearTranslation = { message ->
-                    vm.clearTranslationField(message.id)
+                    draftVm.clearTranslationField(message.id)
                 },
                 onJumpToMessage = { index ->
                     previewMode = false
@@ -813,16 +827,16 @@ private fun ChatPageContent(
                     }
                 },
                 onToolApproval = { toolCallId, approved, reason ->
-                    vm.handleToolApproval(toolCallId, approved, reason)
+                    messageVm.handleToolApproval(toolCallId, approved, reason)
                 },
                 onTrustWriteRootAndApprove = { toolCallId, rootPrefix ->
-                    vm.trustWriteRootAndApprove(toolCallId, rootPrefix)
+                    messageVm.trustWriteRootAndApprove(toolCallId, rootPrefix)
                 },
                 onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
+                    messageVm.handleToolAnswer(toolCallId, answer)
                 },
                 onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
+                    messageVm.toggleMessageFavorite(node)
                 },
                 onConversationSystemPromptChange = { newPrompt ->
                     vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
@@ -838,6 +852,7 @@ private fun ChatPageContent(
                 conversation = conversation,
                 assistant = assistant,
                 vm = vm,
+                messageVm = messageVm,
                 onDismiss = { showFilesSheet = false },
             )
         }
@@ -851,6 +866,7 @@ private fun ChatFilesPickerSheet(
     conversation: Conversation,
     assistant: Assistant,
     vm: ChatVM,
+    messageVm: ChatMessageVM,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1025,20 +1041,16 @@ private fun ChatFilesPickerSheet(
             assistant = assistant,
             mcpManager = vm.mcpManager,
             onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                messageVm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
             },
-            onUpdateAssistant = {
-                vm.updateSettings(
-                    setting.copy(
-                        assistants = setting.assistants.map { assistant ->
-                            if (assistant.id == it.id) {
-                                it
-                            } else {
-                                assistant
-                            }
+            onUpdateAssistant = { updated ->
+                vm.updateSettings { current ->
+                    current.copy(
+                        assistants = current.assistants.map { assistant ->
+                            if (assistant.id == updated.id) updated else assistant
                         }
                     )
-                )
+                }
             },
             onUpdateConversation = {
                 vm.updateConversation(it)
@@ -1090,10 +1102,29 @@ private fun TopBar(
         },
         title = {
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
+            // #268: 流式输出时 conversation 每 ~64ms 产生新实例, 但 title / hasMessages 在多数
+            // 帧内不变. 用 derivedStateOf 只在这些窄字段真正变化时才让后续 Text/分支重组.
+            val conversationTitle by remember {
+                derivedStateOf { conversation.title }
+            }
+            val hasMessages by remember {
+                derivedStateOf { conversation.messageNodes.isNotEmpty() }
+            }
+            // 助手 / 模型 / provider 只依赖 assistantId 与 chatModelId, 流式帧内基本不变,
+            // 用 derivedStateOf 避免 messageNodes 变更导致这部分内容无效重组.
+            val assistant by remember {
+                derivedStateOf { settings.resolveAssistant(conversation) }
+            }
+            val model by remember {
+                derivedStateOf { settings.getCurrentChatModel(conversation) }
+            }
+            val provider by remember {
+                derivedStateOf { model?.findProvider(providers = settings.providers, checkOverwrite = false) }
+            }
             Surface(
                 onClick = {
-                    if (conversation.messageNodes.isNotEmpty()) {
-                        titleState.open(conversation.title)
+                    if (hasMessages) {
+                        titleState.open(conversationTitle)
                     } else {
                         toaster.show(editTitleWarning, type = ToastType.Warning)
                     }
@@ -1101,18 +1132,17 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Column {
-                    val assistant = settings.resolveAssistant(conversation)
-                    val model = settings.getCurrentChatModel(conversation)
-                    val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
                     Text(
-                        text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
+                        text = conversationTitle.ifBlank { stringResource(R.string.chat_page_new_chat) },
                         maxLines = 1,
                         style = MaterialTheme.typography.bodyMedium,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (model != null && provider != null) {
+                    val currentModel = model
+                    val currentProvider = provider
+                    if (currentModel != null && currentProvider != null) {
                         Text(
-                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${model.displayName} (${provider.name})",
+                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${currentModel.displayName} (${currentProvider.name})",
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),

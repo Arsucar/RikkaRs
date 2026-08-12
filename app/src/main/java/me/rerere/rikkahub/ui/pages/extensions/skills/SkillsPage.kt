@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -405,30 +408,34 @@ internal fun AddSkillDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.skills_page_add_title)) },
         text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
-                placeholder = {
-                    Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
-                        fontFamily = FontFamily.Monospace,
-                    )
-                },
-                supportingText = {
-                    if (nameError) Text(
-                        stringResource(R.string.skills_page_name_error),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
-                    else Text(stringResource(R.string.skills_page_paste_hint))
-                },
-                isError = nameError,
-                minLines = 8,
-                maxLines = 14,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
+                    placeholder = {
+                        Text(
+                            "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    },
+                    supportingText = {
+                        if (nameError) Text(
+                            stringResource(R.string.skills_page_name_error),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
+                        else Text(stringResource(R.string.skills_page_paste_hint))
+                    },
+                    isError = nameError,
+                    minLines = 8,
+                    maxLines = 14,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
         confirmButton = {
             TextButton(

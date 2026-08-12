@@ -27,6 +27,8 @@ These guides help you **ask the right questions before coding**.
 | [UI Modification Thinking Guide](./ui-modification-thinking-guide.md) | Prevent recurring Android Compose layout, state, feedback, accessibility, and visual-validation regressions | Before changing any user-visible Android Compose UI (not web-ui/React) |
 | [Kotlin Concurrency and Compose Guide](./kotlin-concurrency-and-compose.md) | Prevent coroutine, Compose state, gesture, and Kotlin file-initialization regressions | When changing shared Kotlin utilities or Compose/concurrency behavior |
 
+> Choosing a dependency-injection pattern (VM constructor vs `koinInject` vs `by inject` vs manual `new`)? Read the [Dependency Injection Conventions](../app/dependency-injection.md) spec first.
+
 ---
 
 ## Quick Reference: Thinking Triggers
@@ -70,6 +72,15 @@ These guides help you **ask the right questions before coding**.
 - [ ] You are about to run `git add .` or `git add -A` after device inspection
 
 → Read [Repository Hygiene Guide](./repository-hygiene.md)
+
+### When Choosing a Dependency Injection Pattern
+
+- [ ] You are adding a new Repository / Manager / Store / Coordinator / UseCase
+- [ ] You are about to call `koinInject<T>()` in a Composable
+- [ ] You are about to construct a business object with `Foo(...)` inside a ViewModel
+- [ ] You are adding a `viewModel` / `viewModelOf` registration
+
+→ Read [Dependency Injection Conventions](../app/dependency-injection.md)
 
 ### When Verifying AI Cross-Review Results
 

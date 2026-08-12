@@ -43,11 +43,17 @@ class DebugVM(
         }
     }
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(transform)
         }
     }
+
+    @Deprecated(
+        message = "使用 transform 重载避免读快照-全量写竞态 (#267)",
+        replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
+    )
+    fun updateSettings(settings: Settings) = updateSettings { settings }
 
     /**
      * 创建一个超大的对话用于测试 CursorWindow 限制
@@ -81,7 +87,7 @@ class DebugVM(
                 val assistantMessage = UIMessage(
                     id = Uuid.random(),
                     role = MessageRole.ASSISTANT,
-                    parts = listOf(UIMessagePart.Text("回复: $largeText")),
+                    parts = listOf(UIMessagePart.Text("Reply: $largeText")),
                     createdAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
                 )
 

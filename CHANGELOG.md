@@ -20,6 +20,49 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.50
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.49 之后）
+
+- **ChatVM 拆分与乐观写入（#295, #296）** — 原 800+ 行 ChatVM 拆分为 7 个卫星 VM（ChatMessageVM / ChatGitVM / ChatHookVM / ChatMemoryTableVM / ChatDraftVM / ChatContextVM），共享 NavBackStackEntry；引入 `OptimisticWrite` 并发原语与 `OptimisticWriteCoordinator` generation 机制，标题/置顶/移动/收藏等操作乐观更新 UI 后异步持久化，失败回滚；修复 `updateTitle` persist 读取 stale `conversation.value` 的问题改用 snapshot；修复 `moveConversationToAssistant` persist 部分成功导致 session/DB 不一致的问题。
+  **ChatVM split & optimistic writes (#295, #296)** — Split the 800+ line ChatVM into 7 satellite VMs sharing NavBackStackEntry; introduced `OptimisticWrite` primitive with `OptimisticWriteCoordinator` generation gating; optimistic UI updates for title/pin/move/favorite with async persist and rollback; fixed `updateTitle` stale `conversation.value` read in persist; fixed `moveConversationToAssistant` session/DB mismatch on partial persist failure.
+- **设置原子写入（#267）** — `updateSettings` 改为 transform-based 原子写入，避免并发字段更新互覆盖。
+  **Atomic settings transform (#267)** — `updateSettings` now takes a `(Settings) -> Settings` transform to prevent concurrent field overwrites.
+- **DI 约定规范化** — 新增 `.trellis/spec/app/dependency-injection.md` spec 文档；AGENTS.md 补充 DI 速查；VM-scoped business object（`AssistantSwitchCoordinator`、`ToolConnectionStatusStore`）注释标注 Rule 5。
+  **DI conventions spec** — Added dependency-injection.md spec; AGENTS.md DI cheat-sheet; annotated VM-scoped business objects per Rule 5.
+- **detekt + ktlint 静态分析 CI** — 新增 `static-analysis.yml` workflow 和 `config/detekt.yml`；detekt 1.23.8 + ktlint 插件，`ignoreFailures = true` 报告模式。
+  **detekt + ktlint CI** — Added static-analysis workflow and detekt config; detekt 1.23.8 + ktlint plugin in report-only mode.
+- **代码健壮性修复（#283）** — 消除 `!!` 强解、`runCatching` 改用具体异常、InputStream 正确关闭、移除 `printStackTrace`。
+  **Code robustness fixes (#283)** — Eliminate `!!`, specific catch, proper InputStream close, remove `printStackTrace`.
+- **DB 复合索引（#288, #299）** — ConversationEntity 新增 4 个复合索引（assistantId/isPinned/updateAt 等），加速会话列表查询。
+  **DB composite indexes (#288, #299)** — Added 4 composite indexes to ConversationEntity for faster list queries.
+- **魔数提取为命名常量（#293, #300）** — 散落魔数统一提取为 companion object 常量。
+  **Extract magic numbers to named constants (#293, #300)**.
+- **SharingStarted.Eagerly → WhileSubscribed（#291, #298）** — 减少 ViewModel 不必要的上游订阅。
+  **Replace SharingStarted.Eagerly with WhileSubscribed (#291, #298)**.
+- **Modifier 顺序修复（#289, #297）** — clickable 包含 padding，点击区域正确。
+  **Modifier order fix (#289, #297)** — clickable includes padding so tap target is correct.
+- **统一 Skill 管理 UI（#265, #266）** — 三入口共用 SkillCard 组件。
+  **Unified Skill management UI (#265, #266)** — Three entry points share SkillCard component.
+- **runBlocking 替换（#279）** — 改用拦截器 + provider 非阻塞替代。
+  **Replace runBlocking with non-blocking alternatives (#279)**.
+- **磁盘扫描移出 settingsStore 锁（#280）** — skill 读取去重。
+  **Move disk scan out of settingsStore lock + deduplicate skill reads (#280)**.
+- **子代理预算耗尽防护（#286）** — 防止复用预算耗尽的 context，重置 tool budget。
+  **Subagent budget exhaustion guard (#286)**.
+- **Compose 批量性能优化（#282）** — `collectAsStateWithLifecycle` + items key。
+  **Batch Compose perf (#282)** — `collectAsStateWithLifecycle` + items key.
+- **磁盘 IO 包裹 Dispatchers.IO（#277）** — 避免主线程阻塞。
+  **Wrap disk IO in Dispatchers.IO (#277)**.
+- **流式 UI 卡顿缓解（#281）** — reasoning timer 50ms→200ms + Markdown debounce。
+  **Reduce streaming UI jank (#281)** — reasoning timer 50ms→200ms + Markdown debounce.
+- **MCP 传输层死代码清理（#278）**。
+  **Remove dead code in MCP transport (#278)**.
+- **i18n 外提** — SemanticMemory / ImgGen / Skills 页面硬编码中文提取为 stringResource。
+  **i18n extraction** — Extracted hardcoded Chinese strings to stringResource in SemanticMemory / ImgGen / Skills pages.
+
+---
+
 ## v2.3.49
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.48 之后）

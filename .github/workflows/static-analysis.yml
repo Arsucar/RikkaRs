@@ -1,0 +1,73 @@
+# Static analysis: detekt + ktlint on PRs and pushes to release/rikka-arsucar.
+# Non-blocking on first rollout — reports findings as warnings so existing code isn't blocked.
+# Once the codebase is clean, flip ignoreFailures to false in app/build.gradle.kts and add
+# a required status check here.
+name: Static Analysis
+
+on:
+  push:
+    branches: [release/rikka-arsucar]
+  pull_request:
+    branches: [release/rikka-arsucar]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Run detekt
+        run: |
+          chmod +x gradlew
+          # ignoreFailures = true in config, so this reports but does not fail the job.
+          # New violations outside the baseline will surface in the report.
+          ./gradlew :app:detekt --no-daemon
+
+      - name: Run ktlint
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:ktlintCheck --no-daemon
+
+      - name: Upload detekt reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-reports
+          path: |
+            app/build/reports/detekt/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload ktlint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktlint-reports
+          path: |
+            app/build/reports/ktlint/
+          if-no-files-found: ignore
+          retention-days: 14

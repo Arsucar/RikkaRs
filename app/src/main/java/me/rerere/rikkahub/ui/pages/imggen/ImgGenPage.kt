@@ -1101,7 +1101,10 @@ private fun ImageQuickMessageEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = quickMessageTitle,
                     onValueChange = { quickMessageTitle = it },
@@ -2683,7 +2686,7 @@ private fun SettingsBottomSheet(
                     CompactSegmentedOptions(
                         options = ImageQualityOption.entries,
                         selected = imageSettings.quality,
-                        label = { option -> Text(option.label) },
+                        label = { option -> Text(option.label()) },
                         onSelect = { option ->
                             updateImageSettings { it.copy(quality = option) }
                         },
@@ -2729,7 +2732,7 @@ private fun SettingsBottomSheet(
                     CompactSegmentedOptions(
                         options = ImageBackgroundOption.entries,
                         selected = imageSettings.background,
-                        label = { option -> Text(option.label) },
+                        label = { option -> Text(option.label()) },
                         onSelect = { option ->
                             updateImageSettings { it.copy(background = option) }
                         },
@@ -2743,7 +2746,7 @@ private fun SettingsBottomSheet(
                     CompactSegmentedOptions(
                         options = ImageModerationOption.entries,
                         selected = imageSettings.moderation,
-                        label = { option -> Text(option.label) },
+                        label = { option -> Text(option.label()) },
                         onSelect = { option ->
                             updateImageSettings { it.copy(moderation = option) }
                         },
@@ -2943,7 +2946,7 @@ private fun ImageSizeSelector(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = selected.label,
+                        text = selected.label(),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -2964,7 +2967,7 @@ private fun ImageSizeSelector(
                     DropdownMenuItem(
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                                Text(option.label(), style = MaterialTheme.typography.bodyMedium)
                                 Text(
                                     option.detail(customSize),
                                     style = MaterialTheme.typography.labelSmall,
@@ -2986,14 +2989,14 @@ private fun ImageSizeSelector(
                 value = customSize,
                 onValueChange = onCustomSizeChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("自定义尺寸") },
+                label = { Text(stringResource(R.string.imggen_page_custom_size)) },
                 placeholder = { Text("2048x1152") },
                 singleLine = true,
                 isError = customValidation.error != null,
                 supportingText = {
                     Text(
-                        customValidation.error?.label
-                            ?: "最长边 <= 3840，宽高为 16 的倍数，比例 <= 3:1",
+                        customValidation.error?.let { it.label() }
+                            ?: stringResource(R.string.imggen_page_custom_size_hint),
                     )
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
@@ -3002,37 +3005,37 @@ private fun ImageSizeSelector(
     }
 }
 
-private val ImageSizeOption.label: String
-    get() = when (this) {
-        ImageSizeOption.AUTO -> "自动"
-        ImageSizeOption.SIZE_1024_1024 -> "方图"
-        ImageSizeOption.SIZE_1536_1024 -> "横图"
-        ImageSizeOption.SIZE_1024_1536 -> "竖图"
-        ImageSizeOption.SIZE_2048_2048 -> "方图高清"
-        ImageSizeOption.SIZE_2048_1152 -> "2K 横图"
-        ImageSizeOption.SIZE_3840_2160 -> "4K 横图"
-        ImageSizeOption.SIZE_2160_3840 -> "4K 竖图"
-        ImageSizeOption.CUSTOM -> "自定义"
-        ImageSizeOption.SIZE_1792_1024,
-        ImageSizeOption.SIZE_2048_1024 -> "横图"
-        ImageSizeOption.SIZE_1024_1792 -> "竖图"
-    }
+@Composable
+private fun ImageSizeOption.label(): String = when (this) {
+    ImageSizeOption.AUTO -> stringResource(R.string.imggen_page_size_auto)
+    ImageSizeOption.SIZE_1024_1024 -> stringResource(R.string.imggen_page_size_square)
+    ImageSizeOption.SIZE_1536_1024 -> stringResource(R.string.imggen_page_size_landscape)
+    ImageSizeOption.SIZE_1024_1536 -> stringResource(R.string.imggen_page_size_portrait)
+    ImageSizeOption.SIZE_2048_2048 -> stringResource(R.string.imggen_page_size_square_hd)
+    ImageSizeOption.SIZE_2048_1152 -> stringResource(R.string.imggen_page_size_2k_landscape)
+    ImageSizeOption.SIZE_3840_2160 -> stringResource(R.string.imggen_page_size_4k_landscape)
+    ImageSizeOption.SIZE_2160_3840 -> stringResource(R.string.imggen_page_size_4k_portrait)
+    ImageSizeOption.CUSTOM -> stringResource(R.string.imggen_page_size_custom)
+    ImageSizeOption.SIZE_1792_1024,
+    ImageSizeOption.SIZE_2048_1024 -> stringResource(R.string.imggen_page_size_landscape)
+    ImageSizeOption.SIZE_1024_1792 -> stringResource(R.string.imggen_page_size_portrait)
+}
 
 private fun ImageSizeOption.detail(customSize: String): String {
     return when (this) {
         ImageSizeOption.AUTO -> "auto"
-        ImageSizeOption.CUSTOM -> customSize.ifBlank { "宽x高" }
+        ImageSizeOption.CUSTOM -> customSize.ifBlank { "width x height" }
         else -> apiValue ?: "auto"
     }
 }
 
-private val ImageQualityOption.label: String
-    get() = when (this) {
-        ImageQualityOption.AUTO -> "自动"
-        ImageQualityOption.LOW -> "低"
-        ImageQualityOption.MEDIUM -> "中"
-        ImageQualityOption.HIGH -> "高"
-    }
+@Composable
+private fun ImageQualityOption.label(): String = when (this) {
+    ImageQualityOption.AUTO -> stringResource(R.string.imggen_page_quality_auto)
+    ImageQualityOption.LOW -> stringResource(R.string.imggen_page_quality_low)
+    ImageQualityOption.MEDIUM -> stringResource(R.string.imggen_page_quality_medium)
+    ImageQualityOption.HIGH -> stringResource(R.string.imggen_page_quality_high)
+}
 
 private val ImageOutputFormatOption.label: String
     get() = when (this) {
@@ -3052,24 +3055,24 @@ private fun ImageOutputFormatOption.selectableFormat(): ImageOutputFormatOption 
     }
 }
 
-private val ImageBackgroundOption.label: String
-    get() = when (this) {
-        ImageBackgroundOption.AUTO -> "自动"
-        ImageBackgroundOption.OPAQUE -> "不透明"
-    }
+@Composable
+private fun ImageBackgroundOption.label(): String = when (this) {
+    ImageBackgroundOption.AUTO -> stringResource(R.string.imggen_page_background_auto)
+    ImageBackgroundOption.OPAQUE -> stringResource(R.string.imggen_page_background_opaque)
+}
 
-private val ImageModerationOption.label: String
-    get() = when (this) {
-        ImageModerationOption.AUTO -> "自动"
-        ImageModerationOption.LOW -> "低"
-    }
+@Composable
+private fun ImageModerationOption.label(): String = when (this) {
+    ImageModerationOption.AUTO -> stringResource(R.string.imggen_page_moderation_auto)
+    ImageModerationOption.LOW -> stringResource(R.string.imggen_page_moderation_low)
+}
 
-private val ImageSizeValidationError.label: String
-    get() = when (this) {
-        ImageSizeValidationError.EMPTY -> "请输入尺寸，例如 2048x1152"
-        ImageSizeValidationError.FORMAT -> "格式应为 宽x高，例如 2048x1152"
-        ImageSizeValidationError.MAX_EDGE -> "最长边不能超过 3840px"
-        ImageSizeValidationError.MULTIPLE_OF_16 -> "宽和高都必须是 16 的倍数"
-        ImageSizeValidationError.ASPECT_RATIO -> "长短边比例不能超过 3:1"
-        ImageSizeValidationError.TOTAL_PIXELS -> "总像素需在 655360 到 8294400 之间"
-    }
+@Composable
+private fun ImageSizeValidationError.label(): String = when (this) {
+    ImageSizeValidationError.EMPTY -> stringResource(R.string.imggen_page_size_validation_empty)
+    ImageSizeValidationError.FORMAT -> stringResource(R.string.imggen_page_size_validation_format)
+    ImageSizeValidationError.MAX_EDGE -> stringResource(R.string.imggen_page_size_validation_max_edge)
+    ImageSizeValidationError.MULTIPLE_OF_16 -> stringResource(R.string.imggen_page_size_validation_multiple_of_16)
+    ImageSizeValidationError.ASPECT_RATIO -> stringResource(R.string.imggen_page_size_validation_aspect_ratio)
+    ImageSizeValidationError.TOTAL_PIXELS -> stringResource(R.string.imggen_page_size_validation_total_pixels)
+}

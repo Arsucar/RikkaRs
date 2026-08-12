@@ -78,7 +78,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
 
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
-        vm.updateSettings(settings.copy(displaySetting = setting))
+        vm.updateSettings { it.copy(displaySetting = setting) }
     }
 
     val importSuccessMsg = stringResource(R.string.setting_display_page_custom_font_import_success)
@@ -278,21 +278,34 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                     item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_bubble_opacity_title)) },
                         supportingContent = {
+                            // Local draft while dragging; commit on release to avoid
+                            // every-tick DataStore write (#267).
+                            val bubbleOpacity = displaySetting.bubbleOpacity
+                            var bubbleOpacityDraft by remember { mutableFloatStateOf(bubbleOpacity) }
+                            var bubbleOpacityDragging by remember { mutableStateOf(false) }
+                            LaunchedEffect(bubbleOpacity) {
+                                if (!bubbleOpacityDragging) bubbleOpacityDraft = bubbleOpacity
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Slider(
-                                    value = displaySetting.bubbleOpacity,
+                                    value = bubbleOpacityDraft,
                                     onValueChange = {
-                                        updateDisplaySetting(displaySetting.copy(bubbleOpacity = it))
+                                        bubbleOpacityDragging = true
+                                        bubbleOpacityDraft = it
+                                    },
+                                    onValueChangeFinished = {
+                                        bubbleOpacityDragging = false
+                                        updateDisplaySetting(displaySetting.copy(bubbleOpacity = bubbleOpacityDraft))
                                     },
                                     valueRange = 0.1f..1.0f,
                                     steps = 8,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Text(text = "${(displaySetting.bubbleOpacity * 100).toInt()}%")
+                                Text(text = "${(bubbleOpacityDraft * 100).toInt()}%")
                             }
                         }
                     )
@@ -457,27 +470,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
                         supportingContent = {
                             Column {
+                                // Local draft while dragging; commit on release to avoid
+                                // every-tick DataStore write (#267).
+                                val fontSizeRatio = displaySetting.fontSizeRatio
+                                var fontSizeRatioDraft by remember { mutableFloatStateOf(fontSizeRatio) }
+                                var fontSizeRatioDragging by remember { mutableStateOf(false) }
+                                LaunchedEffect(fontSizeRatio) {
+                                    if (!fontSizeRatioDragging) fontSizeRatioDraft = fontSizeRatio
+                                }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Slider(
-                                        value = displaySetting.fontSizeRatio,
+                                        value = fontSizeRatioDraft,
                                         onValueChange = {
-                                            updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
+                                            fontSizeRatioDragging = true
+                                            fontSizeRatioDraft = it
+                                        },
+                                        onValueChangeFinished = {
+                                            fontSizeRatioDragging = false
+                                            updateDisplaySetting(displaySetting.copy(fontSizeRatio = fontSizeRatioDraft))
                                         },
                                         valueRange = 0.5f..2f,
                                         steps = 11,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text(text = "${(displaySetting.fontSizeRatio * 100).toInt()}%")
+                                    Text(text = "${(fontSizeRatioDraft * 100).toInt()}%")
                                 }
                                 MarkdownBlock(
                                     content = stringResource(R.string.setting_display_page_font_size_preview),
                                     style = LocalTextStyle.current.copy(
-                                        fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
-                                        lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
+                                        fontSize = LocalTextStyle.current.fontSize * fontSizeRatioDraft,
+                                        lineHeight = LocalTextStyle.current.lineHeight * fontSizeRatioDraft,
                                         fontFamily = chatFontFamily
                                     )
                                 )

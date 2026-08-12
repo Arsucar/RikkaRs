@@ -410,14 +410,14 @@ private fun McpServerItem(
                     }
                     if (status == McpStatus.Authorizing) {
                         Text(
-                            text = "正在授权，请在浏览器中完成…",
+                            text = stringResource(R.string.setting_mcp_page_authorizing),
                             style = MaterialTheme.typography.labelSmall,
                         )
                         TextButton(
                             onClick = { mcpManager.cancelAuthorization(item) },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         ) {
-                            Text("取消授权")
+                            Text(stringResource(R.string.setting_mcp_page_cancel_authorization))
                         }
                     }
                 }

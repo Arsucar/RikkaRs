@@ -21,11 +21,17 @@ class PromptVM(
     val settings = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings.withPrunedAssistantExtensionIds())
+            settingsStore.update { transform(it).withPrunedAssistantExtensionIds() }
         }
     }
+
+    @Deprecated(
+        message = "使用 transform 重载避免读快照-全量写竞态 (#267)",
+        replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
+    )
+    fun updateSettings(settings: Settings) = updateSettings { settings }
 
     fun updatePreset(
         presetId: Uuid,

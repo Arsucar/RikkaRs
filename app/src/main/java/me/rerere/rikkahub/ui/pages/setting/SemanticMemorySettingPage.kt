@@ -38,10 +38,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -94,9 +96,9 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                 showImportConfirm = false
                 pendingImportPath = null
             },
-            title = { Text("替换全部语义记忆？") },
+            title = { Text(stringResource(R.string.semantic_memory_setting_replace_confirm_title)) },
             text = {
-                Text("导入将删除现有全部语义记忆后写入文件内容，此操作不可撤销。")
+                Text(stringResource(R.string.semantic_memory_setting_replace_confirm_message))
             },
             confirmButton = {
                 TextButton(
@@ -105,7 +107,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         showImportConfirm = false
                         pendingImportPath = null
                     },
-                ) { Text("导入") }
+                ) { Text(stringResource(R.string.semantic_memory_setting_import)) }
             },
             dismissButton = {
                 TextButton(
@@ -113,7 +115,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         showImportConfirm = false
                         pendingImportPath = null
                     },
-                ) { Text("取消") }
+                ) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -121,7 +123,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("语义记忆设置") },
+                title = { Text(stringResource(R.string.semantic_memory_setting_title)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -139,11 +141,11 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("embeddingConfig") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("语义记忆") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_section_main)) },
                 ) {
                     item(
-                        headlineContent = { Text("启用语义记忆") },
-                        supportingContent = { Text("开启后, 每次对话前会通过向量相似度召回相关记忆并注入到系统提示词中") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_enable)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_enable_desc)) },
                         trailingContent = {
                             Switch(
                                 checked = config.enabled,
@@ -155,8 +157,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                     item(
                         onClick = { navController.navigate(Screen.SemanticMemoryBrowser) },
                         leadingContent = { Icon(HugeIcons.Brain02, contentDescription = null) },
-                        headlineContent = { Text("记忆浏览器") },
-                        supportingContent = { Text("查看、编辑、删除语义记忆, 手动触发总结") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_browser)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_browser_desc)) },
                     )
                 }
             }
@@ -165,12 +167,12 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("embeddingApiConfig") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("嵌入模型") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_embedding_model)) },
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text(
-                                text = "从已配置的提供商中选择 Embedding 模型（与提供商页一致）",
+                                text = stringResource(R.string.semantic_memory_setting_embedding_model_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
@@ -199,7 +201,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 if (isProcessing) {
                                     CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
                                 }
-                                Text("测试连接")
+                                Text(stringResource(R.string.semantic_memory_setting_test_connection))
                             }
                             testResult?.let { result ->
                                 Text(
@@ -218,7 +220,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("recallSettings") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("召回设置") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_recall_settings)) },
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -227,7 +229,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = topKText,
                                 onValueChange = { topKText = it },
-                                label = { Text("每次召回最大记忆条数 (1-100)") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_recall_top_k)) },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -241,7 +243,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 singleLine = true,
                             )
                             Text(
-                                text = "相似度阈值: ${String.format("%.2f", config.similarityThreshold)}",
+                                text = stringResource(R.string.semantic_memory_setting_similarity_threshold, String.format("%.2f", config.similarityThreshold)),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
@@ -259,8 +261,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = maxCoreInjectText,
                                 onValueChange = { maxCoreInjectText = it },
-                                label = { Text("注入核心记忆上限") },
-                                supportingText = { Text("空 = 不限制；注入 system 时最多带入多少条 core") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_max_core_inject)) },
+                                supportingText = { Text(stringResource(R.string.semantic_memory_setting_max_core_inject_desc)) },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -282,8 +284,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = maxInjectCharsText,
                                 onValueChange = { maxInjectCharsText = it },
-                                label = { Text("注入总字符预算") },
-                                supportingText = { Text("空 = 不限制；记忆正文总长度上限") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_max_inject_chars)) },
+                                supportingText = { Text(stringResource(R.string.semantic_memory_setting_max_inject_chars_desc)) },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -305,8 +307,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = maxMemoryContentLenText,
                                 onValueChange = { maxMemoryContentLenText = it },
-                                label = { Text("单条记忆内容上限") },
-                                supportingText = { Text("空 = 不截断；sanitize 后单条最长字符") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_max_memory_content_len)) },
+                                supportingText = { Text(stringResource(R.string.semantic_memory_setting_max_memory_content_len_desc)) },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -327,8 +329,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                         }
                     }
                     item(
-                        headlineContent = { Text("关键词回退") },
-                        supportingContent = { Text("当向量 API 调用失败时, 使用关键词匹配作为回退方案") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_keyword_fallback)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_keyword_fallback_desc)) },
                         trailingContent = {
                             Switch(
                                 checked = config.enableFallbackKeyword,
@@ -343,17 +345,17 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("summarizeSettings") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("总结设置") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_summarize_settings)) },
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             // 总结状态指示器 (AC14: StateFlow-backed stats)
                             val status = stats.summarizeStatus
                             val statusText = when (status) {
-                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.IDLE -> "空闲"
-                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.RUNNING -> "正在总结..."
-                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.SUCCESS -> "上次总结成功"
-                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.FAILED -> "上次总结失败"
+                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.IDLE -> stringResource(R.string.semantic_memory_setting_summarize_status_idle)
+                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.RUNNING -> stringResource(R.string.semantic_memory_setting_summarize_status_running)
+                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.SUCCESS -> stringResource(R.string.semantic_memory_setting_summarize_status_success)
+                                me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.FAILED -> stringResource(R.string.semantic_memory_setting_summarize_status_failed)
                             }
                             val statusColor = when (status) {
                                 me.rerere.rikkahub.data.memory.semantic.SummarizeStatus.IDLE -> MaterialTheme.colorScheme.outline
@@ -366,7 +368,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
-                                Text("总结状态", style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.semantic_memory_setting_summarize_status), style = MaterialTheme.typography.bodyMedium)
                                 Text(statusText, color = statusColor, style = MaterialTheme.typography.bodyMedium)
                             }
                             // 自动总结开关
@@ -377,7 +379,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
-                                Text("自动总结", style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.semantic_memory_setting_auto_summarize), style = MaterialTheme.typography.bodyMedium)
                                 Switch(
                                     checked = config.autoSummarizeEnabled,
                                     onCheckedChange = { newValue -> vm.updateConfig { it.copy(autoSummarizeEnabled = newValue) } },
@@ -387,8 +389,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = summarizeIntervalText,
                                 onValueChange = { summarizeIntervalText = it },
-                                label = { Text("总结间隔 (对话轮数)") },
-                                supportingText = { Text("每 N 轮用户消息自动触发一次总结") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_summarize_interval)) },
+                                supportingText = { Text(stringResource(R.string.semantic_memory_setting_summarize_interval_desc)) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -405,8 +407,8 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = autoSummarizeMessageCountText,
                                 onValueChange = { autoSummarizeMessageCountText = it },
-                                label = { Text("自动总结取最近消息条数 (4-100)") },
-                                supportingText = { Text("自动总结时从最新消息往上取多少条对话") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_auto_summarize_message_count)) },
+                                supportingText = { Text(stringResource(R.string.semantic_memory_setting_auto_summarize_message_count_desc)) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -423,7 +425,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = maxMemoriesPerSummaryText,
                                 onValueChange = { maxMemoriesPerSummaryText = it },
-                                label = { Text("每次总结最多提取记忆数") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_max_memories_per_summary)) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -440,7 +442,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = maxMemoriesPerAssistantText,
                                 onValueChange = { maxMemoriesPerAssistantText = it },
-                                label = { Text("每个助手最大记忆数") },
+                                label = { Text(stringResource(R.string.semantic_memory_setting_max_memories_per_assistant)) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -455,7 +457,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             )
                             // 总结用模型选择
                             Text(
-                                text = "总结用模型 (不选则用默认聊天模型)",
+                                text = stringResource(R.string.semantic_memory_setting_summarize_model_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -470,7 +472,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             )
                             // 提示词编辑器
                             Text(
-                                text = "总结提示词 ({{conversation}}会被替换为对话内容)",
+                                text = stringResource(R.string.semantic_memory_setting_summarize_prompt_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -502,7 +504,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                         vm.updateConfig { it.copy(summarizePrompt = promptText) }
                                     },
                                 ) {
-                                    Text("载入默认")
+                                    Text(stringResource(R.string.semantic_memory_setting_load_default))
                                 }
                                 OutlinedButton(
                                     onClick = {
@@ -510,14 +512,14 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                                         vm.updateConfig { it.copy(summarizePrompt = null) }
                                     },
                                 ) {
-                                    Text("恢复默认")
+                                    Text(stringResource(R.string.semantic_memory_setting_restore_default))
                                 }
                             }
                         }
                     }
                     item(
-                        headlineContent = { Text("自动清理超限记忆") },
-                        supportingContent = { Text("记忆数超过上限时, 在记忆浏览器中提示清理低重要性记忆 (需手动确认)") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_auto_eviction)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_auto_eviction_desc)) },
                         trailingContent = {
                             Switch(
                                 checked = config.autoEvictionEnabled,
@@ -532,37 +534,41 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("debugStats") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("调试统计") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_debug_stats)) },
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            StatRow("向量 API 调用次数", stats.embeddingCallCount.toString())
-                            StatRow("成功次数", stats.embeddingSuccessCount.toString())
-                            StatRow("失败次数", stats.embeddingFailCount.toString())
-                            stats.lastEmbeddingDim?.let { StatRow("最近向量维度", it.toString()) }
-                            stats.lastEmbeddingError?.let { StatRow("最近向量错误", it) }
-                            StatRow("记忆总数", stats.totalMemories.toString())
-                            StatRow("召回次数", stats.recallCount.toString())
-                            StatRow("最近召回记忆数", stats.lastRecallCount.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_embedding_calls), stats.embeddingCallCount.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_embedding_success), stats.embeddingSuccessCount.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_embedding_fail), stats.embeddingFailCount.toString())
+                            stats.lastEmbeddingDim?.let { StatRow(stringResource(R.string.semantic_memory_setting_stat_embedding_dim), it.toString()) }
+                            stats.lastEmbeddingError?.let { StatRow(stringResource(R.string.semantic_memory_setting_stat_embedding_error), it) }
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_total_memories), stats.totalMemories.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_recall_count), stats.recallCount.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_last_recall_count), stats.lastRecallCount.toString())
                             if (stats.lastRecallAt > 0) {
-                                StatRow("最近召回时间", dateFormat.format(Date(stats.lastRecallAt)))
+                                StatRow(stringResource(R.string.semantic_memory_setting_stat_last_recall_at), dateFormat.format(Date(stats.lastRecallAt)))
                             }
-                            StatRow("最近召回降级", if (stats.lastRecallFallback) "是 (关键词匹配)" else "否 (向量匹配)")
-                            stats.lastRecallQuery?.let { StatRow("最近召回查询", it) }
-                            StatRow("自动总结次数", stats.autoSummarizeCount.toString())
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_last_recall_fallback), if (stats.lastRecallFallback) stringResource(R.string.semantic_memory_setting_stat_last_recall_fallback_yes) else stringResource(R.string.semantic_memory_setting_stat_last_recall_fallback_no))
+                            stats.lastRecallQuery?.let { StatRow(stringResource(R.string.semantic_memory_setting_stat_last_recall_query), it) }
+                            StatRow(stringResource(R.string.semantic_memory_setting_stat_auto_summarize_count), stats.autoSummarizeCount.toString())
                             if (stats.lastAutoSummarizeAt > 0) {
                                 StatRow(
-                                    "最近自动总结",
-                                    "${dateFormat.format(Date(stats.lastAutoSummarizeAt))} " +
-                                        "(新增${stats.lastAutoSummarizeNew}/更新${stats.lastAutoSummarizeUpdated})",
+                                    stringResource(R.string.semantic_memory_setting_stat_last_auto_summarize),
+                                    stringResource(
+                                        R.string.semantic_memory_setting_stat_last_auto_summarize_value,
+                                        dateFormat.format(Date(stats.lastAutoSummarizeAt)),
+                                        stats.lastAutoSummarizeNew,
+                                        stats.lastAutoSummarizeUpdated,
+                                    ),
                                 )
                             }
-                            stats.lastAutoSummarizeError?.let { StatRow("自动总结错误", it) }
+                            stats.lastAutoSummarizeError?.let { StatRow(stringResource(R.string.semantic_memory_setting_stat_auto_summarize_error), it) }
                             OutlinedButton(
                                 onClick = { vm.resetStats() },
                                 modifier = Modifier.padding(top = 8.dp),
                             ) {
-                                Text("重置统计")
+                                Text(stringResource(R.string.semantic_memory_setting_reset_stats))
                             }
                         }
                     }
@@ -573,32 +579,32 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("dataManagement") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("数据管理") },
+                    title = { Text(stringResource(R.string.semantic_memory_setting_data_management)) },
                 ) {
                     item(
-                        headlineContent = { Text("导出数据") },
-                        supportingContent = { Text("将所有语义记忆导出为 gzip 压缩文件") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_export_data)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_export_data_desc)) },
                         trailingContent = {
                             OutlinedButton(onClick = { exportLauncher.launch("semantic_memory_${System.currentTimeMillis()}.gz") }) {
-                                Text("导出")
+                                Text(stringResource(R.string.semantic_memory_setting_export))
                             }
                         }
                     )
                     item(
-                        headlineContent = { Text("导入数据") },
-                        supportingContent = { Text("从压缩文件导入记忆 (会替换现有数据)") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_import_data)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_import_data_desc)) },
                         trailingContent = {
                             OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/gzip", "application/octet-stream", "*/*")) }) {
-                                Text("导入")
+                                Text(stringResource(R.string.semantic_memory_setting_import))
                             }
                         }
                     )
                     item(
-                        headlineContent = { Text("迁移旧记忆") },
-                        supportingContent = { Text("将原有记忆功能的所有记忆迁移为语义记忆 (含全局和各助手)") },
+                        headlineContent = { Text(stringResource(R.string.semantic_memory_setting_migrate_old_memories)) },
+                        supportingContent = { Text(stringResource(R.string.semantic_memory_setting_migrate_old_memories_desc)) },
                         trailingContent = {
                             OutlinedButton(onClick = { vm.migrateAllOldMemories() }) {
-                                Text("迁移")
+                                Text(stringResource(R.string.semantic_memory_setting_migrate))
                             }
                         }
                     )
@@ -618,7 +624,7 @@ fun SemanticMemorySettingPage(vm: SemanticMemoryVM = koinViewModel()) {
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             CircularProgressIndicator()
-                            Text("处理中...", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.semantic_memory_setting_processing), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }

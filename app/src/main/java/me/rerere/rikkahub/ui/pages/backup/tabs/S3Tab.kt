@@ -229,7 +229,7 @@ fun S3Tab(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.bucket,
                             onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
-                            placeholder = { Text("my-bucket") },
+                            placeholder = { Text(stringResource(R.string.backup_page_s3_bucket_placeholder)) },
                             singleLine = true
                         )
                     },
@@ -251,7 +251,7 @@ fun S3Tab(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.region,
                             onValueChange = { updateS3Config(s3Config.copy(region = it.trim())) },
-                            placeholder = { Text("auto") },
+                            placeholder = { Text(stringResource(R.string.backup_page_s3_region_placeholder)) },
                             singleLine = true
                         )
                     },

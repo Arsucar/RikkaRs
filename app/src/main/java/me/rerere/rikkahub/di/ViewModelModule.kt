@@ -3,7 +3,13 @@ package me.rerere.rikkahub.di
 import me.rerere.rikkahub.ui.pages.assistant.AssistantVM
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailVM
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
+import me.rerere.rikkahub.ui.pages.chat.ChatContextVM
+import me.rerere.rikkahub.ui.pages.chat.ChatDraftVM
 import me.rerere.rikkahub.ui.pages.chat.ChatDrawerVM
+import me.rerere.rikkahub.ui.pages.chat.ChatGitVM
+import me.rerere.rikkahub.ui.pages.chat.ChatHookVM
+import me.rerere.rikkahub.ui.pages.chat.ChatMemoryTableVM
+import me.rerere.rikkahub.ui.pages.chat.ChatMessageVM
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
@@ -27,6 +33,7 @@ import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val viewModelModule = module {
+    // Chat page VMs share NavBackStackEntry + parametersOf(conversationId string).
     viewModel<ChatVM> { params ->
         ChatVM(
             id = params.get(),
@@ -36,12 +43,52 @@ val viewModelModule = module {
             chatService = get(),
             updateChecker = get(),
             filesManager = get(),
-            favoriteRepository = get(),
-            memoryTableRepository = get(),
-            hookRepository = get(),
             conversationTagRepository = get(),
+        )
+    }
+    viewModel<ChatMessageVM> { params ->
+        ChatMessageVM(
+            id = params.get(),
+            context = get(),
+            settingsStore = get(),
+            chatService = get(),
+            favoriteRepository = get(),
+        )
+    }
+    viewModel<ChatGitVM> { params ->
+        ChatGitVM(
+            id = params.get(),
             getAssistantGitStatus = get(),
             getGitFileDiff = get(),
+        )
+    }
+    viewModel<ChatHookVM> { params ->
+        ChatHookVM(
+            id = params.get(),
+            chatService = get(),
+            hookRepository = get(),
+        )
+    }
+    viewModel<ChatMemoryTableVM> { params ->
+        ChatMemoryTableVM(
+            id = params.get(),
+            context = get(),
+            chatService = get(),
+            memoryTableRepository = get(),
+        )
+    }
+    viewModel<ChatDraftVM> { params ->
+        ChatDraftVM(
+            id = params.get(),
+            context = get(),
+            chatService = get(),
+            conversationRepo = get(),
+        )
+    }
+    viewModel<ChatContextVM> { params ->
+        ChatContextVM(
+            id = params.get(),
+            chatService = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

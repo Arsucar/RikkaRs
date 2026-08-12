@@ -65,6 +65,8 @@ slf4j = "2.0.18"
 sqlite-android = "-SNAPSHOT"
 termux = "0.118.0"
 diffutils = "4.17"
+detekt = "1.23.8"
+ktlint = "12.1.1"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
@@ -188,3 +190,5 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }

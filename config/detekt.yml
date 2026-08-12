@@ -1,0 +1,350 @@
+# detekt configuration for rikkahub
+#
+# This config builds upon detekt's default config (buildUponDefaultConfig = true in app/build.gradle.kts).
+# It is intentionally lenient on the first pass: rules that would block the existing build are
+# relaxed or disabled here. As the codebase is cleaned up, tighten these rules back toward defaults.
+#
+# Generate a baseline capturing current findings with:
+#   ./gradlew --no-daemon :app:detektBaseline
+# Then commit `app/detekt-baseline.xml`. New violations will fail the build (once ignoreFailures = false).
+#
+# Docs: https://detekt.dev/docs/rules
+
+config:
+  # Produce validation warnings for unknown rules in this file instead of failing.
+  warningsAsErrors: false
+
+# ---------------------------------------------------------------------------
+# Complexity rules: Android Compose VMs / parsers are naturally complex.
+# Thresholds are relaxed from defaults; tighten later.
+# ---------------------------------------------------------------------------
+complexity:
+  active: true
+  LongMethod:
+    active: true
+    threshold: 150
+  LongParameterList:
+    active: true
+    functionThreshold: 8
+    constructorThreshold: 10
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+    ignoreAnnotatedParameter: []
+  ComplexMethod:
+    active: true
+    threshold: 20
+    ignoreSingleWhenExpression: true
+    ignoreSimpleWhenEntries: true
+  TooManyImplementations:
+    active: false # noisy for sealed hierarchies in AI/Message models
+  LargeClass:
+    active: true
+    threshold: 600
+  ComplexCondition:
+    active: true
+    threshold: 5
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 20
+  NestedBlockDepth:
+    active: true
+    threshold: 5
+  StringLiteralDuplication:
+    active: false # too noisy for UI text before i18n migration (#292)
+  MethodOverloading:
+    active: false
+  TooManyFunctions:
+    active: false # Android VMs commonly exceed defaults
+
+# ---------------------------------------------------------------------------
+# Code style: keep enabled but allow Compose idioms.
+# ---------------------------------------------------------------------------
+style:
+  active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 120
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: false
+  WildcardImport:
+    active: true
+    excludes: ['**/test/**', '**/androidTest/**']
+    # Allow common Compose / kotlinx wildcard imports to reduce churn.
+    excludeImports:
+      - 'kotlinx.coroutines.*'
+      - 'androidx.compose.material3.*'
+      - 'androidx.compose.foundation.*'
+      - 'androidx.compose.ui.*'
+      - 'androidx.compose.runtime.*'
+      - 'me.rerere.ai.ui.*'
+  ReturnCount:
+    active: true
+    max: 4
+    excludedFunctions: ['equals', 'hashCode']
+    excludeLabeled: true
+    excludeReturnFromLambda: true
+  MagicNumber:
+    active: false # handled separately by issue #293; too noisy as a default
+  ForbiddenComment:
+    active: false # TODO/FIXME tracking is out of scope for the initial rollout
+  UseDataClass:
+    active: true
+    allowVars: true
+  LoopWithTooManyJumpStatements:
+    active: true
+    maxJumpCount: 2
+  ThrowsCount:
+    active: true
+    max: 4
+  SerialVersionUIDInSerializableClass:
+    active: false
+  UtilityClassWithPublicConstructor:
+    active: false
+  NestedClassesVisibility:
+    active: true
+  EqualsOnSignatureLine:
+    active: false
+  BracesOnIfStatements:
+    active: false # Compose / Kotlin idiom allows single-line if without braces
+  BracesOnWhenStatements:
+    active: false
+  MandatoryBracesLoops:
+    active: false
+  ForbiddenImport:
+    active: false
+  ForbiddenMethodCall:
+    active: false
+  FunctionOnlyReturningConstant:
+    active: true
+  OptionalAbstractKeyword:
+    active: true
+  OptionalWhenBraces:
+    active: false
+  RedundantVisibilityModifierRule:
+    active: false
+  RedundantUnitReturnType:
+    active: false
+  ProtectedMemberInFinalClass:
+    active: true
+  SpacingBetweenPackageAndImports:
+    active: true
+  UnnecessaryAbstractClass:
+    active: true
+  UnnecessaryAnnotationUseSiteTarget:
+    active: true
+  UnnecessaryInheritanceDoc:
+    active: true
+  UnnecessaryParentheses:
+    active: false
+  UnusedPrivateMember:
+    active: true
+    allowedNames: '(_|ignored|expected)'
+  UseIfInsteadOfWhen:
+    active: false
+  UselessOverride:
+    active: true
+  VarCouldBeVal:
+    active: true
+  DataClassContainsFunctions:
+    active: false
+  DataClassShouldBeImmutable:
+    active: false
+
+# ---------------------------------------------------------------------------
+# Empty blocks: low value initially; keep a few useful ones.
+# ---------------------------------------------------------------------------
+empty-blocks:
+  active: true
+  EmptyFunctionBlock:
+    active: true
+    ignoreOverridden: true
+  EmptyClassBlock:
+    active: true
+  EmptyDefaultConstructor:
+    active: true
+  EmptyKtFile:
+    active: true
+  EmptySecondaryConstructor:
+    active: true
+
+# ---------------------------------------------------------------------------
+# Exceptions: discourage generic catches but allow pragmatic patterns.
+# ---------------------------------------------------------------------------
+exceptions:
+  active: true
+  SwallowedException:
+    active: true
+    allowedExceptionNameRegex: '(ignore|expected).*'
+  TooGenericExceptionCaught:
+    active: true
+    allowedExceptionNameRegex: '(ignore|expected).*'
+    exceptionNames:
+      - ArrayIndexOutOfBoundsException
+      - Error
+      - IllegalMonitorStateException
+      - NullPointerException
+      - IndexOutOfBoundsException
+      - RuntimeException
+      - Throwable
+  TooGenericExceptionThrown:
+    active: true
+    exceptionNames:
+      - Error
+      - Exception
+      - RuntimeException
+      - Throwable
+
+# ---------------------------------------------------------------------------
+# Naming: align with Kotlin conventions; relaxed for Android VMs.
+# ---------------------------------------------------------------------------
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+    functionPattern: '([a-z][a-zA-Z0-9]*)|(`.*`)'
+    excludes: ['**/androidTest/**', '**/test/**']
+    # Compose @Composable functions are PascalCase; exclude them via annotation.
+    ignoreAnnotated: ['Composable']
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][a-zA-Z0-9]*'
+  ConstructorParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+    privateParameterPattern: '[a-z][A-Za-z0-9]*'
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][A-Za-z0-9]*'
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[A-Za-z][_A-Za-z0-9]*'
+    privatePropertyPattern: '(_)?[a-z][A-Za-z0-9]*'
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9]*)*'
+  EnumNaming:
+    active: true
+    enumEntryPattern: '[A-Z][_a-zA-Z0-9]*'
+  FunctionParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+  InvalidPackageDeclaration:
+    active: true
+    rootPackage: ''
+  MatchingDeclarationName:
+    active: true
+    mustBeFirst: true
+  MemberNameEqualsClassName:
+    active: true
+    ignoreOverridden: true
+  NoNameShadowing:
+    active: true
+  NonBooleanPropertyPrefixedWithIs:
+    active: false
+  ObjectPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[A-Za-z][_A-Za-z0-9]*'
+    privatePropertyPattern: '(_)?[a-z][A-Za-z0-9]*'
+  VariableMaxLength:
+    active: false
+  VariableMinLength:
+    active: false
+
+# ---------------------------------------------------------------------------
+# Performance: keep a minimal set; most Android perf issues are lint-covered.
+# ---------------------------------------------------------------------------
+performance:
+  active: true
+  ArrayPrimitive:
+    active: true
+  ForEachOnRange:
+    active: true
+  SpreadOperator:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+  CouldBeSequence:
+    active: false # noisy; enable later
+
+# ---------------------------------------------------------------------------
+# Potential bugs: high-signal subset.
+# ---------------------------------------------------------------------------
+potential-bugs:
+  active: true
+  AvoidReferentialEquality:
+    active: true
+    forbiddenTypePatterns: []
+  CastToNullableType:
+    active: false
+  Deprecation:
+    active: false
+  DontDowncastCollectionType:
+    active: false
+  DoubleMutabilityForValues:
+    active: true
+  EqualsAlwaysReturnsTrueOrFalse:
+    active: true
+  EqualsNullCall:
+    active: true
+  EqualsWithHashCodeExist:
+    active: true
+  ExplicitGarbageCollectionCall:
+    active: true
+  HasPlatformType:
+    active: true
+  IgnoredReturnValue:
+    active: false # too noisy with Result.runCatching patterns
+  ImplicitDefaultLocale:
+    active: true
+  IteratorNotThrowingNoSuchElementException:
+    active: true
+  MapGetWithNotNullAssertionOperator:
+    active: true
+  MissingWhenCase:
+    active: true
+    allowElseExpression: true
+  NullCheckOnMutableProperty:
+    active: true
+  NullableToStringCall:
+    active: true
+  UnconditionalJumpStatementInLoop:
+    active: true
+  UnreachableCode:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true
+  UnsafeCast:
+    active: true
+  UselessPostfixExpression:
+    active: true
+  WrongEqualsTypeParameter:
+    active: true
+
+# ---------------------------------------------------------------------------
+# Coroutines: focus on real correctness issues.
+# ---------------------------------------------------------------------------
+coroutines:
+  active: true
+  GlobalCoroutineUsage:
+    active: true
+  RedundantSuspendModifier:
+    active: true
+  SuspendFunctionOnCoroutineScope:
+    active: true
+  SleepInCoroutine:
+    active: true
+  InjectDispatcher:
+    active: false # framework uses runBlocking in tests intentionally
+  RedundantAsync:
+    active: true
+
+# ---------------------------------------------------------------------------
+# Compose-specific rules (detekt-rules-compose, bundled in 1.23.7 via plugin).
+# Disabled by default; enable selectively later.
+# ---------------------------------------------------------------------------
+# compose:
+#   active: false

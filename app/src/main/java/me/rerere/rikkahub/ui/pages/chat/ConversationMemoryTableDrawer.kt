@@ -1283,7 +1283,7 @@ fun ConversationMemoryTableDrawerContent(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 返回中转菜单
                 IconButton(onClick = onBack) {
-                    Icon(Lucide.ArrowLeft, contentDescription = "返回")
+                    Icon(Lucide.ArrowLeft, contentDescription = stringResource(R.string.memory_table_drawer_back))
                 }
                 Icon(Lucide.Database, contentDescription = null)
                 Text(
@@ -1450,7 +1450,7 @@ private fun InheritedMemoryTableRow(
                 }
             }
             IconButton(onClick = onSyncToConversation) {
-                Icon(Lucide.Copy, contentDescription = "同步到对话")
+                Icon(Lucide.Copy, contentDescription = stringResource(R.string.memory_table_drawer_sync_to_conversation))
             }
         }
     }
@@ -1527,15 +1527,15 @@ private fun MemoryTableDocumentCard(
                             )
                         },
                     ) {
-                        Icon(Lucide.Pencil, contentDescription = "全屏编辑")
+                        Icon(Lucide.Pencil, contentDescription = stringResource(R.string.memory_table_drawer_fullscreen_edit))
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Lucide.Trash2, contentDescription = "删除")
+                        Icon(Lucide.Trash2, contentDescription = stringResource(R.string.delete))
                     }
                 } else {
                     // 助手级/全局 → 对话级同步
                     IconButton(onClick = onSyncToConversation) {
-                        Icon(Lucide.Copy, contentDescription = "同步到对话")
+                        Icon(Lucide.Copy, contentDescription = stringResource(R.string.memory_table_drawer_sync_to_conversation))
                     }
                 }
             }
@@ -1609,7 +1609,7 @@ private fun MemoryTableDocumentCard(
                         enabled = dirty,
                     ) {
                         Icon(Lucide.Save, contentDescription = null)
-                        Text("保存", modifier = Modifier.padding(start = 6.dp))
+                        Text(stringResource(R.string.memory_table_drawer_save), modifier = Modifier.padding(start = 6.dp))
                     }
                 }
             }
@@ -1656,7 +1656,7 @@ private fun MemoryTableView(
 
         if (table.columns.isEmpty()) {
             Text(
-                text = "（无列定义）",
+                text = stringResource(R.string.memory_table_drawer_no_columns),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1707,7 +1707,7 @@ private fun MemoryTableView(
                 if (editable) {
                     add {
                         IconButton(onClick = { onChange(table.deleteRow(rowIndex)) }) {
-                            Icon(Lucide.Trash2, contentDescription = "删除行")
+                            Icon(Lucide.Trash2, contentDescription = stringResource(R.string.memory_table_drawer_delete_row))
                         }
                     }
                 }
@@ -1726,7 +1726,7 @@ private fun MemoryTableView(
         if (editable) {
             TextButton(onClick = { onChange(table.addRow()) }) {
                 Icon(Lucide.Plus, contentDescription = null)
-                Text("新增行", modifier = Modifier.padding(start = 6.dp))
+                Text(stringResource(R.string.memory_table_drawer_add_row), modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
@@ -1756,14 +1756,16 @@ private fun CreateConversationMemoryTableDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建对话级记忆表") },
+        title = { Text(stringResource(R.string.memory_table_drawer_new_conversation_table)) },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "选择一个模板，为当前对话创建一个空的对话级记忆表。",
+                    text = stringResource(R.string.memory_table_drawer_select_template_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -1796,7 +1798,7 @@ private fun CreateConversationMemoryTableDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.cancel))
             }
         },
     )

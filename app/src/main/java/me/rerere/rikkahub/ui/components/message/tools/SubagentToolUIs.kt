@@ -1185,12 +1185,12 @@ private fun SubagentSummarySheet(
                 FilterChip(
                     selected = !showRaw,
                     onClick = { showRaw = false },
-                    label = { Text("预览") },
+                    label = { Text(stringResource(R.string.subagent_tool_preview)) },
                 )
                 FilterChip(
                     selected = showRaw,
                     onClick = { showRaw = true },
-                    label = { Text("原生") },
+                    label = { Text(stringResource(R.string.subagent_tool_raw)) },
                 )
             }
             if (showRaw) {

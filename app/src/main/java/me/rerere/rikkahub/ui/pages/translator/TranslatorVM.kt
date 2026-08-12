@@ -45,11 +45,17 @@ class TranslatorVM(
     // 当前任务
     private var currentJob: Job? = null
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(transform)
         }
     }
+
+    @Deprecated(
+        message = "使用 transform 重载避免读快照-全量写竞态 (#267)",
+        replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
+    )
+    fun updateSettings(settings: Settings) = updateSettings { settings }
 
     fun updateInputText(text: String) {
         _inputText.value = text

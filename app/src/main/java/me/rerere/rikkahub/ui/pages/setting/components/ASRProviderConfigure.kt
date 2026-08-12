@@ -52,7 +52,7 @@ fun ASRProviderConfigure(
                 value = setting.name,
                 onValueChange = { onValueChange(setting.copyProvider(name = it)) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("OpenAI Realtime") }
+                placeholder = { Text(stringResource(R.string.setting_asr_configure_openai_realtime_placeholder)) }
             )
         }
 

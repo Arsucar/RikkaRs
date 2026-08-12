@@ -258,7 +258,10 @@ private fun AssistantMemoryContent(
                 Text(stringResource(R.string.assistant_page_manage_memory_title))
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     TextField(
                         value = memory.content,
                         onValueChange = {
@@ -717,7 +720,10 @@ private fun MemoryTableBudgetDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.assistant_page_memory_table_budget_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.assistant_page_memory_table_budget_description),
                     style = MaterialTheme.typography.bodyMedium,

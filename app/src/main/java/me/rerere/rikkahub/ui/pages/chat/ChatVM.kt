@@ -1,81 +1,45 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.app.Application
-import android.content.Context
-import android.util.Log
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
-import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.withRecentChatModel
-import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ConversationTag
-import me.rerere.rikkahub.data.model.HookRunHistory
-import me.rerere.rikkahub.data.model.HookExecutionRecord
-import me.rerere.rikkahub.data.model.GitChangeSection
-import me.rerere.rikkahub.data.model.GitDiffUiState
-import me.rerere.rikkahub.data.model.GitStatusUiState
-import me.rerere.rikkahub.data.model.MemoryTableDocument
-import me.rerere.rikkahub.data.model.MemoryTableScopeType
-import me.rerere.rikkahub.data.model.MemoryTableTemplate
-import me.rerere.rikkahub.data.model.MessageNode
-import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ConversationTagRepository
-import me.rerere.rikkahub.data.repository.FavoriteRepository
-import me.rerere.rikkahub.data.repository.MemoryTableRepository
-import me.rerere.rikkahub.data.repository.MEMORY_TABLE_DELETED_BY_USER_UI
-import me.rerere.rikkahub.data.repository.MemoryTableSoftDeleteResult
-import me.rerere.rikkahub.data.repository.HookRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.CheckpointRecoveryHint
-import me.rerere.rikkahub.service.hooks.MemoryTableHookPreview
-import me.rerere.rikkahub.domain.git.GetAssistantGitStatusUseCase
-import me.rerere.rikkahub.domain.git.GetGitFileDiffUseCase
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
-import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.ui.components.ai.hasInputDraftReplyTarget
-import me.rerere.rikkahub.ui.components.ai.requireInputDraftText
+import me.rerere.rikkahub.utils.OptimisticWriteCoordinator
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
-import java.util.Locale
+import me.rerere.rikkahub.utils.runOptimisticWrite
 import kotlin.uuid.Uuid
-
-private const val TAG = "ChatVM"
 
 internal suspend fun handleManualCompressionResult(
     result: Result<Unit>,
@@ -103,6 +67,11 @@ internal suspend fun handleManualCompressionResult(
     }
 }
 
+/**
+ * Core chat ViewModel: conversation lifecycle, settings/model, list ops.
+ * Satellite VMs share NavBackStackEntry parametersOf(conversationId) and ChatService flows:
+ * [ChatMessageVM], [ChatGitVM], [ChatHookVM], [ChatMemoryTableVM], [ChatDraftVM], [ChatContextVM].
+ */
 class ChatVM(
     id: String,
     private val context: Application,
@@ -111,38 +80,11 @@ class ChatVM(
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
     private val filesManager: FilesManager,
-    private val favoriteRepository: FavoriteRepository,
-    private val memoryTableRepository: MemoryTableRepository,
-    hookRepository: HookRepository,
     conversationTagRepository: ConversationTagRepository,
-    private val getAssistantGitStatus: GetAssistantGitStatusUseCase,
-    private val getGitFileDiff: GetGitFileDiffUseCase,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
-    private var contextPreviewJob: Job? = null
-    private var inputDraftJob: Job? = null
-    private var gitStatusJob: Job? = null
-    private var gitDiffJob: Job? = null
-    private var gitStatusGeneration = 0L
-    private var gitDiffGeneration = 0L
-    private var loadingGitWorkspaceId: String? = null
-    private var loadingGitWorkspaceCwd: String? = null
-    // #180: 记录上次已完成加载的 workspace key，避免抽屉重开时对同一目标强制全量重载
-    private var loadedGitWorkspaceId: String? = null
-    private var loadedGitWorkspaceCwd: String? = null
-    private var hasLoadedGitStatus = false
-    private var inputDraftGeneration = 0L
-    private var originalInputDraftText: String? = null
-    private var lastInputDraftText: String? = null
-    private val _inputDraftLoading = MutableStateFlow(false)
-    val inputDraftLoading = _inputDraftLoading.asStateFlow()
-
-    // #181: 草稿生成成功完成时发出事件，由 UI 复用现有 Toaster 提示。
-    // 带 1 格缓冲 + tryEmit，避免 emit 时无活跃订阅者（页面切换/销毁）导致挂起。
-    private val _inputDraftSuccessFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val inputDraftSuccessFlow: SharedFlow<Unit> = _inputDraftSuccessFlow
 
     /** #220: one-shot recovery toast after process death mid-generation (this conversation only). */
     private val _checkpointRecoveryHint = MutableStateFlow<CheckpointRecoveryHint?>(null)
@@ -152,25 +94,8 @@ class ChatVM(
         _checkpointRecoveryHint.value = null
     }
 
-    val contextPreviewState = MutableStateFlow<UiState<ContextPreview>>(UiState.Idle)
-
-    val hookHistoryState: StateFlow<UiState<List<HookRunHistory>>> = hookRepository
-        .observeHistory(_conversationId)
-        .map<List<HookRunHistory>, UiState<List<HookRunHistory>>> { UiState.Success(it) }
-        .catch { emit(UiState.Error(it)) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
-
-    val hookPreviewState = MutableStateFlow<UiState<MemoryTableHookPreview>>(UiState.Idle)
-    val hookManualRunState = MutableStateFlow<UiState<HookExecutionRecord>>(UiState.Idle)
-    val gitStatusState = MutableStateFlow<GitStatusUiState>(GitStatusUiState.Idle)
-    val gitDiffState = MutableStateFlow<GitDiffUiState>(GitDiffUiState.Idle)
-    val gitStatusWorkspaceId = MutableStateFlow<String?>(null)
-
     val conversationTags: StateFlow<List<ConversationTag>> = conversationTagRepository.observeTags()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
-    val inputState = ChatInputState()
 
     // 异步任务 (从ChatService获取，响应式)
     val conversationJob: StateFlow<Job?> =
@@ -204,126 +129,18 @@ class ChatVM(
     }
 
     override fun onCleared() {
-        contextPreviewJob?.cancel()
-        inputDraftJob?.cancel()
-        gitStatusJob?.cancel()
-        gitDiffJob?.cancel()
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
-    }
-
-    fun loadContextPreview() {
-        contextPreviewJob?.cancel()
-        contextPreviewJob = viewModelScope.launch {
-            contextPreviewState.value = UiState.Loading
-            try {
-                contextPreviewState.value = UiState.Success(chatService.buildContextPreview(_conversationId))
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                contextPreviewState.value = UiState.Error(error)
-            }
-        }
-    }
-
-    fun clearContextPreview() {
-        contextPreviewJob?.cancel()
-        contextPreviewJob = null
-        contextPreviewState.value = UiState.Idle
-    }
-
-    /**
-     * 加载助手绑定 workspace 的 Git 状态。
-     *
-     * #180: 抽屉每次打开都会调用本方法。为避免对同一 workspaceId + cwd 反复置 Loading
-     * 并走 proot 双次 git 造成卡顿，非强制刷新时若已对同一目标加载过（无论成功与否）
-     * 就复用现有 [gitStatusState]，不再重置。仅在 workspace/cwd 变化或
-     * [forceRefresh]（手动刷新）时才重新全量拉取。
-     */
-    fun loadGitStatus(
-        workspaceId: String?,
-        workspaceCwd: String? = null,
-        forceRefresh: Boolean = false,
-    ) {
-        // 已有同一目标的在途请求，直接复用，避免重复触发。
-        if (gitStatusJob?.isActive == true &&
-            loadingGitWorkspaceId == workspaceId &&
-            loadingGitWorkspaceCwd == workspaceCwd
-        ) {
-            return
-        }
-        // 非强制刷新且已对同一目标加载过：复用缓存结果，不再置 Loading 重载。
-        if (!forceRefresh &&
-            hasLoadedGitStatus &&
-            loadedGitWorkspaceId == workspaceId &&
-            loadedGitWorkspaceCwd == workspaceCwd
-        ) {
-            // 仍需同步当前展示归属，保证 UI 过滤逻辑指向正确 workspace。
-            gitStatusWorkspaceId.value = workspaceId
-            return
-        }
-        gitStatusJob?.cancel()
-        gitDiffJob?.cancel()
-        loadingGitWorkspaceId = workspaceId
-        loadingGitWorkspaceCwd = workspaceCwd
-        gitStatusWorkspaceId.value = workspaceId
-        val generation = ++gitStatusGeneration
-        ++gitDiffGeneration
-        gitStatusState.value = GitStatusUiState.Loading
-        gitDiffState.value = GitDiffUiState.Idle
-        gitStatusJob = viewModelScope.launch {
-            val result = getAssistantGitStatus(workspaceId, workspaceCwd)
-            if (generation == gitStatusGeneration) {
-                gitStatusState.value = result
-                loadingGitWorkspaceId = null
-                loadingGitWorkspaceCwd = null
-                // #180: 仅缓存稳定结果；瞬态错误（proot 未就绪/超时/git 不可用/执行失败）
-                // 不缓存，使重开抽屉能自动重试，无需用户手动刷新。
-                val isTransientError = result is GitStatusUiState.WorkspaceNotReady ||
-                    result is GitStatusUiState.TimedOut ||
-                    result is GitStatusUiState.GitUnavailable ||
-                    result is GitStatusUiState.DirectoryUnavailable ||
-                    result is GitStatusUiState.Failed
-                if (isTransientError) {
-                    hasLoadedGitStatus = false
-                } else {
-                    loadedGitWorkspaceId = workspaceId
-                    loadedGitWorkspaceCwd = workspaceCwd
-                    hasLoadedGitStatus = true
-                }
-            }
-        }
-    }
-
-    fun loadGitDiff(
-        workspaceId: String,
-        path: String,
-        section: GitChangeSection,
-        workspaceCwd: String? = null,
-    ) {
-        gitDiffJob?.cancel()
-        val generation = ++gitDiffGeneration
-        gitDiffState.value = GitDiffUiState.Loading
-        gitDiffJob = viewModelScope.launch {
-            val result = getGitFileDiff(workspaceId, path, section, workspaceCwd)
-            if (generation == gitDiffGeneration) {
-                gitDiffState.value = result
-            }
-        }
-    }
-
-    fun clearGitDiff() {
-        gitDiffJob?.cancel()
-        gitDiffJob = null
-        ++gitDiffGeneration
-        gitDiffState.value = GitDiffUiState.Idle
     }
 
     // 用户设置
     val settings: StateFlow<Settings> =
         settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings.dummy())
 
+    // VM-scoped business object (DI Rule 5, see .trellis/spec/app/dependency-injection.md):
+    // holds per-conversation switch generation + mutex + settled assistant id, so two ChatVMs
+    // must never share an instance. Not registered in Koin on purpose.
     private val assistantSwitchCoordinator = AssistantSwitchCoordinator(
         currentAssistantId = { settingsStore.settingsFlow.value.assistantId },
         persistAssistant = ::persistSelectedAssistant,
@@ -348,26 +165,6 @@ class ChatVM(
         settings.getCurrentChatModel(conversation)
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    // #89: 对话可见的记忆表模板（用于新建对话级文档时选择模板）
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val memoryTableTemplates: StateFlow<List<MemoryTableTemplate>> = conversation
-        .flatMapLatest { conv ->
-            memoryTableRepository.getEffectiveTemplatesFlow(conv.assistantId.toString())
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    // #89: 当前对话生效的记忆表文档（CONVERSATION + 继承的 ASSISTANT/GLOBAL），
-    // 随会话切换助手时自动跟随，供右侧抽屉查看与管理。
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val memoryTableDocuments: StateFlow<List<MemoryTableDocument>> = conversation
-        .flatMapLatest { conv ->
-            memoryTableRepository.getEffectiveDocumentsFlow(
-                assistantId = conv.assistantId.toString(),
-                conversationId = conv.id.toString(),
-            )
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
     // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
 
@@ -381,20 +178,24 @@ class ChatVM(
     // MCP管理器
     val mcpManager = chatService.mcpManager
 
-    // 更新设置
-    fun updateSettings(newSettings: Settings): Job {
+    // 更新设置 (transform 原子写, #267)
+    fun updateSettings(transform: (Settings) -> Settings): Job {
         return viewModelScope.launch {
-            val oldSettings = settings.value
-            // 检查用户头像是否有变化，如果有则删除旧头像
-            checkUserAvatarDelete(oldSettings, newSettings)
-            settingsStore.update(newSettings)
-        }
-    }
-
-    /** Partial preset toggle (#218); bypasses full writeFullSettings. */
-    fun toggleAssistantPreset(assistantId: Uuid, presetId: Uuid, enabled: Boolean): Job {
-        return viewModelScope.launch {
-            settingsStore.toggleAssistantPreset(assistantId, presetId, enabled)
+            // Capture old/new under the store's atomic transform to avoid
+            // snapshot-read-then-full-write races; file cleanup runs after the
+            // write commits (outside the store mutex) to avoid holding the lock
+            // during IO.
+            var oldSettings: Settings? = null
+            var newSettings: Settings? = null
+            settingsStore.update {
+                oldSettings = it
+                transform(it).also { newSettings = it }
+            }
+            val old = oldSettings
+            val new = newSettings
+            if (old != null && new != null) {
+                checkUserAvatarDelete(old, new)
+            }
         }
     }
 
@@ -438,171 +239,19 @@ class ChatVM(
     val updateState =
         updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
 
-    /**
-     * 处理消息发送
-     *
-     * @param content 消息内容
-     * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
-     */
-    fun handleMessageSend(
-        content: List<UIMessagePart>,
-        answer: Boolean = true,
-    ) {
-        if (content.isEmptyInputMessage()) return
+    // #295: per-key coordinators so rapid pin/title clicks do not lose updates.
+    private val titleWriteCoordinator = OptimisticWriteCoordinator()
+    private val pinWriteCoordinators = mutableMapOf<Uuid, OptimisticWriteCoordinator>()
 
-        chatService.sendMessage(_conversationId, content, answer)
-    }
+    private fun pinCoordinatorFor(conversationId: Uuid): OptimisticWriteCoordinator =
+        pinWriteCoordinators.getOrPut(conversationId) { OptimisticWriteCoordinator() }
 
-    fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
-        if (parts.isEmptyInputMessage()) return
-
-        viewModelScope.launch {
-            chatService.editMessage(_conversationId, messageId, parts)
-        }
-    }
-
-    fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
-        return viewModelScope.launch {
-            val result = chatService.compressConversation(
-                conversationId = _conversationId,
-                additionalPrompt = additionalPrompt,
-                targetTokens = targetTokens,
-                keepRecentMessages = keepRecentMessages,
-            )
-            handleManualCompressionResult(
-                result = result,
-                targetTokens = targetTokens,
-                keepRecentMessages = keepRecentMessages,
-                persistPreferences = settingsStore::updateCompressionPreferences,
-                onCompressionFailure = {
-                    chatService.addError(
-                        it,
-                        title = context.getString(R.string.error_title_compress_conversation),
-                    )
-                },
-                onPreferencePersistenceFailure = {
-                    Log.e(TAG, "Failed to persist compression preferences", it)
-                },
-            )
-        }
-    }
-
-    suspend fun forkMessage(message: UIMessage): Conversation {
-        return chatService.forkConversationAtMessage(_conversationId, message.id)
-    }
-
-    fun deleteMessage(message: UIMessage) {
-        viewModelScope.launch {
-            chatService.deleteMessage(_conversationId, message)
-        }
-    }
-
-    fun toggleMessageHidden(messageId: Uuid) = viewModelScope.launch {
-        chatService.toggleMessageHidden(_conversationId, messageId)
-    }
-
-    fun showDeleteBlockedWhileGeneratingError() {
+    private fun reportWriteFailure(error: Throwable, conversationId: Uuid = _conversationId) {
         chatService.addError(
-            error = IllegalStateException("请先停止生成再删除消息"),
-            conversationId = _conversationId,
-            title = context.getString(R.string.error_title_operation)
+            error = error,
+            conversationId = conversationId,
+            title = context.getString(R.string.error_title_operation),
         )
-    }
-
-    fun regenerateAtMessage(
-        message: UIMessage,
-        regenerateAssistantMsg: Boolean = true
-    ) {
-        chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
-    }
-
-    fun handleToolApproval(
-        toolCallId: String,
-        approved: Boolean,
-        reason: String = "",
-        trustedWriteRoot: String? = null,
-    ) {
-        chatService.handleToolApproval(
-            conversationId = _conversationId,
-            toolCallId = toolCallId,
-            approved = approved,
-            reason = reason,
-            trustedWriteRoot = trustedWriteRoot,
-        )
-    }
-
-    fun trustWriteRootAndApprove(toolCallId: String, rootPrefix: String) {
-        handleToolApproval(
-            toolCallId = toolCallId,
-            approved = true,
-            trustedWriteRoot = rootPrefix,
-        )
-    }
-
-    fun handleToolAnswer(
-        toolCallId: String,
-        answer: String,
-    ) {
-        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
-    }
-
-    fun stopGeneration() {
-        viewModelScope.launch {
-            chatService.stopGeneration(_conversationId)
-        }
-    }
-
-    fun previewMemoryTableHook(hookId: Uuid) {
-        viewModelScope.launch {
-            hookPreviewState.value = UiState.Loading
-            hookPreviewState.value = runCatching {
-                chatService.previewMemoryTableHook(_conversationId, hookId)
-            }.fold(
-                onSuccess = { UiState.Success(it) },
-                onFailure = { UiState.Error(it) },
-            )
-        }
-    }
-
-    fun applyMemoryTableHookPreview(preview: MemoryTableHookPreview) {
-        viewModelScope.launch {
-            hookManualRunState.value = UiState.Loading
-            hookManualRunState.value = runCatching {
-                chatService.applyMemoryTableHookPreview(preview)
-            }.fold(
-                onSuccess = { UiState.Success(it) },
-                onFailure = { UiState.Error(it) },
-            )
-        }
-    }
-
-    fun runMemoryTableHookNow(hookId: Uuid) {
-        viewModelScope.launch {
-            hookManualRunState.value = UiState.Loading
-            hookManualRunState.value = runCatching {
-                chatService.runMemoryTableHookNow(_conversationId, hookId)
-            }.fold(
-                onSuccess = { UiState.Success(it) },
-                onFailure = { UiState.Error(it) },
-            )
-        }
-    }
-
-    fun retryMemoryTableHookExecution(executionId: Uuid) {
-        viewModelScope.launch {
-            hookManualRunState.value = UiState.Loading
-            hookManualRunState.value = runCatching {
-                chatService.retryMemoryTableHookExecution(executionId)
-            }.fold(
-                onSuccess = { UiState.Success(it) },
-                onFailure = { UiState.Error(it) },
-            )
-        }
-    }
-
-    fun clearMemoryTableHookActionState() {
-        hookPreviewState.value = UiState.Idle
-        hookManualRunState.value = UiState.Idle
     }
 
     fun saveConversationAsync() {
@@ -611,162 +260,133 @@ class ChatVM(
         }
     }
 
+    /**
+     * #295: optimistic title update — UI flips via [ChatService.updateConversationState] before
+     * [ChatService.saveConversation]; failure restores prior title and surfaces [errors].
+     */
     fun updateTitle(title: String) {
         viewModelScope.launch {
-            val updatedConversation = conversation.value.copy(title = title)
-            chatService.saveConversation(_conversationId, updatedConversation)
+            val previousTitle = conversation.value.title
+            titleWriteCoordinator.run(
+                applyOptimistic = {
+                    chatService.updateConversationState(_conversationId) { current ->
+                        conversationWithTitle(current, title)
+                    }
+                    conversationWithTitle(conversation.value, title)
+                },
+                persist = { snapshot ->
+                    chatService.saveConversation(_conversationId, snapshot)
+                },
+                rollback = {
+                    chatService.updateConversationState(_conversationId) { current ->
+                        conversationWithTitle(current, previousTitle)
+                    }
+                },
+                onError = { reportWriteFailure(it) },
+            )
         }
     }
 
     fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
-            chatService.stopGeneration(conversation.id)
-            conversationRepo.deleteConversation(conversation)
+            // Deletion removes the row from the drawer paging source; no in-session conversation
+            // overlay is needed. Keep stop-then-delete ordering so generation cannot resurrect it.
+            runOptimisticWrite(
+                applyOptimistic = { conversation },
+                persist = { target ->
+                    chatService.stopGeneration(target.id)
+                    conversationRepo.deleteConversation(target)
+                },
+                rollback = {
+                    // Room paging will not re-insert without a full reload; surface error only.
+                    // Re-inserting a deleted tree is intentionally out of scope for #295 MVP.
+                },
+                onError = { reportWriteFailure(it, conversation.id) },
+            )
         }
 
+    /**
+     * #295: optimistic pin toggle. Updates session state immediately, then writes the pin column.
+     * Rapid toggles are generation-gated per conversation id via [pinCoordinatorFor].
+     */
     fun updatePinnedStatus(conversation: Conversation) {
         viewModelScope.launch {
-            chatService.togglePinStatus(conversation.id)
+            val targetId = conversation.id
+            val previousPinned = if (targetId == _conversationId) {
+                this@ChatVM.conversation.value.isPinned
+            } else {
+                conversation.isPinned
+            }
+            val nextPinned = !previousPinned
+            pinCoordinatorFor(targetId).run(
+                applyOptimistic = {
+                    chatService.updateConversationState(targetId) { current ->
+                        conversationWithPinned(current, nextPinned)
+                    }
+                    nextPinned
+                },
+                persist = { pinned ->
+                    conversationRepo.setPinStatus(targetId, pinned)
+                },
+                rollback = {
+                    chatService.updateConversationState(targetId) { current ->
+                        conversationWithPinned(current, previousPinned)
+                    }
+                },
+                onError = { reportWriteFailure(it, targetId) },
+            )
         }
     }
 
+    /**
+     * #295: optimistic move — session state flips assistantId/folderId before durable write.
+     * Settings assistant switch still runs only after a successful move of the open conversation.
+     */
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
-            // #89: 下沉到 ChatService，内部改 assistantId+folderId 并重绑 followSource 的对话级记忆文档。
-            chatService.moveConversationToAssistant(conversation.id, targetAssistantId)
-            if (conversation.id == _conversationId) {
-                settingsStore.updateAssistant(targetAssistantId)
+            val targetId = conversation.id
+            val previousAssistantId = if (targetId == _conversationId) {
+                this@ChatVM.conversation.value.assistantId
+            } else {
+                conversation.assistantId
             }
-        }
-    }
-
-    fun translateMessage(message: UIMessage, targetLanguage: Locale) {
-        chatService.translateMessage(_conversationId, message, targetLanguage)
-    }
-
-    fun generateTitle(conversation: Conversation, force: Boolean = false) {
-        viewModelScope.launch {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
-            chatService.generateTitle(_conversationId, conversationFull, force)
-        }
-    }
-
-    fun generateSuggestion(conversation: Conversation) {
-        viewModelScope.launch {
-            chatService.generateSuggestion(_conversationId, conversation)
-        }
-    }
-
-    fun generateInputDraft(
-        conversation: Conversation,
-        userInstruction: String = inputState.textContent.text.toString().trim(),
-    ) {
-        // #181: 编辑自己的消息时也允许「写回复草稿」，不再用 isEditing() 硬禁用。
-        if (inputDraftJob?.isActive == true ||
-            !hasInputDraftReplyTarget(
-                latestMessageRole = conversation.currentMessages.lastOrNull()?.role,
-                mainGenerationActive = conversationJob.value != null,
-            )
-        ) {
-            return
-        }
-        val isEditingDraft = inputState.isEditing()
-        val generation = ++inputDraftGeneration
-        val originalText = inputState.textContent.text.toString()
-        originalInputDraftText = originalText
-        lastInputDraftText = ""
-        inputState.setMessageText("")
-        inputDraftJob = viewModelScope.launch {
-            _inputDraftLoading.value = true
-            try {
-                val generatedDraft = chatService.generateInputDraft(
-                    conversationId = _conversationId,
-                    conversation = conversation,
-                    onStreamUpdate = streamUpdate@{ partial ->
-                        if (generation != inputDraftGeneration) return@streamUpdate
-                        val currentText = inputState.textContent.text.toString()
-                        if (currentText != lastInputDraftText) {
-                            // A user/ASR edit wins. Invalidate before cancelling so late chunks are ignored.
-                            inputDraftGeneration++
-                            inputDraftJob?.cancel()
-                            inputDraftJob = null
-                            _inputDraftLoading.value = false
-                            originalInputDraftText = null
-                            lastInputDraftText = null
-                            return@streamUpdate
-                        }
-                        lastInputDraftText = partial
-                        inputState.setMessageText(partial)
-                    },
-                    userInstruction = userInstruction,
-                )
-                val completedDraft = requireInputDraftText(
-                    draft = generatedDraft,
-                    emptyMessage = context.getString(R.string.input_draft_empty_response),
-                )
-                if (generation == inputDraftGeneration &&
-                    inputState.textContent.text.toString() == lastInputDraftText
-                ) {
-                    lastInputDraftText = completedDraft
-                    inputState.setMessageText(completedDraft)
-                    // #181: 编辑态草稿生成成功后，通知 UI 用现有 Toaster 提示可继续修改。
-                    // 用 tryEmit 配合带缓冲的 SharedFlow，避免无订阅者时 emit 挂起。
-                    if (isEditingDraft) {
-                        _inputDraftSuccessFlow.tryEmit(Unit)
+            val previousFolderId = if (targetId == _conversationId) {
+                this@ChatVM.conversation.value.folderId
+            } else {
+                conversation.folderId
+            }
+            runOptimisticWrite(
+                applyOptimistic = {
+                    chatService.updateConversationState(targetId) { current ->
+                        current.copy(assistantId = targetAssistantId, folderId = null)
                     }
-                }
-            } catch (error: CancellationException) {
-                restoreInputDraftIfSafe(generation)
-                throw error
-            } catch (error: Throwable) {
-                restoreInputDraftIfSafe(generation)
-                chatService.addError(
-                    error = error,
-                    conversationId = _conversationId,
-                    title = context.getString(R.string.error_title_generate_input_draft),
-                )
-            } finally {
-                if (generation == inputDraftGeneration) {
-                    _inputDraftLoading.value = false
-                    inputDraftJob = null
-                    originalInputDraftText = null
-                    lastInputDraftText = null
-                }
-            }
+                    targetAssistantId
+                },
+                persist = {
+                    // #89: ChatService also relinks followSource memory docs after durable move.
+                    chatService.moveConversationToAssistant(targetId, targetAssistantId)
+                    if (targetId == _conversationId) {
+                        // Settings update is a secondary effect; if it fails after a successful
+                        // move, the conversation is already durably moved. Rolling back session
+                        // state would create a session/DB mismatch, so surface the error without
+                        // triggering rollback.
+                        try {
+                            settingsStore.updateAssistant(targetAssistantId)
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Throwable) {
+                            reportWriteFailure(error, targetId)
+                        }
+                    }
+                },
+                rollback = {
+                    chatService.updateConversationState(targetId) { current ->
+                        current.copy(assistantId = previousAssistantId, folderId = previousFolderId)
+                    }
+                },
+                onError = { reportWriteFailure(it, targetId) },
+            )
         }
-    }
-
-    fun cancelInputDraft() {
-        val generation = inputDraftGeneration
-        restoreInputDraftIfSafe(generation)
-        inputDraftGeneration++
-        inputDraftJob?.cancel()
-        inputDraftJob = null
-        _inputDraftLoading.value = false
-        originalInputDraftText = null
-        lastInputDraftText = null
-    }
-
-    /** Stops draft streaming while preserving the current text for send/edit actions. */
-    fun finishInputDraft() {
-        inputDraftGeneration++
-        inputDraftJob?.cancel()
-        inputDraftJob = null
-        _inputDraftLoading.value = false
-        originalInputDraftText = null
-        lastInputDraftText = null
-    }
-
-    private fun restoreInputDraftIfSafe(generation: Long) {
-        if (generation != inputDraftGeneration) return
-        val streamedText = lastInputDraftText ?: return
-        if (inputState.textContent.text.toString() == streamedText) {
-            inputState.setMessageText(originalInputDraftText.orEmpty())
-        }
-    }
-
-    fun clearTranslationField(messageId: Uuid) {
-        chatService.clearTranslationField(_conversationId, messageId)
     }
 
     fun updateConversation(newConversation: Conversation) {
@@ -774,159 +394,4 @@ class ChatVM(
             newConversation
         }
     }
-
-    // #89: 切换对话级记忆表隔离开关。先无条件更新内存状态，保证开关立即响应
-    // （空的新对话拨动也生效）；再尝试落库——非空对话直接持久化，空的新对话
-    // 由首条消息发送时的 saveConversation 一并写入，避免重启后丢失。
-    fun setMemoryTableIsolation(enabled: Boolean) {
-        val updated = conversation.value.copy(memoryTableIsolation = enabled)
-        chatService.updateConversationState(_conversationId) { updated }
-        viewModelScope.launch {
-            chatService.saveConversation(_conversationId, updated)
-        }
-    }
-
-    fun upsertConversationVariable(name: String, value: String) {
-        chatService.updateConversationVariables(_conversationId) { current ->
-            me.rerere.rikkahub.data.ai.variables.ConversationVariables.applyTransform(current) { map ->
-                me.rerere.rikkahub.data.ai.variables.ConversationVariables.putVar(map, name, value)
-            }
-        }
-    }
-
-    fun deleteConversationVariable(name: String) {
-        chatService.updateConversationVariables(_conversationId) { current ->
-            current - name.trim()
-        }
-    }
-
-    fun toggleMessageFavorite(node: MessageNode) {
-        viewModelScope.launch {
-            val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)
-            if (currentlyFavorited) {
-                favoriteRepository.removeNodeFavorite(_conversationId, node.id)
-            } else {
-                favoriteRepository.addNodeFavorite(
-                    NodeFavoriteTarget(
-                        conversationId = _conversationId,
-                        conversationTitle = conversation.value.title,
-                        nodeId = node.id,
-                        node = node
-                    )
-                )
-            }
-
-            chatService.updateConversationState(_conversationId) { currentConversation ->
-                currentConversation.copy(
-                    messageNodes = currentConversation.messageNodes.map { existingNode ->
-                        if (existingNode.id == node.id) {
-                            existingNode.copy(isFavorite = !currentlyFavorited)
-                        } else {
-                            existingNode
-                        }
-                    }
-                )
-            }
-        }
-    }
-
-    // #89: 保存（新建/更新）一个对话级记忆表文档。scopeType 强制为 CONVERSATION，
-    // scopeId 绑定到当前对话，从而让 conversation scope 真正可写、可查看。
-    fun upsertConversationMemoryTableDocument(
-        document: MemoryTableDocument,
-        onDone: (Result<MemoryTableDocument>) -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            val result = runCatching {
-                memoryTableRepository.upsertDocument(
-                    document.copy(
-                        scopeType = MemoryTableScopeType.CONVERSATION,
-                        scopeId = _conversationId.toString(),
-                    ),
-                    actorAssistantId = conversation.value.assistantId.toString(),
-                    actorConversationId = _conversationId.toString(),
-                )
-            }
-            onDone(result)
-        }
-    }
-
-    // #89: 将助手级/全局的记忆表文档同步（复制）到当前对话级。
-    // 若当前对话已存在同模板的对话级文档则覆盖其内容，否则新建，避免重复。
-    fun syncMemoryTableDocumentToConversation(
-        source: MemoryTableDocument,
-        onDone: (Result<MemoryTableDocument>) -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            val result = runCatching {
-                val conversationScopeId = _conversationId.toString()
-                val existing = memoryTableRepository
-                    .getDocumentsForScope(MemoryTableScopeType.CONVERSATION, conversationScopeId)
-                    .firstOrNull { it.templateId == source.templateId }
-                val target = (existing ?: MemoryTableDocument(
-                    templateId = source.templateId,
-                    scopeType = MemoryTableScopeType.CONVERSATION,
-                    scopeId = conversationScopeId,
-                )).copy(
-                    templateId = source.templateId,
-                    scopeType = MemoryTableScopeType.CONVERSATION,
-                    scopeId = conversationScopeId,
-                    payloadJson = source.payloadJson,
-                    // #89: 记录来源助手级文档，默认跟随其更新；用户可在抽屉里断开独立编辑。
-                    sourceDocumentId = source.id,
-                    followSource = true,
-                )
-                memoryTableRepository.upsertDocument(
-                    target,
-                    actorAssistantId = conversation.value.assistantId.toString(),
-                    actorConversationId = _conversationId.toString(),
-                )
-            }
-            onDone(result)
-        }
-    }
-
-    // #89: 设置对话级记忆文档是否跟随来源助手级文档。follow=false 即"断开独立编辑"，
-    // 后续源文档更新不再覆盖该对话级文档。
-    fun setMemoryTableDocumentFollow(
-        documentId: String,
-        follow: Boolean,
-        onDone: (Result<MemoryTableDocument>) -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            val result = runCatching {
-                val doc = memoryTableRepository.getEffectiveDocument(
-                    id = documentId,
-                    assistantId = conversation.value.assistantId.toString(),
-                    conversationId = _conversationId.toString(),
-                )
-                    ?: error("Memory table document not found: $documentId")
-                memoryTableRepository.upsertDocument(
-                    doc.copy(followSource = follow),
-                    actorAssistantId = conversation.value.assistantId.toString(),
-                    actorConversationId = _conversationId.toString(),
-                )
-            }
-            onDone(result)
-        }
-    }
-
-    // #89: 删除一个记忆表文档（抽屉内针对对话级文档的清理）。
-    fun deleteMemoryTableDocument(
-        documentId: String,
-        onDone: (Result<MemoryTableSoftDeleteResult>) -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            val result = runCatching {
-                memoryTableRepository.softDeleteDocument(
-                    id = documentId,
-                    deletedBy = MEMORY_TABLE_DELETED_BY_USER_UI,
-                    assistantId = conversation.value.assistantId.toString(),
-                    conversationId = _conversationId.toString(),
-                )
-            }
-            onDone(result)
-        }
-    }
-
 }

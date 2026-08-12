@@ -41,11 +41,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -63,7 +65,6 @@ import kotlin.uuid.Uuid
 @Composable
 fun DebugPage(vm: DebugVM = koinViewModel()) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -139,6 +140,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
 private fun MainPage(vm: DebugVM) {
     val settings = LocalSettings.current
     val conversationCount by vm.conversationCount.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
     Column(
         modifier = Modifier
             .padding(8.dp)
@@ -184,9 +186,9 @@ private fun MainPage(vm: DebugVM) {
         val toaster = LocalToaster.current
         Button(
             onClick = {
-                toaster.show("测试 ${counter++}")
-                toaster.show("测试 ${counter++}", type = ToastType.Info)
-                toaster.show("测试 ${counter++}", type = ToastType.Error)
+                toaster.show(ctx.getString(R.string.debug_page_test_toast, counter++))
+                toaster.show(ctx.getString(R.string.debug_page_test_toast, counter++), type = ToastType.Info)
+                toaster.show(ctx.getString(R.string.debug_page_test_toast, counter++), type = ToastType.Error)
             }
         ) {
             Text("toast")
@@ -200,15 +202,15 @@ private fun MainPage(vm: DebugVM) {
                 )
             }
         ) {
-            Text("重置Chat模型")
+            Text(stringResource(R.string.debug_page_reset_chat_model))
         }
 
         Button(
             onClick = {
-                error("测试崩溃 ${Random.nextInt(0..1000)}")
+                error(ctx.getString(R.string.debug_page_test_crash, Random.nextInt(0..1000)))
             }
         ) {
-            Text("崩溃")
+            Text(stringResource(R.string.debug_page_crash))
         }
 
         Row(
@@ -216,30 +218,30 @@ private fun MainPage(vm: DebugVM) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Conversation 数量: ${conversationCount?.toString() ?: "..."}",
+                text = stringResource(R.string.debug_page_conversation_count, conversationCount?.toString() ?: "..."),
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = { vm.refreshConversationCount() }) {
-                Text("刷新")
+                Text(stringResource(R.string.debug_page_refresh))
             }
         }
 
         Button(
             onClick = {
                 vm.createOversizedConversation(30)
-                toaster.show("正在创建 30MB 超大对话...")
+                toaster.show(ctx.getString(R.string.debug_page_creating_30mb))
             }
         ) {
-            Text("创建超大对话 (30MB)")
+            Text(stringResource(R.string.debug_page_create_oversized_conversation))
         }
 
         Button(
             onClick = {
                 vm.createConversationWithMessages(1024)
-                toaster.show("正在创建 1024 条消息对话...")
+                toaster.show(ctx.getString(R.string.debug_page_creating_1024))
             }
         ) {
-            Text("创建 1024 个消息的聊天")
+            Text(stringResource(R.string.debug_page_create_1024_messages))
         }
 
         HorizontalDivider()

@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlint)
 }
 
 android {
@@ -20,8 +22,8 @@ android {
         applicationId = "me.arsucar.rikka"
         minSdk = 26
         targetSdk = 37
-        versionCode = 211
-        versionName = "2.3.49"
+        versionCode = 212
+        versionName = "2.3.50"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -169,6 +171,38 @@ ksp {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+detekt {
+    // Shared config at repo root; per-module overrides still possible via module-local detekt.yml.
+    config.setFrom(rootProject.files("config/detekt.yml"))
+    // Baseline file captures existing findings so new code is held to the standard
+    // without failing the build on historical issues. Run `./gradlew :app:detektBaseline` to generate,
+    // then uncomment to activate.
+    // baseline = file("detekt-baseline.xml")
+    buildUponDefaultConfig = true
+    parallel = true
+    // Don't fail the build on existing findings until the team has cleaned them up.
+    // Toggle to `false` (and rely on the baseline) once the codebase is clean.
+    ignoreFailures = true
+    autoCorrect = false
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        txt.required.set(true)
+        sarif.required.set(false)
+    }
+}
+
+ktlint {
+    version.set(rootProject.libs.versions.ktlint)
+    android.set(true)
+    // Don't fail the build on existing style violations; report only.
+    ignoreFailures.set(true)
+    reporters {
+        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
+        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
     }
 }
 

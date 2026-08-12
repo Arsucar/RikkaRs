@@ -30,11 +30,17 @@ class AssistantVM(
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings.dummy())
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(transform)
         }
     }
+
+    @Deprecated(
+        message = "使用 transform 重载避免读快照-全量写竞态 (#267)",
+        replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
+    )
+    fun updateSettings(settings: Settings) = updateSettings { settings }
 
     fun addAssistant(assistant: Assistant) {
         viewModelScope.launch {

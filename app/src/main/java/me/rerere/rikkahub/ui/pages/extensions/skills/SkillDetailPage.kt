@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -498,15 +499,19 @@ private fun EditFileDialog(
         onDismissRequest = onDismiss,
         title = { Text(skillFile.relativePath, fontFamily = FontFamily.Monospace) },
         text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skill_detail_page_content)) },
-                minLines = 10,
-                maxLines = 20,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text(stringResource(R.string.skill_detail_page_content)) },
+                    minLines = 10,
+                    maxLines = 20,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(content) }) { Text(stringResource(R.string.skill_detail_page_save)) }
@@ -530,7 +535,10 @@ private fun AddFileDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.skill_detail_page_new_file)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = fileName,
                     onValueChange = { fileName = it },

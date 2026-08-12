@@ -28,6 +28,7 @@ For any user-visible Compose change, read the shared [UI Modification Thinking G
 | [Conversation Checkpoint Cache](./conversation-checkpoint-cache.md) | Experimental N-step MessageNode checkpoints + recovery toast (#220) |
 | [Conversation Variables](./conversation-variables.md) | ST macros + MVU UpdateVariable + branch snapshots (#217/#216) |
 | [Experimental Features](./experimental-features.md) | Registry + Global/Assistant experiment pages; gates #219/#220/#217 (#215) |
+| [Dependency Injection Conventions](./dependency-injection.md) | Four DI patterns (VM constructor / `koinInject` / `by inject` / manual `new`), when each is correct, and VM-scoped business objects (#290) |
 
 ## Pre-Development Checklist
 

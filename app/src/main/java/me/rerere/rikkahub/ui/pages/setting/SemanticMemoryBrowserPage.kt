@@ -40,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
@@ -82,7 +84,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("语义记忆浏览器") },
+                title = { Text(stringResource(R.string.semantic_memory_browser_title)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -100,7 +102,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
             item("assistantSelector") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("选择助手 (${assistants.size} 个)") },
+                    title = { Text(stringResource(R.string.semantic_memory_browser_select_assistant, assistants.size)) },
                 ) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -125,7 +127,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
                             OutlinedTextField(
                                 value = messageCount.toString(),
                                 onValueChange = { v -> v.toIntOrNull()?.let { messageCount = it.coerceIn(1, 500) } },
-                                label = { Text("总结最近消息数 (1-500)") },
+                                label = { Text(stringResource(R.string.semantic_memory_browser_summarize_recent_count)) },
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -151,10 +153,10 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
                                             modifier = Modifier.padding(end = 8.dp),
                                         )
                                     }
-                                    Text("手动触发总结")
+                                    Text(stringResource(R.string.semantic_memory_browser_trigger_summarize))
                                 }
                                 OutlinedButton(onClick = { showAddDialog = true }) {
-                                    Text("手动添加记忆")
+                                    Text(stringResource(R.string.semantic_memory_browser_add_memory))
                                 }
                             }
 
@@ -170,7 +172,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
                                     },
                                     enabled = selectedAssistantId != null && !isProcessing,
                                 ) {
-                                    Text("一键召回测试")
+                                    Text(stringResource(R.string.semantic_memory_browser_recall_test))
                                 }
                             }
                         }
@@ -182,7 +184,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
             if (selectedAssistantId != null) {
                 item("memoryHeader") {
                     Text(
-                        text = "记忆列表 (${memories.size} 条)",
+                        text = stringResource(R.string.semantic_memory_browser_memory_list, memories.size),
                         style = MaterialTheme.typography.titleSmallEmphasized,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
@@ -192,7 +194,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
                 if (memories.isEmpty()) {
                     item("emptyState") {
                         Text(
-                            text = "暂无语义记忆。可以通过\"手动触发总结\"或自动总结来生成。",
+                            text = stringResource(R.string.semantic_memory_browser_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(16.dp),
                         )
@@ -225,7 +227,7 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             CircularProgressIndicator()
-                            Text("处理中...", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.semantic_memory_browser_processing), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -267,16 +269,16 @@ fun SemanticMemoryBrowserPage(vm: SemanticMemoryVM = koinViewModel()) {
     pendingDelete?.let { memory ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除记忆") },
-            text = { Text("确定要删除这条记忆吗？\n\n${memory.content.take(100)}") },
+            title = { Text(stringResource(R.string.semantic_memory_browser_delete_title)) },
+            text = { Text(stringResource(R.string.semantic_memory_browser_delete_message, memory.content.take(100))) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteMemory(memory.id, memory.assistantId)
                     pendingDelete = null
-                }) { Text("删除") }
+                }) { Text(stringResource(R.string.semantic_memory_browser_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -352,16 +354,16 @@ private fun MemoryCard(
                     if (memory.isCore) {
                         AssistChip(
                             onClick = {},
-                            label = { Text("核心", style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(stringResource(R.string.semantic_memory_browser_core_badge), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
                 Row {
                     IconButton(onClick = onEdit) {
-                        Icon(HugeIcons.PencilEdit01, contentDescription = "编辑")
+                        Icon(HugeIcons.PencilEdit01, contentDescription = stringResource(R.string.semantic_memory_browser_edit))
                     }
                     IconButton(onClick = onDelete) {
-                        Icon(HugeIcons.Delete01, contentDescription = "删除")
+                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.semantic_memory_browser_delete))
                     }
                 }
             }
@@ -388,13 +390,13 @@ private fun MemoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "创建: ${dateFormat.format(Date(memory.createdAt))}",
+                    text = stringResource(R.string.semantic_memory_browser_created_at, dateFormat.format(Date(memory.createdAt))),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
                 if (memory.recallCount > 0) {
                     Text(
-                        text = "召回 ${memory.recallCount} 次",
+                        text = stringResource(R.string.semantic_memory_browser_recall_count, memory.recallCount),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                     )
@@ -421,7 +423,7 @@ private fun MemoryEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isNew) "添加记忆" else "编辑记忆") },
+        title = { Text(if (isNew) stringResource(R.string.semantic_memory_browser_add_title) else stringResource(R.string.semantic_memory_browser_edit_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -432,20 +434,20 @@ private fun MemoryEditDialog(
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("内容") },
+                    label = { Text(stringResource(R.string.semantic_memory_browser_content_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                 )
                 OutlinedTextField(
                     value = summary,
                     onValueChange = { summary = it },
-                    label = { Text("摘要 (可选)") },
+                    label = { Text(stringResource(R.string.semantic_memory_browser_summary_label)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp),
                 )
                 Text(
-                    text = "重要性: ${importance.toInt()} 星",
+                    text = stringResource(R.string.semantic_memory_browser_importance, importance.toInt()),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -459,7 +461,7 @@ private fun MemoryEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("核心记忆 (始终注入)")
+                    Text(stringResource(R.string.semantic_memory_browser_core_memory))
                     Switch(
                         checked = isCore,
                         onCheckedChange = { isCore = it },
@@ -477,10 +479,10 @@ private fun MemoryEditDialog(
                         isCore = isCore,
                     )
                 )
-            }) { Text("确定") }
+            }) { Text(stringResource(R.string.confirm)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
@@ -496,10 +498,10 @@ private fun EvictionConfirmDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("清理低重要性记忆") },
+        title = { Text(stringResource(R.string.semantic_memory_browser_eviction_title)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("以下 ${candidates.size} 条低重要性记忆建议清理:")
+                Text(stringResource(R.string.semantic_memory_browser_eviction_hint, candidates.size))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -518,10 +520,10 @@ private fun EvictionConfirmDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(candidates) }) { Text("确认清理") }
+            TextButton(onClick = { onConfirm(candidates) }) { Text(stringResource(R.string.semantic_memory_browser_eviction_confirm)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("保留") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.semantic_memory_browser_eviction_keep)) }
         },
     )
 }

@@ -207,13 +207,13 @@ private fun ContextMessageCard(index: Int, message: UIMessage) {
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("#${index + 1} · ${message.role.name.lowercase()}", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.chat_context_inspector_item_format, index + 1, message.role.name.lowercase()), fontWeight = FontWeight.SemiBold)
                 Icon(if (expanded) Lucide.ChevronDown else Lucide.ChevronRight, contentDescription = null)
             }
             if (expanded) {
                 message.parts.forEachIndexed { partIndex, part ->
                     Text(
-                        text = "${partIndex + 1}. ${contextPartText(part)}",
+                        text = stringResource(R.string.chat_context_inspector_part_format, partIndex + 1, contextPartText(part)),
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                     )

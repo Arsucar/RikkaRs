@@ -321,7 +321,7 @@ internal fun AssistantBasicContent(
                         singleLine = true,
                         isError = temperatureValue == null || temperatureValue !in 0f..2f,
                         supportingText = {
-                            Text("0 - 2")
+                            Text(stringResource(R.string.assistant_basic_page_temperature_range))
                         }
                     )
                 }
@@ -374,7 +374,7 @@ internal fun AssistantBasicContent(
                         singleLine = true,
                         isError = topPValue == null || topPValue !in 0f..1f,
                         supportingText = {
-                            Text("0 - 1")
+                            Text(stringResource(R.string.assistant_basic_page_top_p_range))
                         }
                     )
                 }

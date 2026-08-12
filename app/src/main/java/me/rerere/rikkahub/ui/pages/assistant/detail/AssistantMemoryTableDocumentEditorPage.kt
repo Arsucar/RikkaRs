@@ -877,7 +877,10 @@ private fun ColumnActionDialog(
         onDismissRequest = onDismiss,
         title = { Text(column.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = columnName,
                     onValueChange = {
@@ -928,7 +931,10 @@ private fun AddColumnDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.assistant_page_memory_table_add_column)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = columnName,
                     onValueChange = {
