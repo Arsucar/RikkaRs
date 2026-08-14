@@ -14,8 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,7 +24,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -196,29 +194,31 @@ private fun BindingConfirmDialog(
         },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(stringResource(R.string.assistant_importer_binding_dialog_message))
-                HorizontalDivider()
                 lorebooks.forEach { lorebook ->
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                lorebook.name.ifEmpty { stringResource(R.string.assistant_importer_unnamed_lorebook) },
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                stringResource(
-                                    R.string.assistant_importer_lorebook_entries_count,
-                                    lorebook.entries.size
-                                )
-                            )
-                        },
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = lorebook.name.ifEmpty {
+                                stringResource(R.string.assistant_importer_unnamed_lorebook)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.assistant_importer_lorebook_entries_count,
+                                lorebook.entries.size,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         },
