@@ -217,6 +217,12 @@
   <string name="assistant_importer_read_json_failed">读取JSON失败</string>
   <string name="assistant_importer_unsupported_file_type">不支持的文件类型: %s</string>
   <string name="assistant_importer_unsupported_spec">不支持的规格: %s</string>
+  <string name="assistant_importer_binding_dialog_title">检测到附加内容</string>
+  <string name="assistant_importer_binding_dialog_message">这个角色卡包含附加世界书，是否一并导入？</string>
+  <string name="assistant_importer_binding_dialog_import">全部导入</string>
+  <string name="assistant_importer_binding_dialog_skip">跳过</string>
+  <string name="assistant_importer_unnamed_lorebook">未命名世界书</string>
+  <string name="assistant_importer_lorebook_entries_count">%1$d 个条目</string>
   <string name="assistant_page_actions">操作</string>
   <string name="assistant_page_add">添加</string>
   <string name="assistant_page_add_body">添加 Body</string>

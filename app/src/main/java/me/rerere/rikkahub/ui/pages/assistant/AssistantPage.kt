@@ -417,9 +417,16 @@ private fun AssistantCreationSheet(
                     }
 
                     AssistantImporter(
-                        onUpdate = {
-                            update(it)
-                            state.confirm()
+                        onUpdate = { importedAssistant, lorebooks ->
+                            if (lorebooks.isEmpty()) {
+                                // 无附加绑定：走 EditState 原路径
+                                update(importedAssistant)
+                                state.confirm()
+                            } else {
+                                // 有附加世界书：一次性原子写入 lorebooks + assistant，然后关闭弹窗
+                                vm.addAssistantWithLorebooks(importedAssistant, lorebooks)
+                                state.dismiss()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )

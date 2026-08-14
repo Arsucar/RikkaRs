@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.MemoryTableRepository
@@ -48,6 +49,30 @@ class AssistantVM(
             settingsStore.update(
                 settings.copy(
                     assistants = settings.assistants.plus(assistant.copy(isArchived = false))
+                )
+            )
+        }
+    }
+
+    /**
+     * 添加助手并同时写入关联的世界书（issue #302）。
+     *
+     * 一次性原子写入 lorebooks + assistant，避免分步写入产生的中间状态。
+     * assistant.lorebookIds 自动关联到新建的 lorebook ids。
+     */
+    fun addAssistantWithLorebooks(assistant: Assistant, lorebooks: List<Lorebook>) {
+        viewModelScope.launch {
+            val settings = settings.value
+            val lorebookIds = lorebooks.map { it.id }.toSet()
+            settingsStore.update(
+                settings.copy(
+                    assistants = settings.assistants.plus(
+                        assistant.copy(
+                            isArchived = false,
+                            lorebookIds = lorebookIds,
+                        )
+                    ),
+                    lorebooks = settings.lorebooks.plus(lorebooks)
                 )
             )
         }

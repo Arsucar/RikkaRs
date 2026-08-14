@@ -374,6 +374,100 @@ private data class SillyTavernEntry(
 )
 
 /**
+ * 角色卡 V2/V3 `data.character_book` 内嵌世界书（见 issue #302）。
+ *
+ * 字段命名遵循角色卡规范（malfoyslastname/character-card-spec-v2），与独立世界书
+ * [SillyTavernLorebook] 的字段名不同（`keys` vs `key`、`enabled` vs `disable`、
+ * `insertion_order` vs `order`、`position` 是 string vs int），故单独定义。
+ *
+ * 不支持的 spec 字段（`selective` / `secondary_keys` / `recursive_scanning` /
+ * `scan_depth` / `token_budget`）忽略但不破坏——依赖 DefaultJson.ignoreUnknownKeys。
+ */
+@Serializable
+private data class CharacterBook(
+    val name: String? = null,
+    val description: String? = null,
+    val entries: List<CharacterBookEntry> = emptyList(),
+)
+
+@Serializable
+private data class CharacterBookEntry(
+    val keys: List<String> = emptyList(),
+    val content: String = "",
+    val extensions: Map<String, JsonElement> = emptyMap(),
+    val enabled: Boolean = true,
+    val insertionOrder: Int = 100,
+    val caseSensitive: Boolean? = null,
+    val name: String? = null,
+    val priority: Int? = null,
+    val id: Int? = null,
+    val comment: String? = null,
+    val selective: Boolean? = null,
+    val secondaryKeys: List<String>? = null,
+    val constant: Boolean = false,
+    val position: String? = null,
+)
+
+/**
+ * 解析角色卡 V2/V3 `data.character_book` 内嵌世界书为 [Lorebook]（见 issue #302）。
+ *
+ * Context-free 纯函数，便于 JVM 单测。`characterBookJson` 为 null、解码失败或 entries 为空时返回 null。
+ * position 字符串映射沿用 [LorebookSerializer.mapSillyTavernPosition] 的语义但独立实现
+ *（角色卡用 `'before_char'`/`'after_char'`，独立世界书用 int 0-4）。
+ */
+internal fun tryImportCharacterBook(
+    characterBookJson: JsonElement?,
+    fallbackName: String,
+): Lorebook? {
+    if (characterBookJson == null) return null
+    val characterBook = runCatching {
+        ExportSerializer.DefaultJson.decodeFromJsonElement(CharacterBook.serializer(), characterBookJson)
+    }.getOrNull() ?: return null
+    if (characterBook.entries.isEmpty()) return null
+    val entries = characterBook.entries.map { entry ->
+        PromptInjection.RegexInjection(
+            id = Uuid.random(),
+            name = entry.comment?.takeIf { it.isNotBlank() }
+                ?: entry.name?.takeIf { it.isNotBlank() }
+                ?: entry.keys.firstOrNull().orEmpty(),
+            enabled = entry.enabled,
+            priority = entry.insertionOrder,
+            position = mapCharacterBookPosition(entry.position),
+            injectDepth = 4,
+            content = entry.content,
+            keywords = entry.keys,
+            useRegex = false,
+            caseSensitive = entry.caseSensitive ?: false,
+            scanDepth = 4,
+            constantActive = entry.constant,
+        )
+    }
+    return Lorebook(
+        id = Uuid.random(),
+        name = characterBook.name?.takeIf { it.isNotBlank() }
+            ?: fallbackName,
+        description = characterBook.description.orEmpty(),
+        enabled = true,
+        entries = entries,
+    )
+}
+
+/**
+ * 角色卡 character_book entry 的 position 字符串映射。
+ *
+ * 角色卡规范定义 `position: 'before_char' | 'after_char'`：
+ * - `before_char` → 角色定义之前 → BEFORE_SYSTEM_PROMPT
+ * - `after_char` → 角色定义之后 → AFTER_SYSTEM_PROMPT
+ * - 缺失/未知 → AFTER_SYSTEM_PROMPT（最常用默认）
+ */
+private fun mapCharacterBookPosition(position: String?): InjectionPosition =
+    when (position) {
+        "before_char" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        "after_char" -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+    }
+
+/**
  * SillyTavern「提示词预设」（Chat Completion Preset）顶层结构。
  *
  * 只声明本次需要的字段：`prompts` 提供条目内容，`promptOrder` 提供顺序与启用状态，
