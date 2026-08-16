@@ -311,7 +311,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         }.getOrNull()
     }
 
-    private fun tryImportSillyTavern(json: String, fileName: String?): Lorebook? {
+    internal fun tryImportSillyTavern(json: String, fileName: String?): Lorebook? {
         return runCatching {
             val stLorebook = ExportSerializer.DefaultJson.decodeFromString(
                 SillyTavernLorebook.serializer(),
@@ -342,7 +342,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         }.getOrNull()
     }
 
-    private fun mapSillyTavernPosition(position: Int): InjectionPosition {
+    internal fun mapSillyTavernPosition(position: Int): InjectionPosition {
         return when (position) {
             0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
             1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
@@ -355,12 +355,12 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
 }
 
 @Serializable
-private data class SillyTavernLorebook(
+internal data class SillyTavernLorebook(
     val entries: Map<String, SillyTavernEntry> = emptyMap(),
 )
 
 @Serializable
-private data class SillyTavernEntry(
+internal data class SillyTavernEntry(
     val key: List<String> = emptyList(),
     val content: String = "",
     val comment: String? = null,

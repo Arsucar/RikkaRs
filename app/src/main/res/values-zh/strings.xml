@@ -217,6 +217,10 @@
   <string name="assistant_importer_read_json_failed">读取JSON失败</string>
   <string name="assistant_importer_unsupported_file_type">不支持的文件类型: %s</string>
   <string name="assistant_importer_unsupported_spec">不支持的规格: %s</string>
+  <string name="assistant_importer_detected_bindings">检测到附加内容</string>
+  <string name="assistant_importer_world_book_count">世界书：%1$d 条</string>
+  <string name="assistant_importer_import_all">导入</string>
+  <string name="assistant_importer_skip_bindings">跳过</string>
   <string name="assistant_page_actions">操作</string>
   <string name="assistant_page_add">添加</string>
   <string name="assistant_page_add_body">添加 Body</string>

@@ -36,8 +36,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.export.LorebookSerializer
+import me.rerere.rikkahub.data.export.ExportSerializer
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
@@ -48,7 +52,7 @@ import com.dokar.sonner.ToasterState
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
-    onUpdate: (Assistant) -> Unit,
+    onUpdate: (Assistant, List<Lorebook>) -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -61,13 +65,14 @@ fun AssistantImporter(
 
 @Composable
 private fun SillyTavernImporter(
-    onImport: (Assistant) -> Unit
+    onImport: (Assistant, List<Lorebook>) -> Unit
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var isLoading by remember { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<PendingImport?>(null) }
 
     val jsonPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -83,6 +88,7 @@ private fun SillyTavernImporter(
                             onImport = onImport,
                             toaster = toaster,
                             filesManager = filesManager,
+                            onPendingImport = { pendingImport = it }
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -109,6 +115,7 @@ private fun SillyTavernImporter(
                             onImport = onImport,
                             toaster = toaster,
                             filesManager = filesManager,
+                            onPendingImport = { pendingImport = it }
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -144,7 +151,40 @@ private fun SillyTavernImporter(
             Text(text = if (isLoading) stringResource(R.string.assistant_importer_importing) else stringResource(R.string.assistant_importer_import_tavern_json))
         }
     }
+
+    pendingImport?.let { pending ->
+        RikkaConfirmDialog(
+            show = true,
+            title = stringResource(R.string.assistant_importer_detected_bindings),
+            confirmText = stringResource(R.string.assistant_importer_import_all),
+            dismissText = stringResource(R.string.assistant_importer_skip_bindings),
+            onConfirm = {
+                onImport(pending.assistant, pending.lorebooks)
+                pendingImport = null
+            },
+            onDismiss = {
+                onImport(pending.assistant, emptyList())
+                pendingImport = null
+            },
+        ) {
+            Column {
+                if (pending.lorebooks.isNotEmpty()) {
+                    Text(
+                        stringResource(
+                            R.string.assistant_importer_world_book_count,
+                            pending.lorebooks.sumOf { it.entries.size }
+                        )
+                    )
+                }
+            }
+        }
+    }
 }
+
+private data class PendingImport(
+    val assistant: Assistant,
+    val lorebooks: List<Lorebook>,
+)
 
 // region Parsing Strategy
 
@@ -246,14 +286,32 @@ private fun parseAssistantFromJson(
     return parser.parse(context = context, json = json, background = background)
 }
 
+private fun detectWorldBook(json: JsonObject): List<Lorebook> {
+    val data = json["data"]?.jsonObject ?: return emptyList()
+    val extensions = data["extensions"]?.jsonObject
+
+    val characterBookJson = data["character_book"]?.jsonObject
+        ?: extensions?.get("world")?.jsonObject
+        ?: extensions?.get("character_book")?.jsonObject
+        ?: return emptyList()
+
+    val characterBookString = characterBookJson.toString()
+    val lorebook = LorebookSerializer.tryImportSillyTavern(
+        characterBookString,
+        null
+    )
+    return listOfNotNull(lorebook)
+}
+
 // endregion
 
 private suspend fun importAssistantFromUri(
     context: Context,
     uri: Uri,
-    onImport: (Assistant) -> Unit,
+    onImport: (Assistant, List<Lorebook>) -> Unit,
     toaster: ToasterState,
     filesManager: FilesManager,
+    onPendingImport: (PendingImport) -> Unit,
 ) {
     try {
         val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
@@ -280,7 +338,12 @@ private suspend fun importAssistantFromUri(
         }
         val json = Json.parseToJsonElement(jsonString).jsonObject
         val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
-        onImport(assistant)
+        val lorebooks = detectWorldBook(json)
+        if (lorebooks.isEmpty()) {
+            onImport(assistant, emptyList())
+        } else {
+            onPendingImport(PendingImport(assistant, lorebooks))
+        }
     } catch (exception: Exception) {
         exception.printStackTrace()
         toaster.show(

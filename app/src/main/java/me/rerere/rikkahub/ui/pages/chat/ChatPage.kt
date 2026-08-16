@@ -199,6 +199,18 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
+    // #301: 左右抽屉互斥。任一抽屉开始打开时关掉另一个，避免遮罩间隙把两侧同时展开。
+    LaunchedEffect(drawerState.targetValue) {
+        if (drawerState.targetValue == DrawerValue.Open && rightDrawerState.isActive) {
+            rightDrawerState.close()
+        }
+    }
+    LaunchedEffect(rightDrawerState.targetValue) {
+        if (rightDrawerState.targetValue == DrawerValue.Open && drawerState.isActive) {
+            drawerState.close()
+        }
+    }
+
     val windowAdaptiveInfo = currentWindowDpSize()
     val isBigScreen =
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
@@ -289,7 +301,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                                 totalX = totalX,
                                 totalY = totalY,
                                 touchSlop = slop,
-                                drawersClosed = !rightDrawerState.isOpen && !drawerState.isOpen,
+                                drawersClosed = !rightDrawerState.isActive && !drawerState.isActive,
                                 gestureExcluded = horizontalGestureExclusionState.isExcluded(down.id.value),
                             )
                         }
@@ -513,6 +525,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     else -> {
                         ModalNavigationDrawer(
                             drawerState = drawerState,
+                            // #301: 右抽屉打开或动画中时禁用左缘拖拽，避免遮罩间隙同时展开两侧
+                            gesturesEnabled = !rightDrawerState.isActive,
                             drawerContent = {
                                 ChatDrawerContent(
                                     navController = navController,
@@ -559,6 +573,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
     }
 }
+
+private val DrawerState.isActive: Boolean
+    get() = currentValue == DrawerValue.Open || targetValue == DrawerValue.Open
 
 @Composable
 private fun ChatPageContent(

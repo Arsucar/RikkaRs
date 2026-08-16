@@ -161,6 +161,11 @@ private fun AssistantPromptContent(
                 val systemPromptValue = rememberTextFieldState(
                     initialText = assistant.systemPrompt,
                 )
+                if (systemPromptValue.text.isEmpty() && assistant.systemPrompt.isNotEmpty()) {
+                    LaunchedEffect(Unit) {
+                        systemPromptValue.edit { replace(0, length, assistant.systemPrompt) }
+                    }
+                }
                 LaunchedEffect(Unit) {
                     snapshotFlow { systemPromptValue.text }.collect {
                         onUpdate(
