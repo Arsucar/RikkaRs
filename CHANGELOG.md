@@ -20,6 +20,21 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.53
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.52 之后）
+
+- **修复助手提示词页空白（#304）** — `#298` 的 `WhileSubscribed(5000)` 冷启动导致 `AssistantPromptPage` 的 `rememberTextFieldState` 捕获空默认值后不同步；添加与 `AssistantSubagentProfilePage` 一致的 inbound sync guard。
+  **Fix assistant prompt page blank render (#304)** — `WhileSubscribed(5000)` cold start from #298 caused `rememberTextFieldState` to capture the empty default and never sync; added inbound sync guard matching `AssistantSubagentProfilePage`.
+
+- **修复对话页左右抽屉同时展开（#301）** — 任一抽屉打开时互斥关闭另一个；左抽屉 `gesturesEnabled` 在右抽屉激活时禁用；外层手势门控改用 `isActive` 覆盖动画窗口。
+  **Fix chat page left/right drawer simultaneous expansion (#301)** — Mutual exclusion via `LaunchedEffect` on `targetValue`; left drawer `gesturesEnabled` disabled when right drawer is active; outer gesture layer uses `isActive` to cover animation window.
+
+- **新增酒馆角色卡世界书导入（#302）** — 导入 v2/v3 角色卡时自动检测 `data.character_book` / `data.extensions.world`，检测到附加内容时弹窗确认，用户可选择导入或跳过；导入后世界书关联到新助手。
+  **Add tavern card world book import (#302)** — Detect `data.character_book` / `data.extensions.world` from v2/v3 cards; show confirmation dialog with entry count when bindings detected; imported lorebooks are associated to the new assistant via `lorebookIds`.
+
+---
+
 ## v2.3.52
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.51 之后）
