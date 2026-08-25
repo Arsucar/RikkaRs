@@ -26,6 +26,40 @@ class SkillPathsTest {
     }
 
     @Test
+    fun `parse supports YAML syntax`() {
+        val content = """
+            ---
+            name: test-skill
+            description: |
+              A multiline description
+              with a colon: supported
+            metadata:
+              author: tester
+            ---
+            body
+        """.trimIndent()
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertEquals("test-skill", frontmatter["name"])
+        assertEquals(
+            "A multiline description\nwith a colon: supported\n",
+            frontmatter["description"],
+        )
+        assertEquals("body", SkillFrontmatterParser.extractBody(content))
+    }
+
+    @Test
+    fun `parse returns empty frontmatter for malformed YAML`() {
+        val content = "---\nname: [invalid\n---\nbody"
+
+        val frontmatter = SkillFrontmatterParser.parse(content)
+
+        assertNull(frontmatter["name"])
+        assertEquals("body", SkillFrontmatterParser.extractBody(content))
+    }
+
+    @Test
     fun `parse preserves literal block scalar newlines and colons`() {
         val content = """
             ---

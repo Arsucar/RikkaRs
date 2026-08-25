@@ -9,12 +9,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MultiChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,8 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.BackupOperation
 import me.rerere.rikkahub.data.sync.BackupTaskState
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -44,6 +51,8 @@ fun ImportExportTab(
     val importState = taskStates.getValue(BackupOperation.LOCAL_IMPORT)
     val isExporting = exportState is BackupTaskState.Running
     val isImportBusy = importState is BackupTaskState.Running
+    val selectedBackupItems by vm.localBackupItems.collectAsStateWithLifecycle()
+    var showImportConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(importState) {
         if (importState == BackupTaskState.Success &&
@@ -91,6 +100,39 @@ fun ImportExportTab(
         item {
             CardGroup {
                 item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_backup_items)) },
+                    supportingContent = {
+                        MultiChoiceSegmentedButtonRow(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            WebDavConfig.BackupItem.entries.forEachIndexed { index, item ->
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = WebDavConfig.BackupItem.entries.size
+                                    ),
+                                    onCheckedChange = { checked ->
+                                        val newItems = if (checked) {
+                                            selectedBackupItems + item
+                                        } else {
+                                            selectedBackupItems - item
+                                        }
+                                        vm.updateLocalBackupItems(newItems)
+                                    },
+                                    checked = item in selectedBackupItems
+                                ) {
+                                    Text(
+                                        when (item) {
+                                            WebDavConfig.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
+                                            WebDavConfig.BackupItem.FILES -> stringResource(R.string.backup_page_files)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    },
+                )
+                item(
                     onClick = if (!isExporting) {
                         {
                             val timestamp = LocalDateTime.now()
@@ -131,8 +173,7 @@ fun ImportExportTab(
                 item(
                     onClick = if (!isImportBusy) {
                         {
-                            importType = "local"
-                            openDocumentLauncher.launch(arrayOf("application/zip"))
+                            showImportConfirmDialog = true
                         }
                     } else null,
                     headlineContent = { Text(stringResource(R.string.backup_page_local_backup_import)) },
@@ -262,6 +303,30 @@ fun ImportExportTab(
                 )
             }
         }
+    }
+
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirmDialog = false },
+            title = { Text(stringResource(R.string.backup_page_local_backup_import)) },
+            text = { Text(stringResource(R.string.backup_page_import_overwrite_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportConfirmDialog = false
+                        importType = "local"
+                        openDocumentLauncher.launch(arrayOf("application/zip"))
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

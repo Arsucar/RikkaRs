@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.pages.log
 
+import android.content.ClipData
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.ClipEntry
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
@@ -65,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -573,6 +576,8 @@ private fun RequestLogDetail(
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
     val display = remember(log.id) { log.redacted() as LogEntry.RequestLog }
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
 
     SelectionContainer {
         LazyColumn(
@@ -639,12 +644,31 @@ private fun RequestLogDetail(
             display.requestBody?.let { body ->
                 item {
                     HorizontalDivider()
-                    Text(
-                        text = "Request Body",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Request Body",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText("Request Body", body))
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Copy01,
+                                contentDescription = stringResource(R.string.copy)
+                            )
+                        }
+                    }
                     val jsonElement = remember(body) {
                         runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
                     }

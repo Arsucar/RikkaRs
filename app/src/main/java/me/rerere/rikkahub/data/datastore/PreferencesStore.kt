@@ -157,6 +157,7 @@ class SettingsStore(
         val THEME_ID = stringPreferencesKey("theme_id")
         val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
+        val NETWORK_SETTING = stringPreferencesKey("network_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val REQUEST_LOGGING_ENABLED = booleanPreferencesKey("request_logging_enabled")
         // Legacy global web-search key (migration input only; removed by PreferenceStoreV4Migration)
@@ -345,6 +346,7 @@ class SettingsStore(
                 requestLoggingEnabled = preferences[REQUEST_LOGGING_ENABLED] == true,
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
+                networkSetting = JsonInstant.decodeFromString(preferences[NETWORK_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
@@ -1297,6 +1299,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.DEVELOPER_MODE] = settings.developerMode
     this[SettingsStore.REQUEST_LOGGING_ENABLED] = settings.requestLoggingEnabled
     this[SettingsStore.DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+    this[SettingsStore.NETWORK_SETTING] = JsonInstant.encodeToString(settings.networkSetting)
 
     this[SettingsStore.FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
     this[SettingsStore.RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
@@ -1644,6 +1647,7 @@ data class Settings(
     val developerMode: Boolean = false,
     val requestLoggingEnabled: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
+    val networkSetting: NetworkSetting = NetworkSetting(),
     val favoriteModels: List<Uuid> = emptyList(),
     val recentChatModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
@@ -1855,6 +1859,14 @@ enum class ImageGalleryDisplayMode {
 }
 
 @Serializable
+data class NetworkSetting(
+    val userAgent: String = "",
+    val proxyUrl: String = "",
+    val proxyUsername: String = "",
+    val proxyPassword: String = "",
+)
+
+@Serializable
 enum class ChatFontFamily {
     @SerialName("default")
     DEFAULT,
@@ -1919,7 +1931,7 @@ data class DisplaySetting(
     val showTokenUsage: Boolean = true,
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
-    val showUpdates: Boolean = true,
+    val updateCheckDisabledUntilEpochMillis: Long = 0L,
     val showMessageJumper: Boolean = true,
     val messageJumperOnLeft: Boolean = false,
     val fontSizeRatio: Float = 1.0f,

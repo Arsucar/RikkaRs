@@ -6,95 +6,75 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import kotlin.time.Clock
+import kotlin.time.Instant
 
-private val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
-private val CLOSING_TAG_REGEX = Regex("</think>")
-
-internal fun splitThinkTaggedText(text: String, createdAt: kotlinx.datetime.Instant, finishedAtOnClose: kotlinx.datetime.Instant?): List<UIMessagePart> {
-    if (!THINKING_REGEX.containsMatchIn(text)) {
-        return listOf(UIMessagePart.Text(text))
-    }
-    val parts = mutableListOf<UIMessagePart>()
-    var lastEnd = 0
-    for (match in THINKING_REGEX.findAll(text)) {
-        val range = match.range
-        if (range.first > lastEnd) {
-            val segment = text.substring(lastEnd, range.first)
-            if (segment.isNotEmpty()) {
-                parts.add(UIMessagePart.Text(segment))
-            }
-        }
-        val reasoning = match.groupValues.getOrNull(1)?.trim().orEmpty()
-        if (reasoning.isNotEmpty()) {
-            val hasClosing = CLOSING_TAG_REGEX.containsMatchIn(text.substring(range))
-            parts.add(
-                UIMessagePart.Reasoning(
-                    reasoning = reasoning,
-                    createdAt = createdAt,
-                    finishedAt = if (hasClosing) finishedAtOnClose else null,
-                ),
-            )
-        }
-        lastEnd = range.last + 1
-    }
-    if (lastEnd < text.length) {
-        val tail = text.substring(lastEnd)
-        if (tail.isNotEmpty()) {
-            parts.add(UIMessagePart.Text(tail))
-        }
-    }
-    return parts.ifEmpty { listOf(UIMessagePart.Text(text)) }
-}
+private val THINKING_REGEX = Regex("\\A\\s*<think>([\\s\\S]*?)(</think>|$)")
 
 object ThinkTagTransformer : OutputMessageTransformer {
     override suspend fun visualTransform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        return messages.map { message ->
-            if (message.role == MessageRole.ASSISTANT && message.hasPart<UIMessagePart.Text>()) {
-                message.copy(
-                    parts = message.parts.flatMap { part ->
-                        if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
-                            splitThinkTaggedText(
-                                text = part.text,
-                                createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
-                                finishedAtOnClose = Clock.System.now(),
-                            )
-                        } else {
-                            listOf(part)
-                        }
-                    }
-                )
-            } else {
-                message
-            }
-        }
+        return messages.transformThinkTags(
+            now = Clock.System.now(),
+            generationFinished = false,
+        )
     }
 
     override suspend fun onGenerationFinish(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val now = Clock.System.now()
-        return messages.map { message ->
-            if (message.role == MessageRole.ASSISTANT && message.hasPart<UIMessagePart.Text>()) {
-                message.copy(
-                    parts = message.parts.flatMap { part ->
-                        if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
-                            splitThinkTaggedText(
-                                text = part.text,
-                                createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
-                                finishedAtOnClose = now,
-                            )
-                        } else {
-                            listOf(part)
-                        }
+        return messages.transformThinkTags(
+            now = Clock.System.now(),
+            generationFinished = true,
+        )
+    }
+}
+
+internal fun List<UIMessage>.transformThinkTags(
+    now: Instant,
+    generationFinished: Boolean,
+): List<UIMessage> = map { message ->
+    if (message.role != MessageRole.ASSISTANT) {
+        return@map message
+    }
+    if (message.hasPart<UIMessagePart.Reasoning>()) {
+        return@map if (generationFinished) {
+            message.copy(
+                parts = message.parts.map { part ->
+                    if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
+                        part.copy(finishedAt = now)
+                    } else {
+                        part
                     }
-                )
-            } else {
-                message
-            }
+                }
+            )
+        } else {
+            message
         }
     }
+
+    val textPartIndex = message.parts.indexOfFirst { part ->
+        part is UIMessagePart.Text && part.text.isNotBlank()
+    }
+    val textPart = message.parts.getOrNull(textPartIndex) as? UIMessagePart.Text
+        ?: return@map message
+    val match = THINKING_REGEX.find(textPart.text) ?: return@map message
+    val hasClosingTag = match.groups[2]?.value == "</think>"
+    val reasoning = UIMessagePart.Reasoning(
+        reasoning = match.groupValues[1].trim(),
+        createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
+        finishedAt = if (generationFinished || hasClosingTag) now else null,
+    )
+    val strippedText = textPart.copy(text = textPart.text.removeRange(match.range))
+
+    message.copy(
+        parts = buildList {
+            addAll(message.parts.subList(0, textPartIndex))
+            add(reasoning)
+            add(strippedText)
+            addAll(message.parts.subList(textPartIndex + 1, message.parts.size))
+        }
+    )
 }

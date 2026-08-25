@@ -1,0 +1,17 @@
+{"file": "docs/RIKKA_ARSUCAR_FORK_AND_CI.md", "reason": "Fork identity, no-Firebase, release-apk-only, version line, CompressContextDialog ours — merge post-gate authority"}
+{"file": ".trellis/spec/app/index.md", "reason": "App-layer checklist for chat/backup/workspace/network paths touched by upstream"}
+{"file": ".trellis/spec/app/android-backup-rules.md", "reason": "Upstream backup import/overwrite UI must not break allow-list or fork atomic restore"}
+{"file": ".trellis/spec/app/workspace-tool-capabilities.md", "reason": "Workspace terminal multi-tab/background must preserve tool path and LINUX contracts"}
+{"file": ".trellis/spec/app/workspace-media-preview.md", "reason": "Workspace preview/SAF contracts if terminal/workspace files conflict"}
+{"file": ".trellis/spec/app/skill-runtime.md", "reason": "Upstream SnakeYAML skill parser must keep private-skill and mount contracts"}
+{"file": ".trellis/spec/app/chat-generation-keepalive.md", "reason": "ChatService bilateral merge must keep FGS/keepalive"}
+{"file": ".trellis/spec/app/dependency-injection.md", "reason": "OkHttpClient/Clash/ProxySelector wiring stays in Koin module, not ad-hoc"}
+{"file": ".trellis/spec/workspace/index.md", "reason": "Workspace package boundary for terminal/shell when merging upstream workspace commits"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Merge spans ai stream API, app GenerationHandler, OkHttp, backup"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "ChatService/ChatVM/BackupVM/IME concurrency after bilateral edits"}
+{"file": ".trellis/spec/guides/ui-modification-thinking-guide.md", "reason": "Network page, backup import confirm, ChatInput IME, terminal tabs UI matrix"}
+{"file": ".trellis/spec/guides/repository-hygiene.md", "reason": "Avoid staging merge debris after large merge"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/prd.md", "reason": "Requirements D1–D10 and AC1–AC10"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/design.md", "reason": "Conflict hot zones and synthesis rules"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/implement.md", "reason": "Ordered merge, gate, validate, rollback checklist"}
+{"file": ".trellis/tasks/07-31-issue-197-upstream-merge/design.md", "reason": "Prior merge hot-zone precedent (#59, LICENSE, Firebase, version)"}

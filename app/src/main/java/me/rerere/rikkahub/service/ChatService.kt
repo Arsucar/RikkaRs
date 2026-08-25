@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -43,7 +44,7 @@ import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
-import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.ai.ui.StreamChunkHandler
 
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
@@ -149,6 +150,7 @@ import me.rerere.rikkahub.data.model.WORKSPACE_TOOL_NAMES
 import me.rerere.rikkahub.data.model.isValidMcpServerRuntimeName
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
@@ -266,7 +268,7 @@ internal fun List<UIMessage>.hasResumablePendingTool(): Boolean =
 
 internal fun backgroundTextGenerationParams(
     model: Model,
-    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
+    reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
 ): TextGenerationParams = TextGenerationParams(
     model = model,
     reasoningLevel = reasoningLevel,
@@ -359,6 +361,25 @@ internal fun Conversation.cleanStaleSubagentStreaming(json: Json): Conversation 
     }
     return this.updateCurrentMessages(updatedMessages)
 }
+
+internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
+    return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
+}
+
+internal fun createForkConversation(
+    source: Conversation,
+    messageNodes: List<MessageNode>,
+): Conversation = Conversation(
+    id = Uuid.random(),
+    assistantId = source.assistantId,
+    chatModelId = source.chatModelId,
+    messageNodes = messageNodes,
+    customSystemPrompt = source.customSystemPrompt,
+    lorebookIds = source.lorebookIds,
+    workspaceCwd = source.workspaceCwd,
+    folderId = source.folderId,
+    variables = source.variables,
+)
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -863,6 +884,7 @@ class ChatService(
         } else {
             model.displayName
         }
+        val useExternalWebSearch = shouldUseExternalWebSearch(assistant, model)
 
         // #219: ref-counted FGS keep-alive for the duration of this generation attempt.
         // Pair every start with end on ALL paths (success / failure before stream / cancel via onCompletion).
@@ -893,7 +915,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
+                if (useExternalWebSearch || mcpManager.getAllAvailableTools(assistant).isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -980,6 +1002,7 @@ class ChatService(
                 processingStatus = session.processingStatus,
                 messages = prepared.messages,
                 assistant = prepared.assistant,
+                conversationId = conversationId,
                 conversationSystemPrompt = prepared.conversation.customSystemPrompt,
                 conversationLorebookIds = prepared.conversation.lorebookIds,
                 workspaceCwd = prepared.workspaceCwd,
@@ -1966,7 +1989,7 @@ class ChatService(
         mode: GenerationPreparationMode,
     ): List<Tool> = buildList {
         val delegateOnly = assistant.enableSubagents && assistant.subagentDelegateOnly
-        if (assistant.enableWebSearch) addAll(createSearchTools(settings))
+        if (shouldUseExternalWebSearch(assistant, model)) addAll(createSearchTools(settings))
         addAll(
             localTools.getTools(
                 if (delegateOnly) assistant.localTools.filter { it in DELEGATE_ALLOWED_LOCAL_TOOLS }
@@ -2278,18 +2301,19 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         force: Boolean = false
-    ) {
+    ) = withContext(Dispatchers.IO) {
         val shouldGenerate = when {
             force -> true
             conversation.title.isBlank() -> true
             else -> false
         }
-        if (!shouldGenerate) return
+        if (!shouldGenerate) return@withContext
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId) ?: return
-            val provider = model.findProvider(settings.providers) ?: return
+            val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId)
+                ?: return@runCatching
+            val provider = model.findProvider(settings.providers) ?: return@runCatching
 
             val providerHandler = providerManager.getProviderByType(provider)
             val messages = listOf(
@@ -2311,7 +2335,7 @@ class ChatService(
             }
 
             // Patch title on live session only — never reload full DB object (clobbers concurrent stream edits).
-            val newTitle = result.choices[0].message?.toText()?.trim() ?: ""
+            val newTitle = result.message.toText().trim()
             updateConversationState(conversationId) { prev -> prev.copy(title = newTitle) }
             saveConversation(conversationId, getConversationFlow(conversationId).value)
         }.onFailure {
@@ -2327,12 +2351,16 @@ class ChatService(
 
     // ---- 生成建议 ----
 
-    suspend fun generateSuggestion(conversationId: Uuid, conversation: Conversation) {
+    suspend fun generateSuggestion(
+        conversationId: Uuid,
+        conversation: Conversation,
+    ) = withContext(Dispatchers.IO) {
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            if (!settings.enableSuggestion) return
-            val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId) ?: return
-            val provider = model.findProvider(settings.providers) ?: return
+            if (!settings.enableSuggestion) return@runCatching
+            val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId)
+                ?: return@runCatching
+            val provider = model.findProvider(settings.providers) ?: return@runCatching
 
             updateConversationState(conversationId) { prev -> prev.copy(chatSuggestions = emptyList()) }
 
@@ -2360,10 +2388,9 @@ class ChatService(
                 )
             }
             val suggestions =
-                result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
-                    ?.filter { it.isNotBlank() }
-                    ?.take(10)
-                    ?: emptyList()
+                result.message.toText().split("\n").map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .take(10)
 
             // Patch suggestions on live session only — never reload full DB object.
             updateConversationState(conversationId) { prev ->
@@ -2410,6 +2437,7 @@ class ChatService(
         var messages = listOf(UIMessage.user(prompt))
         var draft = ""
         val params = backgroundTextGenerationParams(model)
+        val streamChunkHandler = StreamChunkHandler(model)
         ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
         recordProviderCall(provider, model) {
             providerHandler.streamText(
@@ -2417,7 +2445,7 @@ class ChatService(
                 messages = messages,
                 params = params,
             ).collect { chunk ->
-                messages = messages.handleMessageChunk(chunk, model)
+                messages = streamChunkHandler.handle(messages, chunk)
                 draft = messages.lastOrNull()?.toText()?.trimStart().orEmpty()
                 onStreamUpdate(draft)
             }
@@ -2514,7 +2542,7 @@ class ChatService(
                     params = params,
                 )
             }
-            return result.choices[0].message?.toText()?.trim()
+            return result.message.toText().trim().takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("Failed to generate compressed summary")
         }
 
@@ -3096,15 +3124,7 @@ class ChatService(
                 )
             }
 
-        val forkConversation = Conversation(
-            id = Uuid.random(),
-            assistantId = currentConversation.assistantId,
-            chatModelId = currentConversation.chatModelId,
-            messageNodes = copiedNodes,
-            customSystemPrompt = currentConversation.customSystemPrompt,
-            lorebookIds = currentConversation.lorebookIds,
-            variables = currentConversation.variables,
-        )
+        val forkConversation = createForkConversation(currentConversation, copiedNodes)
 
         conversationRepo.insertForkConversation(
             sourceConversationId = conversationId,

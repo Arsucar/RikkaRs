@@ -1,0 +1,12 @@
+{"file": "docs/RIKKA_ARSUCAR_FORK_AND_CI.md", "reason": "Verify applicationId, no Firebase, release-apk.yml, version not rolled back, #59 dialog"}
+{"file": ".trellis/spec/app/android-backup-rules.md", "reason": "Backup import/overwrite did not break allow-list or restore"}
+{"file": ".trellis/spec/app/workspace-tool-capabilities.md", "reason": "Terminal multi-tab still matches workspace tool contracts"}
+{"file": ".trellis/spec/app/skill-runtime.md", "reason": "SnakeYAML skill loading still respects private-skill visibility"}
+{"file": ".trellis/spec/app/chat-generation-keepalive.md", "reason": "Keepalive/FGS still present after ChatService merge"}
+{"file": ".trellis/spec/app/dependency-injection.md", "reason": "OkHttpClient still constructed in Koin with Clash + proxy"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Catch half-merged stream API between ai and GenerationHandler"}
+{"file": ".trellis/spec/guides/kotlin-concurrency-and-compose.md", "reason": "Chat/Backup/IME concurrency regressions"}
+{"file": ".trellis/spec/guides/ui-modification-thinking-guide.md", "reason": "Network/backup/ChatInput/terminal UI smoke matrix"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/prd.md", "reason": "AC1–AC10 acceptance mapping"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/design.md", "reason": "Hot-zone synthesis rules were followed"}
+{"file": ".trellis/tasks/08-25-issue-upstream-2-4-12-merge/implement.md", "reason": "Post-merge gate and validate commands completed"}

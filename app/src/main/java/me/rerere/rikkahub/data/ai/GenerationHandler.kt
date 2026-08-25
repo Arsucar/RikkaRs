@@ -27,7 +27,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -38,7 +37,8 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
-import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.ai.ui.StreamChunkHandler
+import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -153,6 +153,7 @@ class GenerationHandler(
         stepsCountdownLabel: String = "Steps",
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
+        conversationId: Uuid? = null,
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
         workspaceToolAvailable: Boolean = false,
@@ -245,6 +246,7 @@ class GenerationHandler(
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
                     conversationSystemPrompt = conversationSystemPrompt,
+                    conversationId = conversationId,
                     conversationLorebookIds = conversationLorebookIds,
                     workspaceCwd = workspaceCwd,
                     workspaceToolAvailable = workspaceToolAvailable,
@@ -422,6 +424,7 @@ class GenerationHandler(
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
+        conversationId: Uuid? = null,
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
         workspaceToolAvailable: Boolean = false,
@@ -458,21 +461,9 @@ class GenerationHandler(
             customBody = buildList {
                 addAll(assistant.customBodies)
                 addAll(model.customBodies)
-            }
+            },
+            sessionId = conversationId?.toString(),
         )
-        suspend fun handleStreamChunk(chunk: me.rerere.ai.ui.MessageChunk) {
-            messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        message.copy(usage = message.usage.merge(usage))
-                    } else {
-                        message
-                    }
-                }
-            }
-            onUpdateMessages(messages)
-        }
 
         // Rate-limit wait is outside ApiCallRecorder so latency_ms is pure provider RTT
         // (matches ChatService: await then record only generateText/streamText).
@@ -484,12 +475,16 @@ class GenerationHandler(
         )
         val recorder = apiCallRecorder
         if (stream) {
+            val streamChunkHandler = StreamChunkHandler(model)
             suspend fun runStream() {
                 providerImpl.streamText(
                     providerSetting = provider,
                     messages = prepared.messages,
                     params = exactParams,
-                ).collect { handleStreamChunk(it) }
+                ).collect { chunk ->
+                    messages = streamChunkHandler.handle(messages, chunk)
+                    onUpdateMessages(messages)
+                }
             }
             if (recorder != null) {
                 recorder.record(provider = provider, model = model) { runStream() }
@@ -497,29 +492,18 @@ class GenerationHandler(
                 runStream()
             }
         } else {
-            suspend fun runGenerate(): me.rerere.ai.ui.MessageChunk =
+            suspend fun runGenerate() =
                 providerImpl.generateText(
                     providerSetting = provider,
                     messages = prepared.messages,
                     params = exactParams,
                 )
-            val chunk = if (recorder != null) {
+            val result = if (recorder != null) {
                 recorder.record(provider = provider, model = model) { runGenerate() }
             } else {
                 runGenerate()
             }
-            messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        message.copy(
-                            usage = message.usage.merge(usage)
-                        )
-                    } else {
-                        message
-                    }
-                }
-            }
+            messages = messages.handleTextGenerationResult(result = result, model = model)
             onUpdateMessages(messages)
         }
     }
@@ -771,6 +755,7 @@ class GenerationHandler(
                 model = model,
                 reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
             )
+            val streamChunkHandler = StreamChunkHandler(model)
 
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             providerHandler.streamText(
@@ -778,7 +763,7 @@ class GenerationHandler(
                 messages = messages,
                 params = params,
             ).collect { chunk ->
-                messages = messages.handleMessageChunk(chunk)
+                messages = streamChunkHandler.handle(messages, chunk)
                 translatedText = messages.lastOrNull()?.toText() ?: ""
 
                 if (translatedText.isNotBlank()) {
@@ -807,12 +792,12 @@ class GenerationHandler(
                 )
             )
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-            val chunk = providerHandler.generateText(
+            val result = providerHandler.generateText(
                 providerSetting = provider,
                 messages = messages,
                 params = params,
             )
-            val translatedText = chunk.choices.firstOrNull()?.message?.toText() ?: ""
+            val translatedText = result.message.toText()
 
             if (translatedText.isNotBlank()) {
                 onStreamUpdate?.invoke(translatedText)

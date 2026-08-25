@@ -50,7 +50,7 @@ import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
 import kotlin.math.roundToInt
 
-private val allLevels = ReasoningLevel.entries
+private val allLevels = ReasoningLevel.entries.filter { it != ReasoningLevel.MAX }
 
 private fun levelsForDialect(dialect: ReasoningDialect): List<ReasoningLevel> {
     return if (dialect == ReasoningDialect.OnOffOnly) {
@@ -109,12 +109,11 @@ fun ReasoningPicker(
 ) {
     val levels = remember(dialect) { levelsForDialect(dialect) }
     val levelCount = levels.size
-    val effectiveLevel = if (reasoningLevel in levels) {
-        reasoningLevel
-    } else if (reasoningLevel.isEnabled) {
-        ReasoningLevel.AUTO
-    } else {
-        ReasoningLevel.OFF
+    val effectiveLevel = when {
+        reasoningLevel in levels -> reasoningLevel
+        reasoningLevel == ReasoningLevel.MAX -> ReasoningLevel.XHIGH
+        reasoningLevel.isEnabled -> ReasoningLevel.AUTO
+        else -> ReasoningLevel.OFF
     }
     val currentIndex = levels.indexOf(effectiveLevel).coerceAtLeast(0)
     var sliderValue by remember(dialect) { mutableFloatStateOf(currentIndex.toFloat()) }
@@ -169,8 +168,9 @@ fun ReasoningPicker(
                         ReasoningLevel.AUTO -> HugeIcons.Idea01
                         ReasoningLevel.LOW -> ReasoningLow
                         ReasoningLevel.MEDIUM -> ReasoningMedium
-                        ReasoningLevel.HIGH -> ReasoningHigh
-                        ReasoningLevel.XHIGH -> ReasoningHigh
+                        ReasoningLevel.HIGH,
+                        ReasoningLevel.XHIGH,
+                        ReasoningLevel.MAX -> ReasoningHigh
                     },
                     contentDescription = null,
                     modifier = Modifier.size(32.dp),
@@ -301,7 +301,8 @@ private fun ReasoningIcon(level: ReasoningLevel) {
         ReasoningLevel.LOW -> Icon(ReasoningLow, null)
         ReasoningLevel.MEDIUM -> Icon(ReasoningMedium, null)
         ReasoningLevel.HIGH -> Icon(ReasoningHigh, null)
-        ReasoningLevel.XHIGH -> Icon(ReasoningHigh, null)
+        ReasoningLevel.XHIGH,
+        ReasoningLevel.MAX -> Icon(ReasoningHigh, null)
     }
 }
 
@@ -312,7 +313,8 @@ private fun ReasoningLevel.label(): String = when (this) {
     ReasoningLevel.LOW -> stringResource(R.string.reasoning_light)
     ReasoningLevel.MEDIUM -> stringResource(R.string.reasoning_medium)
     ReasoningLevel.HIGH -> stringResource(R.string.reasoning_heavy)
-    ReasoningLevel.XHIGH -> stringResource(R.string.reasoning_xhigh)
+    ReasoningLevel.XHIGH,
+    ReasoningLevel.MAX -> stringResource(R.string.reasoning_xhigh)
 }
 
 @Composable

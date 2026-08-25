@@ -15,6 +15,7 @@ import me.rerere.rikkahub.service.hooks.ManageConversationTagsHookAction
 import me.rerere.rikkahub.service.hooks.ProviderHookModelExecutor
 import me.rerere.rikkahub.service.hooks.MemoryTableHookSyncCommitter
 import me.rerere.rikkahub.service.hooks.SyncMemoryTableHookAction
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenSession
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -80,7 +81,10 @@ val appModule = module {
     }
 
     single {
-        UpdateChecker(get())
+        UpdateChecker(
+            client = get(),
+            appScope = get(),
+        )
     }
 
     single {
@@ -106,6 +110,10 @@ val appModule = module {
             context = get(),
             settingsStore = get(),
         )
+    }
+
+    single {
+        WorkspaceTerminalSessionManager(get(), get())
     }
 
     // 生成通知与业务解耦：ChatService 只发事件，通知由这里消费；

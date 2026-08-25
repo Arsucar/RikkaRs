@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageBackgroundOption
@@ -11,7 +12,7 @@ import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageModerationOption
 import me.rerere.ai.ui.ImageOutputFormatOption
 import me.rerere.ai.ui.ImageQualityOption
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 
 // 提供商实现
@@ -27,13 +28,13 @@ interface Provider<T : ProviderSetting> {
         providerSetting: T,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk
+    ): TextGenerationResult
 
     suspend fun streamText(
         providerSetting: T,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk>
+    ): Flow<StreamChunk>
 
     suspend fun generateEmbedding(
         providerSetting: T,
@@ -58,6 +59,15 @@ interface Provider<T : ProviderSetting> {
 }
 
 @Serializable
+data class TextGenerationResult(
+    val id: String,
+    val model: String,
+    val message: UIMessage,
+    val finishReason: String? = null,
+    val usage: TokenUsage? = null,
+)
+
+@Serializable
 data class TextGenerationParams(
     val model: Model,
     val temperature: Float? = null,
@@ -67,6 +77,7 @@ data class TextGenerationParams(
     val reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
+    val sessionId: String? = null,
 )
 
 @Serializable

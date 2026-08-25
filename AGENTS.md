@@ -1,10 +1,12 @@
 # Repository Guidelines
 
-本文档面向贡献者，概述本仓库的模块结构、开发流程，便于快速上手并保持一致的协作质量。
+## Project Overview
+
+RikkaHub is a native Android LLM chat client that supports switching between different AI providers
+for conversations.
+Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 ## Build, Test, and Development Commands
-
-使用 Android Studio 或命令行 Gradle：
 
 ```bash
 ./gradlew --no-daemon assembleDebug          # 构建 Debug APK

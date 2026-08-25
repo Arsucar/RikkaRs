@@ -68,6 +68,7 @@ class BackupVM(
 
     val webDavBackupItems = MutableStateFlow<UiState<List<WebDavBackupItem>>>(UiState.Idle)
     val s3BackupItems = MutableStateFlow<UiState<List<S3BackupItem>>>(UiState.Idle)
+    val localBackupItems = MutableStateFlow(WebDavConfig.BackupItem.entries.toList())
 
     init {
         loadBackupFileItems()
@@ -85,6 +86,10 @@ class BackupVM(
         replaceWith = ReplaceWith("updateSettings { it.copy(...) }"),
     )
     fun updateSettings(settings: Settings) = updateSettings { settings }
+
+    fun updateLocalBackupItems(items: List<WebDavConfig.BackupItem>) {
+        localBackupItems.value = items
+    }
 
     fun loadBackupFileItems() {
         viewModelScope.launch {
@@ -162,14 +167,17 @@ class BackupVM(
     }
 
     suspend fun exportToFile(): File {
-        // Prefer user-configured backup items (fork lifecycle); full-entry override is for dedicated paths.
-        val file = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        val file = webDavSync.prepareBackupFile(
+            settings.value.webDavConfig.copy(items = localBackupItems.value)
+        )
         recordBackupTime()
         return file
     }
 
     fun startLocalExport(targetUri: Uri): Boolean = taskCoordinator.start(BackupOperation.LOCAL_EXPORT) {
-        val exportFile = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        val exportFile = webDavSync.prepareBackupFile(
+            settings.value.webDavConfig.copy(items = localBackupItems.value)
+        )
         try {
             updateStage(BackupTaskStage.WRITING)
             withContext(Dispatchers.IO) {
@@ -219,7 +227,7 @@ class BackupVM(
     suspend fun restoreFromLocalFile(file: File) {
         webDavSync.restoreFromLocalFile(
             file,
-            settings.value.webDavConfig.copy(items = WebDavConfig.BackupItem.entries),
+            settings.value.webDavConfig.copy(items = localBackupItems.value),
         )
     }
 

@@ -16,7 +16,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ### 新功能与修复 / Features & Fixes
 
-（暂无）
+- **合并上游 rikkahub 2.4.6–2.4.12+** — 将 `upstream/master` tip `fa0305ba` 合入 `release/rikka-arsucar`：AI 流式事件归一、豆包搜索、网络设置（UA/代理）、备份可选导入与覆盖确认、工作区终端后台多 Tab、空 tool schema / ASR / JWT·R8 等修复；保留 fork 身份（`me.arsucar.rikka`、无 Firebase、`release-apk.yml`）、Clash #209、ChatInput 工具栏常驻、搜索选择器与推理刻度 UI。
+  **Merge upstream rikkahub 2.4.6–2.4.12+** — Merged `upstream/master` tip `fa0305ba` into `release/rikka-arsucar`: stream-event normalization, Doubao search, network settings (UA/proxy), selective backup import with overwrite confirm, workspace terminal background/multi-tab, empty tool-schema / ASR / JWT·R8 fixes; kept fork identity (`me.arsucar.rikka`, no Firebase, `release-apk.yml`), Clash #209, always-visible ChatInput toolbar, SearchPicker, and reasoning-tick UI.
 
 ---
 

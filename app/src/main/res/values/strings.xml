@@ -837,6 +837,7 @@
   <string name="reasoning_light_desc">The model will use a small amount of reasoning to answer questions.</string>
   <string name="reasoning_medium">Medium</string>
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
+  <string name="reasoning_max">Max</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
   <string name="reasoning_picker_hint">Not all models support depth adjustment. XHigh means the highest strength the model allows (e.g. max on DeepSeek). Set the reasoning dialect in model settings for mid-station proxies. Refer to provider docs.</string>
@@ -894,11 +895,17 @@
   <string name="search_page_title">Search Messages</string>
   <string name="search_page_untitled">Untitled</string>
   <string name="search_picker_title">Search Settings</string>
+  <string name="search_picker_local_title">Local Search</string>
+  <string name="search_picker_local_description">Connect to various third-party search providers</string>
+  <string name="search_picker_model_title">Model Search</string>
+  <string name="search_picker_model_description">Cloud search built into the model provider</string>
+  <string name="search_picker_select_provider">Select search provider</string>
+  <string name="search_picker_turn_off">Turn off search</string>
   <string name="select_and_copy">Select and Copy</string>
   <string name="send">Send</string>
   <string name="setting_asr_configure_api_key">API Key</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API key</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD sensitivity, set 0 to disable VAD</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD detection threshold. Recommended: 0.0; range: -1 to 1.</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">DashScope realtime websocket endpoint</string>
   <string name="setting_asr_configure_language">Language</string>
   <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
@@ -1144,6 +1151,13 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
+  <string name="setting_page_preferences_network">Network</string>
+  <string name="setting_page_preferences_network_desc">User-Agent and network request settings</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Leave blank to use %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Proxy</string>
+  <string name="setting_page_preferences_network_proxy_desc">Supports HTTP and SOCKS5 proxy URLs. Leave blank to use system settings.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Enter a valid proxy URL with a host and port.</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>
@@ -1642,6 +1656,10 @@
   <string name="workspace_storage_source_remove_failed">Failed to remove source files for workspace: %1$s</string>
   <string name="workspace_detail_files_path">Project files path</string>
   <string name="workspace_terminal_exited">Terminal exited</string>
+  <string name="workspace_terminal_tab">Terminal %1$d</string>
+  <string name="workspace_terminal_new_tab">New terminal tab</string>
+  <string name="workspace_terminal_close_tab">Close terminal %1$d</string>
+  <string name="workspace_terminal_no_tabs">No open terminal tabs</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
   <string name="extensions_page_subagents_entry">Subagents</string>
@@ -2386,6 +2404,8 @@
   <string name="assistant_page_context_message_limit_desc">Caps how many recent messages are sent to the model. When the limit is exceeded, the context is trimmed down to about half in one step instead of dropping one message per turn, so the request prefix stays stable and prompt caching keeps working for many turns.</string>
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
+  <string name="assistant_page_context_message_limit_hint">Enter 0 for unlimited, or a value of at least %d</string>
+  <string name="assistant_page_context_message_limit_too_small">The context message limit cannot be less than %1$d. It has been reset to %1$d.</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
   <string name="assistant_page_variable_system">Conversation variables</string>
   <string name="assistant_page_variable_system_desc">Enable SillyTavern-style variable macros (getvar/setvar/addvar) and MVU UpdateVariable parsing for this assistant. Off by default.</string>
@@ -2587,4 +2607,17 @@
   <string name="backup_page_s3_bucket_placeholder">my-bucket</string>
   <string name="backup_page_s3_region_placeholder">auto</string>
   <string name="setting_asr_configure_openai_realtime_placeholder">OpenAI Realtime</string>
+  <string name="setting_update_reminder_enabled">Update reminders are enabled</string>
+  <string name="setting_update_reminder_paused_until">Paused until %1$s</string>
+  <string name="setting_update_reminder_pause_title">Pause update reminders</string>
+  <string name="setting_update_reminder_pause_description">Choose how long to pause update reminders. They will resume automatically.</string>
+  <string name="setting_update_reminder_pause_days">%1$d days</string>
+  <string name="setting_update_reminder_resume_now">Resume now</string>
+  <string name="backup_page_import_overwrite_confirm">Importing a backup will overwrite app data. Continue?</string>
+  <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
+  <string name="setting_provider_page_test_streaming">Streaming</string>
+  <string name="setting_provider_page_test_tool_call">Tool Call</string>
+  <string name="setting_provider_page_test_tool_called">Called: %1$s  Args: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Tool not called, response: %s</string>
 </resources>
+
