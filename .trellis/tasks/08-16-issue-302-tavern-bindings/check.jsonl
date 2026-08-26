@@ -1,1 +1,5 @@
 {"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/guides/ui-modification-thinking-guide.md", "reason": "Importer dialog UI contracts"}
+{"file": ".trellis/spec/app/dependency-injection.md", "reason": "VM transform write"}
+{"file": ".trellis/spec/app/ui-localization.md", "reason": "Existing importer strings"}
+{"file": ".trellis/tasks/08-16-issue-302-tavern-bindings/research/09-head-vs-pr-303.md", "reason": "Mapper and persistence contracts"}

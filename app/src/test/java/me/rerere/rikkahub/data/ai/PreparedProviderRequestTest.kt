@@ -9,7 +9,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.provider.TextGenerationResult
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -55,16 +56,20 @@ class PreparedProviderRequestTest {
             providerSetting: ProviderSetting.OpenAI,
             messages: List<UIMessage>,
             params: TextGenerationParams,
-        ): MessageChunk {
+        ): TextGenerationResult {
             this.messages = messages
             this.params = params
-            return MessageChunk(id = "fake", model = params.model.modelId, choices = emptyList())
+            return TextGenerationResult(
+                id = "fake",
+                model = params.model.modelId,
+                message = UIMessage.assistant(""),
+            )
         }
 
         override suspend fun streamText(
             providerSetting: ProviderSetting.OpenAI,
             messages: List<UIMessage>,
             params: TextGenerationParams,
-        ): Flow<MessageChunk> = emptyFlow()
+        ): Flow<StreamChunk> = emptyFlow()
     }
 }

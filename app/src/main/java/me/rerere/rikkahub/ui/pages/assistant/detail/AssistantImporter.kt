@@ -35,11 +35,11 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
+import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.files.FilesManager
-import me.rerere.rikkahub.data.export.LorebookSerializer
-import me.rerere.rikkahub.data.export.ExportSerializer
+import me.rerere.rikkahub.data.export.tryImportCharacterBook
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -286,22 +286,22 @@ private fun parseAssistantFromJson(
     return parser.parse(context = context, json = json, background = background)
 }
 
-private fun detectWorldBook(json: JsonObject): List<Lorebook> {
-    val data = json["data"]?.jsonObject ?: return emptyList()
-    val extensions = data["extensions"]?.jsonObject
+internal fun detectWorldBookFromCard(json: JsonObject): List<Lorebook> {
+    val data = json["data"]?.jsonObjectOrNull ?: return emptyList()
+    val extensions = data["extensions"]?.jsonObjectOrNull
+    val fallbackName = extensions?.get("world")?.jsonPrimitiveOrNull?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: data["name"]?.jsonPrimitiveOrNull?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: "World Book"
 
-    val characterBookJson = data["character_book"]?.jsonObject
-        ?: extensions?.get("world")?.jsonObject
-        ?: extensions?.get("character_book")?.jsonObject
-        ?: return emptyList()
-
-    val characterBookString = characterBookJson.toString()
-    val lorebook = LorebookSerializer.tryImportSillyTavern(
-        characterBookString,
-        null
-    )
-    return listOfNotNull(lorebook)
+    val characterBook = data["character_book"]?.jsonObjectOrNull
+    if (characterBook != null) {
+        return listOfNotNull(tryImportCharacterBook(characterBook, fallbackName))
+    }
+    val extensionBook = extensions?.get("character_book")?.jsonObjectOrNull
+    return listOfNotNull(tryImportCharacterBook(extensionBook, fallbackName))
 }
+
+private fun detectWorldBook(json: JsonObject): List<Lorebook> = detectWorldBookFromCard(json)
 
 // endregion
 

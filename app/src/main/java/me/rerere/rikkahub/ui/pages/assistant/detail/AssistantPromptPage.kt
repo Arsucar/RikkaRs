@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.key
@@ -169,18 +170,15 @@ private fun AssistantPromptContent(
                 val systemPromptValue = rememberTextFieldState(
                     initialText = assistant.systemPrompt,
                 )
+                val latestAssistant = rememberUpdatedState(assistant)
                 if (systemPromptValue.text.isEmpty() && assistant.systemPrompt.isNotEmpty()) {
                     LaunchedEffect(Unit) {
                         systemPromptValue.edit { replace(0, length, assistant.systemPrompt) }
                     }
                 }
-                LaunchedEffect(Unit) {
-                    snapshotFlow { systemPromptValue.text }.collect {
-                        onUpdate(
-                            assistant.copy(
-                                systemPrompt = it.toString()
-                            )
-                        )
+                LaunchedEffect(systemPromptValue) {
+                    snapshotFlow { systemPromptValue.text.toString() }.collect { text ->
+                        onUpdate(latestAssistant.value.copy(systemPrompt = text))
                     }
                 }
 

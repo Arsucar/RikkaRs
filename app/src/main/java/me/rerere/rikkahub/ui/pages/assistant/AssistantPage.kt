@@ -420,22 +420,12 @@ private fun AssistantCreationSheet(
                     AssistantImporter(
                         onUpdate = { importedAssistant, lorebooks ->
                             if (lorebooks.isNotEmpty()) {
-                                vm.updateSettings { settings ->
-                                    val newLorebookIds = lorebooks.map { it.id }.toSet()
-                                    settings.copy(
-                                        lorebooks = settings.lorebooks + lorebooks,
-                                        assistants = settings.assistants
-                                    )
-                                }
-                                update(
-                                    importedAssistant.copy(
-                                        lorebookIds = importedAssistant.lorebookIds + lorebooks.map { it.id }.toSet()
-                                    )
-                                )
+                                vm.addAssistantWithLorebooks(importedAssistant, lorebooks)
+                                state.dismiss()
                             } else {
                                 update(importedAssistant)
+                                state.confirm()
                             }
-                            state.confirm()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )

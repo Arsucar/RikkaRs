@@ -373,6 +373,80 @@ internal data class SillyTavernEntry(
     val caseSensitive: Boolean? = null,
 )
 
+@Serializable
+internal data class CharacterBook(
+    val name: String? = null,
+    val description: String? = null,
+    // DefaultJson does not coerce explicit JSON null onto non-null types.
+    val entries: List<CharacterBookEntry>? = null,
+)
+
+@Serializable
+internal data class CharacterBookEntry(
+    val keys: List<String>? = null,
+    val content: String? = null,
+    val extensions: Map<String, JsonElement>? = null,
+    val enabled: Boolean? = null,
+    @SerialName("insertion_order")
+    val insertionOrder: Int? = null,
+    @SerialName("case_sensitive")
+    val caseSensitive: Boolean? = null,
+    val name: String? = null,
+    val priority: Int? = null,
+    val id: Int? = null,
+    val comment: String? = null,
+    val selective: Boolean? = null,
+    @SerialName("secondary_keys")
+    val secondaryKeys: List<String>? = null,
+    val constant: Boolean? = null,
+    val position: String? = null,
+)
+
+internal fun tryImportCharacterBook(
+    characterBookJson: JsonElement?,
+    fallbackName: String,
+): Lorebook? {
+    if (characterBookJson == null) return null
+    val characterBook = runCatching {
+        ExportSerializer.DefaultJson.decodeFromJsonElement(CharacterBook.serializer(), characterBookJson)
+    }.getOrNull() ?: return null
+    val sourceEntries = characterBook.entries.orEmpty()
+    if (sourceEntries.isEmpty()) return null
+    val entries = sourceEntries.map { entry ->
+        val keywords = entry.keys.orEmpty()
+        PromptInjection.RegexInjection(
+            id = Uuid.random(),
+            name = entry.comment?.takeIf { it.isNotBlank() }
+                ?: entry.name?.takeIf { it.isNotBlank() }
+                ?: keywords.firstOrNull().orEmpty(),
+            enabled = entry.enabled ?: true,
+            priority = entry.insertionOrder ?: 100,
+            position = mapCharacterBookPosition(entry.position),
+            injectDepth = 4,
+            content = entry.content.orEmpty(),
+            keywords = keywords,
+            useRegex = false,
+            caseSensitive = entry.caseSensitive ?: false,
+            scanDepth = 4,
+            constantActive = entry.constant ?: false,
+        )
+    }
+    return Lorebook(
+        id = Uuid.random(),
+        name = characterBook.name?.takeIf { it.isNotBlank() } ?: fallbackName,
+        description = characterBook.description.orEmpty(),
+        enabled = true,
+        entries = entries,
+    )
+}
+
+private fun mapCharacterBookPosition(position: String?): InjectionPosition =
+    when (position) {
+        "before_char" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        "after_char" -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+    }
+
 /**
  * SillyTavern「提示词预设」（Chat Completion Preset）顶层结构。
  *
