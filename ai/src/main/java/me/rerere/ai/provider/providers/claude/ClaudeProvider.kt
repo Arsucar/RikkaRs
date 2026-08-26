@@ -795,7 +795,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         val serverToolIndexes = mutableMapOf<String, Int>()
 
         content.forEachIndexed { blockIndex, contentBlock ->
-            val block = contentBlock.jsonObject
+            val block = contentBlock.jsonObjectOrNull ?: return@forEachIndexed
             val type = block["type"]?.jsonPrimitive?.contentOrNull
 
             when (type) {

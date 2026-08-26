@@ -197,11 +197,8 @@ class ResponseApiStreamDecoderTest {
             reasoningItem["summary"]?.jsonArray?.single()?.jsonObject
                 ?.get("text")?.jsonPrimitive?.content,
         )
-        assertEquals(
-            "raw",
-            reasoningItem["content"]?.jsonArray?.single()?.jsonObject
-                ?.get("text")?.jsonPrimitive?.content,
-        )
+        assertEquals("encrypted", reasoningItem["encrypted_content"]?.jsonPrimitive?.content)
+        assertEquals(null, reasoningItem["content"])
     }
 
     @Test

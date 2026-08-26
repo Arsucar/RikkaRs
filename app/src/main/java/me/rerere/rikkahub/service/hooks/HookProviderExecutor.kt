@@ -84,8 +84,9 @@ class ProviderHookModelExecutor(
             providerSetting = provider,
             messages = messages,
             params = params,
-        ).choices.firstOrNull()?.message?.toText()
-            ?: throw HookOutputException(HookErrorCode.MODEL_REQUEST_FAILED)
+        ).message.toText().ifEmpty {
+            throw HookOutputException(HookErrorCode.MODEL_REQUEST_FAILED)
+        }
         return if (request is FrozenHookModelRequest.TransitionConversationTags) raw else raw.trim()
     }
 }

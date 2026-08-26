@@ -30,9 +30,10 @@ import coil3.compose.rememberAsyncImagePainter
 import com.dokar.sonner.ToastType
 import com.jvziyaoyao.scale.image.pager.ImagePager
 import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.blur.materials.HazeMaterials
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
+import dev.chrisbanes.haze.blur.material3.Material3
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
@@ -63,7 +64,9 @@ fun ImagePreviewDialog(
     val clipboardManager = LocalClipboardManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val hazeState = rememberHazeState()
-    val hazeStyle = HazeMaterials.thin(containerColor = Color.Black.copy(alpha = 0.45f))
+    val hazeStyle = HazeBlurStyle.Material3 {
+        blurRadius(12.dp)
+    }
     val currentImage = images.getOrNull(state.currentPage)
 
     Dialog(
@@ -88,9 +91,7 @@ fun ImagePreviewDialog(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeEffect(state = hazeState) {
-                        blurEffect { style = hazeStyle }
-                    },
+                    .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle),
             )
 
             ImagePager(

@@ -137,6 +137,12 @@ private fun UIMessagePart.toDraftContextFragment(config: DraftContextConfig): St
     }
     is UIMessagePart.Tool -> if (config.includeTools) formatToolPlaceholder(toolName, output) else null
     is UIMessagePart.ToolCall -> if (config.includeTools) "[工具: $toolName]" else null
+    is UIMessagePart.ServerTool -> if (config.includeTools) {
+        val summary = output?.toString().orEmpty().take(TOOL_SUMMARY_MAX)
+        if (summary.isBlank()) "[工具: $toolName]" else "[工具: $toolName → $summary]"
+    } else {
+        null
+    }
     is UIMessagePart.ToolResult -> if (config.includeTools) {
         val summary = content.toString().take(TOOL_SUMMARY_MAX)
         if (summary.isBlank()) "[工具: $toolName]" else "[工具: $toolName → $summary]"

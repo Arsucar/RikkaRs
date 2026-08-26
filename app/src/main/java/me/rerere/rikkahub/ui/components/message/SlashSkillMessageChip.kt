@@ -43,7 +43,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
-import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.readSkillBodyByIdentifier
@@ -104,7 +104,7 @@ fun SlashSkillSentChip(
                 modifier = Modifier.size(32.dp),
             ) {
                 Icon(
-                    imageVector = HugeIcons.FullScreen,
+                    imageVector = HugeIcons.Fullscreen,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )

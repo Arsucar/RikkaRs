@@ -249,6 +249,7 @@ fun ModelSelector(
         onlyIcon = onlyIcon,
         allowClear = allowClear,
         onClear = { onSelect(Model()) },
+        onSelect = onSelect,
     )
 
     ModelListSheet(
@@ -264,13 +265,16 @@ internal fun ModelSelectorButton(
     onlyIcon: Boolean = false,
     allowClear: Boolean = false,
     onClear: () -> Unit = {},
+    onSelect: (Model) -> Unit = { onClear() },
 ) {
     val model = state.currentModel
-    val recentChatModels = remember(settings.recentChatModels, providers, type) {
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val recentChatModels = remember(settings.recentChatModels, state.providers, state.type) {
         resolveRecentChatModelItems(
             recentChatModelIds = settings.recentChatModels,
-            providers = providers,
-            type = type,
+            providers = state.providers,
+            type = state.type,
         )
     }
     var recentMenuExpanded by remember { mutableStateOf(false) }
@@ -358,7 +362,7 @@ internal fun ModelSelectorButton(
                                         text = item.model.displayName,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        color = if (item.model.id == modelId) {
+                                        color = if (item.model.id == state.modelId) {
                                             MaterialTheme.colorScheme.primary
                                         } else {
                                             Color.Unspecified

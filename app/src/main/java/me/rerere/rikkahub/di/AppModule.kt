@@ -113,7 +113,18 @@ val appModule = module {
     }
 
     single {
-        WorkspaceTerminalSessionManager(get(), get())
+        val context: android.content.Context = get()
+        val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore = get()
+        WorkspaceTerminalSessionManager(
+            context = context,
+            appScope = get(),
+            filesBaseDirProvider = {
+                me.rerere.rikkahub.workspace.resolveWorkspaceFilesBaseDir(
+                    context,
+                    settingsStore.settingsFlow.value.workspaceFilesStorage,
+                )
+            },
+        )
     }
 
     // 生成通知与业务解耦：ChatService 只发事件，通知由这里消费；

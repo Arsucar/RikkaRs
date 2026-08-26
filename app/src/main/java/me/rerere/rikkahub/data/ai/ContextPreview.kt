@@ -186,6 +186,14 @@ private fun UIMessagePart.toPreviewJson(): JsonElement = buildJsonObject {
             put("output", buildJsonArray { output.forEach { add(it.toPreviewJson()) } })
             put("approval", approvalState.toPreviewJson())
         }
+        is UIMessagePart.ServerTool -> {
+            put("type", "server_tool")
+            put("toolCallId", toolCallId)
+            put("toolName", toolName)
+            input?.let { put("input", it) }
+            output?.let { put("output", it) }
+            put("status", status.name)
+        }
     }
 }
 
@@ -206,6 +214,9 @@ private fun visibleCharacterCount(part: UIMessagePart): Int = when (part) {
     is UIMessagePart.Tool ->
         part.toolCallId.length + part.toolName.length + part.input.length +
             part.output.sumOf(::visibleCharacterCount) + part.approvalState.visibleCharacterCount()
+    is UIMessagePart.ServerTool ->
+        part.toolCallId.length + part.toolName.length +
+            (part.input?.toString()?.length ?: 0) + (part.output?.toString()?.length ?: 0)
 }
 
 private fun ToolApprovalState.visibleCharacterCount(): Int = when (this) {

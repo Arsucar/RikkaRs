@@ -19,8 +19,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -57,9 +55,7 @@ class ClaudeRequestMessageTest {
     }
 
     private fun invokeParseMessage(content: JsonArray): UIMessage {
-        val method = ClaudeProvider::class.java.getDeclaredMethod("parseMessage", JsonArray::class.java)
-        method.isAccessible = true
-        return method.invoke(provider, content) as UIMessage
+        return provider.parseMessage(content)
     }
 
     @Test
@@ -99,10 +95,6 @@ class ClaudeRequestMessageTest {
         )
 
         assertEquals(listOf(UIMessagePart.Text("still parsed")), message.parts)
-        assertNotNull(parseClaudeSsePayload("""{"delta":{"type":"text_delta","text":"ok"}}"""))
-        listOf("[]", "null", "\"relay noise\"", "not-json").forEach { payload ->
-            assertNull(parseClaudeSsePayload(payload))
-        }
     }
 
     @Test

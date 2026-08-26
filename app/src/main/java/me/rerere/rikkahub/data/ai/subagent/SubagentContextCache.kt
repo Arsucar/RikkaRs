@@ -321,6 +321,7 @@ class SubagentContextCache(
             output = part.output.map(::snapshotPart),
             metadata = part.metadata,
         )
+        is UIMessagePart.ServerTool -> part.copy(metadata = part.metadata)
         UIMessagePart.Search -> UIMessagePart.Search
     }
 

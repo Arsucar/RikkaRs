@@ -81,7 +81,7 @@ class MemorySummarizer(
                     temperature = 0.3f,
                 ),
             )
-            chunk.choices.firstOrNull()?.message?.toText() ?: ""
+            chunk.message.toText()
         }.getOrElse {
             Log.e(TAG, "summarize: AI call failed", it)
             return@withContext SummarizeResult(errors = listOf("AI call failed: ${it.message}"))

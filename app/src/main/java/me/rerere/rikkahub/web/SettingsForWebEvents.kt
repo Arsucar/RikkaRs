@@ -43,6 +43,7 @@ private fun Model.withoutSecrets(): Model = copy(
 
 private fun SearchServiceOptions.withoutSecrets(): SearchServiceOptions = when (this) {
     is SearchServiceOptions.BingLocalOptions -> this
+    is SearchServiceOptions.DoubaoOptions -> copy(apiKey = "")
     is SearchServiceOptions.ZhipuOptions -> copy(apiKey = "")
     is SearchServiceOptions.TavilyOptions -> copy(apiKey = "")
     is SearchServiceOptions.ExaOptions -> copy(apiKey = "")

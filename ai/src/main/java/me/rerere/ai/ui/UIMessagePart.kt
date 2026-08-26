@@ -111,6 +111,13 @@ sealed class UIMessagePart {
     ) : UIMessagePart()
 
     @Serializable
+    @SerialName("slash_skill")
+    data class SlashSkill(
+        val name: String,
+        override var metadata: JsonObject? = null,
+    ) : UIMessagePart()
+
+    @Serializable
     @SerialName("reasoning")
     data class Reasoning(
         val reasoning: String,

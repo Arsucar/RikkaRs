@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong
 class WorkspaceTerminalSessionManager internal constructor(
     context: Context,
     private val appScope: AppScope,
+    private val filesBaseDirProvider: () -> java.io.File,
 ) {
     private val appContext = context.applicationContext
     private val workspaceStates = MutableStateFlow<Map<String, WorkspaceTerminalTabsState>>(emptyMap())
@@ -128,7 +129,7 @@ class WorkspaceTerminalSessionManager internal constructor(
                     if (!workspaceRootfsReady(appContext, root)) {
                         false
                     } else {
-                        prepareWorkspaceTerminalSession(appContext, root)
+                        prepareWorkspaceTerminalSession(appContext, root, filesBaseDirProvider())
                         true
                     }
                 }
@@ -159,6 +160,7 @@ class WorkspaceTerminalSessionManager internal constructor(
             createWorkspaceTerminalSession(
                 context = appContext,
                 root = root,
+                filesBaseDir = filesBaseDirProvider(),
                 client = client,
             )
         }.onFailure { error ->

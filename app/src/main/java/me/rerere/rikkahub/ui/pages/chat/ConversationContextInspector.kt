@@ -272,4 +272,9 @@ internal fun contextPartText(part: UIMessagePart): String = when (part) {
         }
         append("\napproval=${part.approvalState::class.simpleName}")
     }
+    is UIMessagePart.ServerTool -> buildString {
+        append("ServerTool: ${part.toolName} id=${part.toolCallId}\nstatus=${part.status.name}")
+        part.input?.let { append("\ninput=").append(it) }
+        part.output?.let { append("\noutput=").append(it) }
+    }
 }

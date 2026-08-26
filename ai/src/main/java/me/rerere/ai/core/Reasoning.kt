@@ -130,7 +130,8 @@ fun mapReasoningEffort(
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH,
-            ReasoningLevel.XHIGH -> "high"
+            ReasoningLevel.XHIGH,
+            ReasoningLevel.MAX -> "high"
             ReasoningLevel.AUTO -> null
         }
 
@@ -139,7 +140,8 @@ fun mapReasoningEffort(
             ReasoningLevel.LOW -> "low"
             ReasoningLevel.MEDIUM -> "medium"
             ReasoningLevel.HIGH -> "high"
-            ReasoningLevel.XHIGH -> "max"
+            ReasoningLevel.XHIGH,
+            ReasoningLevel.MAX -> "max"
             ReasoningLevel.AUTO -> null
         }
 
