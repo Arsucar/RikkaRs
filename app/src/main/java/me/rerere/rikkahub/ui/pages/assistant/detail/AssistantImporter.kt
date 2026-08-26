@@ -207,8 +207,6 @@ private class CharaCardV2Parser : TavernCardParser {
         val scenario = data["scenario"]?.jsonPrimitiveOrNull?.contentOrNull
 
         val prompt = buildString {
-            appendLine("You are roleplaying as $name.")
-            appendLine()
             if (!system.isNullOrBlank()) {
                 appendLine(system)
                 appendLine()
@@ -245,8 +243,6 @@ private class CharaCardV3Parser : TavernCardParser {
         val scenario = data["scenario"]?.jsonPrimitiveOrNull?.contentOrNull
 
         val prompt = buildString {
-            appendLine("You are roleplaying as $name.")
-            appendLine()
             if (!system.isNullOrBlank()) {
                 appendLine(system)
                 appendLine()

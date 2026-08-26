@@ -12,9 +12,9 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
-## Unreleased
+## v2.3.54
 
-### 新功能与修复 / Features & Fixes
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.53 之后）
 
 - **合并上游 rikkahub 2.4.6–2.4.12+** — 将 `upstream/master` tip `fa0305ba` 合入 `release/rikka-arsucar`：AI 流式事件归一、豆包搜索、网络设置（UA/代理）、备份可选导入与覆盖确认、工作区终端后台多 Tab、空 tool schema / ASR / JWT·R8 等修复；保留 fork 身份（`me.arsucar.rikka`、无 Firebase、`release-apk.yml`）、Clash #209、ChatInput 工具栏常驻、搜索选择器与推理刻度 UI。
   **Merge upstream rikkahub 2.4.6–2.4.12+** — Merged `upstream/master` tip `fa0305ba` into `release/rikka-arsucar`: stream-event normalization, Doubao search, network settings (UA/proxy), selective backup import with overwrite confirm, workspace terminal background/multi-tab, empty tool-schema / ASR / JWT·R8 fixes; kept fork identity (`me.arsucar.rikka`, no Firebase, `release-apk.yml`), Clash #209, always-visible ChatInput toolbar, SearchPicker, and reasoning-tick UI.
@@ -22,6 +22,8 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
   **Fix tavern card world-book mapping (#302)** — Parse canonical `data.character_book` (array `keys` / `insertion_order` / `before_char`) instead of standalone world-info JSON; treat `extensions.world` as a filename; persist lorebooks and assistant `lorebookIds` in one settings write.
 - **修复助手提示词页编辑无法落盘（#304）** — inbound 同步后 outbound 仍捕获空壳 `Assistant()`；改为 `rememberUpdatedState` 写入真实助手。
   **Fix assistant prompt edits not persisting (#304)** — After inbound sync, outbound still copied the dummy `Assistant()`; now uses `rememberUpdatedState` against the loaded assistant.
+- **去掉酒馆卡导入时注入的角色扮演前缀** — v2/v3 角色卡不再在系统提示词前追加 `You are roleplaying as <name>.`，只保留卡内 `system_prompt` 与描述/性格/场景。
+  **Drop injected roleplay prefix on tavern import** — v2/v3 cards no longer prepend `You are roleplaying as <name>.`; keep the card `system_prompt` plus description/personality/scenario.
 
 ---
 
