@@ -12,6 +12,15 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.55
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.54 之后）
+
+- **修复聊天建议重复行导致崩溃（#305）** — 建议文本按行拆分后按序去重，渲染侧 item key 改为「索引+文本」组合兜底。
+  **Fix crash on duplicate chat suggestions (#305)** — Dedupe suggestions after line-splitting; compose the list item key as "index-text" as a safety net.
+
+---
+
 ## v2.3.54
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.53 之后）
