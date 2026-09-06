@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/09-07-merge-upstream-2-5-0/prd.md", "reason": "Acceptance criteria: fork features preserved, compile, tests, install, changelog"}
+{"file": ".trellis/tasks/09-07-merge-upstream-2-5-0/design.md", "reason": "Per-file conflict resolution policy table to verify during check"}
+{"file": ".trellis/tasks/09-07-merge-upstream-2-5-0/research/merge-evidence.md", "reason": "Full conflict list to verify no conflict markers remain"}
+{"file": "AGENTS.md", "reason": "Repo rules: --no-daemon, single compiling checker, install flow, review convergence"}

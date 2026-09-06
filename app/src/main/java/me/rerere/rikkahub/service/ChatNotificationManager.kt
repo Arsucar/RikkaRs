@@ -65,7 +65,6 @@ class ChatNotificationManager(
                     is AppEvent.Notice,
                     is AppEvent.Speak,
                     is AppEvent.OpenUsageAccessSettings,
-                    is AppEvent.McpOAuthCallback,
                     -> Unit
                 }
             }

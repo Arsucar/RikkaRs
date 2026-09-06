@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/09-07-merge-upstream-2-5-0/research/merge-evidence.md", "reason": "Conflict file list (45) and upstream key commits from merge-tree preflight"}
+{"file": "docs/RIKKA_ARSUCAR_FORK_AND_CI.md", "reason": "Fork identity: no-Firebase, web module, version scheme, release workflow constraints during merge"}
+{"file": ".trellis/spec/app/index.md", "reason": "App layer spec index for files touched by the upstream merge"}
+{"file": ".trellis/spec/app/dependency-injection.md", "reason": "DI conventions; upstream adds new Koin registrations in AppModule/DataSourceModule"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides for merge conflict arbitration"}
+{"file": "docs/CHANGELOG_GUIDE.md", "reason": "Changelog update rules for the release-side wrap-up step"}

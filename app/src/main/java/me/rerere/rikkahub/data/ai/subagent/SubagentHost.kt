@@ -29,7 +29,7 @@ import me.rerere.ai.ui.ShellChangedFilesMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.util.HttpException
 import me.rerere.rikkahub.data.ai.GenerationChunk
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.WORKSPACE_SHELL_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.workspaceShellTranscriptInput
@@ -245,7 +245,7 @@ internal suspend fun acquireSubagentContext(
 }
 
 class SubagentHost(
-    private val generationHandler: GenerationHandler,
+    private val generationHandler: GenerationLoop,
     internal val contextCache: SubagentContextCache = SubagentContextCache(),
     private val memoryTableInjectionLoader: (suspend (
         parentAssistant: Assistant,

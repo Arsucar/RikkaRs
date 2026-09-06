@@ -11,6 +11,8 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.model.MemoryScope
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -42,17 +44,23 @@ class ChatToolFactory(
         workspaceCwd: String? = null,
     ): List<Tool> = buildList {
         if (assistant.enableMemory) {
-            val memoryAssistantId = if (assistant.useGlobalMemory) {
-                MemoryRepository.GLOBAL_MEMORY_ID
-            } else {
-                assistant.id.toString()
-            }
             addAll(
                 buildMemoryTools(
                     json = json,
-                    onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content) },
-                    onUpdate = { id, content -> memoryRepository.updateContent(id, content) },
-                    onDelete = { id -> memoryRepository.deleteMemory(id) },
+                    defaultScope = MemoryScope.ASSISTANT,
+                    onList = { memoryRepository.getEffectiveMemories(assistant.id.toString()) },
+                    onCreation = { content, scope ->
+                        memoryRepository.addMemory(assistant.id.toString(), content, scope)
+                    },
+                    onUpdate = { id, content, scope ->
+                        memoryRepository.updateMemory(
+                            id = id,
+                            content = content,
+                            actorAssistantId = assistant.id.toString(),
+                            scope = scope,
+                        )
+                    },
+                    onDelete = { id -> memoryRepository.deleteMemory(id, assistant.id.toString()) },
                 )
             )
         }
