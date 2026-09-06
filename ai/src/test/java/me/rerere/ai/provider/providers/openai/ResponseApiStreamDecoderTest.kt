@@ -162,7 +162,7 @@ class ResponseApiStreamDecoderTest {
     }
 
     @Test
-    fun `raw reasoning and summary with the same index should remain distinct`() {
+    fun `raw reasoning and summary with the same index should remain distinct without replaying plaintext`() {
         val decoder = ResponseApiStreamDecoder()
         val chunks = buildList {
             addAll(decoder.decode(reasoningItemEvent("response.output_item.added")))
@@ -198,7 +198,7 @@ class ResponseApiStreamDecoderTest {
                 ?.get("text")?.jsonPrimitive?.content,
         )
         assertEquals("encrypted", reasoningItem["encrypted_content"]?.jsonPrimitive?.content)
-        assertEquals(null, reasoningItem["content"])
+        assertFalse(reasoningItem.containsKey("content"))
     }
 
     @Test

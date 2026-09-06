@@ -167,6 +167,8 @@ class PromptInjectionTransformerTest {
         assertTrue(systemText.contains("System prompt"))
         assertTrue(systemText.contains("After content"))
         assertTrue(systemText.indexOf("System prompt") < systemText.indexOf("After content"))
+        // 融合上游 isSynthetic 断言：合并进已有 system 消息的注入同样标记为 synthetic
+        assertTrue(result.first().isSynthetic)
     }
 
     @Test
@@ -192,6 +194,7 @@ class PromptInjectionTransformerTest {
             presets = listOf(preset),
         )
         assertEquals(MessageRole.SYSTEM, result.first().role)
+        assertTrue(result.first().isSynthetic)
         assertTrue(getMessageText(result.first()).contains("Created system"))
     }
 
@@ -210,6 +213,8 @@ class PromptInjectionTransformerTest {
         )
         val userIndex = result.indexOfFirst { it.role == MessageRole.USER && getMessageText(it) == "First user" }
         assertTrue(userIndex > 0)
+        // 融合上游 isSynthetic 断言：注入的聊天消息标记为 synthetic
+        assertTrue(result[userIndex - 1].isSynthetic)
         assertTrue(getMessageText(result[userIndex - 1]).contains("Top inject"))
     }
 
@@ -226,6 +231,7 @@ class PromptInjectionTransformerTest {
             lorebooks = emptyList(),
             presets = listOf(preset),
         )
+        assertTrue(result[result.lastIndex - 1].isSynthetic)
         assertTrue(getMessageText(result[result.lastIndex - 1]).contains("Bottom inject"))
     }
 

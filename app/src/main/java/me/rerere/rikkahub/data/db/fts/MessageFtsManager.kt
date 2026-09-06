@@ -7,7 +7,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode
 import java.time.Instant
 
 data class MessageSearchResult(
@@ -83,8 +82,20 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun search(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
+        assistantId: String? = null,
     ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
+        val assistantFilter = if (assistantId != null) {
+            """
+            AND EXISTS (
+                SELECT 1 FROM conversationentity AS conversation
+                WHERE conversation.id = m.conversation_id
+                  AND conversation.assistant_id = ?
+            )
+            """.trimIndent()
+        } else {
+            ""
+        }
         val cursor = db.query(
             """
             SELECT m.node_id, m.message_id, m.conversation_id, m.title, m.update_at,
@@ -92,10 +103,11 @@ class MessageFtsManager(private val database: AppDatabase) {
             FROM message_fts m
             INNER JOIN conversationentity c ON c.id = m.conversation_id
             WHERE m.text MATCH jieba_query(?)
+            $assistantFilter
             ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
-            arrayOf(keyword)
+            if (assistantId != null) arrayOf(keyword, assistantId) else arrayOf(keyword)
         )
         Log.i(TAG, "search: $keyword")
         cursor.use {

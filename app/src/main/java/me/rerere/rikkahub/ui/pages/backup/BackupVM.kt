@@ -3,8 +3,10 @@ package me.rerere.rikkahub.ui.pages.backup
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +18,8 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
+import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
@@ -42,6 +46,7 @@ class BackupVM(
     private val conversationRepository: ConversationRepository,
     private val context: Context,
     private val taskCoordinator: BackupTaskCoordinator,
+    private val filesManager: FilesManager,
 ) : ViewModel() {
     val taskStates = taskCoordinator.states
 
@@ -200,7 +205,8 @@ class BackupVM(
             operation = BackupOperation.LOCAL_IMPORT,
             initialStage = BackupTaskStage.TRANSFERRING,
         ) {
-            val extension = if (importType == "chatbox") "json" else "zip"
+            // Chatbox Backup v2 是 ZIP 包；其余类型也是 zip
+            val extension = "zip"
             val tempFile = File.createTempFile("temp_${importType}_", ".$extension", context.cacheDir)
             try {
                 withContext(Dispatchers.IO) {
@@ -231,28 +237,40 @@ class BackupVM(
         )
     }
 
-    suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {
+    suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult = withContext(Dispatchers.IO) {
+        val currentSettings = settings.value
         var importedConversations = 0
         var skippedExistingConversations = 0
         val result = ChatboxImporter.importStreaming(
             file = file,
-            assistantId = settings.value.assistantId,
-            providers = settings.value.providers,
+            assistantId = currentSettings.assistantId,
+            providers = currentSettings.providers,
+            shouldImportConversation = { conversationId ->
+                val exists = conversationRepository.existsConversationById(conversationId)
+                if (exists) skippedExistingConversations++
+                !exists
+            },
+            saveImage = { resource ->
+                val entity = filesManager.saveUploadFromBytes(
+                    bytes = resource.bytes,
+                    displayName = resource.fileName,
+                    mimeType = resource.mimeType,
+                )
+                filesManager.getFile(entity).toUri().toString()
+            },
             onConversation = { conversation ->
-                if (conversationRepository.existsConversationById(conversation.id)) {
-                    skippedExistingConversations++
-                } else {
-                    conversationRepository.insertConversation(conversation)
-                    importedConversations++
-                }
+                conversationRepository.insertConversation(conversation)
+                importedConversations++
             }
         )
 
-        val targetAssistantId = settings.value.assistantId
-        settingsStore.update(
-            settings.value.copy(
-                providers = result.providers + settings.value.providers,
-                assistants = settings.value.assistants.map { assistant ->
+        val targetAssistantId = currentSettings.assistantId
+        settingsStore.update { latestSettings ->
+            latestSettings.copy(
+                providers = result.providers + latestSettings.providers.filterNot { existing ->
+                    result.providers.any { imported -> imported.id == existing.id }
+                },
+                assistants = latestSettings.assistants.map { assistant ->
                     if (result.hasConversationSystemPrompt && assistant.id == targetAssistantId) {
                         assistant.copy(allowConversationSystemPrompt = true)
                     } else {
@@ -260,20 +278,24 @@ class BackupVM(
                     }
                 }
             )
-        )
+        }
 
         Log.i(
             TAG,
             "restoreFromChatBox: import ${result.providers.size} providers, " +
                 "$importedConversations conversations, skip $skippedExistingConversations existing, " +
-                "drop ${result.skippedImageParts} images"
+                "import ${result.importedImageParts} images, drop ${result.skippedImageParts} images, " +
+                "skip ${result.skippedForkMessages} fork messages and ${result.skippedSessions} sessions"
         )
-        return ChatboxRestoreResult(
+        ChatboxRestoreResult(
             importedProviders = result.providers.size,
             importedConversations = importedConversations,
             skippedExistingConversations = skippedExistingConversations,
+            importedImageParts = result.importedImageParts,
             skippedImageParts = result.skippedImageParts,
             skippedEmptyMessages = result.skippedEmptyMessages,
+            skippedForkMessages = result.skippedForkMessages,
+            skippedSessions = result.skippedSessions,
         )
     }
 
@@ -384,6 +406,9 @@ data class ChatboxRestoreResult(
     val importedProviders: Int,
     val importedConversations: Int,
     val skippedExistingConversations: Int,
+    val importedImageParts: Int,
     val skippedImageParts: Int,
     val skippedEmptyMessages: Int,
+    val skippedForkMessages: Int,
+    val skippedSessions: Int,
 )

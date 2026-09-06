@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -100,6 +101,11 @@ class ChatCompletionsAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .configureReferHeaders(providerSetting.baseUrl)
+            .apply {
+                if (providerSetting.baseUrl.toHttpUrl().host == "opencode.ai") {
+                    params.sessionId?.let { header("x-opencode-session", it) }
+                }
+            }
             .build()
 
         Log.d(TAG, "generateText: model=${params.model.modelId}")
@@ -152,6 +158,11 @@ class ChatCompletionsAPI(
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
+            .apply {
+                if (providerSetting.baseUrl.toHttpUrl().host == "opencode.ai") {
+                    params.sessionId?.let { header("x-opencode-session", it) }
+                }
+            }
             .build()
 
         Log.d(TAG, "streamText: model=${params.model.modelId}")
@@ -227,7 +238,7 @@ class ChatCompletionsAPI(
             eventSource.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+    }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO)
 
     private fun buildChatCompletionRequest(
         messages: List<UIMessage>,

@@ -1,16 +1,19 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
-import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.completeWith
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +34,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
-import me.rerere.ai.core.Tool
-import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -56,7 +57,7 @@ import me.rerere.rikkahub.data.ai.prompts.BuiltinPromptRegistry
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_INPUT_DRAFT_PROMPT
 import me.rerere.rikkahub.data.model.resolveDraftContextConfig
 import me.rerere.rikkahub.data.model.toDraftContextContent
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.ContextPreview
 import me.rerere.rikkahub.data.ai.GenerationPreparationMode
 import me.rerere.rikkahub.data.ai.GenerationPreparationException
@@ -94,6 +95,7 @@ import me.rerere.rikkahub.data.ai.subagent.createSubagentWorkspaceTools
 import me.rerere.rikkahub.data.ai.subagent.mergeSubagentProfiles
 import me.rerere.rikkahub.data.ai.subagent.removeSubagentProfile
 import me.rerere.rikkahub.data.ai.subagent.upsertSubagentProfile
+import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.shouldWriteCheckpoint
 
@@ -151,6 +153,7 @@ import me.rerere.rikkahub.data.model.isValidMcpServerRuntimeName
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.resolveMemoryCapabilities
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.MemoryTableScopeType
 import me.rerere.rikkahub.data.model.resolveEffectiveWorkspaceCwd
@@ -391,7 +394,7 @@ data class ChatError(
 )
 
 enum class ChatErrorSolution {
-    CheckTitleModelSettings,
+    CheckFastModelSettings,
 }
 
 private val inputTransformers by lazy {
@@ -430,15 +433,15 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val memoryTableRepository: MemoryTableRepository,
-    private val generationHandler: GenerationHandler,
+    private val generationHandler: GenerationLoop,
     private val subagentHost: SubagentHost,
     private val json: Json,
+    private val translationHandler: TranslationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
-    private val localTools: LocalTools,
+    private val chatToolFactory: ChatToolFactory,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
-    private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
     private val hookRepository: HookRepository,
@@ -513,7 +516,17 @@ class ChatService(
                     assistantId = settings.getCurrentAssistant().id
                 ),
                 scope = appScope,
-                onIdle = { removeSession(it) }
+                onIdle = { removeSession(it) },
+                onGenerationFinished = { id, cause ->
+                    val session = sessions[id]
+                    if (cause != null) session?.messageQueue?.pause()
+                    if (session?.state?.value?.currentMessages?.any { message ->
+                            message.parts.any { it is UIMessagePart.Tool && it.isPending }
+                        } == true) {
+                        session.messageQueue.failReplyWaiters(context.getString(R.string.chat_page_voice_tool_approval))
+                    }
+                    appScope.launch { dispatchNextQueuedMessage(id) }
+                },
             ).also {
                 _sessionsVersion.value++
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
@@ -568,8 +581,7 @@ class ChatService(
     }
 
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
-        val session = sessions[conversationId] ?: return MutableStateFlow(null)
-        return session.processingStatus
+        return getOrCreateSession(conversationId).processingStatus
     }
 
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> {
@@ -582,6 +594,30 @@ class ChatService(
                     s.generationJob.map { job -> s.id to job }
                 }) { pairs ->
                     pairs.filter { it.second != null }.toMap()
+                }
+            }
+        }
+    }
+
+    private fun launchGenerationJob(
+        conversationId: Uuid,
+        keepAliveInBackground: Boolean = true,
+        block: suspend () -> Unit,
+    ): Job {
+        if (!keepAliveInBackground) return appScope.launch(start = CoroutineStart.LAZY) { block() }
+
+        return appScope.launch(start = CoroutineStart.LAZY) {
+            val generationId = Uuid.random()
+            val foregroundStarted = ChatGenerationForegroundService.acquire(
+                context = context,
+                generationId = generationId,
+                conversationId = conversationId,
+            )
+            try {
+                block()
+            } finally {
+                if (foregroundStarted) {
+                    ChatGenerationForegroundService.release(context, generationId)
                 }
             }
         }
@@ -623,20 +659,110 @@ class ChatService(
 
     // ---- 发送消息 ----
 
-    fun sendMessage(
+    fun getMessageQueueFlow(conversationId: Uuid): StateFlow<MessageQueueState> =
+        getOrCreateSession(conversationId).messageQueue.state
+
+    fun removeQueuedMessage(conversationId: Uuid, messageId: Uuid) {
+        sessions[conversationId]?.messageQueue?.remove(messageId)?.let(::cleanupQueuedAttachments)
+        dispatchNextQueuedMessage(conversationId)
+    }
+
+    fun beginEditQueuedMessage(conversationId: Uuid, messageId: Uuid): QueuedMessage? =
+        sessions[conversationId]?.messageQueue?.beginEdit(messageId)
+
+    fun finishEditQueuedMessage(
         conversationId: Uuid,
-        content: List<UIMessagePart>,
-        answer: Boolean = true,
+        messageId: Uuid,
+        parts: List<UIMessagePart>? = null
     ) {
-        if (content.isEmptyInputMessage()) return
+        sessions[conversationId]?.messageQueue?.finishEdit(messageId, parts)
+            ?.let(::cleanupQueuedAttachments)
+        dispatchNextQueuedMessage(conversationId)
+    }
 
-        val session = getOrCreateSession(conversationId)
-        val previousJob = session.getJob()
-        previousJob?.cancel()
-
-        val job = appScope.launch {
+    private fun cleanupQueuedAttachments(previous: QueuedMessage) {
+        val candidates = previous.parts.localFileUrls()
+        if (candidates.isEmpty()) return
+        appScope.launch {
             try {
-                runCatching { previousJob?.join() }
+                // 未打开的会话及未选中的分支也可能引用同一附件。
+                val persistedReferences =
+                    candidates.filter { conversationRepo.hasFileReference(it) }.toSet()
+                // 数据库查询挂起期间队列可能已推进，删除前重新读取内存引用。
+                val currentSessions = sessions.values.toList()
+                val unusedFiles = unreferencedQueuedAttachmentUrls(
+                    previous = previous,                    conversations = currentSessions.map { it.state.value },
+                    pendingMessages = currentSessions.flatMap {
+                        it.messageQueue.state.value.messages + listOfNotNull(it.submittingMessage)
+                    },
+                ) - persistedReferences
+                if (unusedFiles.isNotEmpty()) {
+                    filesManager.deleteChatFiles(unusedFiles.map { it.toUri() })
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // 无法确认引用时保留文件，避免误删。
+                Log.w(TAG, "Failed to clean queued attachments", e)
+            }
+        }
+    }
+
+    fun resumeMessageQueue(conversationId: Uuid) {
+        sessions[conversationId]?.messageQueue?.resume()
+        dispatchNextQueuedMessage(conversationId)
+    }
+
+    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+        if (content.isEmptyInputMessage()) return
+        val session = getOrCreateSession(conversationId)
+        synchronized(session) {
+            if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
+            session.messageQueue.enqueue(content, answer)
+            dispatchNextQueuedMessage(conversationId)
+        }
+    }
+
+    /** Enqueue immediately; the result belongs to this item even after edits or later turns. */
+    fun enqueueVoiceMessage(conversationId: Uuid, text: String): Deferred<String?> {
+        val session = getOrCreateSession(conversationId)
+        val reply = CompletableDeferred<String?>()
+        synchronized(session) {
+            check(text.isNotBlank()) { context.getString(R.string.chat_page_voice_empty) }
+            check(!session.messageQueue.state.value.paused || session.messageQueue.state.value.messages.isEmpty()) {
+                context.getString(R.string.chat_page_voice_resume_queue)
+            }
+            check(session.state.value.currentMessages.none { message ->
+                message.parts.any { it is UIMessagePart.Tool && it.isPending }
+            }) { context.getString(R.string.chat_page_voice_tools_before_resume) }
+            if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
+            session.messageQueue.enqueue(listOf(UIMessagePart.Text(text)), reply = reply)
+            dispatchNextQueuedMessage(conversationId)
+        }
+        return reply
+    }
+
+    private fun dispatchNextQueuedMessage(conversationId: Uuid): Job? {
+        val session = sessions[conversationId] ?: return null
+        synchronized(session) {
+            // A pending tool approval is still part of the current turn.
+            if (session.getJob() != null || session.state.value.currentMessages.any { message ->
+                    message.parts.any { it is UIMessagePart.Tool && it.isPending }
+                }) return null
+            val next = session.messageQueue.takeNext() ?: return null
+            session.submittingMessage = next
+            return sendQueuedMessage(session, next)
+        }
+    }
+
+    private fun sendQueuedMessage(session: ConversationSession, queued: QueuedMessage): Job {
+        val conversationId = session.id
+        val content = queued.parts
+        val answer = queued.answer
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = answer,
+        ) {
+            try {
                 finishInterruptedPendingTools(conversationId)
 
                 val currentConversation = session.state.value
@@ -653,21 +779,42 @@ class ChatService(
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, newConversation)
+                session.submittingMessage = null
 
                 // 开始补全
                 if (answer) {
                     handleMessageComplete(conversationId, GenerationInvocationKind.NormalSend)
                 }
 
-                _generationDoneFlow.emit(conversationId)
-            } catch (e: CancellationException) {
-                throw e
+                queued.reply?.completeWith(runCatching {
+                    val messages = session.state.value.currentMessages
+                    check(!session.messageQueue.state.value.paused) { context.getString(R.string.chat_page_voice_generation_failed) }
+                    check(messages.none { message -> message.parts.any { it is UIMessagePart.Tool && it.isPending } }) {
+                        context.getString(R.string.chat_page_voice_tool_approval)
+                    }
+                    val previousIds = currentConversation.currentMessages.map { it.id }.toSet()
+                    messages.filter { it.id !in previousIds && it.role == MessageRole.ASSISTANT }
+                        .joinToString("\n") { it.toText() }
+                })
+                // Voice owns playback, including when its observer has already left the page.
+                // The ordinary autoplay collector must not read a late voice reply again.
+                if (queued.reply == null) _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
+                queued.reply?.completeExceptionally(e)
                 e.printStackTrace()
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
             }
         }
+        job.invokeOnCompletion { cause ->
+            if (cause != null) queued.reply?.completeExceptionally(cause)
+            synchronized(session) {
+                if (session.submittingMessage?.id == queued.id) session.submittingMessage = null
+            }
+        }
         session.setJob(job)
+        return job
     }
 
     private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {
@@ -694,12 +841,16 @@ class ChatService(
         conversationId: Uuid,
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
-    ) {
+    ) = synchronized(getOrCreateSession(conversationId)) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        val previousJob = session.getJob()
 
-        val job = appScope.launch {
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = message.role == MessageRole.USER || regenerateAssistantMsg,
+        ) {
             try {
+                previousJob?.join()
                 val conversation = session.state.value
 
                 if (message.role == MessageRole.USER) {
@@ -731,6 +882,8 @@ class ChatService(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
         }
@@ -749,9 +902,18 @@ class ChatService(
         trustedWriteRoot: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        val previousJob = session.getJob()
 
-        val job = appScope.launch {
+        val hasOtherPendingTools = session.state.value.messageNodes.any { node ->
+            node.currentMessage.parts.any { part ->
+                part is UIMessagePart.Tool && part.isPending && part.toolCallId != toolCallId
+            }
+        }
+
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = !hasOtherPendingTools,
+        ) {
             try {
                 val conversation = session.state.value
                 // #258: re-validate tool/path server-side; only persist server-derived root
@@ -833,11 +995,13 @@ class ChatService(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
         }
 
-        session.setJob(job)
+        session.setJob(job, cancelPrevious = false)
     }
 
     // ---- 处理消息补全 ----
@@ -1111,6 +1275,8 @@ class ChatService(
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
             endKeepAliveIfNeeded()
+            if (it is CancellationException) throw it
+            sessions[conversationId]?.messageQueue?.pause()
 
             it.printStackTrace()
             if (it is GenerationPreparationException.InvalidMcpServerName) {
@@ -2233,8 +2399,7 @@ class ChatService(
                 UIMessagePart.Text(
                     """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
                 )
-            ),
-            approvalState = ToolApprovalState.Denied("Generation cancelled by user")
+            )
         )
     }
 
@@ -2311,7 +2476,7 @@ class ChatService(
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.fastModelId)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -2324,7 +2489,7 @@ class ChatService(
                             .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                 ),
             )
-            val params = backgroundTextGenerationParams(model)
+            val params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel)
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             val result = recordProviderCall(provider, model) {
                 providerHandler.generateText(
@@ -2344,7 +2509,7 @@ class ChatService(
                 error = it,
                 conversationId = conversationId,
                 title = context.getString(R.string.error_title_generate_title),
-                solution = ChatErrorSolution.CheckTitleModelSettings,
+                solution = ChatErrorSolution.CheckFastModelSettings,
             )
         }
     }
@@ -2358,7 +2523,7 @@ class ChatService(
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             if (!settings.enableSuggestion) return@runCatching
-            val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.fastModelId)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -2378,7 +2543,7 @@ class ChatService(
                             .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                 )
             )
-            val params = backgroundTextGenerationParams(model)
+            val params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel) 
             ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
             val result = recordProviderCall(provider, model) {
                 providerHandler.generateText(
@@ -2414,10 +2579,8 @@ class ChatService(
             context.getString(R.string.input_draft_empty_conversation)
         }
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.findModelById(
-            settings.suggestionModelId,
-            fallback = settings.fastModelId,
-        ) ?: error(context.getString(R.string.input_draft_model_unavailable))
+        val model = settings.findModelById(settings.fastModelId)
+            ?: error(context.getString(R.string.input_draft_model_unavailable))
         val provider = model.findProvider(settings.providers)
             ?: error(context.getString(R.string.input_draft_model_unavailable))
         val providerHandler = providerManager.getProviderByType(provider)
@@ -2436,7 +2599,7 @@ class ChatService(
         )
         var messages = listOf(UIMessage.user(prompt))
         var draft = ""
-        val params = backgroundTextGenerationParams(model)
+        val params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel) 
         val streamChunkHandler = StreamChunkHandler(model)
         ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
         recordProviderCall(provider, model) {
@@ -2533,7 +2696,7 @@ class ChatService(
                 "locale" to Locale.getDefault().displayName,
             )
             val requestMessages = listOf(UIMessage.user(prompt))
-            val params = backgroundTextGenerationParams(model)
+            val params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel) 
             ProviderRateLimiter.await(provider = provider, messages = requestMessages, params = params)
             val result = recordProviderCall(provider, model) {
                 providerHandler.generateText(
@@ -2876,7 +3039,11 @@ class ChatService(
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
-        val newFiles = newConversation.files
+        val session = sessions[newConversation.id]
+        val queuedFiles = (session?.messageQueue?.state?.value?.messages.orEmpty() +
+                listOfNotNull(session?.submittingMessage))
+            .flatMap { it.parts }.localFileUrls().map { it.toUri() }
+        val newFiles = newConversation.files + queuedFiles
         val oldFiles = oldConversation.files
         val deletedFiles = oldFiles.filter { file ->
             newFiles.none { it == file }
@@ -2995,6 +3162,10 @@ class ChatService(
                 conversationRepo.updateConversation(updatedConversation)
             }
         }
+
+        // 删除消息或切换分支也可能解除工具审批阻塞，保存成功后重新检查队列。
+        // 调度器仍会检查当前生成任务、待审批工具、暂停状态及编辑占位。
+        dispatchNextQueuedMessage(conversationId)
     }
 
     // ---- 翻译消息 ----
@@ -3018,7 +3189,7 @@ class ChatService(
                 val loadingText = context.getString(R.string.translating)
                 updateTranslationField(conversationId, message.id, loadingText)
 
-                generationHandler.translateText(
+                translationHandler.translateText(
                     settings = settings,
                     sourceText = messageText,
                     targetLanguage = targetLanguage
@@ -3648,7 +3819,16 @@ class ChatService(
     suspend fun stopGeneration(conversationId: Uuid) {
         subagentHost.requestCancel(conversationId, SUBAGENT_USER_CANCEL_REASON)
         sessions[conversationId]?.lastCheckpointStep = -1
-        val job = sessions[conversationId]?.getJob() ?: run {
+        val session = sessions[conversationId]
+        val jobs = if (session != null) {
+            synchronized(session) {
+                session.messageQueue.pause()
+                session.cancelJobs()
+            }
+        } else {
+            emptyList()
+        }
+        if (jobs.isEmpty()) {
             finishInterruptedPendingTools(conversationId)
             runCatching {
                 saveConversation(
@@ -3658,8 +3838,7 @@ class ChatService(
             }
             return
         }
-        job.cancel()
-        runCatching { job.join() }
+        jobs.forEach { runCatching { it.join() } }
         finishInterruptedPendingTools(conversationId)
         // Stream chunks only live in memory until success; always persist partial reply on cancel.
         runCatching {

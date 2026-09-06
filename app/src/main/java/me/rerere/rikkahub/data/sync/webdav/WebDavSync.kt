@@ -6,11 +6,10 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.BackupArchive
 import me.rerere.rikkahub.data.sync.BackupArchiveOptions
+import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.BackupRestorer
 import me.rerere.rikkahub.data.sync.BackupTaskStage
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -20,8 +19,7 @@ import java.time.Instant
 private const val TAG = "WebDavSync"
 
 class WebDavSync(
-    private val settingsStore: SettingsStore,
-    private val json: Json,
+    private val backupManager: BackupManager,
     private val context: Context,
     private val httpClient: HttpClient,
     private val backupArchive: BackupArchive,
@@ -82,7 +80,7 @@ class WebDavSync(
         onStage: (BackupTaskStage) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
         val client = getClient(config)
-        val backupFile = File(context.cacheDir, item.displayName)
+        val backupFile = File.createTempFile("restore-", ".zip", context.cacheDir)
 
         try {
             // Download backup file directly to file to avoid OOM
@@ -132,6 +130,7 @@ class WebDavSync(
         }
     }
 
+    /** Consistent snapshot via [BackupArchive]: validated DB snapshot + files + settings. */
     suspend fun prepareBackupFile(config: WebDavConfig): File = backupArchive.create(
         BackupArchiveOptions(
             includeDatabase = config.items.contains(WebDavConfig.BackupItem.DATABASE),

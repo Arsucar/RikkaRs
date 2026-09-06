@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +51,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -61,8 +61,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.core.content.FileProvider
-import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -70,7 +68,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
@@ -83,6 +80,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.resolveAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.resolveChatModelId
+import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -110,7 +108,6 @@ import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.resolveChatFileUploadMetadata
@@ -149,6 +146,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val toaster = LocalToaster.current
     val checkpointRecoveryGeneric = stringResource(R.string.chat_page_checkpoint_recovered)
     val resources = LocalResources.current
@@ -192,9 +190,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    // Hide keyboard when drawer is open
+    // 抽屉打开时收起键盘并清除输入焦点（融合上游 #1855 prevent keyboard flicker 语义）
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
+            focusManager.clearFocus(force = true)
             softwareKeyboardController?.hide()
         }
     }
@@ -223,8 +222,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    val inputState = draftVm.inputState
+    // 上游 voice mode：语音会话入口（ChatInput/FilesPicker 经 onStartVoiceMode 使用）
+    val startVoiceMode = rememberVoiceModeStarter(vm, setting)
 
+    val inputState = draftVm.inputState
     // 初始化输入状态（处理传入的 files 和 text 参数）
     LaunchedEffect(files, text) {
         if (files.isNotEmpty()) {
@@ -500,6 +501,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             }
                         ) {
                             ChatPageContent(
+                                onStartVoiceMode = startVoiceMode,
                                 inputState = inputState,
                                 loadingJob = loadingJob,
                                 processingStatus = processingStatus,
@@ -538,6 +540,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                             }
                         ) {
                             ChatPageContent(
+                                onStartVoiceMode = startVoiceMode,
                                 inputState = inputState,
                                 loadingJob = loadingJob,
                                 processingStatus = processingStatus,
@@ -579,6 +582,7 @@ private val DrawerState.isActive: Boolean
 
 @Composable
 private fun ChatPageContent(
+    onStartVoiceMode: () -> Unit,
     inputState: ChatInputState,
     loadingJob: Job?,
     processingStatus: String? = null,
@@ -695,8 +699,18 @@ private fun ChatPageContent(
                 )
             },
             bottomBar = {
+                val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+                val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
                 ChatInput(
+                    onStartVoiceMode = onStartVoiceMode,
+                    voiceState = voiceState,
+                    onStopVoiceMode = vm.voiceSession::stop,
                     state = inputState,
+                    messageQueue = messageQueue,
+                    onRemoveQueuedMessage = vm::removeQueuedMessage,
+                    onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
+                    onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
+                    onResumeMessageQueue = vm::resumeMessageQueue,
                     loading = loadingJob != null,
                     settings = setting,
                     assistant = assistant,
@@ -869,6 +883,7 @@ private fun ChatPageContent(
                 assistant = assistant,
                 vm = vm,
                 messageVm = messageVm,
+                onStartVoiceMode = onStartVoiceMode,
                 onDismiss = { showFilesSheet = false },
             )
         }
@@ -883,12 +898,16 @@ private fun ChatFilesPickerSheet(
     assistant: Assistant,
     vm: ChatVM,
     messageVm: ChatMessageVM,
+    onStartVoiceMode: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
+    val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var showInjectionSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
 
@@ -1082,6 +1101,17 @@ private fun ChatFilesPickerSheet(
             onPickVideo = { videoPickerLauncher.launch("video/*") },
             onPickAudio = { audioPickerLauncher.launch("audio/*") },
             onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+            onStartVoiceMode = if (
+                setting.getSelectedASRProvider()?.supportsServerVadVoiceMode == true &&
+                voiceState.phase == VoicePhase.Off
+            ) {
+                {
+                    dismissAll()
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onStartVoiceMode()
+                }
+            } else null,
         )
     }
 }

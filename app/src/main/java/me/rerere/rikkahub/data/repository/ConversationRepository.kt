@@ -47,6 +47,9 @@ class ConversationRepository(
         private const val TAG = "ConversationRepository"
     }
 
+    suspend fun hasFileReference(fileUrl: String): Boolean =
+        messageNodeDAO.hasFileReference(JsonInstant.encodeToString(fileUrl))
+
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
             assistantId = assistantId.toString(),
@@ -378,7 +381,8 @@ class ConversationRepository(
     suspend fun searchMessages(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ) = messageFtsManager.search(keyword, sort)
+        assistantId: Uuid? = null,
+    ) = messageFtsManager.search(keyword, sort, assistantId?.toString())
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()

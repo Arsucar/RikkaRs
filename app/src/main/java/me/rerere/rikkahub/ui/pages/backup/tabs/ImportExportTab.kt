@@ -224,7 +224,7 @@ fun ImportExportTab(
                     onClick = if (!isImportBusy) {
                         {
                             importType = "chatbox"
-                            openDocumentLauncher.launch(arrayOf("application/json"))
+                            openDocumentLauncher.launch(arrayOf("application/zip"))
                         }
                     } else null,
                     headlineContent = { Text(stringResource(R.string.backup_page_import_from_chatbox)) },

@@ -167,10 +167,9 @@ class SettingsStore(
         val RECENT_CHAT_MODELS = stringPreferencesKey("recent_chat_models")
         val SELECT_MODEL = stringPreferencesKey("chat_model")
         val FAST_MODEL = stringPreferencesKey("fast_model")
-        val TITLE_MODEL = stringPreferencesKey("title_model")
+        val FAST_MODEL_REASONING_LEVEL = stringPreferencesKey("fast_model_reasoning_level")
         val TRANSLATE_MODEL = stringPreferencesKey("translate_model")
         val ENABLE_SUGGESTION = booleanPreferencesKey("enable_suggestion")
-        val SUGGESTION_MODEL = stringPreferencesKey("suggestion_model")
         val IMAGE_GENERATION_MODEL = stringPreferencesKey("image_generation_model")
         val TITLE_PROMPT = stringPreferencesKey("title_prompt")
         val TRANSLATION_PROMPT = stringPreferencesKey("translation_prompt")
@@ -271,6 +270,16 @@ class SettingsStore(
 
         // #215: global experimental feature map (featureId → enabled)
         val EXPERIMENTAL_FEATURES = stringPreferencesKey("experimental_features")
+
+        // Uses the same DataStore singleton without starting settings flows or requiring Koin.
+        // Persists via the file-scoped [writeFullSettings] so fork-added keys are restored too.
+        internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings) {
+            require(!settings.init) { "Cannot restore uninitialized settings" }
+            context.settingsStore.edit { preferences ->
+                preferences.writeFullSettings(settings)
+            }
+        }
+
     }
 
     private val dataStore = context.settingsStore
@@ -295,11 +304,12 @@ class SettingsStore(
                     ?: DEFAULT_AUTO_MODEL_ID,
                 fastModelId = preferences[FAST_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
-                titleModelId = preferences[TITLE_MODEL]?.let { Uuid.parse(it) },
+                fastModelReasoningLevel = preferences[FAST_MODEL_REASONING_LEVEL]
+                    ?.let { value -> ReasoningLevel.entries.find { it.name == value } }
+                    ?: ReasoningLevel.AUTO,
                 translateModeId = preferences[TRANSLATE_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
                 enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
-                suggestionModelId = preferences[SUGGESTION_MODEL]?.let { Uuid.parse(it) },
                 imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 titlePrompt = preferences[TITLE_PROMPT] ?: DEFAULT_TITLE_PROMPT,
                 translatePrompt = preferences[TRANSLATION_PROMPT] ?: DEFAULT_TRANSLATION_PROMPT,
@@ -1305,14 +1315,9 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
     this[SettingsStore.RECENT_CHAT_MODELS] = JsonInstant.encodeToString(settings.recentChatModels)
     this[SettingsStore.SELECT_MODEL] = settings.chatModelId.toString()
     this[SettingsStore.FAST_MODEL] = settings.fastModelId.toString()
-    settings.titleModelId?.let {
-        this[SettingsStore.TITLE_MODEL] = it.toString()
-    } ?: this.remove(SettingsStore.TITLE_MODEL)
+    this[SettingsStore.FAST_MODEL_REASONING_LEVEL] = settings.fastModelReasoningLevel.name
     this[SettingsStore.TRANSLATE_MODEL] = settings.translateModeId.toString()
     this[SettingsStore.ENABLE_SUGGESTION] = settings.enableSuggestion
-    settings.suggestionModelId?.let {
-        this[SettingsStore.SUGGESTION_MODEL] = it.toString()
-    } ?: this.remove(SettingsStore.SUGGESTION_MODEL)
     this[SettingsStore.IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
     this[SettingsStore.TITLE_PROMPT] = settings.titlePrompt
     this[SettingsStore.TRANSLATION_PROMPT] = settings.translatePrompt
@@ -1348,7 +1353,7 @@ private fun MutablePreferences.writeFullSettings(settings: Settings) {
 
     this[SettingsStore.SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
     this[SettingsStore.SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-    this[SettingsStore.SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+    this[SettingsStore.SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, (settings.searchServices.size - 1).coerceAtLeast(0))
 
     this[SettingsStore.MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
     this[SettingsStore.GLOBAL_SUBAGENT_PROFILES] = JsonInstant.encodeToString(settings.globalSubagentProfiles)
@@ -1652,14 +1657,13 @@ data class Settings(
     val recentChatModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
     val fastModelId: Uuid = Uuid.random(),
-    val titleModelId: Uuid? = null,
+    val fastModelReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
     val translateThinkingBudget: Int = 0,
     val enableSuggestion: Boolean = true,
-    val suggestionModelId: Uuid? = null,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
@@ -1864,6 +1868,7 @@ data class NetworkSetting(
     val proxyUrl: String = "",
     val proxyUsername: String = "",
     val proxyPassword: String = "",
+    val enableAutoRetry: Boolean = true,
 )
 
 @Serializable

@@ -1,15 +1,10 @@
 package me.rerere.rikkahub.di
 
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
-import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
-import io.requery.android.database.sqlite.SQLiteCustomExtension
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
@@ -19,11 +14,14 @@ import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.clash.ClashApiClient
 import me.rerere.rikkahub.data.ai.clash.ClashRetryTracer
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
+import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.sync.BackupManager
+import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
@@ -352,10 +350,10 @@ val dataSourceModule = module {
         MessageFtsManager(get())
     }
 
-    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
+    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
 
     single {
-        GenerationHandler(
+        GenerationLoop(
             context = get(),
             providerManager = get(),
             json = get(),
@@ -419,6 +417,10 @@ val dataSourceModule = module {
                 }
             },
         )
+    }
+
+    single {
+        TranslationHandler(providerManager = get())
     }
 
     single<OkHttpClient> {
@@ -520,6 +522,8 @@ val dataSourceModule = module {
         ProviderManager(client = get(), context = get())
     }
 
+    single { BackupManager(context = get(), database = get(), settingsStore = get(), json = get()) }
+
     single {
         BackupArchive(
             settingsStore = get(),
@@ -539,8 +543,7 @@ val dataSourceModule = module {
 
     single {
         WebDavSync(
-            settingsStore = get(),
-            json = get(),
+            backupManager = get(),
             context = get(),
             httpClient = get(),
             backupArchive = get(),
@@ -573,8 +576,7 @@ val dataSourceModule = module {
 
     single {
         S3Sync(
-            settingsStore = get(),
-            json = get(),
+            backupManager = get(),
             context = get(),
             httpClient = get(),
             backupArchive = get(),

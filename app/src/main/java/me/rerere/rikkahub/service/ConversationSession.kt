@@ -3,14 +3,17 @@ package me.rerere.rikkahub.service
 import android.util.Log
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.model.Conversation
 import kotlin.uuid.Uuid
 
@@ -27,8 +30,15 @@ class ConversationSession(
     initial: Conversation,
     private val scope: CoroutineScope,
     private val onIdle: (Uuid) -> Unit,
+    private val onGenerationFinished: (Uuid, Throwable?) -> Unit = { _, _ -> },
 ) {
     val state = MutableStateFlow(initial)
+    val messageQueue = MessageQueue()
+
+    // 从队列取出到写入会话历史之间，附件仍需作为有效引用保留。
+    @Volatile
+    var submittingMessage: QueuedMessage? = null
+        internal set
 
     private val stateLock = Any()
     private val stateRevision = AtomicLong(0L)
@@ -54,9 +64,12 @@ class ConversationSession(
     val processingStatus = MutableStateFlow<String?>(null)
 
     private val _generationJob = MutableStateFlow<Job?>(null)
+    private val activeJobs = mutableSetOf<Job>()
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
-    val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
+    val isInUse: Boolean
+        get() = refCount.get() > 0 || _generationJob.value != null ||
+                messageQueue.state.value.messages.isNotEmpty()
 
     private var idleCheckJob: Job? = null
 
@@ -88,27 +101,34 @@ class ConversationSession(
         }
     }
 
-    fun setJob(job: Job?) {
-        val previous = replaceGenerationJob(job)
-        job?.invokeOnCompletion {
-            if (_generationJob.compareAndSet(job, null) && refCount.get() <= 0) {
-                scheduleIdleCheck()
+    @Synchronized
+    fun setJob(job: Job?, cancelPrevious: Boolean = true) {
+        val previous = _generationJob.value
+        _generationJob.value = job
+        if (cancelPrevious) previous?.cancel()
+        if (job != null) activeJobs.add(job)
+        job?.invokeOnCompletion { cause ->
+            synchronized(this) {
+                activeJobs.remove(job)
+                // Also propagate cancellation when a queued coroutine never entered its body.
+                if (!cancelPrevious && cause is CancellationException) previous?.cancel()
+                // A replaced job must not clear or advance its successor.
+                if (_generationJob.compareAndSet(job, null)) {
+                    onGenerationFinished(id, cause)
+                    if (refCount.get() <= 0) scheduleIdleCheck()
+                }
             }
         }
-        previous?.cancel()
-        if (job == null && refCount.get() <= 0) {
-            scheduleIdleCheck()
-        }
-    }
-
-    private fun replaceGenerationJob(job: Job?): Job? {
-        while (true) {
-            val previous = _generationJob.value
-            if (_generationJob.compareAndSet(previous, job)) return previous
-        }
+        job?.start()
     }
 
     fun getJob(): Job? = _generationJob.value
+
+    @Synchronized
+    fun cancelJobs(): List<Job> = activeJobs.toList().also { jobs ->
+        // Cancel waiters first so a predecessor finishing cannot start the next approval.
+        jobs.asReversed().forEach { it.cancel() }
+    }
 
     fun snapshotState(): ConversationStateSnapshot = synchronized(stateLock) {
         ConversationStateSnapshot(
@@ -227,12 +247,26 @@ class ConversationSession(
         idleCheckJob = null
     }
 
+    @Synchronized
     fun cleanup() {
-        replaceGenerationJob(null)?.cancel()
+        _generationJob.value = null
+        cancelJobs()
         idleCheckJob?.cancel()
         idleCheckJob = null
         synchronized(autoCompressionLock) {
             autoCompressionState = AutoCompressionRuntimeState()
         }
+    }
+}
+
+/** Serialize approval saves without cancelling earlier decisions; stopping cancels the whole chain. */
+internal suspend fun afterPreviousGeneration(previous: Job?, block: suspend () -> Unit) {
+    try {
+        previous?.join()
+        block()
+    } catch (e: CancellationException) {
+        previous?.cancel()
+        withContext(NonCancellable) { previous?.join() }
+        throw e
     }
 }

@@ -7,9 +7,14 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -23,41 +28,42 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.TransformerExecutionMode
 import me.rerere.rikkahub.data.files.FileFolders
-import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.tools.FINISH_WORK_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.MemoryScope
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
+import java.io.File
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Locale
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
@@ -90,6 +96,11 @@ suspend fun currentToolCallId(): String? = coroutineContext[ToolCallIdElement]?.
 private suspend fun <T> withToolCallId(toolCallId: String, block: suspend () -> T): T =
     withContext(ToolCallIdElement(toolCallId)) { block() }
 
+private const val MAX_PROVIDER_NETWORK_RETRIES = 3
+private const val INITIAL_PROVIDER_RETRY_DELAY_MS = 1_000L
+
+private class StreamChunkHandlingException(cause: Throwable) : RuntimeException(cause)
+
 @Serializable
 sealed interface GenerationChunk {
     data class Messages(
@@ -99,7 +110,7 @@ sealed interface GenerationChunk {
     ) : GenerationChunk
 }
 
-class GenerationHandler(
+class GenerationLoop(
     private val context: Context,
     private val providerManager: ProviderManager,
     private val json: Json,
@@ -267,15 +278,15 @@ class GenerationHandler(
                 )
                 emit(GenerationChunk.Messages(messages = messages, stepIndex = stepIndex))
 
-                val tools = messages.last().getTools().filter { !it.isExecuted }
-                if (tools.isEmpty()) {
+                val toolCalls = messages.last().getTools().filter { !it.isExecuted }
+                if (toolCalls.isEmpty()) {
                     // no tool calls, break
                     break
                 }
 
                 // Check for tools that need approval
                 var hasPendingApproval = false
-                val updatedTools = tools.map { tool ->
+                val updatedTools = toolCalls.map { tool ->
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
                     when {
                         // Tool needs approval and state is Auto -> set to Pending
@@ -295,7 +306,7 @@ class GenerationHandler(
                 }
 
                 // If any tools were updated to Pending, update the message and break
-                if (updatedTools != tools) {
+                if (updatedTools != toolCalls) {
                     val lastMessage = messages.last()
                     val updatedParts = lastMessage.parts.map { part ->
                         if (part is UIMessagePart.Tool) {
@@ -474,22 +485,66 @@ class GenerationHandler(
             params = exactParams,
         )
         val recorder = apiCallRecorder
+        val autoRetryEnabled = settings.networkSetting.enableAutoRetry
         if (stream) {
-            val streamChunkHandler = StreamChunkHandler(model)
-            suspend fun runStream() {
-                providerImpl.streamText(
-                    providerSetting = provider,
-                    messages = prepared.messages,
-                    params = exactParams,
-                ).collect { chunk ->
-                    messages = streamChunkHandler.handle(messages, chunk)
-                    onUpdateMessages(messages)
+            // 每次重试都从本次模型调用开始前的消息快照重新合并，避免将重试响应
+            // 追加到已经展示的半截回复后面。预先创建助手消息可让所有尝试复用同一 ID，
+            // ChatService 因而会覆盖当前分支，而不是创建新的候选消息。
+            val responseBaseMessages =
+                if (messages.lastOrNull()?.role == MessageRole.ASSISTANT) {
+                    messages
+                } else {
+                    messages + UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = emptyList(),
+                        modelId = model.id,
+                    )
                 }
-            }
-            if (recorder != null) {
-                recorder.record(provider = provider, model = model) { runStream() }
-            } else {
-                runStream()
+            var retryCount = 0
+            while (true) {
+                val streamChunkHandler = StreamChunkHandler(model)
+                var attemptMessages = responseBaseMessages
+                try {
+                    // Rate-limit wait is outside ApiCallRecorder and outside retries so
+                    // latency_ms stays pure provider RTT (only streamText/generateText recorded).
+                    suspend fun runStreamAttempt() {
+                        providerImpl.streamText(
+                            providerSetting = provider,
+                            messages = prepared.messages,
+                            params = exactParams,
+                        ).collect { chunk ->
+                            try {
+                                if (retryCount > 0) {
+                                    processingStatus.value = null
+                                }
+                                attemptMessages = streamChunkHandler.handle(attemptMessages, chunk)
+                                onUpdateMessages(attemptMessages)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                // 下游消息转换或 UI 更新失败不属于网络故障，不能重放模型请求。
+                                throw StreamChunkHandlingException(error)
+                            }
+                        }
+                    }
+                    if (recorder != null) {
+                        recorder.record(provider = provider, model = model) { runStreamAttempt() }
+                    } else {
+                        runStreamAttempt()
+                    }
+                    messages = attemptMessages
+                    break
+                } catch (error: Throwable) {
+                    if (error is StreamChunkHandlingException) {
+                        throw error.cause ?: error
+                    }
+                    retryCount = awaitNetworkRetryOrThrow(
+                        error = error,
+                        retryCount = retryCount,
+                        processingStatus = processingStatus,
+                        enabled = autoRetryEnabled,
+                    )
+                }
             }
         } else {
             suspend fun runGenerate() =
@@ -498,10 +553,15 @@ class GenerationHandler(
                     messages = prepared.messages,
                     params = exactParams,
                 )
-            val result = if (recorder != null) {
-                recorder.record(provider = provider, model = model) { runGenerate() }
-            } else {
-                runGenerate()
+            val result = executeProviderRequestWithRetry(
+                processingStatus = processingStatus,
+                enabled = autoRetryEnabled,
+            ) {
+                if (recorder != null) {
+                    recorder.record(provider = provider, model = model) { runGenerate() }
+                } else {
+                    runGenerate()
+                }
             }
             messages = messages.handleTextGenerationResult(result = result, model = model)
             onUpdateMessages(messages)
@@ -585,7 +645,9 @@ class GenerationHandler(
                     append(tool.systemPrompt(model, messages))
                 }
             }
-            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+            if (system.isNotBlank()) {
+                add(UIMessage.system(prompt = system).copy(isSynthetic = true))
+            }
             addAll(retainedMessages)
         }.transforms(
             transformers = transformers,
@@ -670,7 +732,8 @@ class GenerationHandler(
                 }
                 Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                 val result = withToolCallId(tool.toolCallId) { toolDef.execute(args) }
-                tool.copy(output = maybeTruncateToolOutput(tool.toolCallId, result))
+                val hasShellAccess = toolsInternal.any { it.name == "workspace_shell" }
+                tool.copy(output = maybeTruncateToolOutput(tool.toolCallId, result, hasShellAccess))
             }.onFailure {
                 if (it is CancellationException) throw it
                 Log.e(TAG, "generateText: tool ${tool.toolName} failed", it)
@@ -696,15 +759,77 @@ class GenerationHandler(
         }
     }
 
+    private suspend fun <T> executeProviderRequestWithRetry(
+        processingStatus: MutableStateFlow<String?>,
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T {
+        var retryCount = 0
+        while (true) {
+            try {
+                return block()
+            } catch (error: Throwable) {
+                retryCount = awaitNetworkRetryOrThrow(
+                    error = error,
+                    retryCount = retryCount,
+                    processingStatus = processingStatus,
+                    enabled = enabled,
+                )
+            }
+        }
+    }
+
+    private suspend fun awaitNetworkRetryOrThrow(
+        error: Throwable,
+        retryCount: Int,
+        processingStatus: MutableStateFlow<String?>,
+        enabled: Boolean,
+    ): Int {
+        // 用户主动停止生成时，底层连接也可能以 IOException("canceled") 收尾；
+        // 先检查协程状态，确保取消不会被当作网络波动重新拉起。
+        currentCoroutineContext().ensureActive()
+        if (!enabled || error !is IOException || retryCount >= MAX_PROVIDER_NETWORK_RETRIES) {
+            throw error
+        }
+
+        val nextRetryCount = retryCount + 1
+        val retryDelay = INITIAL_PROVIDER_RETRY_DELAY_MS shl retryCount
+        processingStatus.value = context.getString(
+            R.string.chat_generation_network_retrying,
+            getNetworkErrorMessage(error),
+            nextRetryCount,
+            MAX_PROVIDER_NETWORK_RETRIES,
+        )
+        Log.w(
+            TAG,
+            "Provider connection failed, retrying in ${retryDelay}ms " +
+                    "($nextRetryCount/$MAX_PROVIDER_NETWORK_RETRIES)",
+            error,
+        )
+        delay(retryDelay)
+        return nextRetryCount
+    }
+
+    private fun getNetworkErrorMessage(error: IOException): String {
+        val messageRes = when (error) {
+            is UnknownHostException -> R.string.chat_generation_network_unknown_host
+            is SocketTimeoutException -> R.string.chat_generation_network_timeout
+            is ConnectException, is NoRouteToHostException -> R.string.chat_generation_network_unreachable
+            else -> R.string.chat_generation_network_disconnected
+        }
+        return context.getString(messageRes)
+    }
+
     private fun maybeTruncateToolOutput(
         toolCallId: String,
         output: List<UIMessagePart>,
+        hasShellAccess: Boolean,
     ): List<UIMessagePart> {
         val textParts = output.filterIsInstance<UIMessagePart.Text>()
         val nonTextParts = output.filter { it !is UIMessagePart.Text }
         val totalChars = textParts.sumOf { it.text.length }
 
-        if (totalChars <= MAX_TOOL_OUTPUT_CHARS) return output
+        if (totalChars <= MAX_TOOL_OUTPUT_CHARS || !hasShellAccess) return output
 
         Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
 
@@ -729,82 +854,6 @@ class GenerationHandler(
         ) + nonTextParts
     }
 
-    fun translateText(
-        settings: Settings,
-        sourceText: String,
-        targetLanguage: Locale,
-        onStreamUpdate: ((String) -> Unit)? = null
-    ): Flow<String> = flow {
-        val model = settings.providers.findModelById(settings.translateModeId)
-            ?: error("Translation model not found")
-        val provider = model.findProvider(settings.providers)
-            ?: error("Translation provider not found")
-
-        val providerHandler = providerManager.getProviderByType(provider)
-
-        if (!ModelRegistry.QWEN_MT.match(model.modelId)) {
-            // Use regular translation with prompt
-            val prompt = settings.translatePrompt.applyPlaceholders(
-                "source_text" to sourceText,
-                "target_lang" to targetLanguage.toString(),
-            )
-
-            var messages = listOf(UIMessage.user(prompt))
-            var translatedText = ""
-            val params = TextGenerationParams(
-                model = model,
-                reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-            )
-            val streamChunkHandler = StreamChunkHandler(model)
-
-            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-            providerHandler.streamText(
-                providerSetting = provider,
-                messages = messages,
-                params = params,
-            ).collect { chunk ->
-                messages = streamChunkHandler.handle(messages, chunk)
-                translatedText = messages.lastOrNull()?.toText() ?: ""
-
-                if (translatedText.isNotBlank()) {
-                    onStreamUpdate?.invoke(translatedText)
-                    emit(translatedText)
-                }
-            }
-        } else {
-            // Use Qwen MT model with special translation options
-            val messages = listOf(UIMessage.user(sourceText))
-            val params = TextGenerationParams(
-                model = model,
-                temperature = 0.3f,
-                topP = 0.95f,
-                customBody = listOf(
-                    CustomBody(
-                        key = "translation_options",
-                        value = buildJsonObject {
-                            put("source_lang", JsonPrimitive("auto"))
-                            put(
-                                "target_lang",
-                                JsonPrimitive(targetLanguage.getDisplayLanguage(Locale.ENGLISH))
-                            )
-                        }
-                    )
-                )
-            )
-            ProviderRateLimiter.await(provider = provider, messages = messages, params = params)
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = messages,
-                params = params,
-            )
-            val translatedText = result.message.toText()
-
-            if (translatedText.isNotBlank()) {
-                onStreamUpdate?.invoke(translatedText)
-                emit(translatedText)
-            }
-        }
-    }.flowOn(Dispatchers.IO)
 }
 
 internal fun groupToolsForSequentialExecution(

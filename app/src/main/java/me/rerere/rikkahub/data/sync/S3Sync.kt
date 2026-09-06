@@ -5,8 +5,6 @@ import android.util.Log
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.sync.s3.S3Client
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -16,8 +14,7 @@ import java.time.Instant
 private const val TAG = "S3Sync"
 
 class S3Sync(
-    private val settingsStore: SettingsStore,
-    private val json: Json,
+    private val backupManager: BackupManager,
     private val context: Context,
     private val httpClient: HttpClient,
     private val backupArchive: BackupArchive,
@@ -77,7 +74,7 @@ class S3Sync(
         onStage: (BackupTaskStage) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
         val client = getS3Client(config)
-        val backupFile = File(context.cacheDir, item.displayName)
+        val backupFile = File.createTempFile("restore-", ".zip", context.cacheDir)
 
         try {
             // Download backup file directly to file to avoid OOM
@@ -105,6 +102,7 @@ class S3Sync(
         Log.i(TAG, "deleteS3BackupFile: Deleted ${item.key}")
     }
 
+    /** Consistent snapshot via [BackupArchive]: validated DB snapshot + files + settings. */
     suspend fun prepareBackupFile(config: S3Config): File = backupArchive.create(
         BackupArchiveOptions(
             includeDatabase = config.items.contains(S3Config.BackupItem.DATABASE),
@@ -122,7 +120,6 @@ class S3Sync(
             includeFiles = config.items.contains(S3Config.BackupItem.FILES),
         )
     }
-
 }
 
 data class S3BackupItem(

@@ -110,7 +110,7 @@ fun HighlightCodeBlock(
     val normalizedLanguage = remember(language) { language.lowercase() }
     val canInlinePreview = completeCodeBlock && normalizedLanguage in PREVIEWABLE_LANGUAGES
     var previewMode by remember(canInlinePreview, code, normalizedLanguage) {
-        mutableStateOf(canInlinePreview)
+        mutableStateOf(false)
     }
 
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
@@ -126,8 +126,8 @@ fun HighlightCodeBlock(
             scope.launch {
                 withContext(Dispatchers.IO) {
                     try {
-                        context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                            outputStream.write(code.toByteArray())
+                        context.contentResolver.openOutputStream(it, "wt")?.use { outputStream ->
+                            outputStream.write(code.toByteArray(Charsets.UTF_8))
                         }
                     } catch (e: Exception) {
                         Log.w("HighlightCodeBlock", "Failed to export code block", e)

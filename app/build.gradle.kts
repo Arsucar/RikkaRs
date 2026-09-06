@@ -22,6 +22,7 @@ android {
         applicationId = "me.arsucar.rikka"
         minSdk = 26
         targetSdk = 37
+        // fork 版本体系：与上游 tag 无关，版本号由 CI bump 流程推进（见 AGENTS.md 发版规约）
         versionCode = 216
         versionName = "2.3.54"
 
@@ -357,6 +358,7 @@ dependencies {
     implementation(project(":common"))
     implementation(project(":material3"))
     implementation(project(":workspace"))
+    implementation(project(":oauth"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
 

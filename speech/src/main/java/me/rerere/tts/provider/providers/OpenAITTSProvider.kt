@@ -9,6 +9,7 @@ import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProvider
+import me.rerere.tts.provider.TTSProviderException
 import me.rerere.tts.provider.TTSProviderSetting
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -47,7 +48,10 @@ class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
 
         httpClient.newCall(httpRequest).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("TTS request failed: ${response.code} ${response.message}")
+                throw TTSProviderException(
+                    message = "TTS request failed: ${response.code} ${response.message}",
+                    statusCode = response.code
+                )
             }
 
             val audioData = response.body.bytes()

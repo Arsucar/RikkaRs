@@ -3,6 +3,7 @@ package me.rerere.rikkahub.di
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
+import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.sync.BackupTaskCoordinator
 import me.rerere.rikkahub.service.ChatKeepAliveController
@@ -140,6 +141,18 @@ val appModule = module {
     }
 
     single {
+        ChatToolFactory(
+            json = get(),
+            memoryRepository = get(),
+            conversationRepository = get(),
+            localTools = get(),
+            mcpManager = get(),
+            skillManager = get(),
+            workspaceRepository = get(),
+        )
+    }
+
+    single {
         ChatService(
             context = get(),
             appScope = get(),
@@ -151,13 +164,13 @@ val appModule = module {
             generationHandler = get(),
             subagentHost = get(),
             json = get(),
+            translationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
-            localTools = get(),
+            chatToolFactory = get(),
             mcpManager = get(),
             keepAliveController = get(),
             filesManager = get(),
-            skillManager = get(),
             workspaceRepository = get(),
             folderRepository = get(),
             hookRepository = get(),

@@ -66,6 +66,7 @@ import java.io.File
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
@@ -305,7 +306,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                     steps = 8,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Text(text = "${(bubbleOpacityDraft * 100).toInt()}%")
+                                Text(text = "${(bubbleOpacityDraft * 100).roundToInt()}%")
                             }
                         }
                     )
