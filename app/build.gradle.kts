@@ -23,8 +23,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // fork 版本体系：与上游 tag 无关，版本号由 CI bump 流程推进（见 AGENTS.md 发版规约）
-        versionCode = 216
-        versionName = "2.3.54"
+        versionCode = 217
+        versionName = "2.3.55"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
