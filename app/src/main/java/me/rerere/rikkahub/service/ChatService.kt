@@ -2561,6 +2561,7 @@ class ChatService(
             val suggestions =
                 result.message.toText().split("\n").map { it.trim() }
                     .filter { it.isNotBlank() }
+                    .distinct()
                     .take(10)
 
             // Patch suggestions on live session only — never reload full DB object.

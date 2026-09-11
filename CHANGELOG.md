@@ -12,12 +12,21 @@ All notable changes to the Rikka-Arsucar fork will be documented in this file.
 
 ---
 
+## v2.3.56
+
+### 新功能与修复 / Features & Fixes（本 Fork，v2.3.55 之后）
+
+- **合并上游 rikkahub 2.4.13–2.5.0** — 将 `upstream/master` tip `12ee935e`（72 个非合并提交）合入 `release/rikka-arsucar`：语音模式（输入队列 + 可选 TTS、ASR server VAD、火山引擎双向流式）、消息发送队列与自动重试开关、连续工具审批丢失修复、快速模型思考级别、自定义 response api 路径、MaruCode/hy4/glm-5.3/gpt-6 模型注册、OAuth/MCP 重构、备份一致性快照与 Chatbox v2 导入、workspace 终端改进（Tab 导航合并、关闭确认、键盘修复、stdin EOF 防阻塞）、Exa 搜索新鲜度证据、依赖升级；保留 fork 身份（`me.arsucar.rikka(.debug)`、无 Firebase、web 模块 preload、fork 版本体系）与 fork 定制（工具组装、消息分支、DI 模式、Chatbox 压缩上下文等）。
+  **Merge upstream rikkahub 2.4.13–2.5.0** — Merged `upstream/master` tip `12ee935e` (72 non-merge commits) into `release/rikka-arsucar`: voice mode (queued input + optional TTS, ASR server VAD, Volcengine bidirectional streaming), message send queue with auto-retry toggle, consecutive tool-approval loss fix, fast-model reasoning level, custom response API path, MaruCode/hy4/glm-5.3/gpt-6 registry entries, OAuth/MCP refactor, consistent backup snapshot + Chatbox v2 import, workspace terminal improvements (tab-bar navigation, close confirm, keyboard fixes, stdin EOF unblock), Exa freshness evidence, dependency upgrades; kept fork identity (`me.arsucar.rikka(.debug)`, no Firebase, web module preload, fork version scheme) and fork customizations (tool assembly, message branching, DI conventions, CompressContextDialog step picker).
+
+---
+
 ## v2.3.55
 
 ### 新功能与修复 / Features & Fixes（本 Fork，v2.3.54 之后）
 
-- **合并上游 rikkahub 2.4.13–2.5.0** — 将 `upstream/master` tip `12ee935e`（72 个非合并提交）合入 `release/rikka-arsucar`：语音模式（输入队列 + 可选 TTS、ASR server VAD、火山引擎双向流式）、消息发送队列与自动重试开关、连续工具审批丢失修复、快速模型思考级别、自定义 response api 路径、MaruCode/hy4/glm-5.3/gpt-6 模型注册、OAuth/MCP 重构、备份一致性快照与 Chatbox v2 导入、workspace 终端改进（Tab 导航合并、关闭确认、键盘修复、stdin EOF 防阻塞）、Exa 搜索新鲜度证据、依赖升级；保留 fork 身份（`me.arsucar.rikka(.debug)`、无 Firebase、web 模块 preload、fork 版本体系）与 fork 定制（工具组装、消息分支、DI 模式、Chatbox 压缩上下文等）。
-  **Merge upstream rikkahub 2.4.13–2.5.0** — Merged `upstream/master` tip `12ee935e` (72 non-merge commits) into `release/rikka-arsucar`: voice mode (queued input + optional TTS, ASR server VAD, Volcengine bidirectional streaming), message send queue with auto-retry toggle, consecutive tool-approval loss fix, fast-model reasoning level, custom response API path, MaruCode/hy4/glm-5.3/gpt-6 registry entries, OAuth/MCP refactor, consistent backup snapshot + Chatbox v2 import, workspace terminal improvements (tab-bar navigation, close confirm, keyboard fixes, stdin EOF unblock), Exa freshness evidence, dependency upgrades; kept fork identity (`me.arsucar.rikka(.debug)`, no Firebase, web module preload, fork version scheme) and fork customizations (tool assembly, message branching, DI conventions, CompressContextDialog step picker).
+- **修复聊天建议重复行导致崩溃（#305）** — 建议文本按行拆分后按序去重，渲染侧 item key 改为「索引+文本」组合兜底。
+  **Fix crash on duplicate chat suggestions (#305)** — Dedupe suggestions after line-splitting; compose the list item key as "index-text" as a safety net.
 
 ---
 
